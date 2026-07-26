@@ -15,13 +15,16 @@
 
 import unittest
 
+import numpy as np
+import pytest
+
 from transformers import (
     EfficientViTSamConfig,
     EfficientViTSamMaskDecoderConfig,
     EfficientViTSamPromptEncoderConfig,
     EfficientViTSamVisionConfig,
 )
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torchvision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -368,6 +371,112 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         torch.testing.assert_close(outputs_from_embeddings.iou_scores, outputs_from_pixels.iou_scores)
         torch.testing.assert_close(outputs_from_embeddings.pred_masks, outputs_from_pixels.pred_masks)
 
+    def test_model_runs_on_available_devices(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).eval()
+        reference_outputs = None
+
+        devices = [torch.device("cpu")]
+        if torch.cuda.is_available():
+            devices.append(torch.device("cuda"))
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            devices.append(torch.device("mps"))
+
+        for device in devices:
+            with self.subTest(device=device):
+                model.to(device)
+                with torch.no_grad():
+                    outputs = model(pixel_values.to(device))
+                self.assertEqual(outputs.pred_masks.device.type, device.type)
+                if device.index is not None:
+                    self.assertEqual(outputs.pred_masks.device.index, device.index)
+                self.assertFalse(torch.isnan(outputs.pred_masks).any())
+                if reference_outputs is None:
+                    reference_outputs = outputs.pred_masks.cpu()
+                else:
+                    torch.testing.assert_close(outputs.pred_masks.cpu(), reference_outputs, rtol=1e-3, atol=1e-3)
+
+    def test_model_supports_reduced_precision(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        dtypes = [torch.float32]
+        if torch.cuda.is_available():
+            dtypes.extend([torch.float16, torch.bfloat16])
+        elif torch.device(torch_device).type == "mps":
+            dtypes.append(torch.float16)
+        else:
+            dtypes.append(torch.bfloat16)
+
+        for dtype in dtypes:
+            with self.subTest(dtype=dtype):
+                model = EfficientViTSamModel(config).to(device=torch_device, dtype=dtype).eval()
+                with torch.no_grad():
+                    outputs = model(pixel_values.to(device=torch_device, dtype=dtype))
+                self.assertEqual(outputs.pred_masks.dtype, dtype)
+                self.assertTrue(torch.isfinite(outputs.pred_masks).all())
+
+    def test_config_roundtrip_preserves_all_sub_configs(self):
+        config = self.model_tester.get_config()
+        reloaded = EfficientViTSamConfig.from_dict(config.to_dict())
+
+        self.assertEqual(reloaded.to_dict(), config.to_dict())
+        self.assertEqual(reloaded.vision_config.to_dict(), config.vision_config.to_dict())
+        self.assertEqual(reloaded.prompt_encoder_config.to_dict(), config.prompt_encoder_config.to_dict())
+        self.assertEqual(reloaded.mask_decoder_config.to_dict(), config.mask_decoder_config.to_dict())
+        for config_class, sub_config in (
+            (EfficientViTSamVisionConfig, config.vision_config),
+            (EfficientViTSamPromptEncoderConfig, config.prompt_encoder_config),
+            (EfficientViTSamMaskDecoderConfig, config.mask_decoder_config),
+        ):
+            self.assertEqual(config_class.from_dict(sub_config.to_dict()).to_dict(), sub_config.to_dict())
+
+    @require_torchvision
+    @unittest.skipUnless(is_vision_available(), "Vision dependencies are required for processor tests")
+    def test_processor_resizes_images_and_normalizes_prompts(self):
+        from transformers.models.efficientvitsam.image_processing_efficientvitsam import EfficientViTSamImageProcessor
+        from transformers.models.efficientvitsam.processing_efficientvitsam import EfficientViTSamProcessor
+
+        image_processor = EfficientViTSamImageProcessor(
+            size={"longest_edge": 32}, pad_size={"height": 32, "width": 32}
+        )
+        processor = EfficientViTSamProcessor(image_processor=image_processor)
+        image = np.zeros((20, 40, 3), dtype=np.uint8)
+        inputs = processor(
+            images=image,
+            input_points=[[[20.0, 10.0]]],
+            input_labels=[[1]],
+            input_boxes=[[[10.0, 5.0, 30.0, 15.0]]],
+            return_tensors="pt",
+        )
+
+        self.assertEqual(inputs["pixel_values"].shape, (1, 3, 32, 32))
+        torch.testing.assert_close(
+            inputs["input_points"], torch.tensor([[[[16.0, 8.0]]]], dtype=torch.float32)
+        )
+        torch.testing.assert_close(
+            inputs["input_boxes"], torch.tensor([[[8.0, 4.0, 24.0, 12.0]]], dtype=torch.float32)
+        )
+        self.assertEqual(inputs["input_labels"].tolist(), [[[1]]])
+
+    @require_torchvision
+    @unittest.skipUnless(is_vision_available(), "Vision dependencies are required for pipeline tests")
+    def test_mask_generation_pipeline(self):
+        from transformers import pipeline
+        from transformers.models.efficientvitsam.image_processing_efficientvitsam import EfficientViTSamImageProcessor
+
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+        image_processor = EfficientViTSamImageProcessor(
+            size={"longest_edge": 32}, pad_size={"height": 32, "width": 32}
+        )
+        generator = pipeline("mask-generation", model=model, image_processor=image_processor, device=torch_device)
+
+        from PIL import Image
+
+        image = Image.fromarray(np.zeros((32, 32, 3), dtype=np.uint8))
+        output = generator(image, points_per_crop=2, points_per_batch=4)
+        self.assertIn("masks", output)
+        self.assertIn("scores", output)
+
     def test_point_and_box_prompts_support_multiple_masks_per_image(self):
         config, pixel_values = self.model_tester.prepare_config_and_inputs()
         input_points, input_labels, input_boxes = self.model_tester.prepare_prompt_inputs()
@@ -431,6 +540,49 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             model(pixel_values=pixel_values, input_boxes=input_boxes.unsqueeze(1))
         with self.assertRaisesRegex(ValueError, "as many bounding boxes as input points"):
             model(pixel_values=pixel_values, input_points=input_points, input_boxes=input_boxes[:, :1])
+
+    @pytest.mark.torch_compile_test
+    def test_prompt_inference_can_be_compiled(self):
+        if not hasattr(torch, "compile"):
+            self.skipTest("torch.compile is unavailable")
+
+        config = self.model_tester.get_config()
+        prompt_encoder = EfficientViTSamPromptEncoder(config).to(torch_device).eval()
+        input_points, input_labels, input_boxes = self.model_tester.prepare_prompt_inputs()
+        compiled_prompt_encoder = torch.compile(prompt_encoder, backend="eager", dynamic=False)
+
+        with torch.no_grad():
+            eager_sparse, eager_dense = prompt_encoder(input_points, input_labels, input_boxes, None)
+            compiled_sparse, compiled_dense = compiled_prompt_encoder(input_points, input_labels, input_boxes, None)
+
+        torch.testing.assert_close(compiled_sparse, eager_sparse)
+        torch.testing.assert_close(compiled_dense, eager_dense)
+
+    def test_batched_outputs_match_single_sample_outputs(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        input_points, input_labels, input_boxes = self.model_tester.prepare_prompt_inputs()
+        model = EfficientViTSamModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            batched_outputs = model(
+                pixel_values=pixel_values,
+                input_points=input_points,
+                input_labels=input_labels,
+                input_boxes=input_boxes,
+            )
+            single_outputs = [
+                model(
+                    pixel_values=pixel_values[i : i + 1],
+                    input_points=input_points[i : i + 1],
+                    input_labels=input_labels[i : i + 1],
+                    input_boxes=input_boxes[i : i + 1],
+                )
+                for i in range(pixel_values.shape[0])
+            ]
+
+        for i, outputs in enumerate(single_outputs):
+            torch.testing.assert_close(batched_outputs.iou_scores[i : i + 1], outputs.iou_scores, rtol=1e-4, atol=1e-5)
+            torch.testing.assert_close(batched_outputs.pred_masks[i : i + 1], outputs.pred_masks, rtol=1e-4, atol=1e-5)
 
     def test_points_only_single_point_per_object(self):
         """Single foreground point per object — simplest point prompt."""
