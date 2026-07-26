@@ -85,6 +85,7 @@ class LoMaModelTester:
         return LoMaConfig(
             keypoint_detector_config=self.keypoint_detector_config,
             descriptor_dim=self.descriptor_dim,
+            descriptor_hidden_blocks=1,
             num_hidden_layers=self.num_layers,
             num_attention_heads=self.num_heads,
             filter_threshold=self.filter_threshold,
@@ -184,6 +185,19 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(descriptor_grid.shape, (2, 16, 32, 48))
         self.assertEqual(descriptors.shape, (2, 3, 16))
 
+    def test_descriptor_network_accepts_grayscale_images(self):
+        config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        pixel_values = floats_tensor([2, 1, 32, 48]).to(torch_device)
+        keypoints = torch.tensor(
+            [[[-0.5, -0.5], [0.0, 0.0], [0.5, 0.5]], [[-0.25, 0.25], [0.25, -0.25], [0.0, 0.0]]],
+            device=torch_device,
+        )
+
+        descriptors = model.describe_keypoints(pixel_values, keypoints)
+
+        self.assertEqual(descriptors.shape, (2, 3, 16))
+
     def test_matching_transformer(self):
         config = LoMaConfig(descriptor_dim=64, num_attention_heads=4, num_hidden_layers=2)
         positional_encoder = LoMaPositionalEncoder(config).to(torch_device)
@@ -210,6 +224,10 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
             # TODO: (ydshieh) fix this
             self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
         super().test_batching_equivalence(atol=atol, rtol=rtol)
+
+    @unittest.skip(reason="LoMa includes a VGG-19 descriptor network and is not a small model")
+    def test_model_is_small(self):
+        pass
 
     @unittest.skip(reason="LoMaForKeypointMatching does not use inputs_embeds")
     def test_inputs_embeds(self):

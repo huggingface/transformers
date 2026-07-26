@@ -140,6 +140,11 @@ class LoMaDescriptorNetwork(nn.Module):
         self.decoder = LoMaDescriptorDecoder(config.input_descriptor_dim, config.descriptor_hidden_blocks)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        if pixel_values.shape[1] == 1:
+            pixel_values = pixel_values.repeat(1, 3, 1, 1)
+        elif pixel_values.shape[1] != 3:
+            raise ValueError("LoMaDescriptorNetwork expects one grayscale or three RGB channels")
+
         feature_maps = self.encoder(pixel_values)
         descriptor_grid = pixel_values.new_zeros(
             pixel_values.shape[0], self.decoder.descriptor_dim, *feature_maps[-1].shape[-2:]
@@ -387,11 +392,11 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
     def __init__(self, config: LoMaConfig):
         super().__init__(config)
         self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
-        self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
+        self.descriptor_network = LoMaDescriptorNetwork(config)
         self.input_projection = (
             nn.Identity()
-            if self.keypoint_detector_descriptor_dim == config.descriptor_dim
-            else nn.Linear(self.keypoint_detector_descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
+            if config.input_descriptor_dim == config.descriptor_dim
+            else nn.Linear(config.input_descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
         )
         self.positional_encoder = LoMaPositionalEncoder(config)
         self.transformer_layers = nn.ModuleList(
@@ -415,8 +420,8 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         output_hidden_states: bool,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...] | None]:
         batch_size, _, num_keypoints, _ = descriptors.shape
-        descriptors_0 = self.input_projection(descriptors[:, 0].detach().contiguous())
-        descriptors_1 = self.input_projection(descriptors[:, 1].detach().contiguous())
+        descriptors_0 = self.input_projection(descriptors[:, 0].contiguous())
+        descriptors_1 = self.input_projection(descriptors[:, 1].contiguous())
         position_embeddings_0 = self.positional_encoder(keypoints[:, 0])
         position_embeddings_1 = self.positional_encoder(keypoints[:, 1])
         all_hidden_states = () if output_hidden_states else None
@@ -466,10 +471,14 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         )
         batch_size, _, num_channels, height, width = pixel_values.shape
         keypoint_detections = self.keypoint_detector(pixel_values.reshape(batch_size * 2, num_channels, height, width))
-        keypoints, _, descriptors, mask = keypoint_detections[:4]
+        keypoints, _, _, mask = keypoint_detections[:4]
         keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
-        descriptors = descriptors.reshape(batch_size, 2, -1, self.keypoint_detector_descriptor_dim).to(pixel_values)
         mask = mask.reshape(batch_size, 2, -1).bool()
+        descriptor_keypoints = keypoints.reshape(batch_size * 2, -1, 2) * 2 - 1
+        descriptors = self.descriptor_network.describe_keypoints(
+            pixel_values.reshape(batch_size * 2, num_channels, height, width), descriptor_keypoints
+        )
+        descriptors = descriptors.reshape(batch_size, 2, -1, self.config.input_descriptor_dim).to(pixel_values)
         absolute_keypoints = keypoints * keypoints.new_tensor((width, height))
         normalized_keypoints = self._normalize_keypoints(absolute_keypoints, height, width)
         matches, matching_scores, prune, hidden_states = self._match_image_pair(
