@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import LoMaForKeypointMatching
+    from transformers.models.loma.modeling_loma import LoMaDescriptorNetwork
 
 if is_vision_available():
     from transformers import AutoImageProcessor
@@ -161,6 +162,21 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "attention_head_dim"):
             LoMaConfig(descriptor_dim=250)
+
+    def test_descriptor_network(self):
+        config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        pixel_values = floats_tensor([2, 3, 32, 48]).to(torch_device)
+        keypoints = torch.tensor(
+            [[[-0.5, -0.5], [0.0, 0.0], [0.5, 0.5]], [[-0.25, 0.25], [0.25, -0.25], [0.0, 0.0]]],
+            device=torch_device,
+        )
+
+        descriptor_grid = model(pixel_values)
+        descriptors = model.describe_keypoints(pixel_values, keypoints)
+
+        self.assertEqual(descriptor_grid.shape, (2, 16, 32, 48))
+        self.assertEqual(descriptors.shape, (2, 3, 16))
 
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         device_properties = get_device_properties()

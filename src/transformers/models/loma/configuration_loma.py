@@ -53,6 +53,8 @@ class LoMaConfig(PreTrainedConfig):
         `"fixed"`.
     positional_encoding_gamma (`float`, *optional*, defaults to 1.0):
         Frequency scale used by the Fourier positional encoding.
+    descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
+        Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
 
     Examples:
         ```python
@@ -87,6 +89,7 @@ class LoMaConfig(PreTrainedConfig):
     attention_head_dim: int | None = None
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
+    descriptor_hidden_blocks: int = 5
 
     def __post_init__(self, **kwargs):
         if self.num_attention_heads is None:

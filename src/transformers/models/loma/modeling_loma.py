@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
@@ -34,6 +35,142 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_loma import LoMaConfig
+
+
+class LoMaConvRefiner(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        hidden_blocks: int,
+    ) -> None:
+        super().__init__()
+        self.block1 = self._make_block(in_channels, hidden_channels, depthwise=False, kernel_size=1)
+        self.hidden_blocks = nn.Sequential(
+            *(
+                self._make_block(hidden_channels, hidden_channels, depthwise=True, kernel_size=5)
+                for _ in range(hidden_blocks)
+            )
+        )
+        self.out_conv = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
+
+    @staticmethod
+    def _make_block(in_channels: int, out_channels: int, depthwise: bool, kernel_size: int) -> nn.Sequential:
+        if depthwise and out_channels % in_channels != 0:
+            raise ValueError("The output channels of a depthwise block must be divisible by its input channels")
+
+        groups = in_channels if depthwise else 1
+        return nn.Sequential(
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                groups=groups,
+            ),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=1),
+        )
+
+    def forward(self, feature_map: torch.Tensor) -> torch.Tensor:
+        initial_features = self.block1(feature_map)
+        refined_features = self.hidden_blocks(initial_features)
+        return self.out_conv((refined_features + initial_features) / 1.4)
+
+
+class LoMaVgg19Encoder(nn.Module):
+    """VGG-19 with batch normalization that returns feature maps before each pooling operation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        channels = [64, 64, "pool", 128, 128, "pool", 256, 256, 256, 256, "pool", 512, 512, 512, 512, "pool"]
+        layers = []
+        in_channels = 3
+        for out_channels in channels:
+            if out_channels == "pool":
+                layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+            else:
+                layers.extend(
+                    [
+                        nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+                        nn.BatchNorm2d(out_channels),
+                        nn.ReLU(inplace=True),
+                    ]
+                )
+                in_channels = out_channels
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
+        feature_maps = []
+        for layer in self.layers:
+            if isinstance(layer, nn.MaxPool2d):
+                feature_maps.append(pixel_values)
+            pixel_values = layer(pixel_values)
+        return feature_maps
+
+
+class LoMaDescriptorDecoder(nn.Module):
+    def __init__(self, descriptor_dim: int, hidden_blocks: int) -> None:
+        super().__init__()
+        self.descriptor_dim = descriptor_dim
+        self.scales = ("8", "4", "2", "1")
+        self.layers = nn.ModuleDict(
+            {
+                "8": LoMaConvRefiner(512, 512, 256 + descriptor_dim, hidden_blocks),
+                "4": LoMaConvRefiner(512, 256, 128 + descriptor_dim, hidden_blocks),
+                "2": LoMaConvRefiner(256, 64, 32 + descriptor_dim, hidden_blocks),
+                "1": LoMaConvRefiner(96, 32, 1 + descriptor_dim, hidden_blocks),
+            }
+        )
+
+    def forward(
+        self, feature_map: torch.Tensor, scale: str, context: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if context is not None:
+            feature_map = torch.cat((feature_map, context), dim=1)
+        output = self.layers[scale](feature_map)
+        return output[:, : self.descriptor_dim], output[:, self.descriptor_dim :]
+
+
+class LoMaDescriptorNetwork(nn.Module):
+    """LoMa's DeDoDe-B-style descriptor network.
+
+    The network produces a dense descriptor grid from an RGB image. `describe_keypoints` bilinearly samples that grid
+    at normalized keypoint coordinates in the `[-1, 1]` range used by `torch.nn.functional.grid_sample`.
+    """
+
+    def __init__(self, config: LoMaConfig) -> None:
+        super().__init__()
+        self.encoder = LoMaVgg19Encoder()
+        self.decoder = LoMaDescriptorDecoder(config.input_descriptor_dim, config.descriptor_hidden_blocks)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        feature_maps = self.encoder(pixel_values)
+        descriptor_grid = pixel_values.new_zeros(
+            pixel_values.shape[0], self.decoder.descriptor_dim, *feature_maps[-1].shape[-2:]
+        )
+        context = None
+
+        for index, (feature_map, scale) in enumerate(zip(reversed(feature_maps), self.decoder.scales)):
+            descriptor_update, context = self.decoder(feature_map, scale=scale, context=context)
+            descriptor_grid = descriptor_grid + descriptor_update
+            if index < len(self.decoder.scales) - 1:
+                descriptor_grid = F.interpolate(
+                    descriptor_grid, size=feature_maps[-(index + 2)].shape[-2:], mode="bilinear", align_corners=False
+                )
+                context = F.interpolate(
+                    context, size=feature_maps[-(index + 2)].shape[-2:], mode="bilinear", align_corners=False
+                )
+
+        return descriptor_grid
+
+    def describe_keypoints(self, pixel_values: torch.Tensor, keypoints: torch.Tensor) -> torch.Tensor:
+        descriptor_grid = self(pixel_values)
+        return F.grid_sample(descriptor_grid.float(), keypoints[:, None], mode="bilinear", align_corners=False)[
+            :, :, 0
+        ].mT
 
 
 @auto_docstring(
