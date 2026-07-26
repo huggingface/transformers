@@ -721,6 +721,35 @@ class NopConfig(PreTrainedConfig):
         tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
         self.assertTrue(tok.__class__ == TokenizersBackend)
 
+    @require_tokenizers
+    def test_tokenizers_backend_tokenizer_class(self):
+        self.assertIs(tokenizer_class_from_name("TokenizersBackend"), TokenizersBackend)
+
+        class FakeLlamaConfig:
+            model_type = "llama"
+            _name_or_path = "mlx-community/MiniCPM5-1B-8bit"
+
+        mock_tokenizer = mock.MagicMock(spec=TokenizersBackend)
+
+        with (
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.AutoConfig.from_pretrained",
+                return_value=FakeLlamaConfig(),
+            ),
+            mock.patch(
+                "transformers.models.auto.tokenization_auto.get_tokenizer_config",
+                return_value={"tokenizer_class": "TokenizersBackend"},
+            ),
+            mock.patch.object(TokenizersBackend, "from_pretrained", return_value=mock_tokenizer) as mock_backend,
+        ):
+            result = AutoTokenizer.from_pretrained("mlx-community/MiniCPM5-1B-8bit")
+
+        mock_backend.assert_called_once_with(
+            "mlx-community/MiniCPM5-1B-8bit",
+            _from_auto=True,
+        )
+        self.assertIs(result, mock_tokenizer)
+
     def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
         nop_tokenizer_code = """
 import transformers
