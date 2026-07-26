@@ -16,7 +16,9 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, can_return_tuple
+from ..auto import CONFIG_MAPPING
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..lightglue.configuration_lightglue import LightGlueConfig
 from ..lightglue.image_processing_lightglue import LightGlueImageProcessor, LightGlueImageProcessorKwargs
@@ -43,10 +45,6 @@ class LoMaConfig(LightGlueConfig):
         Number of self- and cross-attention layers in the matching transformer.
     filter_threshold (`float`, *optional*, defaults to 0.1):
         Confidence threshold used to retain mutual matches.
-    depth_confidence (`float`, *optional*, defaults to -1.0):
-        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive early stopping.
-    width_confidence (`float`, *optional*, defaults to -1.0):
-        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive keypoint pruning.
     positional_encoding_type (`str`, *optional*, defaults to `"learnable"`):
         Type of Fourier positional encoding applied in self-attention. Supported values are `"learnable"` and
         `"fixed"`.
@@ -72,16 +70,17 @@ class LoMaConfig(LightGlueConfig):
     attention_head_dim: int | None = None
     num_hidden_layers: int = 9
     num_attention_heads: int | None = None
-    num_key_value_heads: int | None = None
     filter_threshold: float = 0.1
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
 
-    # LoMa does not use LightGlue's adaptive early stopping or point pruning. These fields remain temporarily so the
-    # inherited skeleton stays executable until the LoMa matching transformer replaces it.
-    depth_confidence: float = -1.0
-    width_confidence: float = -1.0
+    # Fields inherited from LightGlueConfig but not used by LoMa's matching architecture.
+    attention_dropout = AttributeError()
+    depth_confidence = AttributeError()
+    hidden_act = AttributeError()
+    num_key_value_heads = AttributeError()
+    width_confidence = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.num_attention_heads is None:
@@ -98,7 +97,18 @@ class LoMaConfig(LightGlueConfig):
         if self.positional_encoding_type not in {"learnable", "fixed"}:
             raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
 
-        super().__post_init__(**kwargs)
+        # Keep the keypoint detector setup from LightGlueConfig without retaining its attention-specific fields.
+        if isinstance(self.keypoint_detector_config, dict):
+            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
+            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
+                **self.keypoint_detector_config, attn_implementation="eager"
+            )
+        elif self.keypoint_detector_config is None:
+            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+
+        self.intermediate_size = self.descriptor_dim * 2
+        self.hidden_size = self.descriptor_dim
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class LoMaConvRefiner(nn.Module):

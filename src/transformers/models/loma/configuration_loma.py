@@ -44,10 +44,6 @@ class LoMaConfig(PreTrainedConfig):
         Number of self- and cross-attention layers in the matching transformer.
     filter_threshold (`float`, *optional*, defaults to 0.1):
         Confidence threshold used to retain mutual matches.
-    depth_confidence (`float`, *optional*, defaults to -1.0):
-        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive early stopping.
-    width_confidence (`float`, *optional*, defaults to -1.0):
-        Compatibility setting for the inherited model skeleton. LoMa does not use adaptive keypoint pruning.
     positional_encoding_type (`str`, *optional*, defaults to `"learnable"`):
         Type of Fourier positional encoding applied in self-attention. Supported values are `"learnable"` and
         `"fixed"`.
@@ -73,16 +69,8 @@ class LoMaConfig(PreTrainedConfig):
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int | None = None
-    num_key_value_heads: int | None = None
-
-    # LoMa does not use LightGlue's adaptive early stopping or point pruning. These fields remain temporarily so the
-    # inherited skeleton stays executable until the LoMa matching transformer replaces it.
-    depth_confidence: float = -1.0
-    width_confidence: float = -1.0
     filter_threshold: float = 0.1
     initializer_range: float = 0.02
-    hidden_act: str = "gelu"
-    attention_dropout: float | int = 0.0
     attention_bias: bool = True
 
     input_descriptor_dim: int = 256
@@ -105,11 +93,8 @@ class LoMaConfig(PreTrainedConfig):
 
         if self.positional_encoding_type not in {"learnable", "fixed"}:
             raise ValueError("positional_encoding_type must be either 'learnable' or 'fixed'")
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
 
-        # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
-        # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
+        # Keep the keypoint detector setup from LightGlueConfig without retaining its attention-specific fields.
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
             self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](

@@ -60,8 +60,6 @@ class LoMaModelTester:
         descriptor_dim: int = 64,
         num_layers: int = 2,
         num_heads: int = 4,
-        depth_confidence: float = 1.0,
-        width_confidence: float = 1.0,
         filter_threshold: float = 0.1,
         matching_threshold: float = 0.0,
     ):
@@ -74,8 +72,6 @@ class LoMaModelTester:
         self.descriptor_dim = descriptor_dim
         self.num_layers = num_layers
         self.num_heads = num_heads
-        self.depth_confidence = depth_confidence
-        self.width_confidence = width_confidence
         self.filter_threshold = filter_threshold
         self.matching_threshold = matching_threshold
 
@@ -91,8 +87,6 @@ class LoMaModelTester:
             descriptor_dim=self.descriptor_dim,
             num_hidden_layers=self.num_layers,
             num_attention_heads=self.num_heads,
-            depth_confidence=self.depth_confidence,
-            width_confidence=self.width_confidence,
             filter_threshold=self.filter_threshold,
             matching_threshold=self.matching_threshold,
             attn_implementation="eager",
@@ -158,8 +152,15 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(config.num_attention_heads, 4)
         self.assertEqual(config.num_hidden_layers, 9)
         self.assertEqual(config.filter_threshold, 0.1)
-        self.assertEqual(config.depth_confidence, -1.0)
-        self.assertEqual(config.width_confidence, -1.0)
+
+        for attribute in (
+            "attention_dropout",
+            "depth_confidence",
+            "hidden_act",
+            "num_key_value_heads",
+            "width_confidence",
+        ):
+            self.assertFalse(hasattr(config, attribute))
 
     def test_config_derives_attention_heads(self):
         config = LoMaConfig(descriptor_dim=512)
