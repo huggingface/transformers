@@ -15,18 +15,25 @@
 
 import re
 import unittest
+from unittest.mock import patch
 
 from transformers import AutoTokenizer, is_torch_available
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7Config,
     Step3p7TextConfig,
     Step3p7VisionConfig,
 )
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_torch,
     slow,
+    torch_device,
 )
 
+from ... import test_modeling_common
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -125,8 +132,6 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Step3p7VisionText2TextModelTester
-    # Decoder layer returns only hidden_states, discards attn weights
-    has_attentions = False
     # Vision encoder outputs hidden_size*4 channels after the stride-2 conv downsampler,
     # so last_hidden_state.shape[-1] != vision_config.hidden_size
     skip_test_image_features_output_shape = True
@@ -141,9 +146,27 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
         finally:
             self.all_model_classes = orig
 
-    @unittest.skip(reason="Shared conversion mapping's FP8 `weight_scale_inv` rename can't match a non-FP8 test model")
-    def test_reverse_loading_mapping(self):
-        pass
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
+        # The `vit_large_projector` -> `model.multi_modal_projector` mapping carries the base-model
+        # prefix, so it's only visible on the model-with-head; skip the base-model check.
+        # `.mlp.experts.down_proj_scale_inv` only matches a real FP8 checkpoint's `weight_scale_inv`
+        # keys, never this bf16-style test config, so drop it before running the shared assertion.
+        def get_model_conversion_mapping_without_fp8_scale(*args, **kwargs):
+            dropped_targets = {".mlp.experts.down_proj_scale_inv"}
+            return [
+                conversion
+                for conversion in get_model_conversion_mapping(*args, **kwargs)
+                if not dropped_targets.intersection(conversion._original_target_patterns)
+            ]
+
+        with patch.object(
+            test_modeling_common,
+            "get_model_conversion_mapping",
+            get_model_conversion_mapping_without_fp8_scale,
+        ):
+            super().test_reverse_loading_mapping(
+                check_keys_were_modified=check_keys_were_modified, skip_base_model=skip_base_model
+            )
 
     def test_training(self):
         self._for_cond_gen_only(super().test_training)
@@ -164,15 +187,18 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
             model_tester = self.model_tester
         return model_tester.get_vision_config().num_hidden_layers + 1
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        # Same reasoning as `_image_features_get_expected_num_hidden_states` above.
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.get_vision_config().num_hidden_layers
+
 
 @require_torch
 @slow
 class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
-    """Validate compatibility with the real `stepfun-ai/Step-3.7-Flash` checkpoint without ever
-    downloading its ~400GB of weights: only `config.json` and the safetensors *headers* (parsed via
-    `huggingface_hub.get_safetensors_metadata`, which range-reads just the per-shard JSON header —
-    a few MB total, no tensor data) are fetched.
-    """
+    """Validates the conversion mapping against the real checkpoint's `config.json` and safetensors
+    headers (via `huggingface_hub.get_safetensors_metadata`), without downloading any weights."""
 
     checkpoint = _REAL_CHECKPOINT
 
@@ -192,13 +218,9 @@ class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
         self.assertNotEqual(text_config.num_sliding_attention_heads, text_config.num_attention_heads)
 
     def test_real_checkpoint_weight_mapping_is_complete(self):
-        """Every real-checkpoint weight key must either:
-        - rename (optionally via a Chunk/Concatenate `WeightConverter`) to a key that exists in
-          our model, with an exactly matching shape for the simple (non-converter) renames, or
-        - fall in the checkpoint's trailing "MTP" (speculative-decoding) layers, which this
-          implementation deliberately doesn't model (see `Step3p7TextConfig`'s
-          `num_nextn_predict_layers` docstring) — the only tolerated gap.
-        """
+        """Every real-checkpoint weight key must rename to a key in our model (shape-checked for
+        simple renames), except the checkpoint's trailing MTP layers, which this implementation
+        deliberately doesn't model (see `Step3p7TextConfig`'s `num_nextn_predict_layers` docstring)."""
         import torch
         from huggingface_hub import get_safetensors_metadata
 
@@ -257,6 +279,9 @@ class Step3p7IntegrationTest(unittest.TestCase):
 
     model_id = _REAL_CHECKPOINT
 
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def _load_model(self):
         model = Step3p7ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.eval()
@@ -282,9 +307,25 @@ class Step3p7IntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        completion = tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print(f"\n[test_text_generation] completion:\n{completion!r}\n")
-        self.assertIn("cake", completion.lower())
+        generated_ids = output[0, inputs["input_ids"].shape[1] :]
+        decoded = tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): "Got it, the user asked for a cake recipe. First, I should pick a classic that's",
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+
+        EXPECTED_OUTPUT_TOKEN_IDS = Expectations(
+            {
+                ("cuda", None): [
+                    70935, 436, 14, 270, 3967, 4869, 362, 260, 22461, 17144,
+                    16, 5978, 14, 342, 1531, 6009, 260, 16453, 396, 734,
+                ],  # fmt: skip
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(generated_ids.tolist(), EXPECTED_OUTPUT_TOKEN_IDS)
 
     def test_image_and_text_generation(self):
         model = self._load_model()
@@ -296,7 +337,9 @@ class Step3p7IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -308,6 +351,24 @@ class Step3p7IntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        completion = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0]
-        print(f"\n[test_image_and_text_generation] completion:\n{completion!r}\n")
-        self.assertIn("dog", completion.lower())
+        generated_ids = output[0, inputs["input_ids"].shape[1] :]
+        decoded = processor.batch_decode(generated_ids.unsqueeze(0), skip_special_tokens=True)[0]
+
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): (
+                    "The user is asking me to identify the breed of a dog in an image. Looking at the image"
+                ),
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+
+        EXPECTED_OUTPUT_TOKEN_IDS = Expectations(
+            {
+                ("cuda", None): [
+                    671, 3967, 344, 13070, 678, 304, 5784, 270, 28748, 294,
+                    260, 6397, 295, 411, 4609, 16, 32763, 509, 270, 4609,
+                ],  # fmt: skip
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(generated_ids.tolist(), EXPECTED_OUTPUT_TOKEN_IDS)

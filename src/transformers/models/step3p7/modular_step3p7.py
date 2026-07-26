@@ -1033,6 +1033,7 @@ class Step3p7Model(DeepseekOcr2Model):
             last_hidden_state=vision_output.last_hidden_state,
             pooler_output=merged,
             hidden_states=vision_output.hidden_states,
+            attentions=vision_output.attentions,
         )
 
 
