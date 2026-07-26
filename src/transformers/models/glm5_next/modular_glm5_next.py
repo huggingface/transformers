@@ -35,7 +35,7 @@ from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack, VideosKwargs
+from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     add_start_docstrings,
@@ -56,7 +56,7 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
-from ..glmga.video_processing_glmga import GlmgaVideoProcessor
+from ..glmga.video_processing_glmga import GlmgaVideoProcessor, GlmgaVideoProcessorInitKwargs
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
@@ -1652,13 +1652,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
 
 
-class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
-    max_image_size: dict[str, int]
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    patch_expand_factor: int
-    max_frames: int
+class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs):
     dynamic_fps_thresholds: list[tuple[int]]
 
 
@@ -1676,18 +1670,20 @@ class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
             The patch_expand_factor of the vision encoder to llm encoder.
         max_frames (`int`, *optional*, defaults to 640):
             The maximum number of frames that can be sampled.
-        dynamic_fps_thresholds (`list[tuple[int]`, *optional*):
-            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry
-            in the tuple, then the associated second tuple entry is used as target fps.
+        dynamic_fps_thresholds (`list[list[int]]`, *optional*):
+            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry,
+            then the associated second entry is used as target fps.
 
-            Note that one entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
+            NOTE that
+                1. An entry is a `list[int]` but should act as tuple (2 entries); this is for JSON compatibility.
+                2. One entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
     """,
 )
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     fps = AttributeError("defaults now via `dynamic_fps_thresholds` instead")
 
     max_duration = 2400
-    dynamic_fps_thresholds = [(30, 3), (300, 1), (2400, 0.5)]
+    dynamic_fps_thresholds = [[30, 3], [300, 1], [2400, 0.5]]
     valid_kwargs = Glm5NextVideoProcessorInitKwargs
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):

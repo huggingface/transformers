@@ -99,11 +99,13 @@ def smart_resize(
             The patch_expand_factor of the vision encoder to llm encoder.
         max_frames (`int`, *optional*, defaults to 640):
             The maximum number of frames that can be sampled.
-        dynamic_fps_thresholds (`list[tuple[int]`, *optional*):
-            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry
-            in the tuple, then the associated second tuple entry is used as target fps.
+        dynamic_fps_thresholds (`list[list[int]]`, *optional*):
+            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry,
+            then the associated second entry is used as target fps.
 
-            Note that one entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
+            NOTE that
+                1. An entry is a `list[int]` but should act as tuple (2 entries); this is for JSON compatibility.
+                2. One entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
     """,
 )
 class Glm5NextVideoProcessor(BaseVideoProcessor):
@@ -128,7 +130,7 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     patch_expand_factor = 1
     max_frames = 640
-    dynamic_fps_thresholds = [(30, 3), (300, 1), (2400, 0.5)]
+    dynamic_fps_thresholds = [[30, 3], [300, 1], [2400, 0.5]]
 
     def __init__(self, **kwargs: Unpack[Glm5NextVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
