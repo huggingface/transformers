@@ -448,7 +448,7 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels, shift_labels=False):
+    def __call__(self, model_output, labels, shift_labels=False, num_items_in_batch=None):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
         if shift_labels:
             logits = logits[..., :-1, :].contiguous()
@@ -469,10 +469,17 @@ class LabelSmoother:
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
 
-        # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
-        num_active_elements = padding_mask.numel() - padding_mask.long().sum()
-        nll_loss = nll_loss.sum() / num_active_elements
-        smoothed_loss = smoothed_loss.sum() / (num_active_elements * log_probs.shape[-1])
+        # The Trainer passes num_items_in_batch when the loss is normalized over the full batch;
+        # otherwise reduce over this micro-batch's active (non-padded) tokens.
+        if num_items_in_batch is None:
+            denominator = padding_mask.numel() - padding_mask.long().sum()
+        elif torch.is_tensor(num_items_in_batch):
+            # The count may be on another device.
+            denominator = num_items_in_batch.to(nll_loss.device)
+        else:
+            denominator = num_items_in_batch
+        nll_loss = nll_loss.sum() / denominator
+        smoothed_loss = smoothed_loss.sum() / (denominator * log_probs.shape[-1])
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
