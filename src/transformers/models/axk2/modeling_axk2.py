@@ -678,10 +678,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = AXK2Attention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = AXK2MoE(config)
-        else:
-            self.mlp = AXK2MLP(config)
+        self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
         self.input_layernorm = AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
         self.post_attention_layernorm = (
             AXK2GatedRMSNorm(config, eps=config.rms_norm_eps)
