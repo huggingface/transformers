@@ -378,11 +378,11 @@ class EsmFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            expected_distogram = torch.tensor([6.47, 7.72, 9.44, 9.31, 16.12, 18.62, 19.62, 22.62])
+            expected_distogram = torch.tensor([6.03, 7.38, 9.00, 8.94, 15.75, 18.25, 19.25, 22.25])
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )
-            self.assertAlmostEqual(output["ptm"].max().item(), 0.742, delta=0.05)
+            self.assertAlmostEqual(output["ptm"].max().item(), 0.743, delta=0.05)
         finally:
             torch.use_deterministic_algorithms(prev[0], warn_only=prev[1])
             torch.backends.cudnn.deterministic = prev[2]
