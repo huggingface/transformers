@@ -755,7 +755,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
             past_key_values: Cache object containing the indexer state cache for this layer.
 
         Returns:
-            `torch.Tensor`: the `int64` top-k token indices of shape `[B, S, topk]` (or `[B, S, 2*topk - 1]` with tail).
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]` (or `[B, S, 2*topk - 1]` with tail).
             The eager / SDPA paths turn these into an additive sparse mask.
         """
         batch_size, seq_len = hidden_states.shape[:2]
@@ -841,7 +841,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         topk_indices = topk_indices[..., :output_width]
         topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
 
-        return topk_indices.long()
+        return topk_indices.to(torch.int32)
 
     def get_visible_tokens(
         self,
@@ -1295,23 +1295,25 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            base_mask = create_recurrent_attention_mask(
+            attention_mask = create_recurrent_attention_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
             )
             # Guarantee the mask to exist for the indexer
-            if base_mask is None:
-                base_mask = torch.ones(
+            if attention_mask is None:
+                attention_mask = torch.ones(
                     inputs_embeds.shape[0],
                     inputs_embeds.shape[1],
                     dtype=torch.bool,
                     device=inputs_embeds.device,
                 )
+            attention_mask = attention_mask.bool()
+
             causal_mask_mapping = {
-                "deepseek_sparse_attention": base_mask,
-                "linear_attention": base_mask,
+                "deepseek_sparse_attention": attention_mask,
+                "linear_attention": attention_mask,
             }
 
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
@@ -1648,6 +1650,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
                 dtype=torch.bool,
                 device=inputs_embeds.device,
             )
+        attention_mask = attention_mask.bool()
 
         return {"deepseek_sparse_attention": attention_mask, "linear_attention": attention_mask}
 
