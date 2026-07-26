@@ -1017,6 +1017,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             last_hidden_state=vision_output.last_hidden_state,
             pooler_output=merged,
             hidden_states=vision_output.hidden_states,
+            attentions=vision_output.attentions,
         )
 
     def get_placeholder_mask(
