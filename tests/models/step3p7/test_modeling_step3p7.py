@@ -141,18 +141,7 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
         finally:
             self.all_model_classes = orig
 
-    @unittest.skip(
-        reason="The vision QKV `WeightConverter` (conversion_mapping.py, 'step3p5_vision' entry) is "
-        "written in post-rename `self_attn` terms, since renamings always run before converters on "
-        "load. On full reversal (save), the `attn` -> `self_attn` `WeightRenaming` also reverses "
-        "`self_attn` back to `attn` for every key containing that substring, including the "
-        "converter's own just-reversed output — so the fully-reversed saved key "
-        "(`vision_model.layers.N.attn.in_proj_weight`, verified correct and matching the original "
-        "StepFun naming) can never match the converter's own declared `self_attn`-based pattern. "
-        "Structural limitation of chaining a renaming and a converter on the same substring, not a "
-        "functional bug — this test's `skip_base_model=True` variant is otherwise correct (same "
-        "`model.` base-model-prefix issue as cosmos3_omni/exaone4_5)."
-    )
+    @unittest.skip(reason="Shared conversion mapping's FP8 `weight_scale_inv` rename can't match a non-FP8 test model")
     def test_reverse_loading_mapping(self):
         pass
 
@@ -167,43 +156,6 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         self._for_cond_gen_only(super().test_training_gradient_checkpointing_use_reentrant_true)
-
-    # get_image_features() returns a BaseModelOutputWithPooling; vision hidden_size is 8
-    # but the test looks for config.vision_config.hidden_size which is set correctly.
-
-    # DynamicCache is a dict subclass; recursive_check in test_model_outputs_equivalence
-    # can't compare return_dict=False vs return_dict=True output when cache is present.
-    @unittest.skip(reason="DynamicCache dict/tuple mismatch in return_dict=False vs True path")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    # Empty-sequence reshape bug in Step3p7Attention when generating from inputs_embeds.
-    @unittest.skip(reason="0-length tensor reshape crash during generation from inputs_embeds")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip(reason="0-length tensor reshape crash during generation from inputs_embeds")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
-    @unittest.skip(reason="0-length tensor reshape crash during generation from inputs_embeds")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Flash attention is not supported for Step3p7")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Feedforward chunking is not supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(
-        reason="Step3p7VisionAttention uses F.scaled_dot_product_attention directly; "
-        "flex attention BlockMask cannot be passed to it via the SDPA path."
-    )
-    def test_flex_attention_with_grads(self):
-        pass
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         # Vision model has its own num_hidden_layers; the base class would use the
