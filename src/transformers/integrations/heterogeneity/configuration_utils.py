@@ -215,7 +215,27 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
     def __len__(self) -> int:
         return self._config.num_hidden_layers
 
-    def __getitem__(self, layer_idx: int | slice) -> PreTrainedConfig | list[PreTrainedConfig]:
+    def __getitem__(self, layer_idx: int | slice | str) -> PreTrainedConfig | list[PreTrainedConfig]:
+        # Return the config for a specific layer type, if the model is homogeneous for that layer type
+        if isinstance(layer_idx, str):
+            if (layer_types := getattr(self._config, "layer_types", None)) is None:
+                raise ValueError(f"Layer type '{layer_idx}' requested, but config.layer_types is not defined. ")
+
+            if layer_idx not in layer_types:
+                raise ValueError(
+                    f"Layer type '{layer_idx}' not found in config.layer_types: {layer_types}. "
+                    f"Available layer types: {set(layer_types)}"
+                )
+
+            configs = [self[i] for i, layer_type in enumerate(layer_types) if layer_type == layer_idx]
+            if any(config != configs[0] for config in configs):
+                raise ValueError(
+                    f"Layer type '{layer_idx}' is not homogeneous across layers. "
+                    f"Use an integer index to access a specific layer's config."
+                )
+            return configs[0]
+
+        # Return a list of configs for a slice of layers
         if isinstance(layer_idx, slice):
             return [self[i] for i in range(*layer_idx.indices(len(self)))]
 
@@ -223,6 +243,10 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
             layer_idx += len(self)
         if layer_idx < 0 or layer_idx >= len(self):
             raise IndexError("list index out of range")
+
+        # Config is actually homogeneous so just return the global config
+        if not self._config.is_heterogeneous:
+            return self._config
 
         heterogeneity_spec = self._config._heterogeneity_spec
         return _get_layer_config(
@@ -284,9 +308,7 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
-    def per_layer_config(self) -> Sequence[PreTrainedConfig] | None:
-        if not self.is_heterogeneous:
-            return None
+    def per_layer_config(self) -> Sequence[PreTrainedConfig]:
         return _PerLayerConfigView(self)
 
     @per_layer_config.setter
