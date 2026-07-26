@@ -24,7 +24,7 @@ from transformers import (
     EfficientViTSamPromptEncoderConfig,
     EfficientViTSamVisionConfig,
 )
-from transformers.testing_utils import require_torch, require_torchvision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torchvision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -449,11 +449,9 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         )
 
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 32, 32))
+        torch.testing.assert_close(inputs["input_points"], torch.tensor([[[[16.0, 8.0]]]], dtype=torch.float64))
         torch.testing.assert_close(
-            inputs["input_points"], torch.tensor([[[[16.0, 8.0]]]], dtype=torch.float32)
-        )
-        torch.testing.assert_close(
-            inputs["input_boxes"], torch.tensor([[[8.0, 4.0, 24.0, 12.0]]], dtype=torch.float32)
+            inputs["input_boxes"], torch.tensor([[[8.0, 4.0, 24.0, 12.0]]], dtype=torch.float64)
         )
         self.assertEqual(inputs["input_labels"].tolist(), [[[1]]])
 
@@ -698,16 +696,65 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.assertEqual(outputs.pred_masks.shape[:3], (self.model_tester.batch_size, 2, 3))
 
     @slow
-    def test_inference_l0(self):
-        model = EfficientViTSamModel.from_pretrained("./test_l0_hf")
-        model.to(torch_device)
-        model.eval()
+    def test_inference_numerical_parity(self):
+        from huggingface_hub import hf_hub_download
+        from PIL import Image
 
-        pixel_values = torch.zeros(1, 3, 512, 512).to(torch_device)
-        with torch.no_grad():
-            outputs = model(pixel_values)
+        from transformers.models.efficientvitsam.convert_efficientvitsam_to_hf import get_config, replace_keys
+        from transformers.models.efficientvitsam.image_processing_efficientvitsam import EfficientViTSamImageProcessor
+        from transformers.models.efficientvitsam.processing_efficientvitsam import EfficientViTSamProcessor
 
-        self.assertEqual(outputs.iou_scores.shape, (1, 1, 3))
+        expected_outputs = {
+            "efficientvit-sam-l0": ([0.4383514, 0.6686006, 0.7585137], [-0.4104123, 0.3950768, 0.9315740]),
+            "efficientvit-sam-l1": ([0.5030453, 0.8049473, 0.8187212], [-2.2492948, -1.4918246, -1.4300048]),
+            "efficientvit-sam-l2": ([0.5292551, 0.7983652, 0.8195354], [-1.6958143, -0.7988551, -0.8736166]),
+            "efficientvit-sam-xl0": ([0.2872823, 0.5676863, 0.8392619], [-9.0085440, -6.0312724, -8.8787479]),
+            "efficientvit-sam-xl1": ([0.2453989, 0.2956744, 0.6442841], [-15.1235638, -10.6101160, -14.4371719]),
+        }
+
+        for model_name, (scores, masks) in expected_outputs.items():
+            with self.subTest(model_name=model_name):
+                checkpoint_path = hf_hub_download("mit-han-lab/efficientvit-sam", model_name.replace("-", "_") + ".pt")
+                state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+                state_dict = state_dict.get("state_dict", state_dict)
+
+                model = EfficientViTSamModel(get_config(model_name))
+                model.load_state_dict(replace_keys(state_dict, model_name), strict=True)
+                model.to(torch_device).eval()
+
+                image_size = 1024 if "xl" in model_name else 512
+                processor = EfficientViTSamProcessor(
+                    EfficientViTSamImageProcessor(
+                        size={"longest_edge": image_size}, pad_size={"height": image_size, "width": image_size}
+                    )
+                )
+                inputs = processor(
+                    images=Image.new("RGB", (64, 64), color=(127, 63, 31)),
+                    input_points=[[[32, 32]]],
+                    return_tensors="pt",
+                ).to(torch_device)
+                with torch.no_grad():
+                    outputs = model(**inputs)
+
+                expected_scores = Expectations({(None, None): scores})
+                expected_masks = Expectations({(None, None): masks})
+                torch.testing.assert_close(
+                    outputs.iou_scores.flatten(),
+                    torch.tensor(expected_scores.get_expectation(), device=torch_device),
+                    rtol=2e-4,
+                    atol=2e-4,
+                )
+                try:
+                    torch.testing.assert_close(
+                        outputs.pred_masks.flatten()[:3],
+                        torch.tensor(expected_masks.get_expectation(), device=torch_device),
+                        rtol=2e-4,
+                        atol=2e-4,
+                    )
+                except AssertionError as error:
+                    raise AssertionError(
+                        f"{model_name}: actual={outputs.pred_masks.flatten()[:3].tolist()}, {error}"
+                    ) from error
 
 
 @require_torch

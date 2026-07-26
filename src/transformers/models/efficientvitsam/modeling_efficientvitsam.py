@@ -29,12 +29,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_efficientvitsam import (
     EfficientViTSamConfig,
@@ -1439,23 +1440,25 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm, nn.LayerNorm, LayerNorm2d)):
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             if module.weight is not None:
-                nn.init.ones_(module.weight)
+                init.ones_(module.weight)
         elif isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=self.config.initializer_range)
+            init.normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif hasattr(module, "positional_embedding") and hasattr(module, "scale"):
-            nn.init.normal_(module.positional_embedding, std=module.scale)
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
+    _can_record_outputs = {"hidden_states": EfficientViTBlock}
+
     def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__(config)
         self.backbone = EfficientViTLargeBackbone(config=config)
@@ -1464,25 +1467,14 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | EfficientViTSamVisionEncoderOutput:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         features = self.backbone(pixel_values)
         features = self.neck(features)
         output = self.norm(features["sam_encoder"])
-
-        if not return_dict:
-            return (output,)
-
         return EfficientViTSamVisionEncoderOutput(last_hidden_state=output)
 
 

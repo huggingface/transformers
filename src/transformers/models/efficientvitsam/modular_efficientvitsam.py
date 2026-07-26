@@ -23,10 +23,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
 from ..sam.image_processing_pil_sam import SamImageProcessorPil
 from ..sam.image_processing_sam import SamImageProcessor
@@ -122,6 +126,13 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
     image_size: int = 512
 
     def __post_init__(self, **kwargs):
+        if self.block_list is None:
+            self.block_list = ["res", "fmb", "fmb", "mb", "att"]
+        if self.expand_list is None:
+            self.expand_list = [1.0, 4.0, 4.0, 4.0, 6.0]
+        if self.fewer_norm_list is None:
+            self.fewer_norm_list = [False, False, False, True, True]
+
         self.num_pos_feats = kwargs.get("num_pos_feats", 128)
         self.scale = kwargs.get("scale", 128.0)
 
@@ -985,23 +996,25 @@ class EfficientViTSamPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm, nn.LayerNorm, LayerNorm2d)):
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             if module.weight is not None:
-                nn.init.ones_(module.weight)
+                init.ones_(module.weight)
         elif isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=self.config.initializer_range)
+            init.normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif hasattr(module, "positional_embedding") and hasattr(module, "scale"):
-            nn.init.normal_(module.positional_embedding, std=module.scale)
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
+    _can_record_outputs = {"hidden_states": EfficientViTBlock}
+
     def __init__(self, config: EfficientViTSamVisionConfig):
         super().__init__(config)
         self.backbone = EfficientViTLargeBackbone(config=config)
@@ -1010,25 +1023,14 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | EfficientViTSamVisionEncoderOutput:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         features = self.backbone(pixel_values)
         features = self.neck(features)
         output = self.norm(features["sam_encoder"])
-
-        if not return_dict:
-            return (output,)
-
         return EfficientViTSamVisionEncoderOutput(last_hidden_state=output)
 
 

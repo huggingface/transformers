@@ -140,6 +140,13 @@ class EfficientViTSamVisionConfig(PreTrainedConfig):
     image_size: int = 512
 
     def __post_init__(self, **kwargs):
+        if self.block_list is None:
+            self.block_list = ["res", "fmb", "fmb", "mb", "att"]
+        if self.expand_list is None:
+            self.expand_list = [1.0, 4.0, 4.0, 4.0, 6.0]
+        if self.fewer_norm_list is None:
+            self.fewer_norm_list = [False, False, False, True, True]
+
         self.num_pos_feats = kwargs.get("num_pos_feats", 128)
         self.scale = kwargs.get("scale", 128.0)
 
