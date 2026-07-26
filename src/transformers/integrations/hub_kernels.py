@@ -298,6 +298,10 @@ if is_kernels_available():
                         # renamed inside Rocketknight1/esmfold2-trimul-kernel too.
                         layer_name="ESMFold2TriangleMultiplication",
                         version=1,
+                        # TODO: drop once the kernel moves to kernels-community (a trusted
+                        # publisher). A personal namespace has no organization overview, so the
+                        # publisher trust check cannot resolve it and refuses to load.
+                        trust_remote_code=True,
                     ),
                 },
             },

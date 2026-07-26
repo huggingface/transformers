@@ -369,7 +369,7 @@ def _encode_atom_name(name: str) -> list[int]:
 
 
 def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
-    """Featurize a single protein sequence for EsmFold2Model.forward.
+    """Featurize a single protein sequence for EsmFold2Model.fold.
 
     Returns the same keys with the same dtypes/shapes as
     ``EsmFold2InputBuilder.prepare_input(StructurePredictionInput(...))``
@@ -518,9 +518,9 @@ def output_to_pdb(output, features: dict) -> str:
         residue_index_arr = residue_index_arr[0]
 
     valid_tok = np.where(token_mask)[0]
-    n_res = valid_tok.shape[0]
+    number_of_residues = valid_tok.shape[0]
 
-    aatype = np.full(n_res, rc.restype_order_with_x["X"], dtype=np.int64)
+    aatype = np.full(number_of_residues, rc.restype_order_with_x["X"], dtype=np.int64)
     for new_i, t in enumerate(valid_tok):
         rt = int(res_type[t])
         three = _RES_TYPE_TO_3LETTER.get(rt)
@@ -530,9 +530,9 @@ def output_to_pdb(output, features: dict) -> str:
             one = rc.restype_3to1.get(three, "X")
             aatype[new_i] = rc.restype_order_with_x[one]
 
-    atom_positions = np.zeros((n_res, 37, 3), dtype=np.float32)
-    atom_mask = np.zeros((n_res, 37), dtype=np.float32)
-    b_factors = np.zeros((n_res, 37), dtype=np.float32)
+    atom_positions = np.zeros((number_of_residues, 37, 3), dtype=np.float32)
+    atom_mask = np.zeros((number_of_residues, 37), dtype=np.float32)
+    b_factors = np.zeros((number_of_residues, 37), dtype=np.float32)
     tok_to_new = {int(t): i for i, t in enumerate(valid_tok)}
 
     for a in range(atom_to_token.shape[0]):
