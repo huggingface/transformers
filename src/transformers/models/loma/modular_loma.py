@@ -399,8 +399,10 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         super().__init__(config)
         self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
-        self.input_projection = nn.Linear(
-            self.keypoint_detector_descriptor_dim, config.descriptor_dim, bias=config.attention_bias
+        self.input_projection = (
+            nn.Identity()
+            if self.keypoint_detector_descriptor_dim == config.descriptor_dim
+            else nn.Linear(self.keypoint_detector_descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
         )
         self.positional_encoder = LoMaPositionalEncoder(config)
         self.transformer_layers = nn.ModuleList(
