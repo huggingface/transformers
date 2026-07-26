@@ -1656,7 +1656,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs):
-    dynamic_fps_thresholds: list[tuple[int]]
+    dynamic_fps_thresholds: list[list[int]]
 
 
 @add_start_docstrings(

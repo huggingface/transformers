@@ -46,7 +46,7 @@ class Glm5NextVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     patch_expand_factor: int
     max_frames: int
-    dynamic_fps_thresholds: list[tuple[int]]
+    dynamic_fps_thresholds: list[list[int]]
 
 
 def smart_resize(
