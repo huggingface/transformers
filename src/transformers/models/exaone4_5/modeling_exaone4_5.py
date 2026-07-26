@@ -36,7 +36,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -201,7 +200,6 @@ class Exaone4_5_VisionAttention(nn.Module):
         self.kv_dim = self.num_key_value_heads * self.head_dim
         self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -296,7 +294,6 @@ class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
         self.attn = Exaone4_5_VisionAttention(config=config)
         self.mlp = Exaone4_5_MLP(config, bias=True)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
@@ -718,7 +715,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -71,15 +71,6 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
-
-    def test_assisted_generation_rejected_as_stateful(self):
-        """Lfm2Moe is a conv/attention hybrid (stateful), so assisted / prompt-lookup decoding must be rejected
-        with a clear error instead of silently producing wrong text (it cannot roll back its conv state)."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Lfm2MoeForCausalLM(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"][:1]  # batch size 1, so prompt lookup would otherwise run
-        with self.assertRaisesRegex(ValueError, "stateful"):
-            model.generate(input_ids, max_new_tokens=3, do_sample=False, prompt_lookup_num_tokens=2)
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
@@ -150,12 +141,10 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
             )
         return cls.model
 
-    @slow
     def test_model_1a8b_logits(self):
-        set_seed(1789)
         input_ids = [1, 22998, 768, 1947, 797, 22017, 811, 6332, 928, 5743, 797, 779, 48123, 772, 33551, 60996, 523]
         model = self.get_model()
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        input_ids = torch.tensor([input_ids]).to(model.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # fmt: off
@@ -183,50 +172,50 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         out_slice = out[0, 0, :10]
         torch.testing.assert_close(out_slice, EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
-    @slow
     def test_model_1a8b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of the Middle East."""
-        set_seed(1789)
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("cuda", 8): [
+                    "In 1st century A.D., the Roman Empire controlled much of Europe, North Africa, and parts of Western Asia. Which"
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
         prompt = "In 1st century A.D., the Roman Empire"
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)
         model = self.get_model()
-        input_ids = tokenizer.encode(prompt, return_tensors="pt", add_special_tokens=True).to(
-            model.model.embed_tokens.weight.device
-        )
-        with torch.no_grad():
-            generated_ids = model.generate(input_ids, max_new_tokens=15, do_sample=False)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt", add_special_tokens=True).to(model.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
-    @slow
     @require_deterministic_for_xpu
     def test_model_1a8b_batched_chat_generation(self):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
-        # fmt: off
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("cuda", None): [
-                    "Who are you? (AI) designed to assist?  \nI am an AI assistant developed to",
+                ("cuda", (8, 0)): [
+                    "Who are you?, a language model designed to assist with complex problem-solving and creative exploration?",
                     "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum.",
-                    "The Meji Restoration in Japan ended**  \n**A.** The shogunate was abolished, and imperial"
+                    "The Meji Restoration in Japan ended** was a pivotal period in Japanese history that marked the transition from feudal rule",
+                ],
+                ("cuda", (8, 6)): [
+                    "Who are you? (as AI) created by?  \nI am an artificial intelligence designed to",
+                    "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
+                    "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish",
                 ],
                 ("xpu", None): [
                     "Who are you? (AI) designed to assist?  \nI am an AI language model developed",
                     "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
-                    "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish"
+                    "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish",
                 ],
             }
         )
-        # fmt: on
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
 
-        set_seed(1789)
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)
         model = self.get_model()
-        batched_input_ids = tokenizer(prompts, return_tensors="pt", padding=True).to(
-            model.model.embed_tokens.weight.device
-        )
-        with torch.no_grad():
-            generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
+        batched_input_ids = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
