@@ -636,11 +636,11 @@ class BambaMixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
-            hidden_states = self.norm(hidden_states, gate.squeeze(1))
+            hidden_states = hidden_states.view(batch_size, 1, self.num_heads * self.head_dim)
+            hidden_states = self.norm(hidden_states, gate)
 
             # 4. Final linear projection
-            out = self.out_proj(hidden_states)[:, None, ...]
+            out = self.out_proj(hidden_states)
 
         # Fused calculations or step by step if no initialized cache is found
         else:
