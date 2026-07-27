@@ -534,7 +534,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
+            logits_to_keep=logits_to_keep if logits_to_keep is not None else 1,
             **kwargs,
         )
         return model_inputs
