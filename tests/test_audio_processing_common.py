@@ -135,7 +135,7 @@ class AudioProcessingTestMixin:
         outputs = {}
         for backend, cls in self.audio_processing_classes.items():
             ap = cls(**init_dict)
-            outputs[backend] = ap(waveform, sampling_rate=ap.sample_rate, return_tensors="pt")
+            outputs[backend] = ap(waveform, sampling_rate=ap.sampling_rate, return_tensors="pt")
 
         reference_backend, reference_output = next(iter(outputs.items()))
         for backend, output in outputs.items():
@@ -156,7 +156,7 @@ class AudioProcessingTestMixin:
         outputs = {}
         for backend, cls in self.audio_processing_classes.items():
             ap = cls(**init_dict)
-            outputs[backend] = ap(waveforms, sampling_rate=ap.sample_rate, return_tensors="pt")
+            outputs[backend] = ap(waveforms, sampling_rate=ap.sampling_rate, return_tensors="pt")
 
         reference_backend, reference_output = next(iter(outputs.items()))
         for backend, output in outputs.items():
