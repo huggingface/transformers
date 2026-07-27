@@ -281,9 +281,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
 
         tokens = []
+        special_ids = set(self.all_special_ids) if skip_special_tokens else set()
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if skip_special_tokens and index in special_ids:
                 continue
             if index in self.decoder:
                 tokens.append(self.decoder[index])
@@ -422,12 +423,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
         the whole token list and not individually on added tokens
         """
-        # Don't skip special tokens in convert_ids_to_tokens so we can handle word_delimiter_token specially
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
+        special_tokens = set(self.all_special_tokens) if skip_special_tokens else set()
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
+            if skip_special_tokens and token in special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 

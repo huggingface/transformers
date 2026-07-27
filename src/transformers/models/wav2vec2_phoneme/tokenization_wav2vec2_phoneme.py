@@ -420,13 +420,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         the same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be
         called on the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        result = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            result.append(token)
+        result = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         string_output = self.convert_tokens_to_string(
             result,
