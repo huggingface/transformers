@@ -131,29 +131,6 @@ class ColPaliProcessor(ProcessorMixin):
             model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
         return model_inputs
 
-    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
-        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
-        if images is not None:
-            images = make_flat_list_of_images(images)
-            text = [
-                f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n"
-                for _ in range(len(images))
-            ]
-        return images, text, None, None
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text)
-        if text is None and images is None:
-            raise ValueError("Either text or images must be provided")
-
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        return self.image_token * self.image_seq_length
-
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -174,7 +151,9 @@ class ColPaliProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["token_type_ids", "labels"]
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names + image_processor_input_names)
 
     @property
     def query_augmentation_token(self) -> str:
@@ -184,6 +163,29 @@ class ColPaliProcessor(ProcessorMixin):
         Query augmentation buffers are used as reasoning buffers during inference.
         """
         return self.tokenizer.pad_token
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
+
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+        if images is not None:
+            images = make_flat_list_of_images(images)
+            text = [
+                f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n"
+                for _ in range(len(images))
+            ]
+        return images, text, None, None
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.image_seq_length
 
     @auto_docstring(
         custom_intro="This method forwards the `images` and `kwargs` arguments to ColPaliProcessor's [`~ColPaliProcessor.__call__`]."
