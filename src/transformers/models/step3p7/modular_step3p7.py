@@ -43,12 +43,17 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
-from ..gemma3.modeling_gemma3 import Gemma3Attention, Gemma3TextModel
+from ..gemma3.modeling_gemma3 import Gemma3TextModel
 from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
-from ..laguna.modeling_laguna import LagunaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
+from ..laguna.modeling_laguna import (
+    LagunaAttention,
+    LagunaDecoderLayer,
+    LagunaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
-    MiniMaxM3VLDecoderLayer,
     MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
@@ -153,10 +158,11 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         Resolved (not a hub-config kwarg) per-layer head count, so `Step3p7Attention` takes it as a
         plain constructor argument instead of picking between the two scalar fields itself.
     query_pre_attn_scalar (`int` or `float`, *optional*):
-        `Gemma3Attention.__init__` hook point: defaults to `head_dim`, giving standard
-        `head_dim ** -0.5` scaling instead of Gemma3's own hyperparameter of the same name.
+        `Step3p7Attention.__init__` hook point: defaults to `head_dim`, giving standard
+        `head_dim ** -0.5` scaling; overridable per released checkpoint variant.
     attn_logit_softcapping (`float`, *optional*):
-        `Gemma3Attention.__init__` hook point; unused by Step3p7's own attention, so always `None`.
+        Unused by Step3p7's own attention (no logit-softcapping term in `eager_attention_forward`), so
+        always `None`.
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -178,7 +184,9 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     yarn_only_types (`list[str]`, *optional*):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+        `Step3p7Attention.__init__` hook point: when `True`, disables causal masking for
+        `Step3p7Attention.is_causal` and, via inherited `Gemma3TextModel` masking, allows attending
+        past the current position.
     """
 
     model_type = "step3p5"
@@ -191,6 +199,20 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         "num_mtp_layers": "num_nextn_predict_layers",
     }
     default_theta = 10000.0
+    gating = True
+    # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
+    # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
+    # generated files have no cross-model imports, so that name wouldn't resolve there.
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.g_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     # Unused fields inherited from `MiniMaxM3VLTextConfig`'s sparse-indexer/MoE architecture (Step3p7
     # has neither a lightning indexer nor a SwiGLU-OAI activation); removed rather than documented.
@@ -783,6 +805,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     """
 
     config: Step3p7VisionConfig
+    _no_split_modules = ["Step3p7VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Step3p7VisionEncoderLayer,
         "attentions": Step3p7VisionAttention,
@@ -881,18 +904,11 @@ class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
         self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
 
 
-class Step3p7Attention(Gemma3Attention):
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_attention_heads: int):
-        self.num_attention_heads = num_attention_heads
-        super().__init__(config, layer_idx)
-        self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
-        self.q_proj = nn.Linear(
-            config.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
+class Step3p7Attention(LagunaAttention):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_heads: int):
+        super().__init__(config, layer_idx, num_heads)
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.is_causal = not config.use_bidirectional_attention
 
     def forward(
         self,
@@ -932,18 +948,17 @@ class Step3p7Attention(Gemma3Attention):
         )
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = (
-            attn_output.view(*attn_output.shape[:-1], self.num_attention_heads, self.head_dim)
+            attn_output.view(*attn_output.shape[:-1], self.num_heads, self.head_dim)
             * gate_states.unsqueeze(-1).sigmoid()
         ).view(*attn_output.shape)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(MiniMaxM3VLDecoderLayer):
+class Step3p7DecoderLayer(LagunaDecoderLayer):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
         self.self_attn = Step3p7Attention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
         self.attention_type = config.layer_types[layer_idx]
 

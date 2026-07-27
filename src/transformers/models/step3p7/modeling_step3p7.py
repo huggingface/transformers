@@ -30,7 +30,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
@@ -401,6 +400,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     """
 
     config: Step3p7VisionConfig
+    _no_split_modules = ["Step3p7VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Step3p7VisionEncoderLayer,
         "attentions": Step3p7VisionAttention,
@@ -690,40 +690,39 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Step3p7Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Afmoe-style SWA/GQA attention with Step3p7-specific gating and per-layer head count."""
 
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_attention_heads: int):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_heads: int):
         super().__init__()
-        self.num_attention_heads = num_attention_heads
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        # Number of heads is controlled via `config.num_attention_heads_per_layer`
+        self.num_heads = num_heads
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = self.num_attention_heads // config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.attention_dropout = self.config.attention_dropout
-        self.is_causal = not self.config.use_bidirectional_attention
-        self.q_proj = nn.Linear(
-            config.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = not config.use_bidirectional_attention
+
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.is_sliding = self.layer_type == "sliding_attention"
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
+        # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
+        # We only add Step3p7-specific attributes
+        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
+        self.sliding_window = config.sliding_window if self.is_local_attention else None
 
-        self.q_norm = Step3p7RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Step3p7RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.g_proj = nn.Linear(config.hidden_size, self.num_attention_heads, bias=False)
+        self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.gate_per_head = config.gating is True or config.gating == "per-head"
+        g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
+        self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
 
     def forward(
         self,
@@ -763,7 +762,7 @@ class Step3p7Attention(nn.Module):
         )
         attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = (
-            attn_output.view(*attn_output.shape[:-1], self.num_attention_heads, self.head_dim)
+            attn_output.view(*attn_output.shape[:-1], self.num_heads, self.head_dim)
             * gate_states.unsqueeze(-1).sigmoid()
         ).view(*attn_output.shape)
         attn_output = self.o_proj(attn_output)
@@ -771,12 +770,9 @@ class Step3p7Attention(nn.Module):
 
 
 class Step3p7DecoderLayer(GradientCheckpointingLayer):
-    """M3 decoder layer: per-layer dense/MoE MLP and dense/sparse attention."""
-
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
         self.self_attn = Step3p7Attention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
         self.attention_type = config.layer_types[layer_idx]
 
@@ -793,23 +789,28 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
