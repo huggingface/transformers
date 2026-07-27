@@ -291,6 +291,52 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(batched.distogram_logits).all())
         self.assertTrue(torch.isfinite(batched.sample_atom_coords).all())
 
+    def test_output_to_pdb(self):
+        """The PDB writer must round-trip every predicted atom, tag chains, and rank samples.
+
+        These are the three things the previous OpenFold-based writer could not do: it projected
+        atoms onto a canonical 37-slot protein layout (silently dropping anything else), rendered
+        every chain as chain A, and always emitted diffusion sample 0.
+        """
+        from transformers.models.esmfold2.protein_utils import (
+            _encode_atom_name,
+            output_to_pdb,
+            prepare_protein_features,
+        )
+
+        model = self._build()
+        features = prepare_protein_features("MKLVAAGCWQ")
+        with torch.no_grad():
+            output = model.fold(**features, num_loops=1, num_diffusion_samples=4, num_sampling_steps=1)
+
+        def atom_lines(pdb):
+            return [line for line in pdb.splitlines() if line.startswith("ATOM")]
+
+        # Every valid atom is written, and the columnar record is the right width.
+        pdb = output_to_pdb(output, features)
+        num_valid_atoms = int(features["atom_attention_mask"].sum())
+        self.assertEqual(len(atom_lines(pdb)), num_valid_atoms)
+        self.assertTrue(all(len(line) == 80 for line in atom_lines(pdb)))
+        self.assertTrue(pdb.endswith("END\n"))
+
+        # A non-canonical atom name survives instead of being dropped.
+        renamed = {key: value.clone() for key, value in features.items()}
+        renamed["ref_atom_name_chars"][0, 4] = torch.tensor(_encode_atom_name("ZN"))
+        names = [line[12:16].strip() for line in atom_lines(output_to_pdb(output, renamed))]
+        self.assertIn("ZN", names)
+        self.assertEqual(len(names), num_valid_atoms)
+
+        # A second chain gets its own tag and its own TER record.
+        multi_chain = {key: value.clone() for key, value in features.items()}
+        multi_chain["asym_id"][0, 5:] = 1
+        pdb = output_to_pdb(output, multi_chain)
+        self.assertEqual(sorted({line[21] for line in atom_lines(pdb)}), ["A", "B"])
+        self.assertEqual(sum(line.startswith("TER") for line in pdb.splitlines()), 2)
+
+        # The rendered sample is the best-ranked one, not sample 0.
+        best = int(output["ptm"].float().argmax())
+        self.assertEqual(output_to_pdb(output, features), output_to_pdb(output, features, sample_idx=best))
+
     def test_save_load(self):
         # The forward is intentionally stochastic (parcae diffusion-loop scheduler),
         # so save/load fidelity is checked at the weight level, then the reloaded

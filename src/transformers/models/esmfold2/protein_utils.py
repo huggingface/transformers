@@ -481,33 +481,101 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
 _RES_TYPE_TO_3LETTER: dict[int, str] = {rt: three for three, rt in PROTEIN_RESIDUE_TO_RES_TYPE.items()}
 _RES_TYPE_TO_3LETTER[PROTEIN_UNK_RES_TYPE] = "UNK"
 
+# Chain tags for the PDB chain-identifier column, indexed by ``asym_id``.
+_PDB_CHAIN_TAGS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-def output_to_pdb(output, features: dict) -> str:
+
+def _decode_atom_name(name_chars) -> str:
+    """Decode one atom's four encoded name characters back to a string (inverse of ``_encode_atom_name``)."""
+    return "".join(chr(int(c) + 32) if int(c) != 0 else " " for c in name_chars).strip()
+
+
+def _rank_samples(output) -> int:
+    """Index of the best-scoring diffusion sample.
+
+    These models draw several structures per fold and the best-ranked one is the prediction, so
+    ranking here rather than defaulting to sample 0 (an arbitrary draw). Ranks on ``ptm`` -- the
+    standard global score -- falling back to mean ``plddt`` when the confidence head was not run.
+    """
+    for key in ("ptm", "complex_plddt"):
+        score = output.get(key) if isinstance(output, dict) else getattr(output, key, None)
+        if score is not None:
+            return int(score.float().argmax().item())
+    return int(output["plddt"].float().mean(dim=-1).argmax().item())
+
+
+def _pdb_atom_line(
+    atom_index: int,
+    atom_name: str,
+    residue_name: str,
+    chain_tag: str,
+    residue_number: int,
+    position,
+    b_factor: float,
+) -> str:
+    """One PDB ``ATOM`` record. PDB is a columnar format, so every space here matters.
+
+    The column layout follows ``transformers.models.esm.openfold_utils.protein.to_pdb``.
+    """
+    # Names shorter than four characters are indented by one, which is what puts the element
+    # character in its conventional column.
+    name = atom_name if len(atom_name) == 4 else f" {atom_name}"
+    element = atom_name[0] if atom_name else " "
+    alt_loc = insertion_code = charge = ""
+    occupancy = 1.00
+    return (
+        f"{'ATOM':<6}{atom_index:>5} {name:<4}{alt_loc:>1}"
+        f"{residue_name:>3} {chain_tag:>1}"
+        f"{residue_number:>4}{insertion_code:>1}   "
+        f"{position[0]:>8.3f}{position[1]:>8.3f}{position[2]:>8.3f}"
+        f"{occupancy:>6.2f}{b_factor:>6.2f}          "
+        f"{element:>2}{charge:>2}"
+    )
+
+
+def _pdb_terminator_line(atom_index: int, residue_name: str, chain_tag: str, residue_number: int) -> str:
+    """The ``TER`` record closing a chain."""
+    return f"{'TER':<6}{atom_index:>5}      {residue_name:>3} {chain_tag:>1}{residue_number:>4}"
+
+
+def output_to_pdb(output, features: dict, sample_idx: int | None = None) -> str:
     """Convert an ESMFold2 forward output into a PDB string.
 
     Reads the predicted ``sample_atom_coords`` and ``plddt`` from ``output`` (an
-    [`~transformers.models.esmfold2.modeling_esmfold2.EsmFold2Output`]) and the
-    featurization tensors it needs (``res_type``, ``atom_to_token``,
-    ``ref_atom_name_chars``, ``atom_attention_mask``, ``token_attention_mask``,
-    ``residue_index``) from the ``features`` dict the model was run on. Builds a
-    37-atom ``OFProtein`` (per-atom pLDDT in the b-factor column) and renders it
-    with the OpenFold utilities shipped in ``transformers.models.esm``.
-    """
-    from transformers.models.esm.openfold_utils import OFProtein, to_pdb
-    from transformers.models.esm.openfold_utils import residue_constants as rc
+    [`~transformers.models.esmfold2.modeling_esmfold2.EsmFold2Output`]) and the featurization tensors
+    it needs (``res_type``, ``atom_to_token``, ``ref_atom_name_chars``, ``atom_attention_mask``,
+    ``token_attention_mask``, ``residue_index``, and ``asym_id`` for the chain column) from the
+    ``features`` dict the model was run on.
 
+    Every predicted atom is written out under its own name, so nothing is restricted to a canonical
+    residue's atom set. Atoms are emitted in featurization order, which is the conventional PDB
+    ordering (``N``, ``CA``, ``C``, ``O``, then side chain).
+
+    Args:
+        output: The model output to render.
+        features: The feature dict the model was run on.
+        sample_idx: Which diffusion sample to render. Defaults to the best-ranked one
+            (see :func:`_rank_samples`).
+
+    Returns:
+        The PDB string. Per-residue pLDDT goes in the b-factor column.
+    """
     coords = output["sample_atom_coords"]
     if coords.dim() == 4:
         coords = coords[:, 0]
-    coords = coords.detach().cpu().numpy()[0]
+    if sample_idx is None:
+        sample_idx = _rank_samples(output)
+    coords = coords.detach().cpu().numpy()[sample_idx]
 
-    plddt = output["plddt"].detach().cpu().numpy()[0]
+    plddt = output["plddt"].detach().cpu().numpy()[sample_idx]
     atom_to_token = features["atom_to_token"].cpu().numpy()
     ref_chars = features["ref_atom_name_chars"].cpu().numpy()
     res_type = features["res_type"].cpu().numpy()
     token_mask = features["token_attention_mask"].cpu().numpy().astype(bool)
     atom_mask_in = features["atom_attention_mask"].cpu().numpy().astype(bool)
     residue_index_arr = features["residue_index"].cpu().numpy()
+    # Per-token chain id; a single-chain fold may omit it, in which case everything is chain A.
+    asym_id = features["asym_id"].cpu().numpy() if "asym_id" in features else np.zeros_like(residue_index_arr)
 
     if atom_to_token.ndim == 2:
         atom_to_token = atom_to_token[0]
@@ -516,45 +584,45 @@ def output_to_pdb(output, features: dict) -> str:
         token_mask = token_mask[0]
         atom_mask_in = atom_mask_in[0]
         residue_index_arr = residue_index_arr[0]
+        asym_id = asym_id[0]
 
-    valid_tok = np.where(token_mask)[0]
-    number_of_residues = valid_tok.shape[0]
-
-    aatype = np.full(number_of_residues, rc.restype_order_with_x["X"], dtype=np.int64)
-    for new_i, t in enumerate(valid_tok):
-        rt = int(res_type[t])
-        three = _RES_TYPE_TO_3LETTER.get(rt)
-        if three is None or three == "UNK":
-            aatype[new_i] = rc.restype_order_with_x["X"]
-        else:
-            one = rc.restype_3to1.get(three, "X")
-            aatype[new_i] = rc.restype_order_with_x[one]
-
-    atom_positions = np.zeros((number_of_residues, 37, 3), dtype=np.float32)
-    atom_mask = np.zeros((number_of_residues, 37), dtype=np.float32)
-    b_factors = np.zeros((number_of_residues, 37), dtype=np.float32)
-    tok_to_new = {int(t): i for i, t in enumerate(valid_tok)}
-
-    for a in range(atom_to_token.shape[0]):
-        if not atom_mask_in[a]:
+    pdb_lines: list[str] = ["PARENT N/A"]
+    atom_index = 1
+    # A residue's atoms are contiguous, so walking the atom axis visits chains and residues in order.
+    previous_token: int | None = None
+    previous_residue_name, previous_number = "UNK", 0
+    chain_tag = _PDB_CHAIN_TAGS[0]
+    for atom in range(atom_to_token.shape[0]):
+        token = int(atom_to_token[atom])
+        if not atom_mask_in[atom] or not token_mask[token]:
             continue
-        tok = int(atom_to_token[a])
-        if tok not in tok_to_new:
-            continue
-        new_i = tok_to_new[tok]
-        name = "".join(chr(int(c) + 32) if int(c) != 0 else " " for c in ref_chars[a]).strip()
-        idx37 = rc.atom_order.get(name)
-        if idx37 is None:
-            continue
-        atom_positions[new_i, idx37] = coords[a]
-        atom_mask[new_i, idx37] = 1.0
-        b_factors[new_i, idx37] = float(plddt[tok])
 
-    pred = OFProtein(
-        aatype=aatype,
-        atom_positions=atom_positions,
-        atom_mask=atom_mask,
-        residue_index=residue_index_arr[valid_tok].astype(np.int32) + 1,
-        b_factors=b_factors,
-    )
-    return to_pdb(pred)
+        residue_name = _RES_TYPE_TO_3LETTER.get(int(res_type[token]), "UNK")
+        residue_number = int(residue_index_arr[token]) + 1  # PDB numbering is 1-based
+        next_chain_tag = _PDB_CHAIN_TAGS[int(asym_id[token]) % len(_PDB_CHAIN_TAGS)]
+        if previous_token is not None and next_chain_tag != chain_tag:
+            pdb_lines.append(_pdb_terminator_line(atom_index, previous_residue_name, chain_tag, previous_number))
+            atom_index += 1
+            pdb_lines.append("PARENT N/A")
+        chain_tag = next_chain_tag
+
+        atom_name = _decode_atom_name(ref_chars[atom])
+        pdb_lines.append(
+            _pdb_atom_line(
+                atom_index=atom_index,
+                atom_name=atom_name,
+                residue_name=residue_name,
+                chain_tag=chain_tag,
+                residue_number=residue_number,
+                position=coords[atom],
+                b_factor=float(plddt[token]),
+            )
+        )
+        atom_index += 1
+        previous_token, previous_residue_name, previous_number = token, residue_name, residue_number
+
+    if previous_token is not None:
+        pdb_lines.append(_pdb_terminator_line(atom_index, previous_residue_name, chain_tag, previous_number))
+    pdb_lines.append("END")
+    pdb_lines.append("")
+    return "\n".join(pdb_lines)
