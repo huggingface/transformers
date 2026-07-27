@@ -240,7 +240,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
-    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = {
+    base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
         "embed_tokens": "free_full_weight",
         "layers.*": "free_full_weight",
         "norm": "keep_full_weight",
