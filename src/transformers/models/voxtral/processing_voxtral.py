@@ -104,6 +104,10 @@ class VoxtralProcessor(ProcessorMixin):
 
         return torch.cat(input_features_list)
 
+    def _get_audio_token_length(self, audio_lengths, pad_to_multiple_of):
+        # audio tokens per padded 30s chunk: 1500 * 1280 // 5120 = 375
+        return ((audio_lengths - 1) // pad_to_multiple_of + 1) * (1500 * 1280 // 5120)
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -234,20 +238,45 @@ class VoxtralProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         if isinstance(text, str):
             text = [text]
 
-        if any(self.audio_token in t for t in text):
-            raise ValueError(
-                f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
-            )
-
         output_kwargs = self._merge_kwargs(VoxtralProcessorKwargs, **kwargs)
-        out = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        text_kwargs = output_kwargs["text_kwargs"]
+        audio_kwargs = output_kwargs["audio_kwargs"]
+        return_tensors = text_kwargs.get("return_tensors", None)
 
-        return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
+        if audio is None:
+            # `MistralCommonBackend.__call__` only accepts tokenizer kwargs
+            text_kwargs["return_tensors"] = None
+            text_kwargs.pop("return_dict", None)
+            text_kwargs.pop("tokenize", None)
+            text_kwargs.pop("return_mm_token_type_ids", None)
+            out = self.tokenizer(text, **text_kwargs)
+            return BatchFeature(data=out, tensor_type=return_tensors)
+
+        audio = make_list_of_audio(audio)
+        max_source_positions = audio_kwargs.pop("max_source_positions")
+        input_features = self._retrieve_input_features(audio, max_source_positions, **audio_kwargs)
+        audio_lengths = torch.tensor([audio_array.shape[-1] for audio_array in audio])
+        num_audio_tokens = self._get_audio_token_length(audio_lengths, audio_kwargs["pad_to_multiple_of"])
+
+        # `MistralCommonBackend` does not encode `[AUDIO]`, so splice the id in
+        num_audio_tokens_iter = iter(num_audio_tokens.tolist())
+        input_ids = []
+        for prompt in text:
+            segments = prompt.split(self.audio_token)
+            ids = self.tokenizer.encode(segments[0])
+            for segment in segments[1:]:
+                ids += [self.audio_token_id] * next(num_audio_tokens_iter)
+                ids += self.tokenizer.encode(segment, add_special_tokens=False)
+            input_ids.append(ids)
+
+        data = {"input_ids": input_ids, "input_features": input_features}
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
     @requires(backends=("mistral-common",))
