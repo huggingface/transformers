@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 import numpy as np
@@ -47,6 +46,7 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
+# Adapted from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):
@@ -83,7 +83,6 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     default_to_square = False
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -94,9 +93,8 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def resize(
         self,
@@ -104,7 +102,6 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         size: SizeDict,
         resample: "PILImageResampling | int | None",
         factor: int,
-        temporal_factor: int,
         **kwargs,
     ) -> np.ndarray:
         """Resize dynamically based on input image aspect ratio."""
@@ -113,11 +110,9 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
 
         height, width = image.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height=height,
-            width=width,
-            num_frames=temporal_factor,
+            height,
+            width,
             factor=factor,
-            temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
@@ -164,6 +159,14 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         )
         return flatten_patches, grid_h, grid_w
 
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
     def _preprocess(
         self,
         images: list[np.ndarray],
@@ -181,11 +184,8 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess images one by one for PIL backend.
-        """
-        processed_images = []
-        processed_grids = []
+        all_patches = []
+        all_grids = []
 
         for image in images:
             if do_resize:
@@ -194,10 +194,8 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
-                    temporal_factor=temporal_patch_size,
                 )
 
-            # Rescale and normalize
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
@@ -210,13 +208,11 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
                 temporal_patch_size=temporal_patch_size,
             )
 
-            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
-            processed_images.append(patches)
-            processed_grids.append([1, grid_h, grid_w])
+            all_patches.append(patches)
+            all_grids.append([1, grid_h, grid_w])
 
-        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
-        pixel_values = np.concatenate(processed_images, axis=0)
-        image_grid_thw = np.array(processed_grids)
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -225,6 +221,9 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
 
         Args:
             height (`int`):
@@ -236,35 +235,17 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        if images_kwargs is not None:
-            patch_size = images_kwargs.get("patch_size", self.patch_size)
-            merge_size = images_kwargs.get("merge_size", self.merge_size)
-            size = images_kwargs.get("size", {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000})
-        else:
-            patch_size = self.patch_size
-            merge_size = self.merge_size
-            size = self.size
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            num_frames=self.temporal_patch_size,
-            height=height,
-            width=width,
-            factor=factor,
-            min_pixels=size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge,
-            max_pixels=size["longest_edge"] if isinstance(size, dict) else size.longest_edge,
-            temporal_factor=self.temporal_patch_size,
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
 
 
-class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`Ernie4_5_VL_MoeImageProcessorPil` is deprecated; please use `Ernie4_5_VLMoeImageProcessorPil` instead.",
-        )
-        super().__init__(*args, **kwargs)
-
-
-__all__ = ["Ernie4_5_VL_MoeImageProcessorPil", "Ernie4_5_VLMoeImageProcessorPil"]
+__all__ = ["Ernie4_5_VLMoeImageProcessorPil"]

@@ -25,13 +25,14 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -56,8 +57,6 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
-from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
-from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -68,6 +67,8 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
 
 
@@ -1206,7 +1207,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         )
 
 
-class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
+class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1216,15 +1217,31 @@ class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
         The merge size of the vision encoder to llm encoder.
     """
 
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
-class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
+
+class Ernie4_5_VLMoeImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     temporal_patch_size = 1
 
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
+        PilBackend.__init__(self, **kwargs)
 
-class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):
+    def _standardize_kwargs(self, **super_kwargs):
+        raise NotImplementedError("Model doesn't need an override")
+
+
+class Ernie4_5_VLMoeImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     temporal_patch_size = 1
+
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
+        TorchvisionBackend.__init__(self, **kwargs)
+
+    def _standardize_kwargs(self, **super_kwargs):
+        raise NotImplementedError("Model doesn't need an override")
 
 
 # Keep aliases for BC

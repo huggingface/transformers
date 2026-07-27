@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 
 import torch
@@ -84,7 +85,6 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     default_to_square = False
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -95,8 +95,15 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
     valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
+    def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs],
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -105,7 +112,6 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
-        temporal_factor: int,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
@@ -114,11 +120,9 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
 
         height, width = images.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height=height,
-            width=width,
-            num_frames=temporal_factor,
+            height,
+            width,
             factor=factor,
-            temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
@@ -148,7 +152,10 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
             merge_size,
             patch_size,
         )
+        # Reorder dimensions to group grid and patch information for subsequent flattening.
+        # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
         patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+
         flatten_patches = (
             patches.unsqueeze(6)
             .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
@@ -178,10 +185,6 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-        """
-
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -191,21 +194,17 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
-                    temporal_factor=temporal_patch_size,
                 )
             resized_images_grouped[shape] = stacked_images
-
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
-
         for shape, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-
             patches, grid_h, grid_w = self.patchify(
                 stacked_images,
                 patch_size=patch_size,
@@ -217,10 +216,9 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
             processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_grids = reorder_images(processed_grids, grouped_images_index)
-
+        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
         pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
-        image_grid_thw = torch.tensor(processed_grids)
+        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -229,6 +227,9 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
 
         Args:
             height (`int`):
@@ -240,30 +241,17 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", self.size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            num_frames=self.temporal_patch_size,
-            height=height,
-            width=width,
-            factor=factor,
-            min_pixels=size["shortest_edge"],
-            max_pixels=size["longest_edge"],
-            temporal_factor=self.temporal_patch_size,
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
 
 
-class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`Ernie4_5_VL_MoeImageProcessor` is deprecated; please use `Ernie4_5_VLMoeImageProcessor` instead.",
-        )
-        super().__init__(*args, **kwargs)
-
-
-__all__ = ["Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VLMoeImageProcessor"]
+__all__ = ["Ernie4_5_VLMoeImageProcessor"]

@@ -54,7 +54,6 @@ class HunYuanVLImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# Adapted from transformers.models.hunyuan_vl.image_processing_hunyuan_vl.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):
@@ -134,6 +133,17 @@ class HunYuanVLImageProcessorPil(PilBackend):
         **kwargs,
     ) -> np.ndarray:
         """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = image.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 

@@ -79,6 +79,8 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
+        if kwargs.get("temporal_patch_size", self.temporal_patch_size) != 1:
+            raise ValueError("Cosmos3 Edge only supports `temporal_patch_size=1`.")
 
     def sample_frames(
         self,

@@ -20,6 +20,7 @@
 import math
 import warnings
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -132,10 +133,87 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
 
+    def patchify(
+        self,
+        image: np.ndarray,
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[np.ndarray, int, int]:
+        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: final layout is a 4D image instead of flattened 2D seq
+        image = np.asarray(image, dtype=np.float32)
+        channel, resized_height, resized_width = image.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = image.reshape(
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # (gh, gw, mh, mw, C, ph, pw)
+        patches = np.transpose(patches, (1, 4, 2, 5, 0, 3, 6))
+
+        # expand temporal_patch_size as a broadcast (zero-copy)
+        patches = np.broadcast_to(
+            patches[:, :, :, :, :, None, :, :],
+            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+        )
+
+        flatten_patches = patches.reshape(
+            grid_h * grid_w,
+            channel * temporal_patch_size,
+            patch_size,
+            patch_size,
+        )
+        return flatten_patches, grid_h, grid_w
+
 
 class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: final layout is a 4D image instead of flattened 2D seq
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # Reorder dimensions to group grid and patch information for subsequent flattening.
+        # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+
+        flatten_patches = (
+            patches.unsqueeze(6)
+            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                channel * temporal_patch_size,
+                patch_size,
+                patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):

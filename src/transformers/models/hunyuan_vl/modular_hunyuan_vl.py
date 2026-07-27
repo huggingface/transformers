@@ -20,12 +20,14 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -57,7 +59,7 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import (
     Qwen2VLImageProcessorKwargs,
     Qwen2VLImageProcessorPil,
 )
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipMLP
 
@@ -343,6 +345,35 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
+    def resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
+        )
+
     def patchify(
         self,
         images: "torch.Tensor",
@@ -387,6 +418,35 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     merge_size = 2
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
+
+    def resize(
+        self,
+        image: np.ndarray,
+        size: SizeDict,
+        resample: "PILImageResampling | int | None",
+        factor: int,
+        **kwargs,
+    ) -> np.ndarray:
+        """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = image.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=image,
+            size=SizeDict(height=resized_height, width=resized_width),
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
+        )
 
     def patchify(
         self,

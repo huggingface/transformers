@@ -168,6 +168,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
         "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: final layout is a 4D image instead of flattened 2D seq
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         patches = images.reshape(
@@ -190,7 +191,9 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
             .reshape(
                 batch_size,
                 grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+                channel * temporal_patch_size,
+                patch_size,
+                patch_size,
             )
         )
         return flatten_patches, grid_h, grid_w

@@ -57,7 +57,7 @@ from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
-from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
+from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor, Glm4vVideoProcessorInitKwargs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -1054,7 +1054,7 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
         # Override: time-major, block-major patches with HWC values within each flattened patch
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)
-        channel, resized_height, resized_width = image.shape[-2:]
+        channel, resized_height, resized_width = image.shape
 
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
@@ -1083,6 +1083,10 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
         return flatten_patches, grid_h, grid_w
 
 
+class Cosmos3EdgeVideoProcessorInitKwargs(Glm4vVideoProcessorInitKwargs):
+    pass
+
+
 class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -1092,6 +1096,11 @@ class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     min_frames = 4
     max_frames = 768
     num_frames = None
+
+    def __init__(self, **kwargs: Unpack[Cosmos3EdgeVideoProcessorInitKwargs]):
+        if kwargs.get("temporal_patch_size", self.temporal_patch_size) != 1:
+            raise ValueError("Cosmos3 Edge only supports `temporal_patch_size=1`.")
+        super().__init__(**kwargs)
 
     def patchify(
         self,

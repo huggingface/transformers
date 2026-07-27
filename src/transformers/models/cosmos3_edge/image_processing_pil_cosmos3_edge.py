@@ -143,7 +143,7 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         # Override: time-major, block-major patches with HWC values within each flattened patch
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)
-        channel, resized_height, resized_width = image.shape[-2:]
+        channel, resized_height, resized_width = image.shape
 
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
