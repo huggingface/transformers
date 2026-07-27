@@ -23,7 +23,7 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, sliding_window_bidirectional_overlay
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -234,27 +234,26 @@ def eager_attention_forward(
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
-    The atom stack keeps heads at dim 2 (``[batch, atoms, heads, head_dim]``), so it passes
-    ``unsqueeze_dim=2``.
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-def _swa_window_mask_function(valid: Tensor, half_window: int) -> Callable:
-    """Sliding-window ``and`` mask over atom index: atoms attend iff their indices differ by at most
-    ``half_window``. Padding is folded in here rather than passed as ``attention_mask`` because the
-    atom stack needs padded queries masked too, not just padded keys.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        within = abs(q_idx - kv_idx) <= half_window
-        return within & valid[batch_idx, q_idx] & valid[batch_idx, kv_idx]
-
-    return inner_mask
 
 
 class EsmFold2SWA3DRoPEAttention(nn.Module):
@@ -268,9 +267,8 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         super().__init__()
         d_model = atom_config.hidden_size
         self.config = config
-        self.n_heads = atom_config.num_attention_heads
         self.head_dim = atom_config.head_dim
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the interface happy.
         self.num_key_value_groups = 1
         self.is_causal = False  # bidirectional encoder, even when the mask is None
@@ -289,36 +287,39 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         attention_mask: Tensor,
         position_embeddings: tuple[Tensor, Tensor],
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Tensor:
-        B, N = hidden_states.shape[:2]
+    ) -> tuple[Tensor, Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
         cos, sin = position_embeddings
-
-        q = self.q_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
-        k = self.k_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
-        v = self.v_proj(hidden_states).view(B, N, self.n_heads, self.head_dim)
-        q, k = self.q_norm(q), self.k_norm(k)
-
-        q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        out, _ = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            q.transpose(1, 2),
-            k.transpose(1, 2),
-            v.transpose(1, 2),
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0,
-            scaling=self.scale,
+            scaling=self.scaling,
             **kwargs,
         )
-        # Fully padded query rows are all-masked, so the softmax gives NaN; zero them.
-        out = torch.nan_to_num(out)
+        # Needed because padding can sometimes create tokens with no attendable keys, creating NaN outputs
+        attn_output = torch.nan_to_num(attn_output)
 
-        out = out.reshape(B, N, -1)
-        out = out * torch.sigmoid(self.gate_proj(hidden_states))
-        return self.o_proj(out)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
+        return self.o_proj(attn_output), attn_weights
 
 
 class EsmFold2SWAAtomLayer(nn.Module):
@@ -349,7 +350,7 @@ class EsmFold2SWAAtomLayer(nn.Module):
         shift_a, scale_a, gate_a, shift_f, scale_f, gate_f = modulation.chunk(6, dim=-1)
 
         attn_input = self.attn_norm(hidden_states) * (1 + scale_a) + shift_a
-        attn_out = self.attn(attn_input, attention_mask, position_embeddings)
+        attn_out, _ = self.attn(attn_input, attention_mask, position_embeddings)
         hidden_states = hidden_states + gate_a * attn_out
 
         ffn_input = self.ffn_norm(hidden_states) * (1 + scale_f) + shift_f
@@ -485,17 +486,18 @@ class EsmFold2AtomEncoder(nn.Module):
         return c_base, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid, dtype=c_base.dtype)
 
     def build_attention_mask(self, atom_mask: Tensor, atom_embeds: Tensor) -> Tensor:
-        """Sliding-window attention mask for the atom stack, built once per fold.
+        """Symmetric sliding-window attention mask over atom index, built once per fold.
 
         ``atom_embeds`` (the ``embed_atoms`` output) only supplies the mask metadata
-        (dtype/device/shape); padding is folded into the ``and`` mask instead of ``attention_mask``
-        (see ``_swa_window_mask_function``).
+        (dtype/device/shape). ``atom_mask`` is the boolean valid-atom mask, passed as the standard 2D
+        ``attention_mask``. Note ``config.sliding_window`` is the *total* window width here, while the
+        overlay takes the (inclusive) radius, hence the halving.
         """
         return create_bidirectional_mask(
             config=self.config,
             inputs_embeds=atom_embeds,
-            attention_mask=None,
-            and_mask_function=_swa_window_mask_function(atom_mask, self.config.sliding_window // 2),
+            attention_mask=atom_mask,
+            and_mask_function=sliding_window_bidirectional_overlay(self.config.sliding_window // 2),
         )
 
     def forward(
@@ -590,10 +592,8 @@ class EsmFold2AttentionPairBias(nn.Module):
         d_pair = config.pairwise_hidden_size  # the trunk pair rep flows in at this width
         num_heads = config.structure_head.diffusion_module.token_num_heads
         d_cond = config.structure_head.diffusion_module.token_hidden_size
-        self.d_model = d_model
-        self.num_heads = num_heads
         self.head_dim = d_model // num_heads
-        self.scale = self.head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the attention interface happy.
         self.num_key_value_groups = 1
         self.is_causal = False
@@ -627,29 +627,41 @@ class EsmFold2AttentionPairBias(nn.Module):
             )
         return attention_bias
 
-    def forward(self, token_acts: Tensor, single_repr: Tensor, attention_bias: Tensor) -> Tensor:
-        bsz, n_queries, d_model = token_acts.shape
-
+    def forward(
+        self,
+        token_acts: Tensor,
+        single_repr: Tensor,
+        attention_bias: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[Tensor, Tensor | None]:
         hidden_states = self.adaln(token_acts, single_repr)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        n_keys = hidden_states.shape[1]
-        q = self.q_proj(hidden_states).view(bsz, n_queries, self.num_heads, self.head_dim)
-        k = self.k_proj(hidden_states).view(bsz, n_keys, self.num_heads, self.head_dim)
-        v = self.v_proj(hidden_states).view(bsz, n_keys, self.num_heads, self.head_dim)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        gate = torch.sigmoid(self.g_proj(hidden_states)).view(bsz, n_queries, self.num_heads, self.head_dim)
+        gate = torch.sigmoid(self.g_proj(hidden_states)).view(hidden_shape)
 
-        qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
         # The step-invariant per-head bias doubles as the additive attention mask. Returns [B, Q, H, D].
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        context, _ = attention_interface(self, qh, kh, vh, attention_bias, dropout=0.0, scaling=self.scale)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_bias,
+            dropout=0.0,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        context = gate * context
-        out = self.o_proj(context.reshape(bsz, n_queries, d_model))
-        out = torch.sigmoid(self.out_gate(single_repr)) * out
-        return out
+        attn_output = gate * attn_output
+        attn_output = self.o_proj(attn_output.reshape(*input_shape, -1))
+        return torch.sigmoid(self.out_gate(single_repr)) * attn_output, attn_weights
 
 
 class EsmFold2ConditionedTransitionBlock(nn.Module):
@@ -688,7 +700,8 @@ class EsmFold2DiffusionTransformer(nn.Module):
     def forward(self, token_acts: Tensor, single_repr: Tensor, attention_biases: list[Tensor]) -> Tensor:
         hidden_states = token_acts
         for attn, transition, attention_bias in zip(self.attn_blocks, self.transition_blocks, attention_biases):
-            hidden_states = hidden_states + attn(hidden_states, single_repr, attention_bias)
+            attn_out, _ = attn(hidden_states, single_repr, attention_bias)
+            hidden_states = hidden_states + attn_out
             hidden_states = hidden_states + transition(hidden_states, single_repr)
         return hidden_states
 
