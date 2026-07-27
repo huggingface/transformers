@@ -183,10 +183,14 @@ class EsmFold2ModelTest(unittest.TestCase):
         return padded
 
     def test_swa_mask_excludes_padded_atoms(self):
-        """The sliding-window atom mask must not connect valid atoms and padding, in either direction.
+        """No valid atom may attend to padding, and valid-to-valid attention is exactly the window.
 
-        Asserted on the mask itself: a batch's extra padding lands beyond the window reach of any
-        valid atom, so an output comparison could not see a padding-blind mask.
+        Padding is passed as the standard 2D ``attention_mask``, which masks *keys*, so a padded query
+        row may still see valid keys. That is harmless and deliberate: a padded atom is never itself
+        reachable as a key, and its row is dropped at the atom->token scatter. The invariant that
+        matters is the key direction, asserted on the mask itself because a batch's extra padding
+        lands beyond the window reach of any valid atom, so an output comparison could not see a
+        padding-blind mask.
         """
         from transformers.models.esmfold2.protein_utils import prepare_protein_features
 
@@ -223,7 +227,13 @@ class EsmFold2ModelTest(unittest.TestCase):
 
         per_head = mask[0, 0]
         self.assertFalse(bool(per_head[valid][:, ~valid].any()), "a valid atom may not attend to padding")
-        self.assertFalse(bool(per_head[~valid][:, valid].any()), "padding may not attend to a valid atom")
+        self.assertFalse(bool(per_head[:, ~valid].any()), "a padded atom may never be attended to as a key")
+
+        # Valid-to-valid attention is exactly the symmetric window of radius ``sliding_window // 2``.
+        radius = model.config.sliding_window // 2
+        index = torch.arange(valid.shape[0])
+        within_window = (index[:, None] - index[None, :]).abs() <= radius
+        torch.testing.assert_close(per_head[valid][:, valid], within_window[valid][:, valid])
 
     def test_padded_batch_matches_single_sequence(self):
         """A right-padded sequence folded in a batch must match folding it on its own.
