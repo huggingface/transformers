@@ -1016,6 +1016,20 @@ class Trainer:
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
+        # `BatchRebalanceSampler` is already rank-aware: it assigns per-rank groups itself and each
+        # rank only iterates its own portion. `accelerator.prepare` unconditionally wraps every
+        # map-style `batch_sampler` in Accelerate's `BatchSamplerShard` (which keeps every
+        # `num_processes`-th batch per rank), so leaving it active would re-shard on top of the
+        # sampler's own per-rank yields -> double sharding that silently drops most samples each
+        # epoch. Make that wrapper a passthrough (num_processes=1) so the prepared dataloader
+        # iterates the rank-aware sampler directly. (The wrapper has plain settable attrs; we can't
+        # reassign `batch_sampler` on the underlying DataLoader after init.)
+        if isinstance(sampler, BatchRebalanceSampler):
+            prepared_bs = getattr(dataloader, "batch_sampler", None)
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
+                prepared_bs.num_processes = 1
+                prepared_bs.process_index = 0
+
         # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
             if hasattr(self, "_eval_dataloaders"):
@@ -1082,9 +1096,12 @@ class Trainer:
 
             world_size = max(1, self.args.world_size)
             rank = self.args.process_index if self.args.world_size > 1 else 0
-            micro_batch_size = self.args.train_batch_size // max(1, self.args.world_size)
             grad_accum = self.args.gradient_accumulation_steps
-            effective_batch_size = micro_batch_size * grad_accum * world_size
+            # `self.args.train_batch_size` is the per-process batch (per_device * #GPUs in this
+            # process), NOT per_device * world_size, so deriving micro_batch_size by dividing it by
+            # world_size undercounts by the world_size factor. Use per_device_train_batch_size
+            # directly: eff_bs = per_device_bs * grad_accum * dp_size.
+            effective_batch_size = self.args.per_device_train_batch_size * grad_accum * world_size
 
             return BatchRebalanceSampler(
                 lengths=lengths,
@@ -1092,6 +1109,7 @@ class Trainer:
                 dp_size=world_size,
                 grad_accum=grad_accum,
                 rank=rank,
+                drop_last=self.args.dataloader_drop_last,
                 alpha=self.args.batch_rebalance_alpha,
                 max_tokens=self.args.batch_rebalance_max_tokens,
             )

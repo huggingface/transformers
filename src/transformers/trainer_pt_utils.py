@@ -751,7 +751,14 @@ class BatchRebalanceSampler(Sampler):
         self.cost_fn = cost_fn
         self.epoch = 0
 
-        self.num_global_batches = len(self.lengths) // effective_batch_size
+        self.num_full_batches = len(self.lengths) // effective_batch_size
+        self.remainder = len(self.lengths) % effective_batch_size
+        # When drop_last=False, the trailing partial batch is also yielded (padded up to the
+        # effective batch size when too small to fill every (rank, slot) group), mirroring how
+        # PyTorch's DistributedSampler pads the tail. Otherwise trailing samples are silently
+        # dropped even though the user asked to keep them.
+        self.has_tail = (not drop_last) and self.remainder > 0
+        self.num_global_batches = self.num_full_batches + (1 if self.has_tail else 0)
         self.total_steps = self.num_global_batches
 
     def set_epoch(self, epoch: int):
@@ -767,13 +774,27 @@ class BatchRebalanceSampler(Sampler):
         else:
             order = list(range(n))
 
-        for gb in range(self.num_global_batches):
+        for gb in range(self.num_full_batches):
             start = gb * self.effective_batch_size
             batch_indices = order[start : start + self.effective_batch_size]
             batch_lengths = [self.lengths[i] for i in batch_indices]
 
             rank_mbs = self._assign(batch_indices, batch_lengths)
 
+            for ga in range(self.grad_accum):
+                yield rank_mbs[self.rank][ga]
+
+        # Trailing partial batch when drop_last=False. If the remainder is smaller than the number
+        # of (rank, slot) groups, pad by repeating samples from the start of the epoch order (same
+        # strategy as torch.utils.data.DistributedSampler) so every group still has >= 1 sample and
+        # the all-reduce stays consistent across ranks.
+        if self.has_tail:
+            batch_indices = order[self.num_full_batches * self.effective_batch_size :]
+            if len(batch_indices) < self.dp_size * self.grad_accum:
+                pad = self.effective_batch_size - len(batch_indices)
+                batch_indices = batch_indices + order[:pad]
+            batch_lengths = [self.lengths[i] for i in batch_indices]
+            rank_mbs = self._assign(batch_indices, batch_lengths)
             for ga in range(self.grad_accum):
                 yield rank_mbs[self.rank][ga]
 

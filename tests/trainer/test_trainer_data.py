@@ -889,6 +889,144 @@ class TrainerSamplerTest(unittest.TestCase):
 
         self.assertAlmostEqual(rebalanced_spread, optimal_spread, places=6)
 
+    def test_batch_rebalance_drop_last_false_covers_all_samples(self):
+        """Regression: when drop_last=False the trailing partial batch must also be yielded,
+        otherwise samples beyond the last full batch are silently dropped. All existing
+        batch_rebalance tests use dataset sizes that divide evenly by effective_batch_size, so
+        this regression was not covered."""
+        ds_size = 18
+        eff_bs = 16
+        lengths = list(range(100, 100 + ds_size))
+
+        s = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=eff_bs,
+            dp_size=1,
+            grad_accum=1,
+            shuffle=False,
+            rank=0,
+            drop_last=False,
+        )
+        covered = set()
+        for batch in s:
+            covered.update(batch)
+        # Must cover ALL samples including the trailing {16, 17}.
+        self.assertEqual(covered, set(range(ds_size)))
+        self.assertEqual(s.num_global_batches, 2)  # 1 full + 1 tail
+
+    def test_batch_rebalance_drop_last_true_drops_tail(self):
+        """When drop_last=True the trailing partial batch must be dropped (default behaviour)."""
+        ds_size = 18
+        eff_bs = 16
+        lengths = list(range(100, 100 + ds_size))
+
+        s = BatchRebalanceSampler(
+            lengths=lengths,
+            effective_batch_size=eff_bs,
+            dp_size=1,
+            grad_accum=1,
+            shuffle=False,
+            rank=0,
+            drop_last=True,
+        )
+        covered = set()
+        for batch in s:
+            covered.update(batch)
+        self.assertEqual(covered, set(range(eff_bs)))
+        self.assertEqual(s.num_global_batches, 1)
+
+    def test_batch_rebalance_drop_last_padding_path(self):
+        """When drop_last=False and the remainder is smaller than dp_size * grad_accum, the tail
+        is padded (repeating samples from the start, like torch DistributedSampler) so every
+        (rank, slot) group still has >= 1 sample. Union over all ranks must cover every real
+        sample."""
+        ds_size = 20
+        eff_bs = 16
+        dp_size = 4
+        grad_accum = 2  # K = 8 groups, but remainder = 4 < 8 -> padding kicks in
+        lengths = list(range(100, 100 + ds_size))
+
+        covered = set()
+        for rank in range(dp_size):
+            s = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=eff_bs,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                shuffle=False,
+                rank=rank,
+                drop_last=False,
+            )
+            for batch in s:
+                covered.update(batch)
+        # All real sample indices survive; only padding copies are duplicated.
+        self.assertTrue(set(range(ds_size)) <= covered)
+
+    @require_accelerate
+    def test_batch_rebalance_defeats_double_sharding(self):
+        """Regression: `accelerator.prepare` wraps the already rank-aware batch_sampler in
+        accelerate's `BatchSamplerShard`, which re-shards and silently drops most samples each
+        epoch. The Trainer neutralises the wrapper by setting num_processes=1. This test
+        simulates the wrapper directly (no multi-process needed) and verifies the passthrough
+        restores full sample coverage."""
+        from accelerate.data_loader import BatchSamplerShard
+
+        lengths = [100 * (i + 1) for i in range(16)]
+        kwargs = {"lengths": lengths, "effective_batch_size": 16, "dp_size": 2, "grad_accum": 1, "rank": 0}
+
+        # What the sampler itself yields for rank 0 (ground truth).
+        expected = sorted(idx for batch in BatchRebalanceSampler(**kwargs) for idx in batch)
+
+        # Simulate accelerate's wrapper at num_processes=2 (the double-shard source). Without
+        # the Trainer's passthrough it re-shards and loses samples.
+        wrapper_sharded = BatchSamplerShard(
+            BatchRebalanceSampler(**kwargs), num_processes=2, process_index=0, even_batches=False
+        )
+        sharded = sorted(idx for batch in wrapper_sharded for idx in batch)
+        self.assertLess(len(sharded), len(expected))
+
+        # Apply the Trainer's passthrough fix and confirm full coverage is restored.
+        wrapper = BatchSamplerShard(
+            BatchRebalanceSampler(**kwargs), num_processes=2, process_index=0, even_batches=False
+        )
+        # Detection: the wrapper exposes the original sampler via .batch_sampler.
+        self.assertIsNotNone(getattr(wrapper, "batch_sampler", None))
+        wrapper.num_processes = 1
+        wrapper.process_index = 0
+        passthrough = sorted(idx for batch in wrapper for idx in batch)
+        self.assertEqual(passthrough, expected)
+
+    def test_batch_rebalance_trainer_effective_batch_size_formula(self):
+        """Regression for the effective_batch_size calculation in Trainer._get_train_sampler.
+        `train_batch_size` is the per-process batch (per_device * n_gpu) and already excludes
+        world_size, so the old formula `train_batch_size // world_size` undercounted by the
+        world_size factor. The correct formula is
+        per_device_train_batch_size * grad_accum * world_size. This bug only manifests when
+        world_size > 1, so we simulate a multi-process setup by overriding args."""
+        from unittest.mock import MagicMock
+
+        n = 32
+        fake_trainer = MagicMock()
+        fake_trainer.args.train_sampling_strategy = "batch_rebalance"
+        fake_trainer.args.world_size = 2  # simulate DDP with 2 processes
+        fake_trainer.args.process_index = 0
+        fake_trainer.args.per_device_train_batch_size = 4
+        # `train_batch_size` is a property = per_device * n_gpu; in DDP n_gpu=1 so it equals
+        # per_device (4). The buggy formula used this // world_size (=2), giving 8 instead of 16.
+        fake_trainer.args.train_batch_size = 4
+        fake_trainer.args.gradient_accumulation_steps = 2
+        fake_trainer.args.length_column_name = "length"
+        fake_trainer.args.batch_rebalance_alpha = 0.001
+        fake_trainer.args.batch_rebalance_max_tokens = 0
+        fake_trainer.args.dataloader_drop_last = True
+        fake_trainer.processing_class = None
+        fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]
+
+        sampler = Trainer._get_train_sampler(fake_trainer)
+        self.assertIsInstance(sampler, BatchRebalanceSampler)
+        # expected = per_device(4) * grad_accum(2) * world_size(2) = 16, NOT 8.
+        self.assertEqual(sampler.effective_batch_size, 16)
+
 
 # ---------------------------------------------------------------------------
 # Batch size finder tests
