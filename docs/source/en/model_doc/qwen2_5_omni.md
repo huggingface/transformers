@@ -98,7 +98,6 @@ sf.write(
 print(text)
 ```
 
-
 ### Text-only generation
 
 To generate only text output and save compute by not loading the audio generation model, we can use `Qwen2_5OmniThinkerForConditionalGeneration` model.  
