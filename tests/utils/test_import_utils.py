@@ -8,10 +8,13 @@ from parameterized import parameterized
 
 from transformers.testing_utils import run_test_using_subprocess
 from transformers.utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
     _is_package_available,
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_kernels_available,
 )
 
 
@@ -57,6 +60,36 @@ def test_is_package_available_edge_cases():
             patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
         ):
             assert _is_package_available(pkg_name, return_version=True) == expected
+
+
+@contextmanager
+def mock_installed_kernels_version(kernels_version: str):
+    """Pretend `kernels==kernels_version` is installed, bypassing `is_kernels_available`'s `lru_cache`."""
+    with patch("transformers.utils.import_utils._is_package_available", return_value=(True, kernels_version)):
+        is_kernels_available.cache_clear()
+        try:
+            yield
+        finally:
+            is_kernels_available.cache_clear()
+
+
+@parameterized.expand(
+    [
+        ("0.14.0", False),  # below the floor
+        (KERNELS_MIN_VERSION, True),  # the floor is inclusive
+        (KERNELS_MAX_VERSION, False),  # the ceiling is exclusive -- the case reported in #47455
+    ]
+)
+def test_is_kernels_available_version_bounds(kernels_version: str, expected: bool):
+    with mock_installed_kernels_version(kernels_version):
+        assert is_kernels_available() is expected
+
+
+def test_is_kernels_available_does_not_compare_versions_as_strings():
+    # `"0.9.0" >= "0.15.2"` is True as a string comparison but False as a version comparison. Bounds are passed
+    # explicitly so this keeps testing the double-digit minor regardless of what the pin is bumped to.
+    with mock_installed_kernels_version("0.9.0"):
+        assert not is_kernels_available(MIN_VERSION="0.15.2", MAX_VERSION="0.16.0")
 
 
 @contextmanager

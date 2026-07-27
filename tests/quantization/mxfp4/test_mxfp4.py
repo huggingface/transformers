@@ -31,6 +31,7 @@ from transformers.testing_utils import (
 from transformers.utils import (
     is_torch_available,
 )
+from transformers.utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 
 
 if is_torch_available():
@@ -240,6 +241,41 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             # Should automatically set dequantize=True and warn
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
+
+    def test_kernels_message_states_the_enforced_bounds(self):
+        """The message must quote the bounds `is_kernels_available` actually enforces (#47455)."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        with (
+            _patch_no_accelerator(),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
+            self.assertLogs("transformers", level="WARNING") as cm,
+        ):
+            quantizer.validate_environment()
+
+        warning_text = " ".join(cm.output)
+        self.assertIn(KERNELS_MIN_VERSION, warning_text)
+        self.assertIn(KERNELS_MAX_VERSION, warning_text)
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = False
+
+        with (
+            _patch_no_accelerator(),
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                quantizer.validate_environment()
+
+        self.assertIn(KERNELS_MIN_VERSION, str(ctx.exception))
+        self.assertIn(KERNELS_MAX_VERSION, str(ctx.exception))
 
     def test_is_trainable(self):
         """Test trainability"""
