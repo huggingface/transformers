@@ -39,50 +39,40 @@ class EsmFold2GenerationMixin:
 
     def fold(
         self,
-        token_index: Tensor,
-        residue_index: Tensor,
-        asym_id: Tensor,
-        sym_id: Tensor,
-        entity_id: Tensor,
-        mol_type: Tensor,
-        res_type: Tensor,
-        token_bonds: Tensor,
         token_attention_mask: Tensor,
-        ref_pos: Tensor,
-        ref_element: Tensor,
-        ref_charge: Tensor,
-        ref_atom_name_chars: Tensor,
-        ref_space_uid: Tensor,
-        atom_attention_mask: Tensor,
-        atom_to_token: Tensor,
+        asym_id: Tensor,
+        mol_type: Tensor,
         distogram_atom_idx: Tensor,
-        deletion_mean: Tensor | None = None,
-        msa: Tensor | None = None,
-        has_deletion: Tensor | None = None,
-        deletion_value: Tensor | None = None,
-        msa_attention_mask: Tensor | None = None,
-        input_ids: Tensor | None = None,
-        lm_hidden_states: Tensor | None = None,
-        num_loops: int | None = None,
         num_diffusion_samples: int | None = None,
         num_sampling_steps: int | None = None,
-        **kwargs,
+        **trunk_kwargs,
     ) -> EsmFold2Output:
         r"""
         Predict a structure end-to-end from featurized inputs: run the trunk
         ([`EsmFold2Model.forward`], which documents the feature arguments), sample coordinates from the
         diffusion structure head, and score them with the confidence head.
 
+        Only the arguments the sampler and the confidence head need themselves are named here; every
+        other featurized input is forwarded to the trunk untouched, so ``fold(**features)`` takes the
+        same feature dict as ``forward``.
+
+        token_attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Mask marking valid tokens (``1``) versus padding (``0``). Also forwarded to the trunk.
+        asym_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Asymmetric-unit (chain) ID for each token. Also forwarded to the trunk.
+        mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+            Molecule-type code for each token (``0`` = protein). Also forwarded to the trunk.
         distogram_atom_idx (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Index of the representative atom (Cβ, or Cα for glycine) of each token. Used by the
             confidence head; the trunk does not need it.
-        num_loops (`int`, *optional*):
-            Number of trunk refinement loops. Defaults to `config.num_loops`.
         num_diffusion_samples (`int`, *optional*):
             Number of parallel structure samples to draw; the confidence head re-runs once per sample.
             Defaults to `config.num_diffusion_samples`.
         num_sampling_steps (`int`, *optional*):
             Number of diffusion sampling steps. Defaults to `config.structure_head.inference_num_steps`.
+        trunk_kwargs:
+            The remaining featurized inputs (and `num_loops`), forwarded verbatim to
+            [`EsmFold2Model.forward`], which documents them.
         """
         from .modeling_esmfold2 import EsmFold2Output
 
@@ -91,30 +81,10 @@ class EsmFold2GenerationMixin:
         )
 
         trunk = self(
-            token_index=token_index,
-            residue_index=residue_index,
-            asym_id=asym_id,
-            sym_id=sym_id,
-            entity_id=entity_id,
-            mol_type=mol_type,
-            res_type=res_type,
-            token_bonds=token_bonds,
             token_attention_mask=token_attention_mask,
-            ref_pos=ref_pos,
-            ref_element=ref_element,
-            ref_charge=ref_charge,
-            ref_atom_name_chars=ref_atom_name_chars,
-            ref_space_uid=ref_space_uid,
-            atom_attention_mask=atom_attention_mask,
-            atom_to_token=atom_to_token,
-            deletion_mean=deletion_mean,
-            msa=msa,
-            has_deletion=has_deletion,
-            deletion_value=deletion_value,
-            msa_attention_mask=msa_attention_mask,
-            input_ids=input_ids,
-            lm_hidden_states=lm_hidden_states,
-            num_loops=num_loops,
+            asym_id=asym_id,
+            mol_type=mol_type,
+            **trunk_kwargs,
         )
 
         sample_coords = self._sample_structure(
@@ -133,9 +103,11 @@ class EsmFold2GenerationMixin:
             x_pred=sample_coords.detach(),
             distogram_atom_idx=distogram_atom_idx,
             token_attention_mask=token_attention_mask,
-            # The trunk's copy is the one zeroed at padding.
+            # Both come from the trunk's featurized copy: ``atom_to_token`` because that is the one
+            # zeroed at padding, ``atom_attention_mask`` because it is stored there verbatim and this
+            # way the mask need not be re-declared just to be passed through.
             atom_to_token=trunk.atom_inputs.atom_to_token,
-            atom_attention_mask=atom_attention_mask,
+            atom_attention_mask=trunk.atom_inputs.atom_attention_mask,
             asym_id=asym_id,
             mol_type=mol_type,
             num_diffusion_samples=n_samples,
