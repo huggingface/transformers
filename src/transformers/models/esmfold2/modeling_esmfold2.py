@@ -83,6 +83,10 @@ class EsmFold2DiffusionStepInvariants:
     downstream of it works on the expanded batch and never sees ``num_diffusion_samples``. The
     expansion happens on these *outputs* rather than on the raw inputs so that the per-atom
     featurization and the pair-bias projection still run once at the unexpanded batch size.
+
+    Both masks are folded into their tensors here too, so no module downstream takes an
+    ``attention_mask``: the atom stack's is a prepared 4D mask and the token stack's padding is
+    already added into ``token_attention_bias``.
     """
 
     # Atom stack.
@@ -92,9 +96,10 @@ class EsmFold2DiffusionStepInvariants:
     atom_mask: Tensor
     atom_to_token: Tensor
     n_tokens: int
-    # Token stack.
+    # Token stack. One additive attention bias per token-transformer block,
+    # `[batch_size * num_diffusion_samples, num_heads, num_queries, num_keys]`.
     single_repr_inputs: Tensor
-    token_pair_bias: list[Tensor]
+    token_attention_bias: list[Tensor]
 
 
 class EsmFold2LayerNorm(nn.LayerNorm):
@@ -676,23 +681,33 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.pair_norm = EsmFold2LayerNorm(d_pair)
         self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
-    def compute_pair_bias(self, pair_repr: Tensor) -> Tensor:
-        """Project the (normed) pair representation to per-head attention biases.
+    def compute_pair_bias(self, pair_repr: Tensor, attention_mask: Tensor | None = None) -> Tensor:
+        """Build this block's additive attention bias: the per-head projection of the (normed) pair
+        representation, with the token padding mask folded in.
 
-        Depends only on ``pair_repr`` and this block's fixed weights, so the sampler computes it once
-        per fold and reuses it across denoising steps. Called before the batch is expanded across
-        diffusion samples, so the norm and projection see ``pairwise_hidden_size`` channels at the
-        unexpanded batch size and only the ``num_heads``-wide result is expanded.
+        Returns ``[batch_size, num_heads, num_queries, num_keys]``, ready to hand straight to the
+        attention interface -- which is why :meth:`forward` takes a bias and never sees a mask.
+
+        Depends only on ``pair_repr``, the token mask and this block's fixed weights, so the sampler
+        computes it once per fold and reuses it across every denoising step. Called before the batch
+        is expanded across diffusion samples, so the norm and projection see ``pairwise_hidden_size``
+        channels at the unexpanded batch size and only the ``num_heads``-wide result is expanded.
         """
-        return self.pair_bias_proj(self.pair_norm(pair_repr))
+        pair_bias = self.pair_bias_proj(self.pair_norm(pair_repr))
+        attention_bias = pair_bias.permute(0, 3, 1, 2)  # [B, Q, K, H] -> [B, H, Q, K]
+        if attention_mask is not None:
+            # Build the additive mask at the bias dtype (the query dtype -- both come out of a
+            # compute-dtype Linear). Passing python scalars to ``torch.where`` would make it fp32
+            # whatever that dtype is, promoting the whole [B, H, Q, K] bias only for the attention
+            # interface to need it back at the query dtype.
+            attention_bias = attention_bias + torch.where(
+                attention_mask[:, None, None, :],
+                attention_bias.new_zeros(()),
+                attention_bias.new_full((), torch.finfo(attention_bias.dtype).min),
+            )
+        return attention_bias
 
-    def forward(
-        self,
-        token_acts: Tensor,
-        single_repr: Tensor,
-        pair_bias: Tensor,
-        attention_mask: Tensor | None = None,
-    ) -> Tensor:
+    def forward(self, token_acts: Tensor, single_repr: Tensor, attention_bias: Tensor) -> Tensor:
         bsz, n_queries, d_model = token_acts.shape
 
         hidden_states = self.adaln(token_acts, single_repr)
@@ -704,25 +719,14 @@ class EsmFold2AttentionPairBias(nn.Module):
 
         gate = torch.sigmoid(self.g_proj(hidden_states)).view(bsz, n_queries, self.num_heads, self.head_dim)
 
-        # ``pair_bias`` is step-invariant, so the sampler precomputes it once per block
-        # (see :meth:`compute_pair_bias`) and hands it in.
-        attn_bias = pair_bias.permute(0, 3, 1, 2)  # [B,Q,K,H]->[B,H,Q,K] (H may be 1)
-        if attention_mask is not None:
-            # Build the additive mask at the query dtype. Passing python scalars to ``torch.where``
-            # would make it fp32 whatever ``q.dtype`` is, promoting the whole [B,H,Q,K] bias only for
-            # the attention interface to need it back at the query dtype.
-            mask_bias = torch.where(
-                attention_mask[:, None, None, :],
-                q.new_zeros(()),
-                q.new_full((), torch.finfo(q.dtype).min),
-            )
-            attn_bias = attn_bias + mask_bias
         qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
         # Route through the attention interface (respects config._attn_implementation) with the
-        # per-head pair bias as the additive attention mask. Returns [B, Q, H, D].
-        attn_impl = self.config._attn_implementation
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
-        context, _ = attention_interface(self, qh, kh, vh, attn_bias, dropout=0.0, scaling=self.scale)
+        # step-invariant per-head bias -- pair bias plus token padding, built once per fold by
+        # :meth:`compute_pair_bias` -- as the additive attention mask. Returns [B, Q, H, D].
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        context, _ = attention_interface(self, qh, kh, vh, attention_bias, dropout=0.0, scaling=self.scale)
 
         context = gate * context
         out = self.o_proj(context.reshape(bsz, n_queries, d_model))
@@ -759,26 +763,17 @@ class EsmFold2DiffusionTransformer(nn.Module):
         self.attn_blocks = nn.ModuleList([EsmFold2AttentionPairBias(config) for _ in range(num_blocks)])
         self.transition_blocks = nn.ModuleList([EsmFold2ConditionedTransitionBlock(config) for _ in range(num_blocks)])
 
-    def compute_pair_biases(self, pair_repr: Tensor) -> list[Tensor]:
-        """Per-block attention pair biases. Each depends only on the (step-invariant) conditioning pair
-        repr and this block's fixed weights, so the sampler builds them once per fold."""
-        return [attn.compute_pair_bias(pair_repr) for attn in self.attn_blocks]
+    def compute_pair_biases(self, pair_repr: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
+        """Per-block additive attention biases (see :meth:`EsmFold2AttentionPairBias.compute_pair_bias`).
 
-    def forward(
-        self,
-        token_acts: Tensor,
-        single_repr: Tensor,
-        pair_biases: list[Tensor],
-        attention_mask: Tensor | None = None,
-    ) -> Tensor:
+        Each depends only on the (step-invariant) conditioning pair repr, the token mask and the
+        block's fixed weights, so the sampler builds them once per fold."""
+        return [attn.compute_pair_bias(pair_repr, attention_mask) for attn in self.attn_blocks]
+
+    def forward(self, token_acts: Tensor, single_repr: Tensor, attention_biases: list[Tensor]) -> Tensor:
         hidden_states = token_acts
-        for attn, transition, pair_bias in zip(self.attn_blocks, self.transition_blocks, pair_biases):
-            hidden_states = hidden_states + attn(
-                hidden_states,
-                single_repr,
-                pair_bias,
-                attention_mask=attention_mask,
-            )
+        for attn, transition, attention_bias in zip(self.attn_blocks, self.transition_blocks, attention_biases):
+            hidden_states = hidden_states + attn(hidden_states, single_repr, attention_bias)
             hidden_states = hidden_states + transition(hidden_states, single_repr)
         return hidden_states
 
@@ -813,11 +808,10 @@ class EsmFold2DiffusionConditioning(nn.Module):
     def compute_pair_repr(self, pair_trunk: Tensor, relative_position_encoding: Tensor) -> Tensor:
         """The pair half of the conditioning. Independent of the noise level, so the sampler builds it
         once per fold rather than every denoising step."""
-        # ``pair_trunk`` is already fp32 (see ``EsmFold2TrunkOutput.pair_states``); the relative-position
-        # encoding is in the compute dtype, so upcast it to match before the concat. ``z_input_norm``
-        # keeps the result fp32, then we hand off to z_proj in the compute dtype.
-        rel_pos = relative_position_encoding.to(dtype=torch.float32)
-        pair_repr = torch.cat([pair_trunk, rel_pos], dim=-1)
+        # ``pair_trunk`` is fp32 (see ``EsmFold2TrunkOutput.pair_states``), so the concat promotes the
+        # compute-dtype relative-position encoding to match it; ``z_input_norm`` then keeps the result
+        # fp32 and we hand off to z_proj in the compute dtype.
+        pair_repr = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
         pair_repr = self.z_proj(self.z_input_norm(pair_repr).to(self.z_proj.weight.dtype))
         for block in self.z_transitions:
             pair_repr = pair_repr + block(pair_repr)
@@ -871,22 +865,26 @@ class EsmFold2DiffusionModule(nn.Module):
         pair_trunk: Tensor,
         relative_position_encoding: Tensor,
         single_inputs: Tensor,
+        token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
     ) -> EsmFold2DiffusionStepInvariants:
         """Precompute everything that is constant across denoising steps (see
         :class:`EsmFold2DiffusionStepInvariants`), and expand the batch across diffusion samples.
 
-        Order matters: the per-atom featurization, the pair-bias projection and the single projection
-        all run first, at the unexpanded batch size, and only their (much narrower) results are
-        expanded. Expanding the raw inputs instead would multiply the atom one-hot featurization and
-        the ``pairwise_hidden_size``-wide pair norm by ``num_diffusion_samples``.
+        Order matters: the per-atom featurization, the attention-bias projection and the single
+        projection all run first, at the unexpanded batch size, and only their (much narrower)
+        results are expanded. Expanding the raw inputs instead would multiply the atom one-hot
+        featurization and the ``pairwise_hidden_size``-wide pair norm by ``num_diffusion_samples``.
+
+        ``token_attention_mask`` is the *unexpanded* token padding mask; it is folded into the
+        per-block attention biases here, so the denoiser's forward takes no mask at all.
         """
         samples = num_diffusion_samples
 
         # --- unexpanded: batch_size ---
         c_base, position_embeddings = self.atom_encoder.embed_atoms(atom_inputs)
         pair_repr = self.conditioning.compute_pair_repr(pair_trunk, relative_position_encoding)
-        token_pair_bias = self.token_transformer.compute_pair_biases(pair_repr)
+        token_attention_bias = self.token_transformer.compute_pair_biases(pair_repr, token_attention_mask)
 
         # --- expansion boundary: batch_size -> batch_size * num_diffusion_samples ---
         cos, sin = position_embeddings
@@ -904,7 +902,7 @@ class EsmFold2DiffusionModule(nn.Module):
             # win here is running this once per fold instead of once per denoising step, not running
             # it on a smaller batch. Projecting post-expansion keeps the sampler bit-exact.
             single_repr_inputs=self.conditioning.compute_single_repr(single_inputs.repeat_interleave(samples, 0)),
-            token_pair_bias=[bias.repeat_interleave(samples, 0) for bias in token_pair_bias],
+            token_attention_bias=[bias.repeat_interleave(samples, 0) for bias in token_attention_bias],
         )
 
     def forward(
@@ -912,7 +910,6 @@ class EsmFold2DiffusionModule(nn.Module):
         x_noisy: Tensor,
         t_hat: Tensor,
         step_invariants: EsmFold2DiffusionStepInvariants,
-        token_attention_mask: Tensor | None = None,
     ) -> Tensor:
         # ``t_hat`` is the sampler's per-sample noise level, fp32 and flat at the expanded batch
         # length; everything below (and the conditioning it feeds) relies on that.
@@ -940,12 +937,7 @@ class EsmFold2DiffusionModule(nn.Module):
         token_acts = token_acts + self.s_to_token(self.s_step_norm(single_repr))
 
         # Step 5: token transformer
-        token_acts = self.token_transformer(
-            token_acts,
-            single_repr,
-            step_invariants.token_pair_bias,
-            attention_mask=token_attention_mask,
-        )
+        token_acts = self.token_transformer(token_acts, single_repr, step_invariants.token_attention_bias)
 
         # Step 6: token norm
         token_acts = self.token_norm(token_acts)
