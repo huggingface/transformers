@@ -163,8 +163,15 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+            - `"qnn"` — Qualcomm HTP inference via the ExecuTorch QNN backend.
+        backend_options (`dict[str, Any]`, *optional*):
+            Free-form, backend-owned options forwarded verbatim to the backend. The
+            exporter does not interpret its contents. For QNN (a full-export delegate):
+            `decoder_model` (static_llama key), `soc_model`, `model_mode`, `prompt`,
+            `calib_samples` (path), and `artifact_dir`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    backend_options: dict[str, Any] | None = None
