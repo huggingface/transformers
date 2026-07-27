@@ -19,7 +19,7 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
 * `DeepGemmLoaderTest` mocks the environment probes and `lazy_load_kernel` to drive
   `load_deepgemm_kernel` with no GPU/toolkit — asserting it gates correctly (raises when a
   precondition is unmet, returns the bundle otherwise, honours the per-call `requires_sm100` gate)
-  and stays torch-compile safe. Copied verbatim from `tests/test_kernel_loaders.py`.
+  and stays torch-compile safe.
 * `DeepGemmForwardTest` mocks only the loaded-kernel ops (the `DeepGEMM` bundle callables:
   `per_token_cast_to_fp8`, `fp8_fp4_matmul`, the grouped GEMMs, the Mega MoE ops) to return
   correctly shaped tensors, and runs the REAL public forwards so their scale-factor coercion /

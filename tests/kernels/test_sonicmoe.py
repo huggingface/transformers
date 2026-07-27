@@ -216,7 +216,7 @@ class SonicMoeForwardTest(unittest.TestCase):
         self.addCleanup(setattr, sm, "_SONICMOE", None)
 
     @contextlib.contextmanager
-    def _mocked_kernel(self, activation_type_enum=_FakeActivationType, assert_not_compiling=False):
+    def _mocked_kernel(self):
         captured = {}
 
         def fake_moe(
@@ -235,10 +235,6 @@ class SonicMoeForwardTest(unittest.TestCase):
             concat_layout,
             stream_id,
         ):
-            # sonic-moe's real kernel refuses to run while Dynamo is tracing (CuteDSL is untraceable);
-            # `_sonicmoe_wrapper`'s `@allow_in_graph` must keep this dispatch opaque so it runs at runtime.
-            if assert_not_compiling:
-                assert not torch.compiler.is_compiling()
             captured.update(
                 hidden_states=hidden_states,
                 router_scores=router_scores,
@@ -255,7 +251,7 @@ class SonicMoeForwardTest(unittest.TestCase):
             )
             return torch.zeros_like(hidden_states), None
 
-        bundle = sm.SonicMoE(activation_type_enum=activation_type_enum, moe_general_routing_inputs=fake_moe)
+        bundle = sm.SonicMoE(activation_type_enum=_FakeActivationType, moe_general_routing_inputs=fake_moe)
         with mock.patch.object(sm, "load_sonicmoe_kernel", return_value=bundle):
             yield captured
 
