@@ -33,7 +33,7 @@ The abstract from the paper is the following:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/unlimited_ocr_architecture.png" width="600">
 
-Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. To enable base mode set `crop_to_patches=False`.
+Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. To enable base mode set `crop_to_patches=False` in the processor.
 
 The vision tower follows the two-stage approach from [DeepSeek-OCR-2](./deepseek_ocr2): a SAM ViT-B encoder feeds into a CLIP ViT encoder. Unlike DeepSeek-OCR-2, the CLIP features are additionally concatenated with the SAM features to yield the final image tokens. Unlimited-OCR also omits the learnable patch queries from DeepSeek-OCR-2.
 
