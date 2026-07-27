@@ -36,6 +36,7 @@ import torch
 
 from transformers import LoMaConfig, LoMaForKeypointMatching
 
+
 logger = logging.getLogger(__name__)
 
 
