@@ -84,7 +84,7 @@ __all__ = [
 # ── Config ────────────────────────────────────────────────────────────────────
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(SiglipVisionConfig):
     r"""
@@ -129,7 +129,7 @@ class Step3p7VisionConfig(SiglipVisionConfig):
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     r"""
@@ -356,7 +356,7 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         return kwargs
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7Config(PreTrainedConfig):
     r"""

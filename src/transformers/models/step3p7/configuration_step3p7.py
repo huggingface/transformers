@@ -28,7 +28,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(PreTrainedConfig):
     r"""
@@ -76,7 +76,7 @@ class Step3p7VisionConfig(PreTrainedConfig):
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7TextConfig(PreTrainedConfig):
     r"""
@@ -348,7 +348,7 @@ class Step3p7TextConfig(PreTrainedConfig):
         return kwargs
 
 
-@auto_docstring
+@auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7Config(PreTrainedConfig):
     r"""
