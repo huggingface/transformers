@@ -1906,6 +1906,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         lm_lengths = []
         # Per-batch maps from (original protein-token index) to (LM input position).
         expand_maps: list[Tensor] = []
+        # Largest number of chains in any row, which decides how the backbone is masked below.
+        max_chains = 0
         for b in range(B):
             mask_b = protein_mask[b]
             ids_b = input_ids[b][mask_b]
@@ -1928,6 +1930,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             inverse_ordered = remap[inverse]
 
             chain_ids = asym_collapsed.unique(sorted=True)
+            max_chains = max(max_chains, len(chain_ids))
             # [BOS] chain1 [EOS BOS] chain2 ... [EOS]
             parts: list[Tensor] = [torch.tensor([0], device=device, dtype=ids_b.dtype)]
             # Per-chain LM positions accumulate; track them for the expand map.
@@ -1964,13 +1967,22 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         sequence_id = (lm_input_ids == 0).cumsum(dim=1) - 1  # BOS=0
         sequence_id = sequence_id.masked_fill(lm_input_ids == 1, -1)  # PAD=1
 
+        # Chain-aware masking is only needed when a row holds more than one chain. With a single
+        # chain the two spellings agree wherever it matters: ``sequence_id`` equality gives
+        # valid<->valid plus pad<->pad, a padding mask gives valid<->valid plus padded *query* rows
+        # whose outputs are never gathered below. Preferring the padding mask keeps flash attention
+        # available for the backbone, which dominates the cost of a fold, and matches the reference
+        # (it refuses only multi-chain inputs under flash attention). The choice is made here from a
+        # host-side chain count, so the backbone's forward keeps no data-dependent branch.
+        mask_kwargs = {"sequence_id": sequence_id} if max_chains > 1 else {"attention_mask": sequence_id >= 0}
+
         # bf16 autocast scoped to the backbone; a no-op when it is already fp32.
         use_amp = next(self.esmc.parameters()).dtype == torch.bfloat16
         with (
             torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=use_amp),
             torch.inference_mode(),
         ):
-            esmc_out = self.esmc(input_ids=lm_input_ids, sequence_id=sequence_id, output_hidden_states=True)
+            esmc_out = self.esmc(input_ids=lm_input_ids, output_hidden_states=True, **mask_kwargs)
 
         # Stack the per-layer tuple into the single tensor the projection expects.
         hs = torch.stack(esmc_out.hidden_states, dim=0)  # [n_layers+1, B, max_len, D]
