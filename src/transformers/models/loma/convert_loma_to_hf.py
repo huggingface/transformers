@@ -83,16 +83,40 @@ def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | None:
     return None
 
 
-def convert_matcher_state_dict(
+def _rename_descriptor_key(key: str) -> str | None:
+    """Rename a descriptor network key from the reference checkpoint format.
+
+    The reference checkpoint stores descriptor network weights under the ``_descriptor.`` prefix.
+    The HF model stores them under ``descriptor_network.``.
+    """
+    if key.startswith("_descriptor."):
+        return key.replace("_descriptor.", "descriptor_network.", 1)
+    return None
+
+
+def convert_state_dict(
     reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int
 ) -> dict[str, torch.Tensor]:
-    """Extract and rename the matcher tensors from a LoMa reference state dictionary."""
+    """Extract and rename the matcher and descriptor tensors from a LoMa reference state dictionary."""
     converted_state_dict = {}
     for source_key, tensor in reference_state_dict.items():
         destination_key = _rename_matcher_key(source_key, num_hidden_layers)
+        if destination_key is None:
+            destination_key = _rename_descriptor_key(source_key)
         if destination_key is not None:
             converted_state_dict[destination_key] = tensor
     return converted_state_dict
+
+
+def convert_matcher_state_dict(
+    reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int
+) -> dict[str, torch.Tensor]:
+    """Extract and rename the matcher tensors from a LoMa reference state dictionary.
+
+    .. deprecated::
+        Use :func:`convert_state_dict` instead, which also handles descriptor network weights.
+    """
+    return convert_state_dict(reference_state_dict, num_hidden_layers)
 
 
 def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: str | Path) -> None:
@@ -105,13 +129,21 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
 
     config = LoMaConfig(**VARIANT_CONFIGS[variant])
     model = LoMaForKeypointMatching(config)
-    matcher_state_dict = convert_matcher_state_dict(checkpoint, config.num_hidden_layers)
-    missing_keys, unexpected_keys = model.load_state_dict(matcher_state_dict, strict=False)
-    matcher_prefixes = ("input_projection", "positional_encoder", "transformer_layers", "match_assignment")
-    missing_matcher_keys = [key for key in missing_keys if key.startswith(matcher_prefixes)]
-    if missing_matcher_keys or unexpected_keys:
+    converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers)
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
+
+    # Only keypoint_detector keys are expected to be missing (they come from SuperPoint).
+    converted_prefixes = (
+        "input_projection",
+        "positional_encoder",
+        "transformer_layers",
+        "match_assignment",
+        "descriptor_network",
+    )
+    missing_converted_keys = [key for key in missing_keys if key.startswith(converted_prefixes)]
+    if missing_converted_keys or unexpected_keys:
         raise ValueError(
-            f"Matcher conversion failed. Missing keys: {missing_matcher_keys}. Unexpected keys: {unexpected_keys}."
+            f"Conversion failed. Missing keys: {missing_converted_keys}. Unexpected keys: {unexpected_keys}."
         )
 
     model.save_pretrained(output_dir)
