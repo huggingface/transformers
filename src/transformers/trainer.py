@@ -517,8 +517,13 @@ class Trainer:
         # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
         # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
         # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
-        # are caught too.
-        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
+        # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
+        # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
+        # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would
+        # under-count and over-scale the loss.
+        self._loss_shifts_labels = LOSS_MAPPING.get(
+            getattr(model_to_inspect, "loss_type", None)
+        ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":

@@ -177,7 +177,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
         return audio_inputs, audio_replacements
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 

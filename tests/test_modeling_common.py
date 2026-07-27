@@ -80,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -650,7 +651,10 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__:
+    # Iterate the config rather than its `__dict__`: a heterogeneous config raises on global reads
+    # of its per-layer attributes, and iteration hides exactly those. Sub-configs are still yielded,
+    # so a heterogeneous one (e.g. `Gemma4Config.text_config`) is still recursed into.
+    for key in list(configs_no_init):
         if (
             "init_range" in key
             or "initializer_range" in key
@@ -1733,6 +1737,127 @@ class ModelTesterMixin(ExportTesterMixin):
                                     self.assertTrue(
                                         v.grad is not None, f"{k} in {model_class.__name__} has no gradient!"
                                     )
+
+    def test_encoder_decoder_loss_no_double_shift(self):
+        """
+        Encoder-decoder LM heads are fed right-shifted ``decoder_input_ids``, so their logits are already
+        position-aligned with the targets: the training loss must be the cross-entropy against ``labels``
+        directly. If it shifts a second time (e.g. by routing through ``ForCausalLMLoss`` without passing
+        ``shift_labels``) the model trains against ``labels[..., 1:]`` -- an off-by-one in the loss.
+
+        The right-shifted ``decoder_input_ids`` are built and supplied here, so every model is driven the same
+        way regardless of how its own ``forward`` would have derived them.
+
+        The oracle compares the *gradient* of the reported loss w.r.t. ``output.logits`` against the gradients
+        of the aligned and of the shifted cross-entropy. Gradients carry the target positions, so they stay
+        decisive even where the two loss values coincide numerically -- which happens whenever a tester's
+        initialization makes the logits near-uniform (the T5-family testers set ``initializer_factor=0.002``).
+
+        Scope: encoder-decoder models built on ``ModelTesterMixin`` whose ``forward`` owns the loss. The
+        ``EncoderDecoderModel`` / ``VisionEncoderDecoderModel`` / ``SpeechEncoderDecoderModel`` wrappers are
+        covered by separate ``EncoderDecoderMixin`` test suites; those wrapper models' ``forward`` already
+        computes an aligned cross-entropy independently of the decoder, so they cannot hit this path.
+        """
+        # Class-based applicability gate first: this oracle needs a sequence-to-sequence LM head with one logit
+        # vector per label token. Decide from `all_model_classes` alone -- some testers have no `get_config`, so
+        # the config is not touched until after this gate.
+        seq2seq_lm_names = [
+            *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+            *get_values(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES),
+            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+        ]
+        seq2seq_lm_classes = [c for c in self.all_model_classes if c.__name__ in seq2seq_lm_names]
+        if not seq2seq_lm_classes:
+            self.skipTest(reason="No sequence-to-sequence language modeling head to check")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not config.is_encoder_decoder:
+            self.skipTest(reason="Model is not an encoder-decoder")
+
+        vocab_size = config.get_text_config(decoder=True).vocab_size
+        # Targets are >= 2 tokens long so that `labels[..., 1:]` is non-empty and the two oracles differ.
+        tester_decoder_input_ids = inputs_dict.get("decoder_input_ids")
+        seq_len = (
+            tester_decoder_input_ids.shape[-1]
+            if isinstance(tester_decoder_input_ids, torch.Tensor)
+            else getattr(self.model_tester, "decoder_seq_length", getattr(self.model_tester, "seq_length", 2)) or 2
+        )
+        seq_len = max(2, seq_len)
+        set_seed(42)
+        labels = torch.randint(3, vocab_size, (self.model_tester.batch_size, seq_len), device=torch_device)
+
+        for model_class in seq2seq_lm_classes:
+            with self.subTest(model_class.__name__):
+                # Deep-copy per class so nothing below mutates the shared config across iterations.
+                model_config = copy.deepcopy(config)
+                model_config.use_cache = False
+                model_config.return_dict = True
+                text_config = model_config.get_text_config(decoder=True)
+                pad_fallback = getattr(self.model_tester, "pad_token_id", None) or 0
+                for cfg in (model_config, text_config):
+                    if getattr(cfg, "pad_token_id", None) is None:
+                        # A pad id is still read while building decoder masks, and some models take it from the
+                        # top config while others take it from the decoder text config.
+                        cfg.pad_token_id = pad_fallback
+
+                # The first decoder token moves the logits but cannot change which cross-entropy the reported
+                # loss matches, so any in-vocabulary id will do. Use the model's own start id when the tester
+                # sets one and 0 otherwise, since several testers leave `decoder_start_token_id` unset. The
+                # range check is defensive: it keeps an id past the tester's vocabulary from failing in an
+                # embedding lookup before the alignment assertions run.
+                start_token_id = getattr(model_config, "decoder_start_token_id", None)
+                if not isinstance(start_token_id, int) or not 0 <= start_token_id < vocab_size:
+                    start_token_id = 0
+                decoder_input_ids = labels.roll(shifts=1, dims=1)
+                decoder_input_ids[:, 0] = start_token_id
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=False)
+                # Replace the tester's decoder inputs with targets the model cannot have derived differently:
+                # `decoder_input_ids` is `labels` right-shifted, so the logits are aligned with `labels`.
+                inputs.pop("decoder_attention_mask", None)
+                inputs["decoder_input_ids"] = decoder_input_ids
+                inputs["labels"] = labels
+
+                model = model_class(model_config).to(torch_device).eval()
+                # No `torch.no_grad()`: the oracle below differentiates the reported loss w.r.t. the logits.
+                output = model(**inputs)
+
+                logits = output.logits
+                vocab = logits.shape[-1]
+                float_logits = logits.float()
+                aligned = nn.functional.cross_entropy(float_logits.reshape(-1, vocab), labels.reshape(-1))
+                double_shifted = nn.functional.cross_entropy(
+                    float_logits[:, :-1, :].reshape(-1, vocab), labels[:, 1:].reshape(-1)
+                )
+                # The three gradients are taken from graphs that share nodes, so keep the graph alive until the
+                # last one. `allow_unused` turns "the loss does not depend on `output.logits`" into a readable
+                # failure instead of an autograd error.
+                grad_reported = torch.autograd.grad(output.loss, logits, retain_graph=True, allow_unused=True)[0]
+                self.assertIsNotNone(
+                    grad_reported,
+                    msg=f"{model_class.__name__}: the reported loss is not a function of `output.logits`",
+                )
+                grad_aligned = torch.autograd.grad(aligned, logits, retain_graph=True)[0]
+                grad_shifted = torch.autograd.grad(double_shifted, logits)[0]
+                # Guard the oracle: if both targets produce the same gradient the assertions below are vacuous.
+                self.assertFalse(
+                    torch.allclose(grad_aligned, grad_shifted),
+                    msg=(
+                        f"{model_class.__name__}: the aligned and shifted gradients are indistinguishable "
+                        f"(vacuous oracle)"
+                    ),
+                )
+                self.assertTrue(
+                    torch.allclose(grad_reported, grad_aligned),
+                    msg=f"{model_class.__name__}: training loss is not the cross-entropy against `labels`",
+                )
+                self.assertFalse(
+                    torch.allclose(grad_reported, grad_shifted),
+                    msg=(
+                        f"{model_class.__name__}: training loss is the cross-entropy against `labels[..., 1:]`. "
+                        f"`decoder_input_ids` are already right-shifted, so the loss must not shift `labels` again."
+                    ),
+                )
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -4213,9 +4338,18 @@ class ModelTesterMixin(ExportTesterMixin):
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
             head_dim = None
-            if hasattr(config, "head_dim") and config.head_dim is not None:
-                head_dim = config.head_dim
-                config.head_dim = max(requested_dim, config.head_dim)
+            # On a heterogeneous config `head_dim` cannot be read globally, so probe for it without
+            # tripping the guard. Per-layer overrides are bumped below.
+            global_head_dim = config._getattr_without_heterogeneous_validation("head_dim", None)
+            if global_head_dim is not None:
+                head_dim = global_head_dim
+                config.head_dim = max(requested_dim, global_head_dim)
+                if config.is_heterogeneous and "head_dim" in config.per_layer_attributes:
+                    overrides = copy.deepcopy(config._heterogeneity_spec.per_layer_overrides)
+                    for layer_overrides in overrides.values():
+                        if "head_dim" in layer_overrides:
+                            layer_overrides["head_dim"] = max(requested_dim, layer_overrides["head_dim"])
+                    config.per_layer_config = overrides
 
             cross_head_dim = None
             if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
