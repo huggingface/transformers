@@ -48,7 +48,7 @@ from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -57,14 +57,16 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
@@ -441,6 +443,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
 
+        position_bias = None
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
@@ -453,12 +456,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
             relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            relative_position_attn_weights = relative_position_attn_weights / math.sqrt(self.head_size)
-            attention_mask = (
-                relative_position_attn_weights
-                if attention_mask is None
-                else attention_mask + relative_position_attn_weights
-            )
+            position_bias = relative_position_attn_weights / math.sqrt(self.head_size)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -472,6 +470,7 @@ class SeamlessM4Tv2ConformerSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
 
@@ -585,11 +584,12 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
 
         indices = torch.arange(sequence_len, device=hidden_states.device).unsqueeze(0).expand(sequence_len, -1)
 
-        chunk_mask = (indices < start_indices) | (indices >= end_indices)
+        chunk_mask = (indices >= start_indices) & (indices < end_indices)
         chunk_mask = chunk_mask.unsqueeze(0).unsqueeze(0)
 
-        attention_mask = chunk_mask if attention_mask is None else (attention_mask.bool() | chunk_mask)
-        attention_mask = attention_mask.to(dtype=hidden_states.dtype)
+        attention_mask = (
+            chunk_mask if attention_mask is None else attention_mask[:, None, None, :].bool() & chunk_mask
+        )
         return attention_mask
 
     def forward(
@@ -602,17 +602,13 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
 
         if self.config.speech_encoder_chunk_size is not None:
             attention_mask = self._apply_chunk_attention(attention_mask, hidden_states)
 
-        if attention_mask is not None:
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
+        )
 
         hidden_states = self.dropout(hidden_states)
 
@@ -1263,7 +1259,6 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "seamless_m4t_v2"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_attention_backend = True
     _no_split_modules = [
         "SeamlessM4Tv2EncoderLayer",
         "SeamlessM4Tv2DecoderLayer",
@@ -1516,9 +1511,9 @@ class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor | None,
@@ -1621,9 +1616,9 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1752,9 +1747,9 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

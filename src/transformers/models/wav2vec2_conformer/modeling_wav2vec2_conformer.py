@@ -19,6 +19,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -430,14 +431,16 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
@@ -450,7 +453,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def _apply_relative_position_encoding(module, query, key, attention_mask, relative_position_embeddings):
+def _apply_relative_position_encoding(module, query, key, relative_position_embeddings):
     if relative_position_embeddings is None:
         raise ValueError(
             "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'relative'`"
@@ -477,10 +480,8 @@ def _apply_relative_position_encoding(module, query, key, attention_mask, relati
     relative_attention_scores = relative_attention_scores[..., 1:, :].view(relative_attention_scores_shape)
     relative_attention_scores = relative_attention_scores[..., : key.size(2)]
 
-    # 4. scale and combine with attention mask
+    # 4. scale the relative position bias
     relative_attention_scores = relative_attention_scores * module.scaling
-    if attention_mask is not None:
-        relative_attention_scores = relative_attention_scores + attention_mask
 
     # 5. add pos_bias_u to query for the content-based attention (matrix a+c)
     query = query + module.pos_bias_u[None, :, None, :]
@@ -544,10 +545,11 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         key_states = self.linear_k(query_key_states).view(hidden_shape).transpose(1, 2)
         value_states = self.linear_v(value_states).view(hidden_shape).transpose(1, 2)
 
+        position_bias = None
         # apply relative position embeddings (matrix b+d) and bias the query (matrix a+c) if needed
         if self.position_embeddings_type == "relative":
-            query_states, attention_mask = _apply_relative_position_encoding(
-                self, query_states, key_states, attention_mask, relative_position_embeddings
+            query_states, position_bias = _apply_relative_position_encoding(
+                self, query_states, key_states, relative_position_embeddings
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -562,6 +564,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
 
@@ -684,12 +687,9 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0.0
 
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
+        )
 
         hidden_states = self.dropout(hidden_states)
 

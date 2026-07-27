@@ -31,6 +31,7 @@ from ...activations import ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
@@ -422,31 +423,22 @@ class SEWEncoder(nn.Module):
     ):
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0.0
+
+            # Pool the attention mask to match the pooled hidden_states shape.
+            attention_mask = (
+                nn.functional.max_pool1d(
+                    attention_mask.float().unsqueeze(1),
+                    kernel_size=self.config.squeeze_factor,
+                    stride=self.config.squeeze_factor,
+                )
+                .squeeze(1)
+                .long()
+            )
+
             if is_flash_attention_requested(self.config):
-                # make sure padded tokens output 0
-                hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-            else:
-                # make sure padded tokens output 0
-                hidden_states[~expand_attention_mask] = 0.0
-                # Pool the attention mask to match the pooled hidden_states shape.
-                # max_pool1d avoids torch.arange(max_encoder_length) which bakes
-                # the sequence length as a constant during ONNX export.
-                attention_mask = (
-                    nn.functional.max_pool1d(
-                        attention_mask.float().unsqueeze(1),
-                        kernel_size=self.config.squeeze_factor,
-                        stride=self.config.squeeze_factor,
-                    )
-                    .squeeze(1)
-                    .long()
-                )
-
-                # extend attention_mask — keep {batch,1,1,seq} so the key-seq dimension
-                # stays symbolic during ONNX export (no square seq×seq materialization).
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
 
         n_input_timesteps = hidden_states.shape[1]
 
@@ -456,6 +448,11 @@ class SEWEncoder(nn.Module):
         min_length = min(position_embeddings.size(-1), pooled_hidden_states.size(-1))
         hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
         hidden_states = hidden_states.transpose(1, 2)
+
+        if not is_flash_attention_requested(self.config):
+            attention_mask = create_bidirectional_mask(
+                config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
+            )
 
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)

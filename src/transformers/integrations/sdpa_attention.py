@@ -115,14 +115,9 @@ def sdpa_attention_forward(
     # Quirks on the conditionals:
     # - We avoid inline passing this to the SDPA function directly to support both torch.compile's dynamic shapes and
     #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
-    # - It is important to check first for the shape, otherwise compile will fail with
-    #   `argument 'is_causal' must be bool, not SymBool`.
-    # - Under torch.export, `q_length` can instead be a data-dependent SymInt (e.g. subsampled audio lengths), whose
-    #   `> 1` comparison SDPA also rejects as a SymBool. We therefore gate the shape check behind the always-concrete
-    #   conditions first, so a plain `False` short-circuits before `q_length` is ever evaluated.
-    is_causal = is_causal and attention_mask is None
-    if is_causal:
-        is_causal = q_length > 1 and is_causal
+    # - Check the static conditions first so non-causal attention and explicit masks do not propagate a symbolic
+    #   sequence-length comparison to SDPA's boolean `is_causal` argument.
+    is_causal = is_causal and attention_mask is None and q_length > 1
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
