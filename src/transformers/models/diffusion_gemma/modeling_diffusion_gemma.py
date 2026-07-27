@@ -1394,7 +1394,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
         # Contrarily to the high-level mask creation functions, the mask interface used below does not cast the 2D
         # mask, and an integer one would propagate its dtype to the final mask instead of yielding a boolean mask
-        decoder_attention_mask = decoder_attention_mask.bool()
+        if isinstance(decoder_attention_mask, torch.Tensor) and decoder_attention_mask.ndim == 2:
+            decoder_attention_mask = decoder_attention_mask.bool()
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
