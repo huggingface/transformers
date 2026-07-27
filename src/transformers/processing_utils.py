@@ -2323,11 +2323,14 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
+        input_ids = text_inputs["input_ids"]
+        if hasattr(input_ids, "tolist"):
+            input_ids = input_ids.tolist()
         for modality in modalities:
             token_str = getattr(self, f"{modality}_token", None)
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
-                ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+                ids_count = [list(ids).count(token_id) for ids in input_ids]
                 text_count = [sample.count(token_str) for sample in text]
 
                 if ids_count != text_count:
