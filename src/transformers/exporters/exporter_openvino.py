@@ -40,6 +40,7 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
 
 from __future__ import annotations
 
+import math
 import operator
 import re
 from collections.abc import MutableMapping
@@ -1213,6 +1214,100 @@ def _patch_sdpa(original):
     return patch
 
 
+@register_patch(
+    "openvino",
+    "transformers.integrations.sdpa_attention.repeat_kv",
+    "transformers.integrations.eager_paged.repeat_kv",
+    "transformers.integrations.flex_attention.repeat_kv",
+)
+def _patch_repeat_kv(original):
+    """Expand GQA K/V heads via ``repeat_interleave`` instead of a 5-D ``expand`` + ``reshape``.
+
+    The stock ``repeat_kv`` unsqueezes to ``[b, kv_heads, 1, kv_seq, head_dim]`` then
+    ``expand``s the new axis to ``n_rep``. OV's frontend can't keep the ``kv_seq`` axis dynamic
+    through that 5-D broadcast in stateful decode (``Broadcast Check 'input_shape[j] == 1'`` on
+    dim 3), baking it to the traced length. ``repeat_interleave`` on the head axis is the exact
+    equivalent (per ``repeat_kv``'s own docstring) and lowers to an OV op that stays dynamic.
+    """
+
+    def patch(hidden_states, n_rep):
+        if n_rep == 1:
+            return hidden_states
+        return hidden_states.repeat_interleave(n_rep, dim=1)
+
+    return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.update",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+)
+def _patch_sliding_window_layer(original):
+    """Keep the full KV cache for sliding-window layers during export.
+
+    ``DynamicSlidingWindowLayer`` evicts all but the last ``sliding_window - 1`` tokens from its
+    stored state, reports a windowed ``kv_length``/``kv_offset``, and tracks its length with a
+    Python ``cumulative_length`` counter instead of the state tensor shape. The eviction bakes the
+    sliding-window bound (``0..sliding_window``) into the OV stateful KV tensors, and the counter
+    bakes the trace-time sequence length into the attention mask's ``kv_length`` — both desync the
+    stored cache from the mask at runtime (``Eltwise ... dim index 3 mismatch``). OV's stateful
+    cache is unbounded and never replicates the eviction, and the sliding-window pattern is already
+    enforced by the mask overlay, so falling back to the plain ``DynamicLayer`` behaviour (full
+    cache, shape-derived length) is both correct and export-friendly.
+    """
+    from ..cache_utils import DynamicLayer
+
+    return getattr(DynamicLayer, original.__name__)
+
+
+@register_patch("openvino", "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextModel._deepstack_process")
+def _patch_qwen3vl_deepstack(original):
+    """Rewrite qwen3-vl deepstack injection to avoid boolean-mask indexing.
+
+    ``_deepstack_process`` does ``hidden_states[visual_pos_masks] += visual_embeds``, whose selected
+    length is data-dependent — OV can't trace the dynamic shape. Rebuild the per-position visual
+    features with ``cumsum`` + ``index_select`` (a Gather OV keeps dynamic) and add them through a
+    ``float(mask)`` multiply, which is numerically identical.
+    """
+
+    def patch(self, hidden_states, visual_pos_masks, visual_embeds):
+        visual_embeds = visual_embeds.to(hidden_states.dtype)
+        batch, seq_len, dim = hidden_states.shape
+        flat_mask = visual_pos_masks.reshape(-1)
+        indices = torch.clamp(torch.cumsum(flat_mask.long(), dim=0) - 1, min=0)
+        full_visual = torch.index_select(visual_embeds, 0, indices).reshape(batch, seq_len, dim)
+        return hidden_states + full_visual * flat_mask.to(hidden_states.dtype).reshape(batch, seq_len, 1)
+
+    return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.models.wavlm.modeling_wavlm.WavLMPreTrainedModel._get_feature_vector_attention_mask",
+    "transformers.models.data2vec.modeling_data2vec_audio.Data2VecAudioPreTrainedModel._get_feature_vector_attention_mask",
+)
+def _patch_feature_vector_attention_mask(original):
+    """Build the downsampled attention mask with a broadcast comparison instead of a scatter.
+
+    The wav2vec2-family ``_get_feature_vector_attention_mask`` sets a one-hot at ``output_lengths - 1``
+    via integer advanced-index assignment, then flip/cumsum/flip to fill the earlier positions — OV
+    can't convert the ``aten.index_put`` (integer indices become an unconvertible ``SequenceMark``).
+    ``arange(seq) < output_lengths`` is identical (every position before each row's length is attended)
+    and export-clean.
+    """
+
+    def patch(self, feature_vector_length, attention_mask, add_adapter=None):
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
+        positions = torch.arange(feature_vector_length, device=attention_mask.device)
+        return positions.unsqueeze(0) < output_lengths.unsqueeze(1)
+
+    return patch
+
+
 @register_patch("openvino", "transformers.masking_utils._vmap_expansion_sdpa")
 def _patch_broadcast_mask_expansion(_original):
     """Replace vmap-based mask expansion with broadcast expansion.
@@ -1337,6 +1432,69 @@ def _patch_llama4_vision_rotary_emb(original):
         shape = [d if i == 1 else 1 for i, d in enumerate(query.shape[:-1])] + [freqs_pairs.shape[-2], 2]
         freqs_pairs = freqs_pairs.view(*shape).to(query.device)
         return _rotate_pairs(query, freqs_pairs), _rotate_pairs(key, freqs_pairs)
+
+    return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.models.phi3.modeling_phi3.Phi3RotaryEmbedding.forward",
+    "transformers.models.phimoe.modeling_phimoe.PhimoeRotaryEmbedding.forward",
+)
+def _patch_longrope_rotary_emb(original):
+    """Trace both LongRoPE frequency sets and select with ``torch.where`` on the sequence length.
+
+    Eager LongRoPE picks the long- or short-context ``inv_freq`` with a Python ``if seq_len >
+    original_max``, and the ``@dynamic_rope_update`` wrapper installs it by mutating a buffer. On a
+    dynamic ``position_ids`` both are data-dependent (``GuardOnDataDependentSymNode``). This
+    buffer-free forward computes ``inv_freq``/``mscale`` from both factors and selects with
+    ``torch.where``, so the exported graph carries both paths and picks at runtime.
+    """
+
+    def patch(self, x, position_ids=None, layer_type=None):
+        rope_type = self.rope_type if layer_type is None else self.rope_type[layer_type]
+        if rope_type != "longrope":
+            return (
+                original(self, x, position_ids) if layer_type is None else original(self, x, position_ids, layer_type)
+            )
+
+        params = self.config.rope_parameters if layer_type is None else self.config.rope_parameters[layer_type]
+        original_max = params["original_max_position_embeddings"]
+        partial_rotary_factor = params.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(self.config, "head_dim", None) or self.config.hidden_size // self.config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        seq_len = torch.max(position_ids) + 1
+        is_long = seq_len > original_max
+
+        long_factors = torch.tensor(params["long_factor"], dtype=torch.float32, device=x.device)
+        short_factors = torch.tensor(params["short_factor"], dtype=torch.float32, device=x.device)
+        ext_factors = torch.where(is_long, long_factors, short_factors)
+        inv_freq_shape = torch.arange(0, dim, 2, dtype=torch.int64, device=x.device).float() / dim
+        inv_freq = 1.0 / (ext_factors * params["rope_theta"] ** inv_freq_shape)
+
+        long_mscale, short_mscale = params.get("long_mscale"), params.get("short_mscale")
+        if long_mscale is not None and short_mscale is not None:
+            mscale = torch.where(
+                is_long,
+                torch.tensor(long_mscale, dtype=x.dtype, device=x.device),
+                torch.tensor(short_mscale, dtype=x.dtype, device=x.device),
+            )
+        else:
+            factor = params.get("factor") or self.config.max_position_embeddings / original_max
+            mscale = params.get("attention_factor")
+            if mscale is None:
+                mscale = 1.0 if factor <= 1.0 else math.sqrt(1 + math.log(factor) / math.log(original_max))
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * mscale
+            sin = emb.sin() * mscale
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     return patch
 

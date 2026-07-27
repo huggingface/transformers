@@ -753,6 +753,13 @@ def decompose_prefill_decode(
             f"top-level model and {len(decoder_calls)} on the decoder."
         )
 
+    # `generate` passes `logits_to_keep=1` (it only needs the last token's logits). An exported model
+    # should produce logits for every query position and let the runtime slice — keeping the value bakes
+    # a spurious scalar input that some backends (e.g. OpenVINO GenAI) reject. Drop it so the default
+    # (0 = all positions) applies.
+    for call in module_calls:
+        call.pop("logits_to_keep", None)
+
     components = {
         "prefill": (copy.copy(module), module_calls[0]),
         "decode": (copy.copy(module), module_calls[1]),
