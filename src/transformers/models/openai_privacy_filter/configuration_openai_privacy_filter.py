@@ -64,7 +64,6 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-
     num_hidden_layers: int = 8
     num_local_experts: int = 128
     vocab_size: int = 200064

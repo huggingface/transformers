@@ -115,7 +115,6 @@ class GlmImageTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 168064
