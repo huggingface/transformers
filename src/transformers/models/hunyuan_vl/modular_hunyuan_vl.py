@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
@@ -365,7 +366,8 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
-        return super().resize(
+        return TorchvisionBackend.resize(
+            self,
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
             # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
@@ -409,6 +411,34 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
 
         return flatten_patches, grid_h, grid_w
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        return resized_height // patch_size, resized_width // patch_size
+
 
 @requires(backends=("vision", "torchvision"))
 class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
@@ -439,7 +469,8 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
-        return super().resize(
+        return PilBackend.resize(
+            self,
             image=image,
             size=SizeDict(height=resized_height, width=resized_width),
             # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
@@ -484,6 +515,34 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
             channel * temporal_patch_size * patch_size * patch_size,
         )
         return flatten_patches, grid_h, grid_w
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        return resized_height // patch_size, resized_width // patch_size
 
 
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):

@@ -152,21 +152,13 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
         )
 
     def patchify(
@@ -287,8 +279,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         resized_height, resized_width = smart_resize(
             height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
+        return resized_height // patch_size, resized_width // patch_size
 
 
 __all__ = ["HunYuanVLImageProcessor"]
