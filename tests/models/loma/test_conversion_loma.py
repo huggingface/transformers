@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from transformers import LoMaConfig, LoMaForKeypointMatching
-from transformers.models.loma.convert_loma_to_hf import convert_checkpoint, convert_matcher_state_dict
+from transformers.models.loma.convert_loma_to_hf import convert_checkpoint, convert_matcher_state_dict, convert_state_dict
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -40,7 +40,7 @@ class TestLoMaConversion:
             "_descriptor.encoder.layers.0.weight": torch.ones(2, 2),
         }
 
-        converted_state_dict = convert_matcher_state_dict(reference_state_dict, num_hidden_layers=2)
+        converted_state_dict = convert_state_dict(reference_state_dict, num_hidden_layers=2)
 
         assert set(converted_state_dict) == {
             "positional_encoder.projector.weight",
@@ -53,7 +53,42 @@ class TestLoMaConversion:
             "transformer_layers.0.cross_attention.output.bias",
             "transformer_layers.0.cross_attention.mlp.layers.3.bias",
             "match_assignment.matchability.bias",
+            "descriptor_network.encoder.layers.0.weight",
         }
+
+    def test_convert_descriptor_keys(self):
+        """Verify that _descriptor.* keys are correctly renamed to descriptor_network.*."""
+        reference_state_dict = {
+            "_descriptor.encoder.layers.0.weight": torch.ones(64, 3, 3, 3),
+            "_descriptor.encoder.layers.1.weight": torch.ones(64),
+            "_descriptor.decoder.layers.1.block1.0.weight": torch.ones(256, 128, 1, 1),
+            "_descriptor.decoder.layers.1.out_conv.bias": torch.ones(256),
+        }
+
+        converted = convert_state_dict(reference_state_dict, num_hidden_layers=9)
+
+        assert set(converted) == {
+            "descriptor_network.encoder.layers.0.weight",
+            "descriptor_network.encoder.layers.1.weight",
+            "descriptor_network.decoder.layers.1.block1.0.weight",
+            "descriptor_network.decoder.layers.1.out_conv.bias",
+        }
+        # Verify tensors are the same objects (no copy)
+        for src_key, dst_key in [
+            ("_descriptor.encoder.layers.0.weight", "descriptor_network.encoder.layers.0.weight"),
+            ("_descriptor.decoder.layers.1.out_conv.bias", "descriptor_network.decoder.layers.1.out_conv.bias"),
+        ]:
+            assert torch.equal(converted[dst_key], reference_state_dict[src_key])
+
+    def test_convert_matcher_state_dict_backward_compat(self):
+        """Verify that the deprecated convert_matcher_state_dict still works."""
+        reference_state_dict = {
+            "posenc.Wr.weight": torch.ones(2, 2),
+            "_descriptor.encoder.layers.0.weight": torch.ones(2, 2),
+        }
+        result = convert_matcher_state_dict(reference_state_dict, num_hidden_layers=2)
+        assert "positional_encoder.projector.weight" in result
+        assert "descriptor_network.encoder.layers.0.weight" in result
 
     def test_convert_checkpoint(self, tmp_path):
         model = LoMaForKeypointMatching(LoMaConfig(descriptor_dim=256, num_attention_heads=4))
@@ -96,6 +131,8 @@ class TestLoMaConversion:
                 _, source_name, parameter_name = key.split(".")
                 source_name = "final_proj" if source_name == "final_projection" else source_name
                 reference_key = f"log_assignment.8.{source_name}.{parameter_name}"
+            elif key.startswith("descriptor_network."):
+                reference_key = key.replace("descriptor_network.", "_descriptor.", 1)
             else:
                 continue
             reference_state_dict[reference_key] = tensor
@@ -106,6 +143,12 @@ class TestLoMaConversion:
         convert_checkpoint(checkpoint_path, "loma_b", output_dir)
 
         converted_model = LoMaForKeypointMatching.from_pretrained(output_dir)
+        converted_prefixes = (
+            "positional_encoder",
+            "transformer_layers",
+            "match_assignment",
+            "descriptor_network",
+        )
         for key, tensor in model.state_dict().items():
-            if key.startswith(("positional_encoder", "transformer_layers", "match_assignment")):
-                assert torch.equal(converted_model.state_dict()[key], tensor)
+            if key.startswith(converted_prefixes):
+                assert torch.equal(converted_model.state_dict()[key], tensor), f"Mismatch for key: {key}"
