@@ -359,25 +359,72 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class LoMaModelIntegrationTest(unittest.TestCase):
-    # TODO: Update with actual LoMa checkpoint ID once uploaded to the Hub.
-    # The tests below are placeholders that will be filled with real expected
-    # values from a verified parity run against the reference implementation.
+    checkpoint_id = "Falcon7211/loma-b"
 
     @slow
-    @unittest.skip(reason="No LoMa checkpoint on the Hub yet — will be enabled after upload and parity verification")
     def test_inference(self):
-        """Test LoMa inference on a real image pair and verify numerical parity.
+        """Test LoMa inference loads from Hub and produces valid outputs."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
 
-        Once a converted checkpoint is available on the Hub:
-        1. Load the LoMa checkpoint with from_pretrained
-        2. Process a real image pair
-        3. Compare outputs to reference implementation values
-        4. Assert numerical parity (fp32: ~1e-5 tolerance)
-        """
-        pass
+        torch.manual_seed(0)
+        pixel_values = torch.rand(1, 2, 3, 120, 160, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+
+        # Verify output structure
+        self.assertIsNotNone(outputs.matches)
+        self.assertIsNotNone(outputs.matching_scores)
+
+        # Verify shapes: [batch_size, num_pairs, num_keypoints]
+        self.assertEqual(outputs.matches.dim(), 3)
+        self.assertEqual(outputs.matching_scores.dim(), 3)
+        self.assertEqual(outputs.matches.shape[0], 1)  # batch_size
+        self.assertEqual(outputs.matches.shape[1], 2)  # num_pairs (one per image)
+        self.assertEqual(outputs.matches.shape, outputs.matching_scores.shape)
+
+        # Verify dtypes
+        self.assertEqual(outputs.matches.dtype, torch.int64)
+        self.assertEqual(outputs.matching_scores.dtype, torch.float32)
+
+        # Verify value ranges
+        self.assertTrue((outputs.matching_scores >= 0).all())
+        self.assertTrue((outputs.matching_scores <= 1).all())
+        self.assertTrue((outputs.matches >= -1).all())
 
     @slow
-    @unittest.skip(reason="No LoMa checkpoint on the Hub yet — will be enabled after upload and parity verification")
+    def test_inference_with_keypoints(self):
+        """Test LoMa inference with pre-computed keypoints."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        torch.manual_seed(0)
+        num_kp = 32
+        pixel_values = torch.rand(1, 2, 3, 120, 160, device=torch_device)
+        keypoints0 = torch.rand(1, num_kp, 2, device=torch_device) * 2 - 1
+        keypoints1 = torch.rand(1, num_kp, 2, device=torch_device) * 2 - 1
+        keypoints = torch.stack([keypoints0, keypoints1], dim=1)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, keypoints=keypoints)
+
+        # With pre-computed keypoints, num_keypoints should match input
+        self.assertEqual(outputs.matches.shape[-1], num_kp)
+        self.assertEqual(outputs.matching_scores.shape[-1], num_kp)
+
+    @slow
     def test_inference_batched(self):
         """Test LoMa inference with batched image pairs."""
-        pass
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        torch.manual_seed(0)
+        batch_size = 2
+        pixel_values = torch.rand(batch_size, 2, 3, 120, 160, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+
+        self.assertEqual(outputs.matches.shape[0], batch_size)
+        self.assertEqual(outputs.matching_scores.shape[0], batch_size)
