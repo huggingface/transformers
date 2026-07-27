@@ -221,8 +221,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, revision=self.revision, device_map=torch_device
         ).eval()
-        # TODO: Pass as kwarg to generate one generation_config.json is on the hub
-        model.generation_config.no_repeat_ngram_window_size = 128
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -234,7 +232,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 **inputs,
                 do_sample=False,
                 max_new_tokens=20,
-                no_repeat_ngram_size=35,
             )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
@@ -251,8 +248,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, revision=self.revision, device_map=torch_device
         ).eval()
-        # TODO: Pass as kwarg to generate one generation_config.json is on the hub
-        model.generation_config.no_repeat_ngram_window_size = 128
         image = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -264,7 +259,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 **inputs,
                 do_sample=False,
                 max_new_tokens=20,
-                no_repeat_ngram_size=35,
             )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
@@ -281,8 +275,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, revision=self.revision, device_map=torch_device
         ).eval()
-        # TODO: Pass as kwarg to generate one generation_config.json is on the hub
-        model.generation_config.no_repeat_ngram_window_size = 128
         image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -304,7 +296,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 **inputs,
                 do_sample=False,
                 max_new_tokens=20,
-                no_repeat_ngram_size=35,
             )
         decoded = self.processor.batch_decode(
             generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
@@ -330,8 +321,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         model = UnlimitedOcrForConditionalGeneration.from_pretrained(
             self.model_id, revision=self.revision, device_map=torch_device
         ).eval()
-        # TODO: Pass as kwarg to generate one generation_config.json is on the hub
-        model.generation_config.no_repeat_ngram_window_size = 128
         image1 = load_image(
             url_to_local_path(
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -354,7 +343,6 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 **inputs,
                 do_sample=False,
                 max_new_tokens=20,
-                no_repeat_ngram_size=35,
             )
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
