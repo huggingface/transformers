@@ -75,6 +75,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_fsdp_plan = AttributeError()
 
     vocab_size: int = 262_144
     hidden_size: int = 2304
