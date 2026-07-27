@@ -108,6 +108,55 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
+@require_torch
+class AXK2Fp8SkipListTest(unittest.TestCase):
+    def test_modules_to_not_convert_normalized_to_model_module_names(self):
+        # The released fp8 checkpoints keep the gated-norm gate MLP (stored as `W_down`/`W_up`) and the
+        # indexer's `weights_proj` unquantized via `modules_to_not_convert`. Those bare checkpoint names
+        # must normalize to the model's actual module names through the conversion mapping (as
+        # `FineGrainedFP8HfQuantizer._normalize_modules_to_not_convert` does), otherwise the gate MLP would
+        # be fp8-quantized by mistake. This guards the rename patterns staying unanchored.
+        from transformers import AXK2Config, AXK2ForCausalLM
+        from transformers.conversion_mapping import get_model_conversion_mapping
+
+        config = AXK2Config(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            n_routed_experts=4,
+            num_experts_per_tok=2,
+            kv_lora_rank=16,
+            q_lora_rank=16,
+            qk_nope_head_dim=16,
+            qk_rope_head_dim=16,
+            v_head_dim=16,
+            index_n_heads=1,
+            index_head_dim=16,
+            index_topk=4,
+            gated_norm_rank=4,
+            max_position_embeddings=64,
+        )
+        model = AXK2ForCausalLM(config)
+        renamings = get_model_conversion_mapping(model)
+
+        def normalize(name):
+            for rename in renamings:
+                name, _ = rename.rename_source_key(name)
+            return name
+
+        self.assertEqual(normalize("W_down"), "mlp.fc1")
+        self.assertEqual(normalize("W_up"), "mlp.fc2")
+        # Entries that are already model module names must pass through unchanged.
+        self.assertEqual(normalize("weights_proj"), "weights_proj")
+        self.assertEqual(normalize("lm_head"), "lm_head")
+        # The normalized names correspond to real gate submodules that will then be skipped.
+        self.assertTrue(any(name.endswith("mlp.fc1") for name, _ in model.named_modules()))
+
+
 @slow
 @require_torch_accelerator
 class AXK1IntegrationTest(unittest.TestCase):
