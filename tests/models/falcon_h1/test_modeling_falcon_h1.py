@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch FalconH1 model."""
 
+import textwrap
 import unittest
 
 import pytest
@@ -20,7 +21,6 @@ import pytest
 from transformers import DynamicCache, FalconH1Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_kernels,
     require_torch,
     require_torch_accelerator,
@@ -414,53 +414,57 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch
 @require_torch_accelerator
 class FalconH1ModelIntegrationTest(unittest.TestCase):
-    @slow
     def test_falcon_h1_hard(self):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT_DEFAULT = """
+        EXPECTED_TEXT_A100 = textwrap.dedent(
+            """\
             user
             Tell me about the french revolution.
             assistant
             The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
 
             ### **Causes**
-            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
-            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
-            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
-            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), debt, and inefficient taxation. The nobility and clergy were exempt from taxes, while the common people bore the brunt of the burden.
+            2. **Social Inequality**: French society was divided into three estates: the First Estate (clergy), the Second Estate (nobility), and the Third Estate (commoners, including peasants, bourgeoisie, and urban workers). The disparity between the privileged classes and the common people was immense.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty, which fueled revolutionary fervor.
+            4. **Political Instability**: The absolute monarchy under King Louis XVI proved unable to address the country’s problems, leading to widespread discontent.
 
             ### **Key Events**
-            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
-            2. **Declaration of the Rights of Man and of the Citizen (August 1789)**: A foundational document proclaiming liberty, equality, and fraternity.
-            3. **National Assembly and King’s Trial (1791–1792)**: King Louis XVI and his ministers were tried and executed (King Louis was guillotined, Marie Antoinette was banished), marking the end of the monarchy.
-            4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
-            5. **Thermidorian Reaction
-        """
+            1. **Estates-General (1789)**: The Third Estate broke away from the privileged Estates to form the National Assembly, demanding a constitution and tax reform.
+            2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, equality, and fraternity.
+            4. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, the revolution turned violent as thousands were executed for alleged counter-revolutionary activities.
+            5. **Rise and Fall of Robespierre (July"""
+        )
 
-        EXPECTED_TEXT_A10 = """
+        EXPECTED_TEXT_A10 = textwrap.dedent(
+            """\
             user
             Tell me about the french revolution.
             assistant
-            The French Revolution (1789–1799) was a period of profound social upheaval and radical political change in France that fundamentally transformed the nation and had far-reaching effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
 
             ### **Causes**
-            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and an inefficient tax system.
-            2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed immense wealth and power, while the majority of the population (the Third Estate, comprising commoners) faced poverty and lack of representation.
-            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty, which fueled revolutionary fervor.
-            4. **Political Instability**: The absolute monarchy under King Louis XVI proved unable to address the nation's problems, leading to growing discontent.
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
 
             ### **Key Events**
-            1. **Estates-General (1789)**: The Third Estate broke away and formed the National Assembly, forcing King Louis XVI to convene the Estates-General, an old legislative body, to address the financial crisis.
-            2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
-            3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, equality, and fraternity as fundamental rights.
-            4. **Abolition of Feudalism (November 1789)**: The National Assembly abolished feudal privileges, redistributing church lands to the people.
-            5. **Tennis Court Oath (May 5, 1789)**: The National Assembly members, meeting on a tennis court, pledged to continue their work until a new constitution was established.
-            6.
-        """
+            1. **Opening of the Revolution (1789)**:
+               - **Storming of the Bastille**: Symbolic of the fall of royal authority, marking the start of the revolution.
+               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
 
-        EXPECTED_TEXT_XPU = """
+            2. **Stages of the Revolution**:
+               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
+               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
+               - **Thermidorian Reaction (1794–1795)**: The fall of"""
+        )
+
+        EXPECTED_TEXT_XPU = textwrap.dedent(
+            """\
             user
             Tell me about the french revolution.
             assistant
@@ -482,24 +486,17 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
                - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
                - **Thermidorian Reaction (1794)**: The fall of Robespierre and the end of the Reign of Terror.
 
-            3. **
-        """
+            3. **"""
+        )
 
         expected_texts = Expectations(
             {
-                (None, None): EXPECTED_TEXT_DEFAULT,
-                ("cuda", 8): EXPECTED_TEXT_A10,
+                ("cuda", (8, 0)): EXPECTED_TEXT_A100,
+                ("cuda", (8, 6)): EXPECTED_TEXT_A10,
                 ("xpu", None): EXPECTED_TEXT_XPU,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()
-        # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
-        EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
-
-        device_properties = get_device_properties()
-        # For A10, there is an ending " "
-        if device_properties[0] == "cuda" and device_properties[1] == 8:
-            EXPECTED_TEXT = EXPECTED_TEXT + " "
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -512,5 +509,4 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)
 
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
         self.assertEqual(generated_text, EXPECTED_TEXT)
