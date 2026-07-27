@@ -11,25 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
+from typing import Any
+
 import torch
 
 from ...generation.configuration_utils import GenerationConfig
-from ...generation.logits_process import LOGITS_PROCESSOR_INPUTS_DOCSTRING, NoRepeatNGramLogitsProcessor
+from ...generation.logits_process import (
+    LOGITS_PROCESSOR_INPUTS_DOCSTRING,
+    LogitsProcessorList,
+    NoRepeatNGramLogitsProcessor,
+)
+from ...generation.utils import GenerationMixin
 from ...utils import add_start_docstrings
-
-
-class UnlimitedOcrGenerationConfig(GenerationConfig):
-    r"""A GenerationConfig class with parameterization customized for UnlimitedOcr.
-
-    Args:
-        no_repeat_ngram_window_size (`int`, *optional*):
-            If set together with `no_repeat_ngram_size`, n-gram repetitions are blocked only within this many
-            trailing tokens instead of over the whole sequence.
-    """
-
-    def __init__(self, no_repeat_ngram_window_size: int | None = None, **kwargs):
-        super().__init__(**kwargs)
-        self.no_repeat_ngram_window_size = no_repeat_ngram_window_size
 
 
 class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsProcessor):
@@ -55,4 +49,57 @@ class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsP
         return super().__call__(input_ids[:, -self.window_size :], scores)
 
 
-__all__ = ["UnlimitedOcrGenerationConfig", "UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor"]
+class UnlimitedOcrGenerationMixin(GenerationMixin):
+    r"""
+    Adds support for the `no_repeat_ngram_window_size` generation option. If set together with `no_repeat_ngram_size`,
+    n-gram repetitions are blocked only within this many trailing tokens instead of over the whole sequence.
+
+    `no_repeat_ngram_window_size` is a model specific option and must already be present on the generation config
+    before it can be passed to `generate`, either through the checkpoint's `generation_config.json` or by setting
+    `model.generation_config.no_repeat_ngram_window_size` after loading the model.
+    """
+
+    def _get_logits_processor(
+        self,
+        generation_config: GenerationConfig,
+        input_ids_seq_length: int | None = None,
+        encoder_input_ids: torch.LongTensor | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        device: str | None = None,
+        model_kwargs: dict[str, Any] | None = None,
+        negative_prompt_ids: torch.Tensor | None = None,
+        negative_prompt_attention_mask: torch.Tensor | None = None,
+    ) -> LogitsProcessorList:
+        no_repeat_ngram_size = generation_config.no_repeat_ngram_size
+        no_repeat_ngram_window_size = getattr(generation_config, "no_repeat_ngram_window_size", None)
+        use_sliding_window_processor = False
+
+        if no_repeat_ngram_window_size is not None and no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
+            use_sliding_window_processor = True
+            logits_processor = LogitsProcessorList(logits_processor or [])
+            logits_processor.append(
+                UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(
+                    ngram_size=no_repeat_ngram_size,
+                    window_size=no_repeat_ngram_window_size,
+                )
+            )
+            # Set to None to avoid also adding the default `NoRepeatNGramLogitsProcessor`
+            generation_config.no_repeat_ngram_size = None
+
+        try:
+            processors = super()._get_logits_processor(
+                generation_config=generation_config,
+                input_ids_seq_length=input_ids_seq_length,
+                encoder_input_ids=encoder_input_ids,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                logits_processor=logits_processor,
+                device=device,
+                model_kwargs=model_kwargs,
+                negative_prompt_ids=negative_prompt_ids,
+                negative_prompt_attention_mask=negative_prompt_attention_mask,
+            )
+        finally:
+            if use_sliding_window_processor:
+                generation_config.no_repeat_ngram_size = no_repeat_ngram_size
+        return processors

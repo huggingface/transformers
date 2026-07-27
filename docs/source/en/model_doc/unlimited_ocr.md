@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-06-23 and contributed to Hugging Face Transformers on 2026-07-09.*
+*This model was published in HF papers on 2026-06-23 and contributed to Hugging Face Transformers on 2026-07-27.*
 
 
 # UnlimitedOcr
@@ -207,10 +207,6 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 
 [[autodoc]] UnlimitedOcrSamVisionConfig
 
-## UnlimitedOcrGenerationConfig
-
-[[autodoc]] UnlimitedOcrGenerationConfig
-
 ## UnlimitedOcrImageProcessor
 
 [[autodoc]] UnlimitedOcrImageProcessor
@@ -246,7 +242,3 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 
 [[autodoc]] UnlimitedOcrForConditionalGeneration
     - forward
-
-## UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor
-
-[[autodoc]] UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor

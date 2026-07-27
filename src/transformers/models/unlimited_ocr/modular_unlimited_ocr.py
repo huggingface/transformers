@@ -28,11 +28,10 @@ from ...cache_utils import (
 )
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import and_masks, causal_mask_function, create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -59,7 +58,6 @@ from ..deepseek_ocr2.image_processing_deepseek_ocr2 import (
 )
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
     DeepseekOcr2CausalLMOutputWithPast,
-    DeepseekOcr2ForConditionalGeneration,
     DeepseekOcr2Model,
     DeepseekOcr2ModelOutputWithPast,
     DeepseekOcr2ModelOutputWithPooling,
@@ -71,10 +69,7 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import (
 )
 from ..deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor, DeepseekOcr2ProcessorKwargs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
-from .generation_unlimited_ocr import (
-    UnlimitedOcrGenerationConfig,
-    UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
-)
+from .generation_unlimited_ocr import UnlimitedOcrGenerationMixin
 
 
 class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
@@ -1236,8 +1231,42 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         )
 
 
-class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
-    generation_config_class = UnlimitedOcrGenerationConfig
+@auto_docstring
+class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, UnlimitedOcrGenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config: UnlimitedOcrConfig):
+        super().__init__(config)
+        self.model = UnlimitedOcrModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_patches: list[int] | torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+            The tensors corresponding to the global view input images.
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
+        """
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_values_local=pixel_values_local,
+            num_local_patches=num_local_patches,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1382,33 +1411,6 @@ class UnlimitedOcrForConditionalGeneration(DeepseekOcr2ForConditionalGeneration)
             model_inputs["patches_grid"] = patches_grid
 
         return model_inputs
-
-    def _get_logits_processor(self, generation_config, logits_processor=None, **kwargs):
-        no_repeat_ngram_size = generation_config.no_repeat_ngram_size
-        no_repeat_ngram_window_size = generation_config.no_repeat_ngram_window_size
-
-        use_sliding_window_processor = (
-            no_repeat_ngram_window_size is not None and no_repeat_ngram_size is not None and no_repeat_ngram_size > 0
-        )
-        if use_sliding_window_processor:
-            logits_processor = list(logits_processor or []) + [
-                UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(
-                    ngram_size=no_repeat_ngram_size,
-                    window_size=no_repeat_ngram_window_size,
-                )
-            ]
-
-            # Set to None to avoid adding the default NoRepeatNgramLogitsProcessor
-            generation_config.no_repeat_ngram_size = None
-
-        try:
-            processors = GenerationMixin._get_logits_processor(
-                self, generation_config=generation_config, logits_processor=logits_processor, **kwargs
-            )
-        finally:
-            if use_sliding_window_processor:
-                generation_config.no_repeat_ngram_size = no_repeat_ngram_size
-        return processors
 
 
 __all__ = [
