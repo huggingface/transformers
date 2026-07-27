@@ -587,9 +587,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         chunk_mask = (indices >= start_indices) & (indices < end_indices)
         chunk_mask = chunk_mask.unsqueeze(0).unsqueeze(0)
 
-        attention_mask = (
-            chunk_mask if attention_mask is None else attention_mask[:, None, None, :].bool() & chunk_mask
-        )
+        attention_mask = chunk_mask if attention_mask is None else attention_mask[:, None, None, :].bool() & chunk_mask
         return attention_mask
 
     def forward(
