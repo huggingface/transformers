@@ -105,6 +105,47 @@ def _rename_descriptor_key(key: str) -> str | None:
     return None
 
 
+def _rename_dinov2_keys(key: str) -> str | list[str] | None:
+    if not key.startswith("_descriptor.encoder.frozen_dinov2.dinov2_vitl14."):
+        return None
+
+    sub_key = key.replace("_descriptor.encoder.frozen_dinov2.dinov2_vitl14.", "")
+    hf_prefix = "descriptor_network.dinov2_encoder."
+
+    if sub_key == "cls_token":
+        return hf_prefix + "embeddings.cls_token"
+    if sub_key == "pos_embed":
+        return hf_prefix + "embeddings.position_embeddings"
+    if sub_key == "patch_embed.proj.weight":
+        return hf_prefix + "embeddings.patch_embeddings.projection.weight"
+    if sub_key == "patch_embed.proj.bias":
+        return hf_prefix + "embeddings.patch_embeddings.projection.bias"
+    if sub_key in ("norm.weight", "norm.bias"):
+        return hf_prefix + f"layernorm.{sub_key.split('.')[1]}"
+
+    block_match = re.fullmatch(r"blocks\.(\d+)\.(.+)", sub_key)
+    if block_match:
+        i, rest = block_match.groups()
+        layer_prefix = hf_prefix + f"encoder.layer.{i}."
+        if rest in ("norm1.weight", "norm1.bias", "norm2.weight", "norm2.bias"):
+            return layer_prefix + rest
+        if rest in ("ls1.gamma", "ls2.gamma"):
+            num = rest[2]
+            return layer_prefix + f"layer_scale{num}.lambda1"
+        if rest.startswith("mlp.fc1.") or rest.startswith("mlp.fc2."):
+            return layer_prefix + rest
+        if rest in ("attn.proj.weight", "attn.proj.bias"):
+            return layer_prefix + f"attention.output.dense.{rest.split('.')[2]}"
+        if rest in ("attn.qkv.weight", "attn.qkv.bias"):
+            param = rest.split(".")[2]
+            return [
+                layer_prefix + f"attention.attention.query.{param}",
+                layer_prefix + f"attention.attention.key.{param}",
+                layer_prefix + f"attention.attention.value.{param}",
+            ]
+    return None
+
+
 def convert_state_dict(
     reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int
 ) -> dict[str, torch.Tensor]:
@@ -114,8 +155,17 @@ def convert_state_dict(
         destination_key = _rename_matcher_key(source_key, num_hidden_layers)
         if destination_key is None:
             destination_key = _rename_descriptor_key(source_key)
+        if destination_key is None:
+            destination_key = _rename_dinov2_keys(source_key)
+
         if destination_key is not None:
-            converted_state_dict[destination_key] = tensor
+            if isinstance(destination_key, list):
+                q, k, v = tensor.chunk(3, dim=0)
+                converted_state_dict[destination_key[0]] = q
+                converted_state_dict[destination_key[1]] = k
+                converted_state_dict[destination_key[2]] = v
+            else:
+                converted_state_dict[destination_key] = tensor
     return converted_state_dict
 
 
@@ -142,33 +192,9 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
     model = LoMaForKeypointMatching(config)
     converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers)
 
-    # Filter to only keys present in the model — the reference checkpoint's descriptor decoder
-    # was trained with DINOv2 context which changes decoder input dimensions, so some keys will
-    # have incompatible shapes and must be skipped.
-    model_keys = set(model.state_dict().keys())
-    compatible_state_dict = {}
-    skipped_keys = []
-    for key, tensor in converted_state_dict.items():
-        if key in model_keys:
-            model_shape = model.state_dict()[key].shape
-            if tensor.shape == model_shape:
-                compatible_state_dict[key] = tensor
-            else:
-                skipped_keys.append(f"{key} (checkpoint: {tensor.shape}, model: {model_shape})")
-        else:
-            skipped_keys.append(f"{key} (not in model)")
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
 
-    if skipped_keys:
-        logger.warning(
-            f"Skipped {len(skipped_keys)} descriptor keys due to shape mismatch or missing model key "
-            f"(the reference decoder uses DINOv2 context which the HF model does not support): "
-            f"{skipped_keys[:5]}{'...' if len(skipped_keys) > 5 else ''}"
-        )
-
-    missing_keys, unexpected_keys = model.load_state_dict(compatible_state_dict, strict=False)
-
-    # Only keypoint_detector keys and descriptor_network keys (due to DINOv2 incompatibility)
-    # are expected to be missing.
+    # Only keypoint_detector keys are expected to be missing.
     matcher_prefixes = ("input_projection", "positional_encoder", "transformer_layers", "match_assignment")
     missing_matcher_keys = [key for key in missing_keys if key.startswith(matcher_prefixes)]
     if missing_matcher_keys or unexpected_keys:

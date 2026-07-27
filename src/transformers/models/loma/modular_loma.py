@@ -52,6 +52,8 @@ class LoMaConfig(LightGlueConfig):
         Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
+    dinov2_dim (`int`, *optional*, defaults to 1024):
+        Hidden dimension of the DINOv2 encoder.
 
     Examples:
         ```python
@@ -74,6 +76,7 @@ class LoMaConfig(LightGlueConfig):
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
+    dinov2_dim: int = 1024
 
     # Fields inherited from LightGlueConfig but not used by LoMa's matching architecture.
     attention_dropout = AttributeError()
@@ -186,13 +189,14 @@ class LoMaVgg19Encoder(nn.Module):
 
 
 class LoMaDescriptorDecoder(nn.Module):
-    def __init__(self, descriptor_dim: int, hidden_blocks: int) -> None:
+    def __init__(self, descriptor_dim: int, hidden_blocks: int, dinov2_dim: int = 1024) -> None:
         super().__init__()
         self.descriptor_dim = descriptor_dim
-        self.scales = ("8", "4", "2", "1")
+        self.scales = ("14", "8", "4", "2", "1")
         self.layers = nn.ModuleDict(
             {
-                "8": LoMaConvRefiner(512, 512, 256 + descriptor_dim, hidden_blocks),
+                "14": LoMaConvRefiner(dinov2_dim, 768, 512 + descriptor_dim, hidden_blocks),
+                "8": LoMaConvRefiner(512 + 512, 512, 256 + descriptor_dim, hidden_blocks),
                 "4": LoMaConvRefiner(512, 256, 128 + descriptor_dim, hidden_blocks),
                 "2": LoMaConvRefiner(256, 64, 32 + descriptor_dim, hidden_blocks),
                 "1": LoMaConvRefiner(96, 32, 1 + descriptor_dim, hidden_blocks),
@@ -218,7 +222,19 @@ class LoMaDescriptorNetwork(nn.Module):
     def __init__(self, config: LoMaConfig) -> None:
         super().__init__()
         self.encoder = LoMaVgg19Encoder()
-        self.decoder = LoMaDescriptorDecoder(config.input_descriptor_dim, config.descriptor_hidden_blocks)
+
+        from ..dinov2.configuration_dinov2 import Dinov2Config
+        from ..dinov2.modeling_dinov2 import Dinov2Model
+
+        dinov2_config = Dinov2Config(
+            hidden_size=config.dinov2_dim, num_hidden_layers=24, num_attention_heads=16, patch_size=14, image_size=518
+        )
+        self.dinov2_encoder = Dinov2Model(dinov2_config)
+        self.dinov2_encoder.requires_grad_(False)
+
+        self.decoder = LoMaDescriptorDecoder(
+            config.input_descriptor_dim, config.descriptor_hidden_blocks, config.dinov2_dim
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         if pixel_values.shape[1] == 1:
@@ -227,6 +243,16 @@ class LoMaDescriptorNetwork(nn.Module):
             raise ValueError("LoMaDescriptorNetwork expects one grayscale or three RGB channels")
 
         feature_maps = self.encoder(pixel_values)
+
+        dinov2_outputs = self.dinov2_encoder(pixel_values)
+        sequence_output = dinov2_outputs.last_hidden_state
+        batch_size, _, hidden_size = sequence_output.shape
+        patch_seq = sequence_output[:, 1:, :]
+        h = pixel_values.shape[2] // 14
+        w = pixel_values.shape[3] // 14
+        dinov2_features = patch_seq.transpose(1, 2).reshape(batch_size, hidden_size, h, w)
+        feature_maps.append(dinov2_features)
+
         descriptor_grid = pixel_values.new_zeros(
             pixel_values.shape[0], self.decoder.descriptor_dim, *feature_maps[-1].shape[-2:]
         )

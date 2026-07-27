@@ -51,6 +51,8 @@ class LoMaConfig(PreTrainedConfig):
         Frequency scale used by the Fourier positional encoding.
     descriptor_hidden_blocks (`int`, *optional*, defaults to 5):
         Number of depthwise refinement blocks at each decoder scale in the local descriptor network.
+    dinov2_dim (`int`, *optional*, defaults to 1024):
+        Hidden dimension of the DINOv2 encoder.
 
     Examples:
         ```python
@@ -78,6 +80,7 @@ class LoMaConfig(PreTrainedConfig):
     positional_encoding_type: str = "learnable"
     positional_encoding_gamma: float = 1.0
     descriptor_hidden_blocks: int = 5
+    dinov2_dim: int = 1024
 
     def __post_init__(self, **kwargs):
         if self.num_attention_heads is None:

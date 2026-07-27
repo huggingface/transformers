@@ -66,6 +66,7 @@ class LoMaModelTester:
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.filter_threshold = filter_threshold
+        self.dinov2_dim = 32
 
     def prepare_config_and_inputs(self):
         # LoMa expects a grayscale image as input
@@ -81,6 +82,7 @@ class LoMaModelTester:
             num_hidden_layers=self.num_layers,
             num_attention_heads=self.num_heads,
             filter_threshold=self.filter_threshold,
+            dinov2_dim=self.dinov2_dim,
             attn_implementation="eager",
         )
 
