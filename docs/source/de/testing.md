@@ -41,7 +41,7 @@ Es gibt 2 Testsuiten im Repository:
      `main`. Es wird nur ausgeführt, wenn ein Commit auf `main` den Code in einem der folgenden Ordner aktualisiert hat: `src`,
      `tests`, `.github` (um zu verhindern, dass er auf hinzugefügten Modellkarten, Notebooks usw. läuft)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): führt normale und langsame Tests auf GPU in
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled-caller.yml): führt normale und langsame Tests auf GPU in
      `tests` und `examples`:
 
 ```bash
