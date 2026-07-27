@@ -19,7 +19,7 @@ from functools import cached_property
 from transformers import ConvNextV2Config
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -304,7 +304,14 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.9989, 0.1953, -0.4382]).to(torch_device)
+        # fmt: off
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor([0.9989, 0.1953, -0.4382]),
+                ("xpu", 5): torch.tensor([0.9986, 0.1953, -0.4381]),
+            }
+        ).get_expectation().to(torch_device)
+        # fmt: on
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 

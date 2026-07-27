@@ -26,13 +26,14 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
         create_causal_mask,
         create_chunked_causal_mask,
         create_masks_for_generate,
+        create_recurrent_attention_mask,
         find_packed_sequence_indices,
     )
 
@@ -374,6 +375,44 @@ class MaskTest(unittest.TestCase):
 
         self.assertTrue(padded_mask[0] is not None)
         self.assertTrue(padded_mask[1] is not None)
+
+    def test_recurrent_mask_kept_on_continued_multi_token_forward(self):
+        """
+        Continued multi-token forwards (chunked prefill, cache continuation) must still receive the
+        padding mask for recurrent layers, otherwise pad tokens of the new segment leak into the
+        linear-attention/conv state. Only single-token decode may skip it.
+        """
+        config = Qwen3NextConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            layer_types=["linear_attention", "full_attention"],
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=8,
+            linear_value_head_dim=8,
+            linear_num_key_heads=2,
+            linear_num_value_heads=4,
+        )
+        cache = DynamicCache(config=config)
+        # 8 seen tokens, row 0 left-padded with 6 pads; the continued chunk covers the last 4 positions
+        attention_mask = torch.tensor([[0, 0, 0, 0, 0, 0, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1]], device=torch_device)
+        inputs_embeds = torch.zeros(2, 4, config.hidden_size, device=torch_device)
+
+        # simulate the state left behind by the first (prefill) chunk
+        cache.update_conv_state(torch.zeros(2, 4, config.linear_conv_kernel_dim, device=torch_device), 0)
+        self.assertTrue(cache.has_previous_state(0))
+
+        mask = create_recurrent_attention_mask(
+            config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, past_key_values=cache
+        )
+        self.assertIsNotNone(mask)
+        torch.testing.assert_close(mask, attention_mask[:, -4:])
+
+        # single-token decode keeps skipping the mask (a generated token is never padding)
+        decode_embeds = torch.zeros(2, 1, config.hidden_size, device=torch_device)
+        decode_mask = create_recurrent_attention_mask(
+            config=config, inputs_embeds=decode_embeds, attention_mask=attention_mask, past_key_values=cache
+        )
+        self.assertIsNone(decode_mask)
 
     def test_create_masks_for_generate_defers_for_unmapped_layer_types(self):
         """

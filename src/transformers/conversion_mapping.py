@@ -84,6 +84,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "SiglipTextModel": "CLIPTextModel",
     "Siglip2TextModel": "CLIPTextModel",
     "xCLIPTextModel": "CLIPTextModel",
+    "aria": "llava",
     "paligemma": "llava",
     "aya_vision": "llava",
     "got_ocr2": "llava",
@@ -105,6 +106,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     # class-based mappings
+    "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
     "AyaVisionModel": "LlavaModel",
     "GotOcr2Model": "LlavaModel",
@@ -230,6 +232,32 @@ def _build_checkpoint_conversion_mapping():
         ],
         "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        ],
+        "axk2": [
+            # The A.X-K2 hub checkpoints store the routed experts as individual `experts.{i}` projections
+            # (DeepSeek-V3 layout); the model packs them into the stacked expert tensors.
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
+            # (`fc1` / `fc2`). Bridge the names on load (and back on save).
+            WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
+            WeightRenaming(source_patterns=r"\.W_up\.", target_patterns=".mlp.fc2."),
+            # The released checkpoints fuse the query up-projection and the attention output gate into a
+            # single `q_b_proj` (vLLM layout); the model keeps it fused under the clearer name `q_gate_proj`
+            # and splits the activation in the forward. A plain rename (kept fp8-safe: no weight split, and
+            # the prefix also renames the `weight_scale_inv` companion).
+            WeightRenaming(source_patterns=r"self_attn\.q_b_proj\.", target_patterns="self_attn.q_gate_proj."),
         ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
@@ -1805,6 +1833,12 @@ def _build_checkpoint_conversion_mapping():
     mapping["laguna"] += [
         WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
         WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
+    ]
+
+    # A.X-K1 checkpoints store the MoE output norm at the decoder-layer level.
+    mapping["axk1"] = mapping["qwen2_moe"].copy()
+    mapping["axk1"] += [
+        WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
     ]
 
     mapping["MtpModel"] = [
