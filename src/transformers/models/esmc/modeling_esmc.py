@@ -337,10 +337,20 @@ class EsmcModel(EsmcPreTrainedModel):
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         sequence_id: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
+        position_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Position of each token in the sequence, used by RoPE. Defaults to
+            ``arange(sequence_length)``.
+
+            ESMC positions are absolute over the whole input, and keep running *across* chain
+            boundaries in a multi-chain input. The chain structure is carried separately by
+            ``sequence_id``, which masks attention: unlike the packed-sequence format used elsewhere
+            in the library, these are therefore not per-chain position ids restarting at 0, and the
+            chain structure is deliberately not inferred from them.
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor for chain-aware attention masking. Tokens with the same
             non-negative integer value can attend to each other; tokens with different values
@@ -365,7 +375,8 @@ class EsmcModel(EsmcPreTrainedModel):
         ```
         """
         hidden_states = self.embed_tokens(input_ids)
-        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
+        if position_ids is None:
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         if sequence_id is not None:
@@ -436,6 +447,7 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         sequence_id: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -465,6 +477,7 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         encoder_outputs = self.esmc(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             sequence_id=sequence_id,
             return_dict=True,
             **kwargs,
