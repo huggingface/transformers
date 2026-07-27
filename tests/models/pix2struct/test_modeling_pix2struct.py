@@ -311,6 +311,14 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Pix2StructTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=32)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Pix2Struct stores its head dim in `d_kv` and ties the q/k/v projections to `hidden_size`
+        config.d_kv = max(requested_dim, config.d_kv)
+        config.hidden_size = config.num_heads * config.d_kv
+        return config
+
     @unittest.skip(
         reason="Pix2Struct always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
     )
