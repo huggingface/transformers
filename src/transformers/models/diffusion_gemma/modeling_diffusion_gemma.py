@@ -1446,12 +1446,12 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 @dataclass
 class DiffusionGemmaModelOutputWithPast(MoeModelOutputWithPast):
     r"""
-    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each decoder layer) of shape `(batch_size * canvas_length,
-        num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each decoder layer) of shape `(batch_size * canvas_length,
+        num_experts)`, i.e. the raw router logits used to compute the load balancing loss.
     """
 
     encoder_last_hidden_state: torch.FloatTensor | None = None
