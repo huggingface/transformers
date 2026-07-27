@@ -254,6 +254,26 @@ class PagedAttentionCache:
             allocator.allocate_cache_to_request(state.request_id, state.current_len(), request_len)
         return True
 
+    def count_storable_requests(self, list_blocks_needed: list[dict[str, int]]) -> int:
+        """Given a list of blocks needed for each allocator, taken in order, counts how many could allocate the cache
+        needed if they were admitted one by one. This is a simulation only, no actual allocation is performed."""
+        # These track the status of the simluated cache
+        free_sectors = self.pool.num_free_sectors
+        free_blocks = {name: self.pool.count_free_blocks(ca.index) for name, ca in self.cache_allocators.items()}
+        # Loop over the requests in order, stopping when a request cannot be admitted
+        for num_storable, blocks_needed in enumerate(list_blocks_needed):
+            # Loop over allocators and simulate allocations
+            for name, allocator in self.cache_allocators.items():
+                missing_blocks = blocks_needed[name] - free_blocks[name]
+                if missing_blocks > 0:
+                    new_sectors = ceil(missing_blocks / allocator.blocks_per_sector)
+                    if new_sectors > free_sectors:
+                        return num_storable  # no more free sectors: request cannot be scheduled
+                    free_sectors -= new_sectors
+                    free_blocks[name] += new_sectors * allocator.blocks_per_sector
+                free_blocks[name] -= blocks_needed[name]
+        return len(list_blocks_needed)
+
     def free_blocks(self, request_id: str) -> None:
         """Signals all cache allocators that a request's cache can be freed."""
         for allocator in self.cache_allocators.values():
@@ -273,7 +293,7 @@ class PagedAttentionCache:
             return 0
 
         # Loop over all allocators to find the longest prefix match by all
-        prefix_len = 2 ** 32 - 1  # ~inf
+        prefix_len = 2**32 - 1  # ~inf
         all_matched_blocks = {}
         for name, allocator in self.cache_allocators.items():
             matched_blocks = allocator.match_prefix_blocks(prompt_ids)
@@ -372,10 +392,7 @@ class PagedAttentionCache:
         self.pool.reset()
 
     def prepare_fork_request(
-        self,
-        src_state: RequestState,
-        dst_req_ids: list[str],
-        copy_src_and_dst: dict[str, tuple[list[int], list[int]]]
+        self, src_state: RequestState, dst_req_ids: list[str], copy_src_and_dst: dict[str, tuple[list[int], list[int]]]
     ) -> list[str]:
         """Forks the cache of the source request into new requests: fully-written blocks are shared when block sharing
         is allowed, the others will be copied. Children are forked in order while the cache has room, and the ids

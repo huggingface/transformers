@@ -383,8 +383,8 @@ class ContinuousBatchProcessor:
         # requests and offload enough so that the remaining ones can all be scheduled. The loop is necessary because of
         # prefix sharing: offloading a fully shared request has 0 impact. Its termination is guaranteed.
         while requests_in_batch is None:
-            # Stop case: no request can be offloaded.
-            if self.offloading_manager.offload_requests() == 0:
+            # Stop case: no request can be offloaded
+            if not self.offloading_manager.offload_requests():
                 raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
             # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
             requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(

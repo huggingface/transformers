@@ -53,16 +53,18 @@ class RegularTrees:
 
 
 class CachePool:
-    """Pool of cache sectors."""
+    """Pool of cache sectors. The first num_reserved_sectors sectors are never free for allocation. On GPU, this is used
+    for the read / write trash sectors. On CPU, we don't need to reserve any sectors."""
 
-    def __init__(self, num_sectors: int, num_allocators: int) -> None:
+    def __init__(self, num_sectors: int, num_allocators: int, num_reserved_sectors: int = 2) -> None:
         self.num_sectors = num_sectors
         self.num_allocators = num_allocators
+        self.num_reserved_sectors = num_reserved_sectors
         self.blocks_per_sector = [0 for _ in range(num_allocators)]
         self.reset()
 
     def reset(self) -> None:
-        self.free_sectors = list(range(2, self.num_sectors + 2))  # first two sectors are trash
+        self.free_sectors = list(range(self.num_reserved_sectors, self.num_sectors + self.num_reserved_sectors))
         self._free_blocks = [RegularTrees(blocks_per_sector) for blocks_per_sector in self.blocks_per_sector]
 
     def set_blocks_per_sector(self, index: int, blocks_per_sector: int) -> None:
