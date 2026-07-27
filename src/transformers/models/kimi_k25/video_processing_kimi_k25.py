@@ -162,7 +162,7 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                     max_size_per_side=size.max_height,
                 )
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    videos=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )

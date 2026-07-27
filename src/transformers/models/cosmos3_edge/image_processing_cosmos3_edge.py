@@ -94,7 +94,7 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
     image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
     patch_size = 16
-    temporal_patch_size = 2
+    temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Cosmos3EdgeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
@@ -140,6 +140,7 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
         "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: time-major, block-major patches with HWC values within each flattened patch
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         patches = images.reshape(
@@ -152,14 +153,14 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
             merge_size,
             patch_size,
         )
-        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+        patches = patches.permute(0, 2, 5, 3, 6, 4, 7, 1)
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(-1)
+            .expand(-1, -1, -1, -1, -1, -1, -1, -1, temporal_patch_size)
             .reshape(
                 batch_size,
                 grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+                patch_size * patch_size * channel * temporal_patch_size,
             )
         )
         return flatten_patches, grid_h, grid_w

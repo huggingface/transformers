@@ -167,8 +167,8 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height,
-            width,
+            height=height,
+            width=width,
             num_frames=videos.shape[1],
             factor=factor,
             temporal_factor=temporal_factor,
@@ -246,7 +246,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    videos=stacked_videos,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,

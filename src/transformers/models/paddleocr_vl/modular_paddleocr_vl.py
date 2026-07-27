@@ -20,7 +20,6 @@
 import math
 import warnings
 
-import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -28,11 +27,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
-from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    PILImageResampling,
-    SizeDict,
-)
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -44,7 +38,6 @@ from ...processing_utils import (
     Unpack,
 )
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -138,112 +131,6 @@ class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
 class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
-
-    def _preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        patch_size: int,
-        temporal_patch_size: int,
-        merge_size: int,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
-        all_patches = []
-        all_grids = []
-
-        for image in images:
-            height, width = image.shape[-2:]
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
-                image = self.resize(
-                    image,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
-                )
-            else:
-                resized_height, resized_width = height, width
-
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-
-            patches = np.expand_dims(image, axis=0)
-            if patches.ndim == 4:
-                patches = np.expand_dims(patches, axis=1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = np.repeat(
-                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
-                )
-                patches = np.concatenate([patches, repeats], axis=1)
-
-            batch_size = 1
-            grid_t = patches.shape[1] // temporal_patch_size
-            channel = patches.shape[2]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.reshape(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
-            )
-            patches = patches.transpose(0, 1, 4, 6, 3, 2, 5, 7)
-            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
-
-            all_patches.append(flatten_patches.squeeze(0))
-            all_grids.append([grid_t, grid_h, grid_w])
-
-        pixel_values = np.concatenate(all_patches, axis=0)
-        image_grid_thw = np.array(all_grids, dtype=np.int64)
-
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
-        )
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        """
-        A utility that returns number of image patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of image patches per image.
-        """
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-        )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
 
 
 class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):

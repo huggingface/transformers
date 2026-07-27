@@ -17,7 +17,6 @@ import itertools
 from collections.abc import Callable
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -26,11 +25,6 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    PILImageResampling,
-    SizeDict,
-)
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,7 +33,6 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -75,7 +68,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
-from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
 
 
@@ -1227,124 +1219,7 @@ class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
 
 class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
-    temporal_patch_size = None  # Unused
-
-    def _preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        patch_size: int,
-        merge_size: int,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ):
-        """
-        Preprocess images one by one for PIL backend.
-        """
-        processed_images = []
-        processed_grids = []
-
-        for image in images:
-            height, width = image.shape[-2:]
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height=height,
-                    width=width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
-                image = self.resize(
-                    image,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    resample=resample,
-                )
-
-            # Rescale and normalize
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-
-            # Ensure float32 for patch processing
-            image_array = np.asarray(image, dtype=np.float32)
-            if image_array.ndim == 3:  # (C, H, W)
-                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
-            if image_array.ndim == 4:  # (B, C, H, W)
-                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
-
-            resized_height, resized_width = image_array.shape[-2:]
-            batch_size, grid_t, channel = image_array.shape[:3]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = image_array.reshape(
-                batch_size,
-                grid_t,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = np.transpose(patches, (0, 1, 3, 6, 4, 7, 2, 5, 8))
-
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * patch_size * patch_size,
-            )
-
-            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
-            processed_images.append(flatten_patches.squeeze(0))
-            processed_grids.append([grid_t, grid_h, grid_w])
-
-        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
-        pixel_values = np.concatenate(processed_images, axis=0)
-        image_grid_thw = np.array(processed_grids)
-
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
-        )
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
-        """
-        A utility that returns number of image patches for a given image size.
-
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without an image input.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of image patches per image.
-        """
-        min_pixels = self.size["shortest_edge"]
-        max_pixels = self.size["longest_edge"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
-        )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
+    temporal_patch_size = 1
 
 
 class Ernie4_5_VLMoeImageProcessor(Glm4vImageProcessor):

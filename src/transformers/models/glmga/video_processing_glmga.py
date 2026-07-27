@@ -169,8 +169,8 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height,
-            width,
+            height=height,
+            width=width,
             num_frames=videos.shape[1],
             factor=factor,
             temporal_factor=temporal_factor,

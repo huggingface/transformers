@@ -280,7 +280,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    videos=stacked_videos,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,

@@ -123,8 +123,8 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height,
-            width,
+            height=height,
+            width=width,
             num_frames=videos.shape[1],
             factor=factor,
             temporal_factor=temporal_factor,
@@ -145,6 +145,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
         "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: time-major, block-major patches with HWC values within each flattened patch
         batch_size, num_frames, channel, resized_height, resized_width = videos.shape
 
         # Check that videos have `num_frames` divisible by `temporal_patch_size`
@@ -167,11 +168,11 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
             merge_size,
             patch_size,
         )
-        patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+        patches = patches.permute(0, 1, 4, 7, 5, 8, 6, 9, 3, 2)
         flatten_patches = patches.reshape(
             batch_size,
             grid_t * grid_h * grid_w,
-            channel * temporal_patch_size * patch_size * patch_size,
+            patch_size * patch_size * channel * temporal_patch_size,
         )
 
         return flatten_patches, grid_t, grid_h, grid_w
@@ -202,7 +203,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    videos=stacked_videos,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,

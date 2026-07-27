@@ -1079,60 +1079,28 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
         all_grids = []
 
         for image in images:
-            height, width = image.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 image = self.resize(
                     image,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
                 )
-            else:
-                resized_height, resized_width = height, width
 
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
 
-            patches = np.expand_dims(image, axis=0)
-            if patches.ndim == 4:
-                patches = np.expand_dims(patches, axis=1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = np.repeat(
-                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
-                )
-                patches = np.concatenate([patches, repeats], axis=1)
-
-            batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.reshape(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            patches = patches.transpose(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size * grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+            patches, grid_h, grid_w = self.patchify(
+                image,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            all_patches.append(flatten_patches)
-            all_grids.append([grid_t, grid_h, grid_w])
+            all_patches.append(patches)
+            all_grids.append([1, grid_h, grid_w])
 
         pixel_values = np.concatenate(all_patches, axis=0)
         image_grid_thw = np.array(all_grids, dtype=np.int64)
@@ -1340,7 +1308,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    videos=stacked_videos,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,

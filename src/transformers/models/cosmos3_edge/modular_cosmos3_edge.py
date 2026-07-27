@@ -997,16 +997,90 @@ class Cosmos3EdgeImageProcessor(Glm4vImageProcessor):
     size = {"shortest_edge": 256 * 256, "longest_edge": 4096 * 4096}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
+    temporal_patch_size = 1
     patch_size = 16
     merge_size = 2
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: time-major, block-major patches with HWC values within each flattened patch
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 2, 5, 3, 6, 4, 7, 1)
+        flatten_patches = (
+            patches.unsqueeze(-1)
+            .expand(-1, -1, -1, -1, -1, -1, -1, -1, temporal_patch_size)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                patch_size * patch_size * channel * temporal_patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
 
 class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
     size = {"shortest_edge": 256 * 256, "longest_edge": 4096 * 4096}
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
+    temporal_patch_size = 1
     patch_size = 16
     merge_size = 2
+
+    def patchify(
+        self,
+        image: np.ndarray,
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[np.ndarray, int, int]:
+        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: time-major, block-major patches with HWC values within each flattened patch
+        # Ensure float32 for patch processing
+        image = np.asarray(image, dtype=np.float32)
+        channel, resized_height, resized_width = image.shape[-2:]
+
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = image.reshape(
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # (gh, gw, mh, mw, ph, pw, C)
+        patches = np.transpose(patches, (1, 4, 2, 5, 3, 6, 0))
+
+        # expand temporal_patch_size as a broadcast (zero-copy)
+        patches = np.broadcast_to(
+            patches[:, :, :, :, :, :, :, None],
+            (*patches.shape, temporal_patch_size),
+        )
+
+        flatten_patches = patches.reshape(
+            grid_h * grid_w,
+            patch_size * patch_size * channel * temporal_patch_size,
+        )
+        return flatten_patches, grid_h, grid_w
 
 
 class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
@@ -1018,6 +1092,46 @@ class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     min_frames = 4
     max_frames = 768
     num_frames = None
+
+    def patchify(
+        self,
+        videos: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Override: time-major, block-major patches with HWC values within each flattened patch
+        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        # Check that videos have `num_frames` divisible by `temporal_patch_size`
+        if pad := -num_frames % temporal_patch_size:
+            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
+            videos = torch.cat((videos, repeats), dim=1)
+
+        grid_t = num_frames // temporal_patch_size
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = videos.view(
+            batch_size,
+            grid_t,
+            temporal_patch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 1, 4, 7, 5, 8, 6, 9, 3, 2)
+        flatten_patches = patches.reshape(
+            batch_size,
+            grid_t * grid_h * grid_w,
+            patch_size * patch_size * channel * temporal_patch_size,
+        )
+
+        return flatten_patches, grid_t, grid_h, grid_w
 
     def sample_frames(
         self,

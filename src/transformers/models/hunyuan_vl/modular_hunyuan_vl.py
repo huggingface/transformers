@@ -26,13 +26,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...image_processing_utils import BatchFeature
-from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -58,7 +56,6 @@ from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import (
     Qwen2VLImageProcessorKwargs,
     Qwen2VLImageProcessorPil,
-    smart_resize,
 )
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
@@ -391,107 +388,42 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
-    def _preprocess(
+    def patchify(
         self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        resample: "PILImageResampling | None",
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
+        image: np.ndarray,
         patch_size: int,
-        temporal_patch_size: int,
         merge_size: int,
-        return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
-        all_patches = []
-        all_grids = []
+        temporal_patch_size: int,
+    ) -> tuple[np.ndarray, int, int]:
+        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        # Ensure float32 for patch processing
+        image = np.asarray(image, dtype=np.float32)
+        channel, resized_height, resized_width = image.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-        for image in images:
-            height, width = image.shape[-2:]
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
-                image = self.resize(
-                    image,
-                    size=SizeDict(height=resized_height, width=resized_width),
-                    # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-                    # resampling argument, which uses BICUBIC for RGB images. Its config has
-                    # `resample=1` (LANCZOS), but the original implementation never uses it.
-                    resample=PILImageResampling.BICUBIC,
-                )
-            else:
-                resized_height, resized_width = height, width
+        patches = image.reshape(
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # Flatten patches in row-major order - (gh, mh, gw, mw, C, ph, pw)
+        patches = np.transpose(patches, (1, 2, 4, 5, 0, 3, 6))
 
-            image = image.astype(np.float32)
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-
-            patches = np.expand_dims(image, axis=0)
-            if patches.ndim == 4:
-                patches = np.expand_dims(patches, axis=1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = np.repeat(
-                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
-                )
-                patches = np.concatenate([patches, repeats], axis=1)
-
-            batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.reshape(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-
-            patches = patches.transpose(0, 1, 4, 5, 7, 8, 3, 2, 6, 9)
-            flatten_patches = patches.reshape(
-                batch_size * grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
-            )
-
-            all_patches.append(flatten_patches)
-            all_grids.append([grid_t, grid_h, grid_w])
-
-        pixel_values = np.concatenate(all_patches, axis=0)
-        image_grid_thw = np.array(all_grids, dtype=np.int64)
-
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        # expand temporal_patch_size as a broadcast (zero-copy)
+        patches = np.broadcast_to(
+            patches[:, :, :, :, :, None, :, :],
+            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
-        """Return the `(grid_h, grid_w)` patch counts used by HunYuanVL token accounting."""
-        images_kwargs = images_kwargs or {}
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
-        resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        flatten_patches = patches.reshape(
+            grid_h * grid_w,
+            channel * temporal_patch_size * patch_size * patch_size,
         )
-        return resized_height // patch_size, resized_width // patch_size
+        return flatten_patches, grid_h, grid_w
 
 
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
