@@ -238,17 +238,24 @@ class EsmFold2GenerationMixin:
         return self.fold(**features, **forward_kwargs)
 
     @torch.no_grad()
-    def infer_protein_as_pdb(self, seq: str, **forward_kwargs) -> str:
+    def infer_protein_as_pdb(self, seq: str, sample_idx: int | None = None, **forward_kwargs) -> str:
+        """Fold ``seq`` and render the prediction as a PDB string.
+
+        ``sample_idx`` picks which diffusion sample to render; by default the best-ranked one.
+        """
         from .protein_utils import output_to_pdb, prepare_protein_features
 
         features = prepare_protein_features(seq)
         features = {k: v.to(self.device) for k, v in features.items()}
         output = self.fold(**features, **forward_kwargs)
-        return output_to_pdb(output, features)
+        return output_to_pdb(output, features, sample_idx=sample_idx)
 
     @staticmethod
-    def output_to_pdb(output: EsmFold2Output, features: dict[str, Tensor]) -> str:
-        """Render a PDB string from an [`EsmFold2Output`] and the input ``features`` it was produced from."""
+    def output_to_pdb(output: EsmFold2Output, features: dict[str, Tensor], sample_idx: int | None = None) -> str:
+        """Render a PDB string from an [`EsmFold2Output`] and the input ``features`` it was produced from.
+
+        ``sample_idx`` picks which diffusion sample to render; by default the best-ranked one.
+        """
         from .protein_utils import output_to_pdb as _output_to_pdb
 
-        return _output_to_pdb(output, features)
+        return _output_to_pdb(output, features, sample_idx=sample_idx)

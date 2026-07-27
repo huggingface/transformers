@@ -47,6 +47,10 @@ print(pdb_string)
 slightly different predictions if you run the same sequence multiple times. Set a manual seed if you want exactly
 reproducible structures.
 
+ESMFold2 draws `config.num_diffusion_samples` structures per fold. `infer_protein_as_pdb` renders the best-ranked
+one (highest pTM); pass `sample_idx` to pick a specific sample instead. The PDB carries per-residue pLDDT in the
+b-factor column, on the same 0-1 scale as the `plddt` output.
+
 ### `forward` vs `fold`
 
 A structure prediction has two halves. `EsmFold2Model.forward` is the first: it runs the folding trunk over the
