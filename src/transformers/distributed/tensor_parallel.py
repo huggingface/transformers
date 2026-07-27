@@ -294,12 +294,6 @@ class PackedColwiseParallel(TensorParallelLayer):
             output, mesh, (_StridedShard(dim=-1, split_factor=self.split_factor),), run_check=False
         )
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(input_layouts={self.input_layouts}, "
-            f"use_local_output={self.use_local_output}, split_factor={self.split_factor})"
-        )
-
 
 class MoEParamShard(TensorParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
@@ -322,9 +316,6 @@ class MoEParamShard(TensorParallelLayer):
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(placement={self.placement}, shards_expert_dim={self.shards_expert_dim})"
 
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
