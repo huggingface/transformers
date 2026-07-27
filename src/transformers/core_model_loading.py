@@ -464,7 +464,6 @@ class PermuteForRope(ConversionOps):
                 if len(tensors) != 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
                 tensors = tensors[0]
-            print(key, tensors.shape, self.inverse)
             output[key] = self._apply(tensors)
         return output
 
@@ -488,6 +487,9 @@ class VisionFuseAndPermuteForRope(ConversionOps):
             "`VisionUnfuseAndPermuteForRope` is deprecated and will be removed in v5.20. Use `PermuteForRope()` and `Concatenate()` "
             "consecutively instead to permute back and fuse projections."
         )
+        self.dim = dim
+        self.permute_layer_names = permute_layer_names
+        self.inverse = inverse
         self.concat_op = Concatenate(dim=dim)
         self.permute_op = PermuteForRope(
             subconfig_key="vision_config", permute_layer_names=permute_layer_names, inverse=inverse
@@ -539,6 +541,9 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
             "`VisionUnfuseAndPermuteForRope` is deprecated and will be removed in v5.20. Use `Chunk()` and `PermuteForRope()` "
             "consecutively instead to unfuse projections and permute for block-split RoPE"
         )
+        self.dim = dim
+        self.permute_layer_names = permute_layer_names
+        self.inverse = inverse
         self.chunk_op = Chunk(dim=dim)
         self.permute_op = PermuteForRope(
             subconfig_key="vision_config", permute_layer_names=permute_layer_names, inverse=inverse
