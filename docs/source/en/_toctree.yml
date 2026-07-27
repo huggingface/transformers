@@ -503,6 +503,10 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/axk1
+        title: A.X-K1
+      - local: model_doc/axk2
+        title: A.X-K2
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert
@@ -1251,6 +1255,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_edge
+        title: Cosmos3 Edge
       - local: model_doc/cosmos3_omni
         title: Cosmos3 Omni
       - local: model_doc/data2vec

@@ -90,22 +90,22 @@ tokenizer("Sphinx of black quartz, judge my vow.", return_tensors="pt")
 from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b")
-tokenizer.encode("Sphinx of black quartz, judge my vow.")
+input_ids = tokenizer.encode("Sphinx of black quartz, judge my vow.")
 [2, 235277, 82913, 576, 2656, 30407, 235269, 11490, 970, 29871, 235265]
 ```
 
 [`TokenizersBackend.decode`] converts a single sequence or batch of tokenized `input_ids` back to text.
 
 ```py
-tokenizer.decode(outputs["input_ids"])
-['<bos>Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids)
+'<bos>Sphinx of black quartz, judge my vow.'
 ```
 
 [`TokenizersBackend.decode`] preserves the exact tokenization spacing. Set `clean_up_tokenization_spaces` to remove spaces before punctuation, and `skip_special_tokens` to strip special tokens from the output.
 
 ```py
-tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
-['Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids, skip_special_tokens=True)
+'Sphinx of black quartz, judge my vow.'
 ```
 
 ## Special tokens
@@ -113,10 +113,10 @@ tokenizer.decode(outputs["input_ids"], skip_special_tokens=True)
 Special tokens mark structural boundaries in a sequence, like the beginning-of-sequence or padding positions. Each model defines its own set of special tokens. The tokenizer adds them when you call it.
 
 ```py
-tokenizer.encode("Sphinx of black quartz, judge my vow.")
+input_ids = tokenizer.encode("Sphinx of black quartz, judge my vow.")
 [2, 235277, 82913, 576, 2656, 30407, 235269, 11490, 970, 29871, 235265]
-tokenizer.decode(outputs["input_ids"])
-['<bos>Sphinx of black quartz, judge my vow.']
+tokenizer.decode(input_ids)
+'<bos>Sphinx of black quartz, judge my vow.'
 ```
 
 Register additional named special tokens with the `extra_special_tokens` argument. Multimodal models use them as placeholders for images, video, or audio.
