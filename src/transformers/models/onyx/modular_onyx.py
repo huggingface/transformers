@@ -546,7 +546,7 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     num_key_value_heads: int = 2
     head_dim: int = 128
     hidden_activation: str = "silu"
-    max_position_embeddings: int = 16_384
+    max_position_embeddings: int = 131_072
     rms_norm_eps: float = 1e-5
     tie_word_embeddings: bool = False
     bos_token_id: int | None = 200_000
