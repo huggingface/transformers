@@ -13,13 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch ESMFold2 model.
 
-ESMFold2 is an all-atom structure predictor: its forward takes ~18 structural
-feature tensors (built from a sequence by ``prepare_protein_features``) rather
-than the standard ``input_ids``/``attention_mask``, so it does not plug into
-``ModelTesterMixin`` (the file is registered in
-``utils/check_repo.py::TEST_FILES_WITH_NO_COMMON_TESTS``). Coverage here is the
-config (round-trip / nesting), a CPU forward smoke test across attention
-backends, weight save/load, and a slow real-weight integration test.
+ESMFold2's forward takes ~18 structural feature tensors rather than the standard
+``input_ids``/``attention_mask``, so it does not plug into ``ModelTesterMixin`` (the file is listed in
+``utils/check_repo.py::TEST_FILES_WITH_NO_COMMON_TESTS``).
 """
 
 import tempfile
@@ -43,22 +39,15 @@ if is_torch_available():
     from transformers import EsmFold2Model
     from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomInputs, EsmFold2SWA3DRoPEAttention
 
-# TEMP: the public ``biohub/ESMFold2`` snapshot does not yet bundle the ESMC-6B
-# backbone under ``esmc.*`` (it loads random → garbage outputs). Point the slow
-# integration tests at the locally-bundled checkpoint for now. REVERT to
-# "biohub/ESMFold2" once the backbone is bundled there.
+# TEMP: revert to "biohub/ESMFold2" once that snapshot bundles the ESMC-6B backbone under ``esmc.*``.
 _INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
 
 
 def get_tiny_config(**overrides) -> "EsmFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
 
-    Constraints (see modeling): 3D RoPE needs ``3*n_spatial + n_uid <= head_dim//2``
-    (head_dim = hidden_size / num_attention_heads of each atom sub-config — the inputs
-    ``atom_encoder`` and ``structure_head.diffusion_module.atom_encoder`` — = 8 here). The
-    inputs atom encoder's ``output_dim`` is derived as
-    ``single_inputs_size - (2 * num_res_types + 1)`` (83 - 67 = 16 here), which also feeds
-    the diffusion conditioning.
+    Both atom sub-configs must satisfy ``3 * n_spatial + n_uid <= head_dim // 2``, and
+    ``single_inputs_size`` must leave room for the derived ``atom_encoder.output_dim``.
     """
     kwargs = {
         "hidden_size": 32,
@@ -143,18 +132,14 @@ class EsmFold2ConfigTest(unittest.TestCase):
 class EsmFold2ModelTest(unittest.TestCase):
     seq = "MKLVAAG"
 
-    # These are pure-PyTorch correctness smoke tests, run on CPU for portability
-    # (the diffusion sampler is tiny here); GPU is covered by the slow integration
-    # test below.
+    # Run on CPU for portability; GPU is covered by the slow integration tests below.
     def _build(self, attn_implementation="sdpa"):
         torch.manual_seed(0)
         config = get_tiny_config(attn_implementation=attn_implementation)
         return EsmFold2Model(config).eval()
 
     def test_forward_runs_on_both_backends(self):
-        # The ESMC backbone is a bundled (tiny, randomly-initialised) submodule, so this
-        # exercises the full pure-PyTorch stack on CPU end-to-end: backbone + trunk +
-        # diffusion + confidence head.
+        # End-to-end: the bundled (tiny, random) ESMC backbone, trunk, diffusion and confidence head.
         for impl in ("sdpa", "eager"):
             with self.subTest(attn_implementation=impl):
                 model = self._build(impl)
@@ -179,9 +164,7 @@ class EsmFold2ModelTest(unittest.TestCase):
     def _pad_features(features, num_tokens, num_atoms):
         """Right-pad a single-sequence feature dict out to ``(num_tokens, num_atoms)``.
 
-        Every axis matching the source token count is padded to ``num_tokens`` and every axis
-        matching the source atom count to ``num_atoms``; the zero fill also clears the two
-        ``*_attention_mask`` entries, which is what marks the added positions as padding.
+        The zero fill also clears the ``*_attention_mask`` entries, marking the added positions as padding.
         """
         src_tokens = features["token_attention_mask"].shape[1]
         src_atoms = features["atom_attention_mask"].shape[1]
@@ -202,10 +185,8 @@ class EsmFold2ModelTest(unittest.TestCase):
     def test_swa_mask_excludes_padded_atoms(self):
         """The sliding-window atom mask must not connect valid atoms and padding, in either direction.
 
-        `prepare_protein_features` right-pads the atom axis (a short sequence fills only part of its
-        atom budget), so this path is live in every fold. Asserted on the mask directly rather than
-        end-to-end: the extra padding a batch introduces lands beyond the +/-half_window reach of any
-        valid atom, so an output comparison cannot see a padding-blind mask.
+        Asserted on the mask itself: a batch's extra padding lands beyond the window reach of any
+        valid atom, so an output comparison could not see a padding-blind mask.
         """
         from transformers.models.esmfold2.protein_utils import prepare_protein_features
 
@@ -225,9 +206,7 @@ class EsmFold2ModelTest(unittest.TestCase):
             atom_attention_mask=features["atom_attention_mask"],
             atom_to_token=features["atom_to_token"],
         )
-        # Pass the raw feature tensors through, exactly as ``forward`` does: the atom mask is boolean
-        # (the sliding-window ``and`` mask composes it with ``&``) and ``ref_charge`` is an integer
-        # promoted by the featurizer's concat.
+        # Raw feature tensors, exactly as ``forward`` passes them: boolean mask, integer ``ref_charge``.
         atom_inputs = EsmFold2AtomInputs(
             ref_pos=features["ref_pos"],
             ref_charge=features["ref_charge"],
@@ -249,10 +228,8 @@ class EsmFold2ModelTest(unittest.TestCase):
     def test_padded_batch_matches_single_sequence(self):
         """A right-padded sequence folded in a batch must match folding it on its own.
 
-        Covers batched folding and the token-axis padding it introduces (the trunk's pair mask),
-        which nothing else exercises: `prepare_protein_features` featurizes one sequence at a time,
-        so every other test and the folding-regression script run with a single, full-length batch.
-        The atom-axis mask is covered by `test_swa_mask_excludes_padded_atoms` instead.
+        Covers the token-axis padding batching introduces (the trunk's pair mask); the atom-axis mask
+        is covered by `test_swa_mask_excludes_padded_atoms` instead.
         """
         from unittest.mock import patch
 
@@ -269,8 +246,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         batch = {key: torch.cat([long_features[key], padded_short[key]], dim=0) for key in long_features}
 
         model = self._build()
-        # The trunk is stochastic (random initial pair state + per-loop LM dropout), and a batch of 2
-        # would not draw the same randomness as a batch of 1, so pin both to compare like with like.
+        # The trunk is stochastic and batch size perturbs the draws, so pin both sources of randomness.
         model.config.lm_encoder.lm_dropout = 0.0
         kwargs = {"num_loops": 1, "num_diffusion_samples": 1, "num_sampling_steps": 1}
         with (
@@ -280,8 +256,7 @@ class EsmFold2ModelTest(unittest.TestCase):
             batched = model.fold(**batch, **kwargs)
             alone = model.fold(**short_features, **kwargs)
 
-        # Only the distogram is comparable: it is computed from the trunk before any diffusion
-        # sampling, so it does not depend on the sampler's RNG (which the batch size perturbs).
+        # Only the distogram is comparable: it is read off the trunk, before the sampler's RNG.
         torch.testing.assert_close(
             batched.distogram_logits[1, :short_length, :short_length],
             alone.distogram_logits[0],
@@ -292,12 +267,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(batched.sample_atom_coords).all())
 
     def test_output_to_pdb(self):
-        """The PDB writer must round-trip every predicted atom, tag chains, and rank samples.
-
-        These are the three things the previous OpenFold-based writer could not do: it projected
-        atoms onto a canonical 37-slot protein layout (silently dropping anything else), rendered
-        every chain as chain A, and always emitted diffusion sample 0.
-        """
+        """The PDB writer must round-trip every predicted atom, tag chains, and rank samples."""
         from transformers.models.esmfold2.protein_utils import (
             _encode_atom_name,
             output_to_pdb,
@@ -338,16 +308,13 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertEqual(output_to_pdb(output, features), output_to_pdb(output, features, sample_idx=best))
 
     def test_save_load(self):
-        # The forward is intentionally stochastic (parcae diffusion-loop scheduler),
-        # so save/load fidelity is checked at the weight level, then the reloaded
-        # model is run to confirm it is usable.
+        # The forward is intentionally stochastic, so fidelity is checked at the weight level.
         model = self._build()
         state_before = model.state_dict()
 
         with tempfile.TemporaryDirectory() as tmp:
             model.save_pretrained(tmp)
-            # The (tiny) ESMC backbone is bundled in the saved checkpoint and reloaded
-            # like any other submodule — no separate backbone load.
+            # The ESMC backbone round-trips as a bundled submodule, with no separate load.
             reloaded = EsmFold2Model.from_pretrained(tmp).eval()
 
         state_after = reloaded.state_dict()
@@ -365,13 +332,11 @@ class EsmFold2IntegrationTest(TestCasePlus):
     @slow
     @require_torch_accelerator
     def test_inference_protein_folding(self):
-        # bf16 is the intended inference regime; the ESMC backbone is bundled in the
-        # checkpoint and loaded with the model.
+        # bf16 is the intended inference regime.
         model = EsmFold2Model.from_pretrained(_INTEGRATION_CKPT, dtype=torch.bfloat16).to(torch_device).eval()
 
-        # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. These
-        # diffusion folders draw several samples and the best-ranked is the
-        # prediction, so assert on the best of N.
+        # Ubiquitin (PDB 1UBQ), a textbook well-folding 76-residue domain. The prediction is the
+        # best-ranked of the drawn samples, so assert on the best of N.
         seq = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
         torch.manual_seed(0)
         with torch.no_grad():
@@ -381,8 +346,7 @@ class EsmFold2IntegrationTest(TestCasePlus):
         self.assertEqual(coords.shape[-1], 3)
         self.assertTrue(torch.isfinite(coords).all())
 
-        # pLDDT and pTM are on a 0-1 scale in this model; ESMFold2 folds ubiquitin
-        # confidently (CPU-fp32 reference: best pLDDT ~0.80, best pTM ~0.74).
+        # 0-1 scale; the CPU-fp32 reference folds ubiquitin at best pLDDT ~0.80, best pTM ~0.74.
         plddt = output["plddt"].float()  # [num_samples, n_res]
         ptm = output["ptm"].float()  # [num_samples]
         best_plddt = plddt.mean(dim=1).max().item()

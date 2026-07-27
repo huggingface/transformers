@@ -293,14 +293,10 @@ if is_kernels_available():
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="Rocketknight1/esmfold2-trimul-kernel",
-                        # NOTE: this is the layer name exported by the *remote* kernel repo above;
-                        # it is independent of the local class name. Update it only if the class is
-                        # renamed inside Rocketknight1/esmfold2-trimul-kernel too.
+                        # The layer name exported by the remote repo, not the local class name.
                         layer_name="ESMFold2TriangleMultiplication",
                         version=1,
-                        # TODO: drop once the kernel moves to kernels-community (a trusted
-                        # publisher). A personal namespace has no organization overview, so the
-                        # publisher trust check cannot resolve it and refuses to load.
+                        # TODO: drop once the kernel moves to kernels-community, a trusted publisher.
                         trust_remote_code=True,
                     ),
                 },

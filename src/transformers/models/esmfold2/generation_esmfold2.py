@@ -14,13 +14,11 @@
 
 """Generation / inference loop for ESMFold2, kept out of the modeling file.
 
-``EsmFold2Model.forward`` runs the folding trunk and returns its pair representation; this mixin owns
-the diffusion sampling loop that turns that representation into 3D coordinates, the confidence head
-call on the sampled structure, and the public ``infer_protein`` entry points. It deliberately does NOT
-use ``GenerationConfig`` or the ``Cache`` classes (ESMFold2 emits continuous coordinates, not tokens);
-sampling hyperparameters are plain kwargs falling back to the model config, and the conditioning that
-is constant across denoising steps is precomputed once into an ``EsmFold2DiffusionStepInvariants`` so
-the module forwards stay free of caching branches."""
+``EsmFold2Model.forward`` runs the folding trunk; this mixin owns the diffusion sampling loop that
+turns its pair representation into 3D coordinates, the confidence head call, and the public
+``infer_protein`` entry points. ESMFold2 emits continuous coordinates rather than tokens, so it uses
+neither ``GenerationConfig`` nor the ``Cache`` classes: sampling hyperparameters are plain kwargs
+falling back to the model config."""
 
 from __future__ import annotations
 
@@ -52,9 +50,8 @@ class EsmFold2GenerationMixin:
         ([`EsmFold2Model.forward`], which documents the feature arguments), sample coordinates from the
         diffusion structure head, and score them with the confidence head.
 
-        Only the arguments the sampler and the confidence head need themselves are named here; every
-        other featurized input is forwarded to the trunk untouched, so ``fold(**features)`` takes the
-        same feature dict as ``forward``.
+        Only the arguments the sampler and the confidence head need are named here; the rest are
+        forwarded to the trunk untouched, so ``fold(**features)`` takes the same dict as ``forward``.
 
         token_attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Mask marking valid tokens (``1``) versus padding (``0``). Also forwarded to the trunk.
@@ -103,9 +100,7 @@ class EsmFold2GenerationMixin:
             x_pred=sample_coords.detach(),
             distogram_atom_idx=distogram_atom_idx,
             token_attention_mask=token_attention_mask,
-            # Both come from the trunk's featurized copy: ``atom_to_token`` because that is the one
-            # zeroed at padding, ``atom_attention_mask`` because it is stored there verbatim and this
-            # way the mask need not be re-declared just to be passed through.
+            # From the trunk's featurized copy, as that is the one zeroed at padding.
             atom_to_token=trunk.atom_inputs.atom_to_token,
             atom_attention_mask=trunk.atom_inputs.atom_attention_mask,
             asym_id=asym_id,
@@ -133,21 +128,15 @@ class EsmFold2GenerationMixin:
     ) -> Tensor:
         """Diffusion sampling (Algorithm 18): returns the sampled atom coordinates.
 
-        ``num_sampling_steps`` is the number of denoising steps actually run. The remaining sampling
-        hyperparameters (noise/step scales, the ``max_inference_sigma`` schedule cap) are read from
-        config; see ``_build_noise_schedule``.
+        Only ``num_sampling_steps`` is an argument; the other sampling hyperparameters come from config.
         """
         denoiser = self.structure_head.diffusion_module
         n_atoms = atom_inputs.atom_to_token.shape[1]
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples
 
-        # Everything that doesn't depend on the noise level or the noisy coordinates is built once
-        # here, so each denoising step is a plain forward with no caching branch inside it. This is
-        # also the one place the batch is expanded across diffusion samples: from here down every
-        # tensor is at ``target_batch`` and no module takes ``num_diffusion_samples``. The token
-        # padding mask goes in here too -- it is folded into the per-block attention biases, so the
-        # denoiser's forward takes no mask and rebuilds nothing per step.
+        # Built once, so each denoising step is a plain forward with no caching branch inside it, and
+        # everything below is at ``target_batch`` (no module takes samples or a mask).
         step_invariants = denoiser.prepare_step_invariants(
             atom_inputs=atom_inputs,
             pair_trunk=pair_trunk,
@@ -179,17 +168,14 @@ class EsmFold2GenerationMixin:
             eps_std = lam * max(t_hat_val**2 - sigma_tm_val**2, 0.0) ** 0.5
             x_noisy = x + eps_std * torch.randn_like(x)
 
-            # One denoising step. This is the diffusion module's forward, not the model's -- the
-            # model's forward is the trunk that produced ``step_invariants``.
+            # One denoising step: the diffusion module's forward, not the model's.
             x_denoised = denoiser(
                 x_noisy=x_noisy,
                 t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
                 step_invariants=step_invariants,
             )
 
-            # Reverse diffusion alignment (Kabsch). Coordinates are fp32 for the whole loop: ``x``
-            # starts fp32 and the denoiser's output is fp32 too (its noise-level scalars promote the
-            # coordinate update), so nothing here needs a cast.
+            # Reverse diffusion alignment (Kabsch); coordinates are fp32 for the whole loop.
             x_noisy = self.structure_head._weighted_rigid_align(x_noisy, x_denoised, atom_mask, atom_mask)
 
             # ODE/SDE step

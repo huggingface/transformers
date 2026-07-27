@@ -104,8 +104,7 @@ class EsmcTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
-    # ESMC adds one model-specific named special token (the chain-break token) on top of the
-    # standard set, which gives us the ``chain_break_token`` / ``chain_break_token_id`` attributes.
+    # The chain-break token, which this exposes as ``chain_break_token`` / ``chain_break_token_id``.
     SPECIAL_TOKENS_ATTRIBUTES = TokenizersBackend.SPECIAL_TOKENS_ATTRIBUTES + ["chain_break_token"]
 
     def __init__(
@@ -128,17 +127,13 @@ class EsmcTokenizer(TokenizersBackend):
         cls_str, eos_str = self._ensure_str(cls_token), self._ensure_str(eos_token)
 
         self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=self._ensure_str(unk_token)))
-        # Wrap every encoded sequence with <cls> … <eos>. The special tokens themselves (including the
-        # chain-break token, passed via ``extra_special_tokens`` below) are registered into the backend
-        # by TokenizersBackend from the special-token kwargs — no need to add them here.
+        # Wrap every encoded sequence with <cls> … <eos>; TokenizersBackend registers the special
+        # tokens themselves from the kwargs below.
         self._tokenizer.post_processor = TemplateProcessing(
             single=f"{cls_str} $A {eos_str}",
             special_tokens=[(cls_str, token_to_id[cls_str]), (eos_str, token_to_id[eos_str])],
         )
 
-        # ``chain_break_token`` is a named special token (see ``SPECIAL_TOKENS_ATTRIBUTES``), so
-        # TokenizersBackend registers it into the backend and exposes it as an attribute; a generic
-        # ``extra_special_tokens`` list (round-tripped from a saved config) is passed through untouched.
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -150,9 +145,6 @@ class EsmcTokenizer(TokenizersBackend):
             extra_special_tokens=extra_special_tokens,
             **kwargs,
         )
-
-    # ``chain_break_token`` / ``chain_break_token_id`` are provided automatically by the
-    # ``extra_special_tokens`` named-token mechanism (SpecialTokensMixin).
 
     @staticmethod
     def _ensure_str(token) -> str:

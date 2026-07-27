@@ -44,19 +44,9 @@ from .configuration_esmc import EsmcConfig
 class EsmcLayerNorm(nn.LayerNorm):
     """LayerNorm that returns its input dtype.
 
-    The reference implementation fuses each LayerNorm into the projection that follows it
-    (TransformerEngine's ``LayerNormLinear`` / ``LayerNormMLP``), so the fp32 reduction happens inside
-    the fused op and the block's activations stay in the compute dtype. Unfusing them into standalone
-    modules loses that containment: a bare ``nn.LayerNorm`` under ``torch.autocast`` hands back fp32,
-    which silently promotes the residual stream from the first block onwards and leaves the rotary
-    ``cos``/``sin`` -- built once in ``EsmcModel.forward`` from the embedding dtype -- as the only bf16
-    tensors in the block. That mismatch is invisible to eager RoPE, which promotes, but it means RoPE is
-    applied with bf16-precision ``cos``/``sin`` to fp32 queries, and it hard-fails any fused rotary
-    kernel (they require ``q.dtype == cos.dtype``).
-
-    The reduction itself is left to ``nn.LayerNorm``: autocast already performs it in fp32, and where
-    the weights are pinned fp32 (ESMFold2 pins the bundled backbone's) it happens there too. Only the
-    output dtype is restored, so no fp32 affine parameters are required.
+    The reference fuses each LayerNorm into the projection that follows it, keeping the fp32 reduction
+    inside the fused op; a bare ``nn.LayerNorm`` under autocast instead hands back fp32 and promotes
+    the residual stream, leaving the rotary ``cos``/``sin`` as the only bf16 tensors in the block.
     """
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -231,7 +221,7 @@ class EsmcAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        # QK-LayerNorm is inherent to ESMC; every released checkpoint carries q_norm/k_norm weights.
+        # Every released ESMC checkpoint carries q_norm/k_norm weights, so there is no flag for these.
         self.q_norm = EsmcLayerNorm(config.hidden_size, bias=False)
         self.k_norm = EsmcLayerNorm(config.hidden_size, bias=False)
 
@@ -284,8 +274,7 @@ class EsmcLayer(GradientCheckpointingLayer):
         self.self_attn = EsmcAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = EsmcMLP(config)
-        # LayerNorm instead of Llama's RMSNorm, dtype-restoring so the residual stream stays in
-        # the compute dtype (see EsmcLayerNorm).
+        # LayerNorm instead of Llama's RMSNorm, dtype-restoring (see EsmcLayerNorm).
         self.input_layernorm = EsmcLayerNorm(config.hidden_size)
         self.post_attention_layernorm = EsmcLayerNorm(config.hidden_size)
         # ESM3 residual scaling to stabilise deep networks.
@@ -325,9 +314,7 @@ class EsmcPreTrainedModel(PreTrainedModel):
         "hidden_states": EsmcLayer,
         "attentions": EsmcAttention,
     }
-    # Matched as regexes with ``re.search``, so plain substrings suffice. ``inv_freq`` covers
-    # ``original_inv_freq`` too -- both are non-persistent rotary buffers; ``extra_state`` keys come
-    # from the published checkpoint's fused TransformerEngine layout.
+    # Non-persistent rotary buffers, plus the published checkpoint's TransformerEngine state blobs.
     _keys_to_ignore_on_load_unexpected = ["extra_state", "inv_freq"]
     _no_split_modules = ["EsmcLayer"]
 

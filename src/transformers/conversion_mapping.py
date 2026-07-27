@@ -833,9 +833,8 @@ def _build_checkpoint_conversion_mapping():
         "esmc": [
             WeightRenaming(r"embed\.", "embed_tokens."),
             WeightRenaming(r"transformer\.blocks", "layers"),
-            # The negative lookbehinds anchor the *reverse* search to the final encoder
-            # norm only (they are stripped from the forward replacement), so saving does
-            # not rewrite the "norm" inside ``input_layernorm`` / ``post_attention_layernorm``.
+            # The lookbehinds anchor the reverse search to the final encoder norm, so saving does not
+            # rewrite the "norm" inside ``input_layernorm`` / ``post_attention_layernorm``.
             WeightRenaming(r"transformer\.norm\.", r"(?<!layer)(?<!_)norm\."),
             WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_weight", "input_layernorm.weight"),
             WeightRenaming(r"attn\.layernorm_qkv\.layer_norm_bias", "input_layernorm.bias"),
