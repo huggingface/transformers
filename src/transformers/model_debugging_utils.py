@@ -20,6 +20,7 @@ import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 
+from .distributed.utils import _get_torch_distributed_rank, _torch_distributed_available
 from .utils import logging
 from .utils.import_utils import is_torch_available, requires
 
@@ -28,14 +29,9 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file
 
-    _torch_distributed_available = False
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if torch.distributed.is_available():
+    if _torch_distributed_available:
         import torch.distributed.tensor
-
-        _torch_distributed_available = True
-else:
-    _torch_distributed_available = False
 
 
 logger = logging.get_logger(__name__)
@@ -43,9 +39,7 @@ logger = logging.get_logger(__name__)
 
 def _is_rank_zero():
     """Return True if rank=0 or we aren't running distributed."""
-    if not (_torch_distributed_available and torch.distributed.is_initialized()):
-        return True
-    return torch.distributed.get_rank() == 0
+    return _get_torch_distributed_rank() == 0
 
 
 MEMORY_ADDRESS_REGEX = re.compile(r"object at 0x[0-9A-Fa-f]+")
