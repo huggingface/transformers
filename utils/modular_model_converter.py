@@ -77,11 +77,14 @@ def get_module_source_from_name(module_name: str) -> str:
 
 # Some exceptions to never replace, usually some package names that may contain model names (they may be used outside
 # `from xxx import y`)
-NAMES_TO_NEVER_REPLACE = ("mamba_ssm", "mamba-ssm")
+NAMES_TO_NEVER_REPLACE = ("mamba_ssm", "mamba-ssm", "mamba_inner_fn")
 
 
 def preserve_case_replace(text, patterns: dict, default_name: str):
     if text in NAMES_TO_NEVER_REPLACE:
+        return text
+    # For strings, node.value is the actual string INCLUDING enclosing quote characters
+    if text.strip('"') in NAMES_TO_NEVER_REPLACE:
         return text
 
     # Create a regex pattern to match all variations
