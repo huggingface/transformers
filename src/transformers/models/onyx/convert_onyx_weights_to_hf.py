@@ -135,10 +135,10 @@ TEXT_LAYER_RENAMES = {
 }
 
 
-def fold_embedding_norm(weight: torch.Tensor, eps: float) -> torch.Tensor:
-    """Fold Onyx's scaleless RMSNorm on token embeddings into the embedding table.
+def merge_embedding_norm(weight: torch.Tensor, eps: float) -> torch.Tensor:
+    """Merge Onyx's scaleless RMSNorm on token embeddings into the embedding table.
 
-    The norm is parameter-free, so ``norm(table)`` is a constant; folding it lets the model use a
+    The norm is parameter-free, so ``norm(table)`` is a constant; merging it lets the model use a
     plain ``nn.Embedding`` (and stay compatible with backends that replace the embedding, e.g. vLLM).
     Mirrors ``OnyxRMSNorm._norm`` with ``with_scale=False``.
     maybe we can just change the modeling code at this point. But vLLM mapper does not take into account
@@ -157,7 +157,7 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
     ffn_dim = text_cfg.intermediate_size
 
     out: dict[str, torch.Tensor] = {
-        "model.language_model.embed_tokens.weight": fold_embedding_norm(
+        "model.language_model.embed_tokens.weight": merge_embedding_norm(
             source.pop("tok_embeddings.weight"), text_cfg.rms_norm_eps
         ),
         "model.language_model.norm.weight": source.pop("output.norm.weight"),

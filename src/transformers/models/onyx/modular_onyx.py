@@ -913,7 +913,7 @@ class OnyxTextModel(Gemma2Model):
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)
         # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
-        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is folded
+        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
         # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
         # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
