@@ -61,7 +61,6 @@ class LoMaModelTester:
         num_layers: int = 2,
         num_heads: int = 4,
         filter_threshold: float = 0.1,
-        matching_threshold: float = 0.0,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -73,7 +72,6 @@ class LoMaModelTester:
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.filter_threshold = filter_threshold
-        self.matching_threshold = matching_threshold
 
     def prepare_config_and_inputs(self):
         # LoMa expects a grayscale image as input
@@ -89,7 +87,6 @@ class LoMaModelTester:
             num_hidden_layers=self.num_layers,
             num_attention_heads=self.num_heads,
             filter_threshold=self.filter_threshold,
-            matching_threshold=self.matching_threshold,
             attn_implementation="eager",
         )
 
