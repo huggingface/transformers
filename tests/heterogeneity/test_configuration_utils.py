@@ -163,7 +163,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
             self.assertEqual(config.per_layer_config[layer_idx].num_key_value_heads, 2)
 
     def test_indexing_by_layer_type(self):
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             per_layer_config={1: {"num_key_value_heads": 2}, 3: {"num_key_value_heads": 2}},
             layer_types=["full_attention", "sliding_attention"] * 2,
         )
@@ -172,13 +172,13 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config["sliding_attention"].num_key_value_heads, 2)
 
     def test_indexing_homogeneous_config_by_layer_type_returns_global_config(self):
-        config = _tiny_llama_config(layer_types=["full_attention", "sliding_attention"] * 2)
+        config = tiny_llama_config(layer_types=["full_attention", "sliding_attention"] * 2)
 
         self.assertIs(config.per_layer_config["sliding_attention"], config)
 
     def test_indexing_by_layer_type_ignores_other_layer_types(self):
         """Layers of a different type may differ, only the requested type has to be homogeneous."""
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             per_layer_config={0: {"intermediate_size": 32}, 2: {"intermediate_size": 256}},
             layer_types=["full_attention", "sliding_attention"] * 2,
         )
@@ -186,7 +186,7 @@ class TestHeterogeneousConfig(unittest.TestCase):
         self.assertEqual(config.per_layer_config["sliding_attention"].intermediate_size, 128)
 
     def test_indexing_by_heterogeneous_layer_type_raises(self):
-        config = _tiny_llama_config(
+        config = tiny_llama_config(
             per_layer_config={0: {"intermediate_size": 32}},
             layer_types=["full_attention", "sliding_attention"] * 2,
         )
@@ -195,13 +195,13 @@ class TestHeterogeneousConfig(unittest.TestCase):
             config.per_layer_config["full_attention"]
 
     def test_indexing_by_unknown_layer_type_raises(self):
-        config = _tiny_llama_config(layer_types=["full_attention"] * 4)
+        config = tiny_llama_config(layer_types=["full_attention"] * 4)
 
         with self.assertRaisesRegex(ValueError, "'sliding_attention' not found in config.layer_types"):
             config.per_layer_config["sliding_attention"]
 
     def test_indexing_by_layer_type_without_layer_types_raises(self):
-        config = _tiny_llama_config(per_layer_config={0: {"intermediate_size": 32}})
+        config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 32}})
 
         with self.assertRaisesRegex(ValueError, "config.layer_types is not defined"):
             config.per_layer_config["full_attention"]
