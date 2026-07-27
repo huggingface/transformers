@@ -281,6 +281,11 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_base_model_prefix(self):
         pass
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="CSM doesn't return last hidden states")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
     def _get_custom_4d_mask_test_data(self):
         """
         Overrides [ModelTesterMixin._get_custom_4d_mask_test_data] to handle third input_ids dimension.
