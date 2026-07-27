@@ -97,7 +97,7 @@ def get_heterogeneous_modeling_spec(model: PreTrainedModel) -> HeterogeneousMode
     if getattr(model, "_disable_heterogeneous_modeling_patching", False):
         return None
 
-    model_type = model.config.get_text_config(decoder=True).model_type
+    model_type = model.config.model_type
 
     from transformers.integrations.heterogeneity.supported_models import (
         MODEL_TYPE_TO_SPEC_FACTORY,

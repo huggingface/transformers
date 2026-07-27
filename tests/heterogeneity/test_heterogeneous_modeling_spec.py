@@ -82,9 +82,6 @@ class TestHeterogeneousModelingSpec(unittest.TestCase):
         class BuiltInConfig:
             model_type = "test_model"
 
-            def get_text_config(self, decoder=True):
-                return self
-
         class BuiltInModel:
             def __init__(self, config):
                 self.config = config
