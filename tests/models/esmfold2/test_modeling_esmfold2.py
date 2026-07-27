@@ -225,10 +225,13 @@ class EsmFold2ModelTest(unittest.TestCase):
             atom_attention_mask=features["atom_attention_mask"],
             atom_to_token=features["atom_to_token"],
         )
+        # Pass the raw feature tensors through, exactly as ``forward`` does: the atom mask is boolean
+        # (the sliding-window ``and`` mask composes it with ``&``) and ``ref_charge`` is an integer
+        # promoted by the featurizer's concat.
         atom_inputs = EsmFold2AtomInputs(
             ref_pos=features["ref_pos"],
-            ref_charge=features["ref_charge"].float(),
-            atom_attention_mask=features["atom_attention_mask"].float(),
+            ref_charge=features["ref_charge"],
+            atom_attention_mask=features["atom_attention_mask"],
             ref_element=ref_element_oh,
             ref_atom_name_chars=ref_chars_oh,
             ref_space_uid=features["ref_space_uid"],

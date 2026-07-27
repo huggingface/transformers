@@ -201,8 +201,8 @@ class EsmFold2GenerationMixin:
                 x, atom_mask, second_coords=x_denoised_prev
             )
 
-            sigma_tm_val = float(sigma_tm.item())
-            t_hat_val = sigma_tm_val * (1.0 + float(gamma.item()))
+            sigma_tm_val = sigma_tm.item()
+            t_hat_val = sigma_tm_val * (1.0 + gamma.item())
             eps_std = lam * max(t_hat_val**2 - sigma_tm_val**2, 0.0) ** 0.5
             x_noisy = x + eps_std * torch.randn_like(x)
 
@@ -215,14 +215,13 @@ class EsmFold2GenerationMixin:
                 token_attention_mask=token_attention_mask,
             )
 
-            # Reverse diffusion alignment (Kabsch).
-            x_noisy = self.structure_head._weighted_rigid_align(
-                x_noisy.float(), x_denoised.float(), atom_mask, atom_mask
-            )
-            x_noisy = x_noisy.to(dtype=x_denoised.dtype)
+            # Reverse diffusion alignment (Kabsch). Coordinates are fp32 for the whole loop: ``x``
+            # starts fp32 and the denoiser's output is fp32 too (its noise-level scalars promote the
+            # coordinate update), so nothing here needs a cast.
+            x_noisy = self.structure_head._weighted_rigid_align(x_noisy, x_denoised, atom_mask, atom_mask)
 
             # ODE/SDE step
-            sigma_t_val = float(sigma_t.item())
+            sigma_t_val = sigma_t.item()
             denoised_over_sigma = (x_noisy - x_denoised) / t_hat_val
             x = x_noisy + eta * (sigma_t_val - t_hat_val) * denoised_over_sigma
 
