@@ -217,7 +217,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(
-                    image=stacked_images,
+                    images=stacked_images,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,

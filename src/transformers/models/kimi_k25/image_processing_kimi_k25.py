@@ -153,7 +153,7 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
                     max_size_per_side=size.max_height,
                 )
                 stacked_images = self.resize(
-                    image=stacked_images,
+                    images=stacked_images,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )

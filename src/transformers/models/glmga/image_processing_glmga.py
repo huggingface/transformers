@@ -123,8 +123,8 @@ class GlmgaImageProcessor(TorchvisionBackend):
 
         height, width = images.shape[-2:]
         resized_height, resized_width = smart_resize(
-            height,
-            width,
+            height=height,
+            width=width,
             num_frames=temporal_factor,
             factor=factor,
             temporal_factor=temporal_factor,
@@ -197,7 +197,7 @@ class GlmgaImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(
-                    image=stacked_images,
+                    images=stacked_images,
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size * patch_expand_factor,
@@ -211,7 +211,7 @@ class GlmgaImageProcessor(TorchvisionBackend):
         processed_grids = {}
 
         for shape, stacked_images in grouped_images.items():
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches, grid_h, grid_w = self.patchify(
