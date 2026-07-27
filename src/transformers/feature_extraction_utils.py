@@ -40,7 +40,7 @@ from .utils import (
     requires_backends,
     safe_load_json_file,
 )
-from .utils.hub import cached_file, hf_api
+from .utils.hub import cached_file, extract_commit_hash, hf_api
 
 
 if TYPE_CHECKING:
@@ -377,6 +377,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             kwargs["token"] = token
 
         feature_extractor_dict, kwargs = cls.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        kwargs.pop("_commit_hash", None)
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
@@ -450,6 +451,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -486,7 +488,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
                 resolved_feature_extractor_file = cached_file(
                     pretrained_model_name_or_path,
                     filename=feature_extractor_file,
@@ -499,7 +503,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_feature_extractor_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -540,6 +546,8 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
+        if commit_hash is not None:
+            kwargs["_commit_hash"] = commit_hash
         return feature_extractor_dict, kwargs
 
     @classmethod

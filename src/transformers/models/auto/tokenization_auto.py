@@ -457,7 +457,7 @@ def _has_tekken_tokenizer_file(
         return has_file(
             pretrained_model_name_or_path,
             tekken_filename,
-            revision=kwargs.get("revision"),
+            revision=kwargs.get("_commit_hash") or kwargs.get("revision"),
             token=kwargs.get("token"),
             cache_dir=kwargs.get("cache_dir"),
             local_files_only=kwargs.get("local_files_only", False),
@@ -740,6 +740,7 @@ class AutoTokenizer:
 
         if gguf_file:
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+            kwargs["_commit_hash"] = extract_commit_hash(gguf_path, kwargs.get("_commit_hash"))
             config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
@@ -749,6 +750,9 @@ class AutoTokenizer:
                 )
             except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        if kwargs.get("_commit_hash") is None and (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
 
         config_model_type = config.model_type
         config_model_name = config.model_name if hasattr(config, "model_name") else None

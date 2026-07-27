@@ -21,7 +21,15 @@ from collections import OrderedDict
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
+from ...utils import (
+    CONFIG_NAME,
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    cached_file,
+    extract_commit_hash,
+    logging,
+    safe_load_json_file,
+)
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
@@ -167,6 +175,7 @@ def get_feature_extractor_config(
     feature_extractor.save_pretrained("feature-extractor-test")
     feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
     ```"""
+    commit_hash = kwargs.get("_commit_hash")
     # Load with a priority given to the nested processor config, if available in repo
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
@@ -179,7 +188,9 @@ def get_feature_extractor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
+        _commit_hash=commit_hash,
     )
+    commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
     resolved_feature_extractor_file = cached_file(
         pretrained_model_name_or_path,
         filename=FEATURE_EXTRACTOR_NAME,
@@ -191,6 +202,7 @@ def get_feature_extractor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
+        _commit_hash=commit_hash,
     )
 
     # An empty list if none of the possible files is found in the repo
@@ -299,8 +311,14 @@ class AutoFeatureExtractor:
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+        if kwargs.get("_commit_hash") is None and (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
 
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, unused_kwargs = FeatureExtractionMixin.get_feature_extractor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
+        if (commit_hash := unused_kwargs.pop("_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
         feature_extractor_auto_map = None
         if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
@@ -312,6 +330,8 @@ class AutoFeatureExtractor:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
+            if (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+                kwargs["_commit_hash"] = commit_hash
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
             if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:

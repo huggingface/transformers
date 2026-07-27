@@ -27,6 +27,7 @@ from ...utils import (
     IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
     cached_file,
+    extract_commit_hash,
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
@@ -269,6 +270,7 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
+    commit_hash = kwargs.get("_commit_hash")
     # Load with a priority given to the nested processor config, if available in repo
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
@@ -281,7 +283,9 @@ def get_image_processor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
+        _commit_hash=commit_hash,
     )
+    commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
     resolved_image_processor_file = cached_file(
         pretrained_model_name_or_path,
         filename=IMAGE_PROCESSOR_NAME,
@@ -293,6 +297,7 @@ def get_image_processor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
+        _commit_hash=commit_hash,
     )
 
     # An empty list if none of the possible files is found in the repo
@@ -578,6 +583,8 @@ class AutoImageProcessor:
         backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+        if kwargs.get("_commit_hash") is None and (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
 
         # Resolve the image processor config filename
         if "image_processor_filename" in kwargs:
@@ -590,15 +597,19 @@ class AutoImageProcessor:
         # Load the image processor config
 
         try:
-            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+            config_dict, unused_kwargs = ImageProcessingMixin.get_image_processor_dict(
                 pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
             )
+            if (commit_hash := unused_kwargs.pop("_commit_hash", None)) is not None:
+                kwargs["_commit_hash"] = commit_hash
         except Exception as initial_exception:
             # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
             try:
-                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                config_dict, unused_kwargs = ImageProcessingMixin.get_image_processor_dict(
                     pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
                 )
+                if (commit_hash := unused_kwargs.pop("_commit_hash", None)) is not None:
+                    kwargs["_commit_hash"] = commit_hash
             except Exception:
                 raise initial_exception
 
@@ -626,6 +637,8 @@ class AutoImageProcessor:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
+                if (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+                    kwargs["_commit_hash"] = commit_hash
 
                 image_processor_type = getattr(config, "image_processor_type", None)
                 if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:

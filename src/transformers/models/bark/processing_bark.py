@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import auto_docstring, logging
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, extract_commit_hash
 from ..auto import AutoTokenizer
 
 
@@ -89,7 +89,10 @@ class BarkProcessor(ProcessorMixin):
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
+                _commit_hash=kwargs.get("_commit_hash"),
             )
+            if (commit_hash := extract_commit_hash(speaker_embeddings_path, kwargs.get("_commit_hash"))) is not None:
+                kwargs["_commit_hash"] = commit_hash
             if speaker_embeddings_path is None:
                 logger.warning(
                     f"""`{os.path.join(pretrained_processor_name_or_path, speaker_embeddings_dict_path)}` does not exists
@@ -188,6 +191,13 @@ class BarkProcessor(ProcessorMixin):
         voice_preset_dict = {}
         token = kwargs.get("token")
         repo_or_path = self.speaker_embeddings.get("repo_or_path", "/")
+        subfolder = kwargs.pop("subfolder", None)
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        commit_hash = kwargs.pop("_commit_hash", None)
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
@@ -200,17 +210,19 @@ class BarkProcessor(ProcessorMixin):
             path = cached_file(
                 self.speaker_embeddings.get("repo_or_path", "/"),
                 voice_preset_paths[key],
-                subfolder=kwargs.pop("subfolder", None),
-                cache_dir=kwargs.pop("cache_dir", None),
-                force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                local_files_only=kwargs.pop("local_files_only", False),
+                subfolder=subfolder,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 token=token,
-                revision=kwargs.pop("revision", None),
+                revision=revision,
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
+                _commit_hash=commit_hash,
             )
+            commit_hash = extract_commit_hash(path, commit_hash)
             if path is None:
                 raise ValueError(
                     f"""`{os.path.join(self.speaker_embeddings.get("repo_or_path", "/"), voice_preset_paths[key])}` does not exists

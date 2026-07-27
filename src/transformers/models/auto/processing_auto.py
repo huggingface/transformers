@@ -25,7 +25,14 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_python import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
+from ...utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    extract_commit_hash,
+    logging,
+)
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .auto_mappings import PROCESSOR_MAPPING_NAMES
@@ -194,6 +201,8 @@ class AutoProcessor:
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+        if kwargs.get("_commit_hash") is None and (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
 
         processor_class = None
         processor_auto_map = None
@@ -210,6 +219,7 @@ class AutoProcessor:
             "subfolder",
             "repo_type",
             "user_agent",
+            "_commit_hash",
         )
         cached_file_kwargs = {key: kwargs[key] for key in _hub_valid_kwargs if key in kwargs}
         # We don't want to raise
@@ -223,6 +233,9 @@ class AutoProcessor:
 
         # Let's start by checking whether the processor class is saved in a processor config
         processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
+        commit_hash = extract_commit_hash(processor_config_file, kwargs.get("_commit_hash"))
+        if commit_hash is not None:
+            kwargs["_commit_hash"] = cached_file_kwargs["_commit_hash"] = commit_hash
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class")
@@ -234,6 +247,9 @@ class AutoProcessor:
             preprocessor_config_file = cached_file(
                 pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
             )
+            commit_hash = extract_commit_hash(preprocessor_config_file, commit_hash)
+            if commit_hash is not None:
+                kwargs["_commit_hash"] = cached_file_kwargs["_commit_hash"] = commit_hash
             if preprocessor_config_file is not None:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
                 processor_class = config_dict.get("processor_class", None)
@@ -245,6 +261,9 @@ class AutoProcessor:
                 preprocessor_config_file = cached_file(
                     pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
+                commit_hash = extract_commit_hash(preprocessor_config_file, commit_hash)
+                if commit_hash is not None:
+                    kwargs["_commit_hash"] = cached_file_kwargs["_commit_hash"] = commit_hash
                 if preprocessor_config_file is not None:
                     config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
                         pretrained_model_name_or_path, **kwargs
@@ -257,6 +276,9 @@ class AutoProcessor:
                 preprocessor_config_file = cached_file(
                     pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
                 )
+                commit_hash = extract_commit_hash(preprocessor_config_file, commit_hash)
+                if commit_hash is not None:
+                    kwargs["_commit_hash"] = cached_file_kwargs["_commit_hash"] = commit_hash
                 if preprocessor_config_file is not None and processor_class is None:
                     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
                         pretrained_model_name_or_path, **kwargs
@@ -270,6 +292,9 @@ class AutoProcessor:
             tokenizer_config_file = cached_file(
                 pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **cached_file_kwargs
             )
+            commit_hash = extract_commit_hash(tokenizer_config_file, commit_hash)
+            if commit_hash is not None:
+                kwargs["_commit_hash"] = cached_file_kwargs["_commit_hash"] = commit_hash
             if tokenizer_config_file is not None:
                 with open(tokenizer_config_file, encoding="utf-8") as reader:
                     config_dict = json.load(reader)
@@ -289,6 +314,8 @@ class AutoProcessor:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
+                if (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+                    kwargs["_commit_hash"] = commit_hash
 
                 processor_class = getattr(config, "processor_class", None)
                 if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:

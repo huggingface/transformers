@@ -31,7 +31,7 @@ from .utils import (
     logging,
     safe_load_json_file,
 )
-from .utils.hub import cached_file, hf_api
+from .utils.hub import cached_file, extract_commit_hash, hf_api
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -177,6 +177,7 @@ class ImageProcessingMixin(PushToHubMixin):
             kwargs["token"] = token
 
         image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        kwargs.pop("_commit_hash", None)
 
         return cls.from_dict(image_processor_dict, **kwargs)
 
@@ -256,6 +257,7 @@ class ImageProcessingMixin(PushToHubMixin):
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
         image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -291,7 +293,9 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
                 resolved_image_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     filename=image_processor_file,
@@ -304,7 +308,9 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_image_processor_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -345,6 +351,8 @@ class ImageProcessingMixin(PushToHubMixin):
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
 
+        if commit_hash is not None:
+            kwargs["_commit_hash"] = commit_hash
         return image_processor_dict, kwargs
 
     @classmethod

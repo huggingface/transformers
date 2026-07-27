@@ -57,6 +57,7 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
+    extract_commit_hash,
     hf_api,
     is_torch_available,
     list_repo_templates,
@@ -1224,6 +1225,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         # holding a copy for optionally loading the audio tokenizer (if available)
         audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+        audio_tokenizer_kwargs.pop("_commit_hash", None)
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -1232,6 +1234,7 @@ class ProcessorMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -1270,7 +1273,7 @@ class ProcessorMixin(PushToHubMixin):
                     for template in list_repo_templates(
                         pretrained_model_name_or_path,
                         local_files_only=local_files_only,
-                        revision=revision,
+                        revision=commit_hash or revision,
                         cache_dir=cache_dir,
                         token=token,
                     ):
@@ -1294,7 +1297,9 @@ class ProcessorMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
 
                 # chat_template.json is a legacy file used by the processor class
                 # a raw chat_template.jinja is preferred in future
@@ -1310,7 +1315,9 @@ class ProcessorMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_chat_template_file, commit_hash)
 
                 resolved_raw_chat_template_file = cached_file(
                     pretrained_model_name_or_path,
@@ -1324,10 +1331,12 @@ class ProcessorMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_raw_chat_template_file, commit_hash)
 
-                resolved_additional_chat_template_files = {
-                    template_name: cached_file(
+                for template_name, template_file in additional_chat_template_files.items():
+                    resolved_additional_chat_template_files[template_name] = cached_file(
                         pretrained_model_name_or_path,
                         template_file,
                         cache_dir=cache_dir,
@@ -1339,9 +1348,11 @@ class ProcessorMixin(PushToHubMixin):
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
-                    for template_name, template_file in additional_chat_template_files.items()
-                }
+                    commit_hash = extract_commit_hash(
+                        resolved_additional_chat_template_files[template_name], commit_hash
+                    )
 
                 resolved_audio_tokenizer_file = cached_file(
                     pretrained_model_name_or_path,
@@ -1355,7 +1366,9 @@ class ProcessorMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_audio_tokenizer_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -1441,6 +1454,8 @@ class ProcessorMixin(PushToHubMixin):
                 audio_tokenizer_path, **audio_tokenizer_kwargs
             )
 
+        if commit_hash is not None:
+            kwargs["_commit_hash"] = commit_hash
         return processor_dict, kwargs
 
     @classmethod
@@ -1719,6 +1734,8 @@ class ProcessorMixin(PushToHubMixin):
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
         processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if (commit_hash := instantiation_kwargs.pop("_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
 

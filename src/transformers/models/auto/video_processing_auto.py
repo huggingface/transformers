@@ -27,6 +27,7 @@ from ...utils import (
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     cached_file,
+    extract_commit_hash,
     is_torchvision_available,
     logging,
     safe_load_json_file,
@@ -170,6 +171,7 @@ def get_video_processor_config(
     video_processor.save_pretrained("video-processor-test")
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
+    commit_hash = kwargs.get("_commit_hash")
     # Load with a priority given to the nested processor config, if available in repo
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
@@ -182,27 +184,28 @@ def get_video_processor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
+        _commit_hash=commit_hash,
     )
-    resolved_video_processor_files = [
-        resolved_file
-        for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
-        if (
-            resolved_file := cached_file(
-                pretrained_model_name_or_path,
-                filename=filename,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                token=token,
-                revision=revision,
-                local_files_only=local_files_only,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
+    commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
+    resolved_video_processor_files = []
+    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]:
+        resolved_file = cached_file(
+            pretrained_model_name_or_path,
+            filename=filename,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            token=token,
+            revision=revision,
+            local_files_only=local_files_only,
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+            _commit_hash=commit_hash,
         )
-        is not None
-    ]
+        commit_hash = extract_commit_hash(resolved_file, commit_hash)
+        if resolved_file is not None:
+            resolved_video_processor_files.append(resolved_file)
     resolved_video_processor_file = resolved_video_processor_files[0] if resolved_video_processor_files else None
 
     # An empty list if none of the possible files is found in the repo
@@ -313,8 +316,14 @@ class AutoVideoProcessor:
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+        if kwargs.get("_commit_hash") is None and (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, unused_kwargs = BaseVideoProcessor.get_video_processor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
+        if (commit_hash := unused_kwargs.pop("_commit_hash", None)) is not None:
+            kwargs["_commit_hash"] = commit_hash
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
@@ -342,6 +351,8 @@ class AutoVideoProcessor:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
+                if (commit_hash := getattr(config, "_commit_hash", None)) is not None:
+                    kwargs["_commit_hash"] = commit_hash
 
                 # It could be in `config.video_processor_type``
                 video_processor_class = getattr(config, "video_processor_type", None)

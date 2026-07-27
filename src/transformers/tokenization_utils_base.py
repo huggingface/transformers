@@ -1675,7 +1675,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 for template in list_repo_templates(
                     pretrained_model_name_or_path,
                     local_files_only=local_files_only,
-                    revision=revision,
+                    revision=commit_hash or revision,
                     cache_dir=cache_dir,
                     token=token,
                 ):
@@ -1685,7 +1685,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         remote_files = []
         if not is_local and not local_files_only:
             try:
-                remote_files = hf_api().list_repo_files(pretrained_model_name_or_path, revision=revision)
+                remote_files = hf_api().list_repo_files(
+                    pretrained_model_name_or_path, revision=commit_hash or revision
+                )
             except Exception:
                 remote_files = []
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):

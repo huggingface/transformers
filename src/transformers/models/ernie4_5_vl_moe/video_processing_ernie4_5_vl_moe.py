@@ -44,7 +44,7 @@ from ...utils import (
     logging,
     safe_load_json_file,
 )
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, extract_commit_hash
 from ...utils.import_utils import is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
@@ -143,6 +143,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -178,27 +179,28 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                     revision=revision,
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
+                    _commit_hash=commit_hash,
                 )
-                resolved_video_processor_files = [
-                    resolved_file
-                    for filename in [video_processor_file, IMAGE_PROCESSOR_NAME]
-                    if (
-                        resolved_file := cached_file(
-                            pretrained_model_name_or_path,
-                            filename=filename,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            local_files_only=local_files_only,
-                            token=token,
-                            user_agent=user_agent,
-                            revision=revision,
-                            subfolder=subfolder,
-                            _raise_exceptions_for_missing_entries=False,
-                        )
+                commit_hash = extract_commit_hash(resolved_processor_file, commit_hash)
+                resolved_video_processor_files = []
+                for filename in [video_processor_file, IMAGE_PROCESSOR_NAME]:
+                    resolved_file = cached_file(
+                        pretrained_model_name_or_path,
+                        filename=filename,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        local_files_only=local_files_only,
+                        token=token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
-                    is not None
-                ]
+                    commit_hash = extract_commit_hash(resolved_file, commit_hash)
+                    if resolved_file is not None:
+                        resolved_video_processor_files.append(resolved_file)
                 resolved_video_processor_file = (
                     resolved_video_processor_files[0] if resolved_video_processor_files else None
                 )
@@ -254,6 +256,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                 revision=revision,
                 subfolder=subfolder,
                 _raise_exceptions_for_missing_entries=False,
+                _commit_hash=commit_hash,
             )
             try:
                 ImageFont.truetype(video_processor_dict["font"])
@@ -270,6 +273,8 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
 
+        if commit_hash is not None:
+            kwargs["_commit_hash"] = commit_hash
         return video_processor_dict, kwargs
 
     def to_dict(self) -> dict[str, Any]:

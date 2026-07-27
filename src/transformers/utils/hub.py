@@ -357,7 +357,8 @@ def cached_files(
             if False, do not raise an exception for connection errors but return None.
         _commit_hash (`str`, *optional*):
             passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
-            a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
+            a pipeline). Cached files are loaded directly, and cache misses are resolved against this commit
+            instead of resolving the requested revision again.
 
     <Tip>
 
@@ -439,7 +440,7 @@ def cached_files(
                 filenames[0],
                 subfolder=None if len(subfolder) == 0 else subfolder,
                 repo_type=repo_type,
-                revision=revision,
+                revision=_commit_hash or revision,
                 cache_dir=cache_dir,
                 user_agent=user_agent,
                 force_download=force_download,
@@ -453,7 +454,7 @@ def cached_files(
                 path_or_repo_id,
                 allow_patterns=full_filenames,
                 repo_type=repo_type,
-                revision=revision,
+                revision=_commit_hash or revision,
                 cache_dir=cache_dir,
                 user_agent=user_agent,
                 force_download=force_download,
@@ -489,7 +490,7 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, _commit_hash or revision, repo_type)
             for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
@@ -527,7 +528,8 @@ def cached_files(
             raise e
 
     resolved_files = [
-        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
+        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, _commit_hash or revision)
+        for filename in full_filenames
     ]
     # If there are any missing file and the flag is active, raise
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
