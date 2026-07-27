@@ -28,12 +28,14 @@ from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .tensor_parallel import apply_tensor_parallelism_dtensor
 from .utils import (
     _distributed_barrier,
     _ensure_torch_distributed,
     _get_torch_distributed_rank,
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
+    _torch_distributed_available,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     save_model_checkpoint_distributed,
@@ -192,20 +194,28 @@ class DistributedMixin:
         device_mesh,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if device_mesh is not None:
-            model.config.distributed_config = distributed_config
-            model._device_mesh = device_mesh
+        if not _torch_distributed_available or device_mesh is None or distributed_config is None:
+            return model
 
-            if distributed_config.tp_size > 1:
+        model.config.distributed_config = distributed_config
+        model._device_mesh = device_mesh
+
+        if distributed_config.tp_size > 1:
+            tp_backend = os.environ.get("TP_BACKEND", "plain")
+            tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+            if tp_backend == "dtensor":
+                model = apply_tensor_parallelism_dtensor(model, tp_mesh)
+            else:
                 model = apply_tensor_parallelism(
                     model,
                     distributed_config.tp_plan,
                     distributed_config,
                     device_mesh,
                 )
-            elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+        elif distributed_config.fsdp_size > 1:
+            fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+            model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
