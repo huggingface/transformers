@@ -64,10 +64,12 @@ def get_vision_cu_seqlens(
 def get_vision_attention_seqlens(
     grid_thw: torch.Tensor,
     config: PreTrainedConfig,
+    merge_temporal: bool = False,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, int | None]:
-    """Get cumulative and maximum sequence lengths for packed vision attention."""
-    cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+    """Get cumulative and maximum sequence lengths for packed vision attention. ``merge_temporal`` is
+    forwarded to [`get_vision_cu_seqlens`] (``True`` for clip-level attention, e.g. kimi_k25)."""
+    cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=merge_temporal, kwargs=kwargs)
     max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
     return cu_seqlens, max_seqlen
 
@@ -253,6 +255,55 @@ def get_vision_bilinear_indices_and_weights(
     bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
     bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
     return bilinear_indices, bilinear_weights
+
+
+def get_vision_bicubic_indices_and_weights(
+    grid_thw: torch.Tensor, num_grid_per_side: int, kwargs: dict | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-patch 16-tap bicubic gather indices/weights for resampling a square learned
+    `(num_grid_per_side, num_grid_per_side)` position-embedding table to each image's `(h, w)`,
+    or pop `"bicubic_indices"`/`"bicubic_weights"` from `kwargs`.
+
+    Reproduces `F.interpolate(mode="bicubic", align_corners=False)` (Keys cubic kernel, `a=-0.75`)
+    as `(total_patches, 16)` indices + weights, consumed by a single fused `F.embedding_bag`. Fully
+    vectorised over packed patches (ragged `(h, w)` handled with `repeat_interleave`, no per-image
+    loop), so it traces and supports dynamic shapes like the other grid_thw precompute helpers.
+    """
+    if kwargs is not None:
+        bicubic_indices = kwargs.pop("bicubic_indices", None)
+        bicubic_weights = kwargs.pop("bicubic_weights", None)
+        if bicubic_indices is not None and bicubic_weights is not None:
+            return bicubic_indices, bicubic_weights
+
+    a = -0.75
+    side = num_grid_per_side
+    device = grid_thw.device
+    offsets = torch.arange(-1, 3, device=device)  # the 4 bicubic taps: floor-1 .. floor+2
+
+    def cubic_weights(distance):
+        # Keys convolution kernel (a=-0.75): near lobe for |d| <= 1, far lobe for 1 < |d| < 2.
+        near = ((a + 2) * distance - (a + 3)) * distance * distance + 1
+        far = ((a * distance - 5 * a) * distance + 8 * a) * distance - 4 * a
+        return torch.where(distance <= 1, near, far)
+
+    def axis_taps_weights(index, size):
+        src = (index + 0.5) * side / size - 0.5  # source coordinate, align_corners=False
+        floor = torch.floor(src)
+        taps = (floor.long()[:, None] + offsets).clamp(0, side - 1)  # (total, 4)
+        return taps, cubic_weights((src[:, None] - floor[:, None] - offsets).abs())
+
+    # Per-patch (row, col) within its image, derived from packed offsets — no per-image loop.
+    counts = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
+    heights = torch.repeat_interleave(grid_thw[:, 1], counts)
+    widths = torch.repeat_interleave(grid_thw[:, 2], counts)
+    starts = torch.repeat_interleave(F.pad(counts.cumsum(0)[:-1], (1, 0)), counts)
+    within = (torch.arange(counts.sum(), device=device) - starts) % (heights * widths)
+    h_taps, h_weights = axis_taps_weights(within // widths, heights)
+    w_taps, w_weights = axis_taps_weights(within % widths, widths)
+    # 2D separable: outer of the 4 h-taps × 4 w-taps → 16 taps per patch.
+    bicubic_indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, 16)
+    bicubic_weights = (h_weights[:, :, None] * w_weights[:, None, :]).reshape(-1, 16)
+    return bicubic_indices, bicubic_weights
 
 
 def get_vision_nearest_position_ids(

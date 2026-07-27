@@ -58,8 +58,8 @@ if is_torch_available():
 
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
+        get_vision_attention_seqlens,
         get_vision_bilinear_indices_and_weights,
-        get_vision_cu_seqlens,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -450,8 +450,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
     module = sys.modules[type(model).__module__]
     temporal_encoder = hasattr(module, "get_vision_frame_index")
-    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw, merge_temporal=temporal_encoder)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
+    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
+        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+    )
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -470,7 +471,7 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
         if hasattr(module, "get_vision_bicubic_indices_and_weights"):
-            # kimi_k25 resamples its learned grid bicubically (helper defined in its own module).
+            # kimi_k25 resamples its learned grid bicubically (its module imports the shared helper).
             inputs["bicubic_indices"], inputs["bicubic_weights"] = module.get_vision_bicubic_indices_and_weights(
                 grid_thw, num_grid_per_side
             )
