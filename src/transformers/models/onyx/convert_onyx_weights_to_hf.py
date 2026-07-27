@@ -39,7 +39,40 @@ from transformers import (
     TokenizersBackend,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers.models.onyx.processing_onyx import ONYX_MM_CHAT_TEMPLATE
+from transformers.models.onyx.onyx_chat_template import build_chat_template
+from transformers.utils.hub import cached_file
+
+
+# Canonical home of the chat template. Following the HF convention (cf. the Gemma
+# release, which reads ``chat_template.jinja`` from its model repo via ``cached_file``),
+# the template's source of truth is the ``chat_template.jinja`` file in the model repo
+# on the Hub, not an inline Python string. The converter downloads it from here and
+# bakes it into the converted checkpoint.
+#
+# NOTE: this points at the temporary early-release repo. Update it to the final
+# public repo before the release.
+ONYX_HUB_REPO = "someorgtoo/onyx_early"
+
+
+def _load_chat_template() -> str:
+    """Return the Onyx chat template text.
+
+    Prefer the canonical copy in the Hub repo (``ONYX_HUB_REPO/chat_template.jinja``)
+    so the repo remains the single source of truth. Fall back to the copy packaged
+    with ``transformers`` (``onyx/chat_template.jinja``) when the Hub is unreachable
+    (offline conversion, CI without network), so conversion never hard-depends on
+    network access.
+    """
+    try:
+        path = cached_file(ONYX_HUB_REPO, "chat_template.jinja")
+        if path is not None:
+            return Path(path).read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - offline / missing file / auth: fall back
+        print(f"[convert] could not fetch chat_template.jinja from {ONYX_HUB_REPO} ({exc}); using packaged copy")
+    return build_chat_template()
+
+
+ONYX_MM_CHAT_TEMPLATE = _load_chat_template()
 
 
 NUM_BASE_TOKENS = 200_000
