@@ -60,11 +60,10 @@ from .utils import (
     BaseHandler,
     Modality,
     ReasoningText,
+    ToolCall,
     _StreamError,
-    get_reasoning_config,
-    get_tool_call_config,
-    parse_reasoning,
-    parse_tool_calls,
+    build_response_parser,
+    parse_assistant_message,
 )
 
 
@@ -106,7 +105,7 @@ class _ResponseStreamBuilder:
         self.reasoning_id = f"rs_{request_id}"
         self.seq = 0
         self.output_index = 0
-        self.full_text = ""
+        self.content = ""
         self.full_reasoning = ""
         self.reasoning_open = False
         self.message_open = False
@@ -228,7 +227,7 @@ class _ResponseStreamBuilder:
         ]
 
     def text_delta(self, text: str) -> list[str]:
-        self.full_text += text
+        self.content += text
         return [
             self._emit(
                 ResponseTextDeltaEvent(
@@ -244,7 +243,7 @@ class _ResponseStreamBuilder:
         ]
 
     def finish_message(self) -> list[str]:
-        output_text_part = ResponseOutputText(type="output_text", text=self.full_text, annotations=[])
+        output_text_part = ResponseOutputText(type="output_text", text=self.content, annotations=[])
         self.message_item = ResponseOutputMessage(
             id=self.msg_id,
             type="message",
@@ -261,7 +260,7 @@ class _ResponseStreamBuilder:
                     sequence_number=self.seq,
                     output_index=self.output_index,
                     content_index=0,
-                    text=self.full_text,
+                    text=self.content,
                     logprobs=[],
                 )
             ),
@@ -420,9 +419,6 @@ class ResponseHandler(BaseHandler):
         # TODO: remove when CB supports per-request generation config
         if use_cb:
             gen_manager.init_cb(model, gen_config)
-        tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
-        reasoning_config = get_reasoning_config(processor, model, inputs["input_ids"])
-
         streaming = body.get("stream", True)
         if streaming:
             return self._streaming(
@@ -434,8 +430,6 @@ class ResponseHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_config=tool_config,
-                reasoning_config=reasoning_config,
             )
         else:
             return await self._non_streaming(
@@ -447,8 +441,6 @@ class ResponseHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_config=tool_config,
-                reasoning_config=reasoning_config,
             )
 
     # ----- input conversion -----
@@ -577,18 +569,16 @@ class ResponseHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
+        response_parser = build_response_parser(processor, model, inputs["input_ids"])
         queue, streamer = gen_manager.generate_streaming(
             model,
             processor,
             inputs,
             gen_config,
             request_id=request_id,
-            tool_config=tool_config,
-            reasoning_config=reasoning_config,
+            response_parser=response_parser,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
@@ -610,8 +600,7 @@ class ResponseHandler(BaseHandler):
             try:
                 yield "".join(builder.start_response())
 
-                # Stream tokens — items are opened lazily so reasoning (if any)
-                # appears as a separate output item before the message item.
+                tool_call_index = 0
                 done = False
                 while not done:
                     batch = [await queue.get()]
@@ -622,25 +611,38 @@ class ResponseHandler(BaseHandler):
                         pass
 
                     parts: list[str] = []
-                    for text in batch:
-                        if text is None:
+                    for item in batch:
+                        if item is None:
                             done = True
                             break
-                        if isinstance(text, _StreamError):
-                            logger.error(f"Exception in response generation: {text.msg}")
-                            parts.extend(builder.error(text.msg))
+                        if isinstance(item, _StreamError):
+                            logger.error(f"Exception in response generation: {item.msg}")
+                            parts.extend(builder.error(item.msg))
                             yield "".join(parts)
                             return
-                        if isinstance(text, ReasoningText):
+                        if isinstance(item, ToolCall):
+                            # Make sure any open content/reasoning items are closed
+                            # before emitting the tool call so output ordering stays valid.
+                            if builder.reasoning_open:
+                                parts.extend(builder.finish_reasoning())
+                            if builder.message_open:
+                                parts.extend(builder.finish_message())
+                            parts.extend(
+                                builder.tool_call(
+                                    f"{request_id}_tool_call_{tool_call_index}", item.name, item.arguments
+                                )
+                            )
+                            tool_call_index += 1
+                        elif isinstance(item, ReasoningText):
                             if not builder.reasoning_open:
                                 parts.extend(builder.start_reasoning())
-                            parts.extend(builder.reasoning_delta(text))
+                            parts.extend(builder.reasoning_delta(item))
                         else:
                             if builder.reasoning_open:
                                 parts.extend(builder.finish_reasoning())
                             if not builder.message_open:
                                 parts.extend(builder.start_message())
-                            parts.extend(builder.text_delta(text))
+                            parts.extend(builder.text_delta(item))
 
                     if parts:
                         yield "".join(parts)
@@ -651,16 +653,6 @@ class ResponseHandler(BaseHandler):
                 if not builder.message_open:
                     yield "".join(builder.start_message())
                 yield "".join(builder.finish_message())
-
-                # Tool calls are parsed after generation completes (not during streaming),
-                # because the full token sequence is needed for reliable parsing.
-                if tool_config:
-                    parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
-                    if parsed:
-                        for i, tc in enumerate(parsed):
-                            yield "".join(
-                                builder.tool_call(f"{request_id}_tool_call_{i}", tc["name"], tc["arguments"])
-                            )
 
                 yield "".join(builder.completed(compute_usage(input_len, streamer.total_tokens)))
             except (GeneratorExit, asyncio.CancelledError):
@@ -683,27 +675,27 @@ class ResponseHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
-        full_text, input_len, generated_ids = await gen_manager.generate_non_streaming(
+        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
             model, processor, inputs, gen_config, request_id=request_id
         )
 
+        content, reasoning_content, parsed_tool_calls = parse_assistant_message(
+            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+        )
+
         output_items = []
-        if reasoning_config is not None:
-            full_text, reasoning_content = parse_reasoning(processor, generated_ids, full_text, reasoning_config)
-            if reasoning_content is not None:
-                output_items.append(
-                    ResponseReasoningItem(
-                        id=f"rs_{request_id}",
-                        type="reasoning",
-                        summary=[],
-                        content=[{"type": "reasoning_text", "text": reasoning_content}],
-                        status="completed",
-                    )
+        if reasoning_content:
+            output_items.append(
+                ResponseReasoningItem(
+                    id=f"rs_{request_id}",
+                    type="reasoning",
+                    summary=[],
+                    content=[{"type": "reasoning_text", "text": reasoning_content}],
+                    status="completed",
                 )
+            )
 
         output_items.append(
             ResponseOutputMessage(
@@ -711,26 +703,24 @@ class ResponseHandler(BaseHandler):
                 type="message",
                 status="completed",
                 role="assistant",
-                content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
+                content=[ResponseOutputText(type="output_text", text=content, annotations=[])],
                 annotations=[],  # type: ignore[call-arg]
             )
         )
 
-        if tool_config is not None:
-            parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])
-            if parsed:
-                for i, tc in enumerate(parsed):
-                    tc_id = f"{request_id}_tool_call_{i}"
-                    output_items.append(
-                        ResponseFunctionToolCall(
-                            id=tc_id,
-                            call_id=tc_id,
-                            type="function_call",
-                            name=tc["name"],
-                            arguments=tc["arguments"],
-                            status="completed",
-                        )
+        if parsed_tool_calls:
+            for i, tc in enumerate(parsed_tool_calls):
+                tc_id = f"{request_id}_tool_call_{i}"
+                output_items.append(
+                    ResponseFunctionToolCall(
+                        id=tc_id,
+                        call_id=tc_id,
+                        type="function_call",
+                        name=tc.name,
+                        arguments=tc.arguments,
+                        status="completed",
                     )
+                )
 
         usage = compute_usage(input_len, len(generated_ids))
         response = Response(
