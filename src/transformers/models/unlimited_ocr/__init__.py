@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_unlimited_ocr import *
     from .image_processing_unlimited_ocr import *
     from .modeling_unlimited_ocr import *
     from .processing_unlimited_ocr import *
