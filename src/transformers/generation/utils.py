@@ -2183,30 +2183,6 @@ class GenerationMixin(ContinuousMixin):
             if switch:
                 self.set_experts_implementation(original_experts_implementation)
 
-    def _get_deprecated_gen_repo(
-        self,
-        generation_mode: GenerationMode,
-        trust_remote_code: bool,
-        custom_generate: str | None = None,
-    ) -> str | None:
-        """
-        Returns the Hub repo for a deprecated generation mode, if any.
-        """
-        if custom_generate is not None or "/" not in (repo := GENERATION_MODES_MAPPING[generation_mode]):
-            return None
-
-        logger.warning_once(
-            f"{generation_mode.name.replace('_', ' ').title()} was moved to a `custom_generate` repo: https://hf.co/{repo}. "
-            f"To prevent loss of backward compatibility, add `custom_generate='{repo}'` "
-            "to your `generate` call before v4.62.0."
-        )
-        if not trust_remote_code:
-            raise ValueError(
-                f"{generation_mode.name.replace('_', ' ').title()} requires `trust_remote_code=True` in your `generate` call, "
-                f"since it loads https://hf.co/{repo}."
-            )
-        return repo
-
     def _extract_generation_mode_kwargs(
         self,
         custom_generate,
@@ -2455,37 +2431,14 @@ class GenerationMixin(ContinuousMixin):
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
-        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
-
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        elif deprecated_mode_repo is None:
+        else:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
-
-        # Deprecation-related step: set Hub repo for deprecated strategies.
-        # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
-        # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
-        # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo is not None:
-            return GenerationMixin.generate(
-                self,
-                inputs=inputs,
-                generation_config=generation_config,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
-                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                assistant_model=assistant_model,
-                negative_prompt_ids=negative_prompt_ids,
-                negative_prompt_attention_mask=negative_prompt_attention_mask,
-                custom_generate=deprecated_mode_repo,
-                trust_remote_code=trust_remote_code,
-                **generation_mode_kwargs,
-                **kwargs,
-            )
 
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -3271,15 +3224,6 @@ class GenerationMixin(ContinuousMixin):
             (torch.ones((num_beams), dtype=torch.bool), torch.zeros((beams_to_keep - num_beams), dtype=torch.bool)),
             dim=0,
         ).to(input_ids.device)
-
-        # (joao) feature lost in the refactor. Probably won't implement, hurts readability with minimal gains (there
-        # are newer low-memory alternatives like the offloaded cache)
-        sequential = generation_config.low_memory
-        if sequential:
-            raise ValueError(
-                "`low_memory=True` is not supported after the beam search refactor. Please check the discussion in "
-                "#35802 *after the PR got merged*, and add a comment there if your questions are not yet answered."
-            )
 
         # 2. init output tuples
         all_scores = () if (return_dict_in_generate and output_scores) else None

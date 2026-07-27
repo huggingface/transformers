@@ -477,15 +477,6 @@ class GenerationConfig(PushToHubMixin):
             )
             warnings.warn(msg, FutureWarning, stacklevel=2)
 
-        # Deprecated (moved to the Hub). TODO remove for v5
-        self.low_memory = kwargs.pop("low_memory", None)
-        self.penalty_alpha = kwargs.pop("penalty_alpha", None)
-        self.dola_layers = kwargs.pop("dola_layers", None)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", None)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", None)
-        self.constraints = kwargs.pop("constraints", None)
-        self.force_words_ids = kwargs.pop("force_words_ids", None)
-
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Common attributes
@@ -542,25 +533,13 @@ class GenerationConfig(PushToHubMixin):
         """
         # TODO joao: find out a way of not depending on external fields (e.g. `assistant_model`), then make this a
         # property and part of the `__repr__`
-        if self.constraints is not None or self.force_words_ids is not None:
-            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
-        elif self.num_beams is None or self.num_beams == 1:
+        if self.num_beams is None or self.num_beams == 1:
             if self.do_sample is not True:
-                if (
-                    self.top_k is not None
-                    and self.top_k > 1
-                    and self.penalty_alpha is not None
-                    and self.penalty_alpha > 0
-                ):
-                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
-                else:
-                    generation_mode = GenerationMode.GREEDY_SEARCH
+                generation_mode = GenerationMode.GREEDY_SEARCH
             else:
                 generation_mode = GenerationMode.SAMPLE
         else:
-            if self.num_beam_groups is not None and self.num_beam_groups > 1:
-                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif self.do_sample is True:
+            if self.do_sample is True:
                 generation_mode = GenerationMode.BEAM_SAMPLE
             else:
                 generation_mode = GenerationMode.BEAM_SEARCH
@@ -581,17 +560,6 @@ class GenerationConfig(PushToHubMixin):
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
 
-        # DoLa generation may extend some generation modes
-        # TODO joao, manuel: remove this in v4.62.0
-        if self.dola_layers is not None:
-            if generation_mode in ("greedy_search", "sample"):
-                generation_mode = GenerationMode.DOLA_GENERATION
-            else:
-                logger.warning(
-                    "You've set `dola_layers`, which triggers DoLa generate. Currently, DoLa generate "
-                    "is only supported with Greedy Search and Sample.  However, the base decoding mode (based on "
-                    f"current flags) is {generation_mode} -- some of the set flags will be ignored."
-                )
         return generation_mode
 
     @staticmethod
@@ -636,9 +604,6 @@ class GenerationConfig(PushToHubMixin):
             "assistant_confidence_threshold": 0.4,
             "assistant_lookbehind": 10,
             "target_lookbehind": 10,
-            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
         }
 
     def validate(self, strict=False, user_set_attributes: set[str] | None = None):
