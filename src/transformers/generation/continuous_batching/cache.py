@@ -27,7 +27,7 @@ from .cache_allocators import (
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
-from .requests import RequestState, get_device_and_memory_breakdown, logger
+from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .utils import find_head_dim, find_num_key_value_heads
 
 
@@ -196,12 +196,10 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.register_cache_tensor(self.bytes_per_sector, non_trash_bytes, self.cache_tensor, self.pool)
 
-        # Sector-tracking data structures. Sectors 0 and 1 are the trash sectors, so they are never free for allocation.
-        # Block management data structures
+        # Block and prefix sharing
         self.allow_block_sharing = continuous_batching_config.allow_block_sharing
-        allocators_can_share = all(ca.supports_block_sharing for ca in self.cache_allocators.values())
-        self.use_prefix_sharing = self.allow_block_sharing and allocators_can_share
-        # self._block_manager = BlockManager(num_blocks, self.block_size, tp_on=distributed_helper.tp_size > 1)
+        allocators_can_share = all(ca.use_block_sharing for ca in self.cache_allocators.values())
+        self.use_prefix_sharing = allocators_can_share and self.allow_block_sharing
 
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
@@ -266,7 +264,70 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             allocator.free_all_requests()
             if clear_ledgers:
-                allocator.ref_counts.clear()
+                allocator.ledger.reset()
+
+    def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
+        """Searches the prompt for a prefix whose blocks are already in the cache. Matched blocks are shared with the
+        request instead of being recomputed, and the number of matched tokens is returned."""
+        if not self.use_prefix_sharing:
+            return 0
+
+        # Loop over all allocators to find the longest prefix match by all
+        prefix_len = 2 ** 32 - 1  # ~inf
+        all_matched_blocks = {}
+        for name, allocator in self.cache_allocators.items():
+            matched_blocks = allocator.match_prefix_blocks(prompt_ids)
+            # Stop if there was no prefill match
+            if not matched_blocks:
+                prefix_len = 0
+                break
+            # Otherwise, update accumulators
+            else:
+                prefix_len = min(prefix_len, len(matched_blocks) * allocator.tokens_per_page)
+                all_matched_blocks[name] = matched_blocks
+
+        # If there was a prefix match, acquire the blocks and return the number of matched tokens
+        if prefix_len > 0:
+            logger.debug(f"Found a prefix match of {prefix_len} tokens for request {request_id}")
+            for name, matched_blocks in all_matched_blocks.items():
+                self.cache_allocators[name].acquire_prefix_blocks(request_id, prefix_len, matched_blocks)
+        return prefix_len
+
+    def count_new_complete_blocks(self, state: RequestState, request_len: int) -> dict[str, int]:
+        """Counts the blocks that the forward pass over request_len new tokens will complete for the request, so they
+        can be marked for de-duplication after the forward."""
+        if not self.use_prefix_sharing:
+            return {}
+        complete_blocks = {}
+        for name, allocator in self.cache_allocators.items():
+            tokens_in_last_block = state.current_len() % allocator.tokens_per_page
+            new_complete_blocks = (tokens_in_last_block + request_len) // allocator.tokens_per_page
+            if new_complete_blocks:
+                complete_blocks[name] = new_complete_blocks
+        return complete_blocks
+
+    def mark_complete_blocks(self, state: RequestState, complete_blocks: dict[str, int]) -> None:
+        """Registers the content hashes of the blocks the last forward pass completed for the request, making them
+        available for de-duplication."""
+        # The status can be FINISHED in async mode, because batch N+1 offloaded the request before batch N was over:
+        # the block table no longer exists in that case
+        if not self.allow_block_sharing or not complete_blocks or state.status == RequestStatus.FINISHED:
+            return
+        token_ids = state.initial_tokens + state.generated_tokens
+        for name, new_complete_blocks in complete_blocks.items():
+            self.cache_allocators[name].mark_complete_blocks(state.request_id, token_ids, new_complete_blocks)
+
+    def evict_cached_blocks(self) -> bool:
+        """Evicts all the blocks kept cached for de-duplication, returning them to the pool. Returns True if any block
+        was evicted. Called under memory pressure: cached blocks are a bonus, never worth starving live requests."""
+        evicted_any = False
+        for allocator in self.cache_allocators.values():
+            evicted_blocks = allocator.ledger.evict_cached_blocks()
+            if evicted_blocks:
+                logger.debug(f"Evicting {len(evicted_blocks)} cached blocks from allocator {allocator.index}")
+                self.pool.free_blocks(allocator.index, evicted_blocks)
+                evicted_any = True
+        return evicted_any
 
     def extend_read_and_write_indices(
         self,
@@ -439,49 +500,6 @@ class PagedAttentionCache:
     #                 f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: {inspect.signature(flash_attn_with_kvcache_fn)}"
     #             )
     #     return self._block_table_key
-
-    # def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
-    #     """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
-    #     matching blocks in the (request_id), increase the reference count of the blocks and return the number of blocks
-    #     that match. If no prefix match is found, we return 0."""
-    #     current_hash = None
-    #     allocated_blocks = []
-    #     for b in range(len(prompt_ids) // self.block_size):
-    #         tokens = prompt_ids[b * self.block_size : (b + 1) * self.block_size]
-    #         # Prefix sharing is only supported when there is only one full attention layer group, so group_id=0.
-    #         current_hash = self._block_manager.compute_hash(current_hash, tokens, group_id=0)
-    #         block_id = self._block_manager._hash_to_id.get(current_hash)
-    #         if block_id is not None:
-    #             allocated_blocks.append(block_id)
-    #             self._block_manager.increase_ref_count(block_id)
-    #         else:
-    #             break
-    #     # If we found a matching prefix, we reference the blocks in the request
-    #     if allocated_blocks:
-    #         logger.debug(f"Found prefix match for request {request_id} with {len(allocated_blocks)} blocks")
-    #         cm = self.group_cache_managers[0]
-    #         cm.block_table[request_id] = allocated_blocks
-
-    #     prefix_length = len(allocated_blocks) * self.block_size
-    #     self._total_prefix_length += prefix_length
-    #     return prefix_length
-
-    # def mark_shareable_blocks_as_complete(self, state: RequestState, num_complete_blocks: int) -> None:
-    #     """Marks the blocks allocated to a request (state) as complete if they are shareable and they have been computed
-    #     in the forward pass. A complete block is a block where the KV cache has been fully computed: if the block has
-    #     enough space to hold the cache for N tokens, the block is marked as complete when the cache data is present for
-    #     the N tokens. If block sharing is off, this is a no-op."""
-    #     # The status can be FINISHED in async mode, because batch N+1 offloaded the request before batch N was over. So
-    #     # we need to check for this case to avoid looking in the block table for blocks that no longer exist.
-    #     if num_complete_blocks == 0 or state.status == RequestStatus.FINISHED:
-    #         return None
-    #     for cm in self.group_cache_managers:
-    #         if cm.uses_block_sharing:
-    #             self._block_manager.mark_shareable_blocks_as_complete(
-    #                 num_complete_blocks=num_complete_blocks,
-    #                 allocated_blocks=cm.block_table[state.request_id],
-    #                 prompt_ids=(state.initial_tokens + state.generated_tokens),
-    #             )
 
 
 # TODO: BUG: check this class in details (moving on rn)

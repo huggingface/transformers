@@ -355,7 +355,7 @@ class FutureRequestState:
     # This makes instantiating this class faster
     __slots__ = ("state", "has_new_token", "complete_blocks", "query_length")
 
-    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int, query_length: int) -> None:
+    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: dict[str, int], query_length: int) -> None:
         self.state = state
         self.has_new_token = has_new_token
         self.complete_blocks = complete_blocks

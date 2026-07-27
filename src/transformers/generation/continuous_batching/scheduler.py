@@ -118,19 +118,17 @@ class Scheduler(ABC):
     def _infer_request_tokens(self, state: RequestState, request_ids_to_remove_from_waiting: set[str]) -> list[int]:
         """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
         pending, this is where we look for a prefix match and split the request if found."""
-        # # If prefix sharing is enabled, we look for a prefix match and split the request if found
-        # if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING and not state.is_cpu_offloaded:
-        #     prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
-        #     if prefill_length > 0:
-        #         self.active_requests[state.request_id] = state
-        #         request_ids_to_remove_from_waiting.add(state.request_id)
-        #         state.status = RequestStatus.PREFILLING
-        #         # We keep track of the number of allocated blocks to avoid double allocation
-        #         state.allocated_blocks += prefill_length // self.cache.block_size
-        #         # Even if we match the whole request, we keep at least 1 token to start decoding
-        #         prefill_length = min(prefill_length, len(state.remaining_prefill_tokens) - 1)
-        #         state.remaining_prefill_tokens = state.remaining_prefill_tokens[prefill_length:]
-        #         state.position_offset += prefill_length
+        # If prefix sharing is enabled, we look for a prefix match and split the request if found
+        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING and not state.is_cpu_offloaded:
+            prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
+            if prefill_length > 0:
+                self.active_requests[state.request_id] = state
+                self.waiting_requests.pop(state.request_id, None)  # takes effect even if scheduling fails later
+                request_ids_to_remove_from_waiting.add(state.request_id)
+                state.status = RequestStatus.PREFILLING
+                # The match never covers the whole prompt, so there is always at least 1 token left to prefill
+                state.remaining_prefill_tokens = state.remaining_prefill_tokens[prefill_length:]
+                state.position_offset += prefill_length
 
         # If the request is decoding, the tokens to process are already set
         if state.status == RequestStatus.DECODING:
@@ -178,6 +176,23 @@ class Scheduler(ABC):
             state.remaining_prefill_tokens = request_tokens[token_budget:]
             state.tokens_to_process = request_tokens[:token_budget]
 
+    def _try_to_meet_safety_margin(self) -> bool:
+        """Tries to meet the safety_margin by freeing unused sectors and (if needed) evicting cached blocks. Returns a
+        boolean indicating if the safety margin is met."""
+        # Once before loop starts, does not affect cache but non-referenced blocks
+        self.cache.pool.try_to_free_sectors()
+        cache_free_percent = self.cache.compute_free_capacity()
+        in_safety_margin = cache_free_percent >= self.safety_margin
+        # When under the margin, evicting the blocks cached for de-duplication may free enough memory
+        if not in_safety_margin and self.cache.evict_cached_blocks():
+            self.cache.pool.try_to_free_sectors()
+            cache_free_percent = self.cache.compute_free_capacity()
+            in_safety_margin = cache_free_percent >= self.safety_margin
+        # Log and return
+        if not in_safety_margin:
+            logger.debug(f"{cache_free_percent = } < {self.safety_margin = }: limiting the requests scheduled.")
+        return in_safety_margin
+
     def _process_candidates(
         self,
         candidates: list[RequestState],
@@ -199,16 +214,12 @@ class Scheduler(ABC):
         request_budget = self.max_requests_per_batch
 
         # Check safety margin
-        self.cache.pool.try_to_free_sectors()  # once before the loop starts to free sectors for the next batch
-        cache_free_percent = self.cache.compute_free_capacity()
-        outside_safety_margin = cache_free_percent < self.safety_margin
-        if outside_safety_margin:
-            logger.debug(f"{cache_free_percent = } < {self.safety_margin = }: limiting the requests scheduled.")
+        in_safety_margin = self._try_to_meet_safety_margin()
 
         for state in candidates:
 
             # If we are outside the safety margin, we only accept decoding requests or the first prefill request
-            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+            if not in_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
                 break
 
             # Infer the tokens that will be present in the batch if token budget is enough
@@ -248,13 +259,8 @@ class Scheduler(ABC):
             cache_budget -= read_cache_needed
             request_budget -= 1
 
-            # # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            # if self.cache.allow_block_sharing:
-            #     tokens_in_current_block = state.current_len() % self.cache.block_size
-            #     tokens_after_forward = tokens_in_current_block + request_len
-            #     complete_blocks = tokens_after_forward // self.cache.block_size
-            # else:
-            complete_blocks = 0
+            # If using prefix sharing, we make note of the blocks that will be completed by the forward pass
+            complete_blocks = self.cache.count_new_complete_blocks(state, request_len)
 
             # Store the future request state
             has_new_token = not state.remaining_prefill_tokens

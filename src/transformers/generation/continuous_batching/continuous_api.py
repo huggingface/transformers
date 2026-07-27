@@ -441,16 +441,16 @@ class ContinuousBatchProcessor:
 
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token, logprob)
-                # We mark the completed blocks as such
-                # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+                # Register the hashes of the blocks completed in this forward pass (before the request may finish)
+                self.cache.mark_complete_blocks(state, future_state.complete_blocks)
                 if is_finished:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
                     pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
-            # elif state.status == RequestStatus.PREFILLING:
-            # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+            elif state.status == RequestStatus.PREFILLING:
+                self.cache.mark_complete_blocks(state, future_state.complete_blocks)
 
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)

@@ -52,7 +52,11 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self.cache_dtype = cache_dtype
         bytes_per_page = self.get_bytes_per_page(num_key_value_heads, self.head_dim, cache_dtype, page_size)
         self._before_cache_tensor_init(
-            index=index, layer_indices=layer_indices, tokens_per_page=page_size, bytes_per_page=bytes_per_page, allow_block_sharing=allow_block_sharing
+            index=index,
+            layer_indices=layer_indices,
+            tokens_per_page=page_size,
+            bytes_per_page=bytes_per_page,
+            allow_block_sharing=allow_block_sharing,
         )
 
     def register_cache_tensor(
