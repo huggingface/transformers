@@ -105,10 +105,11 @@ class Step3p7TextConfig(PreTrainedConfig):
         Resolved (not a hub-config kwarg) per-layer head count, so `Step3p7Attention` takes it as a
         plain constructor argument instead of picking between the two scalar fields itself.
     query_pre_attn_scalar (`int` or `float`, *optional*):
-        `Gemma3Attention.__init__` hook point: defaults to `head_dim`, giving standard
-        `head_dim ** -0.5` scaling instead of Gemma3's own hyperparameter of the same name.
+        `Step3p7Attention.__init__` hook point: defaults to `head_dim`, giving standard
+        `head_dim ** -0.5` scaling; overridable per released checkpoint variant.
     attn_logit_softcapping (`float`, *optional*):
-        `Gemma3Attention.__init__` hook point; unused by Step3p7's own attention, so always `None`.
+        Unused by Step3p7's own attention (no logit-softcapping term in `eager_attention_forward`), so
+        always `None`.
     use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_moe_router_bias (`bool`, *optional*, defaults to `False`):
@@ -130,15 +131,21 @@ class Step3p7TextConfig(PreTrainedConfig):
     yarn_only_types (`list[str]`, *optional*):
         Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
+        `Step3p7Attention.__init__` hook point: when `True`, disables causal masking for
+        `Step3p7Attention.is_causal` and, via inherited `Gemma3TextModel` masking, allows attending
+        past the current position.
     """
 
     model_type = "step3p5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
+    # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
+    # generated files have no cross-model imports, so that name wouldn't resolve there.
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
         "layers.*.self_attn.v_proj": "colwise_gather_output",
+        "layers.*.self_attn.g_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -192,6 +199,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     routed_scaling_factor: float = 2.0
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
+    gating = True
     max_seq_len: int = 128000
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288
