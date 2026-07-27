@@ -25,13 +25,54 @@ if TYPE_CHECKING:
 
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch
-    from torch.distributed.tensor import DTensor
+    from torch.distributed._functional_collectives import wait_tensor
+    from torch.distributed.tensor import DTensor, Replicate
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
-    from torch.distributed.tensor.placement_types import Shard
+    from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
     # torch < 2.10 names as an underscore before `local_shard_size_and_offset`: alias it the non-underscored version
     if not hasattr(Shard, "local_shard_size_and_offset") and hasattr(Shard, "_local_shard_size_and_offset"):
         Shard.local_shard_size_and_offset = Shard._local_shard_size_and_offset
+
+
+def _find_strided_shard_placement_from_fused_params(placements):
+    """Return the `_StridedShard` placement from a fused parameter (e.g. fused gate/up), if any."""
+    for i, p in enumerate(placements):
+        if not isinstance(p, _StridedShard):
+            continue
+        has_partner_on_same_dim = any(
+            j != i and getattr(other, "dim", None) == p.dim for j, other in enumerate(placements)
+        )
+        if not has_partner_on_same_dim:
+            return p
+    return None
+
+
+def _replicate_dtensor(tensor: DTensor) -> DTensor:
+    """All-gather a DTensor to fully Replicate, handling _StridedShard."""
+    mesh = tensor.device_mesh
+    placements = tensor.placements
+    replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
+
+    if not any(isinstance(p, _StridedShard) for p in placements):
+        return tensor.redistribute(placements=replicate_all)
+
+    with torch.no_grad():
+        local = tensor._local_tensor
+        for i in reversed(range(mesh.ndim)):
+            p = placements[i]
+            if p.is_replicate():
+                continue
+            logical_shape = list(tensor.shape)
+            for j, pj in enumerate(placements[:i]):
+                if not pj.is_replicate():
+                    size, _ = Shard.local_shard_size_and_offset(
+                        logical_shape[pj.dim], mesh.size(j), mesh.get_local_rank(j)
+                    )
+                    logical_shape[pj.dim] = size
+            local = p._to_replicate_tensor(local, mesh, i, logical_shape)
+            local = wait_tensor(local)
+        return DTensor.from_local(local, mesh, replicate_all, run_check=False)
 
 
 class DtensorShardOperation:
