@@ -37,7 +37,7 @@ from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
-    get_vision_bicubic_indices_and_weights,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -216,10 +216,10 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         # gather (`embedding_bag`), equivalent to a per-image `F.interpolate(mode="bicubic")` but a
         # single traceable op over all patches — and faster.
         table = self.position_embeddings.flatten(0, 1)
-        bicubic_indices, bicubic_weights = get_vision_bicubic_indices_and_weights(
-            grid_thw, self.num_grid_per_side, kwargs=kwargs
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw, self.num_grid_per_side, mode="bicubic", align_corners=False, kwargs=kwargs
         )
-        pos = F.embedding_bag(bicubic_indices, table, per_sample_weights=bicubic_weights.to(table.dtype), mode="sum")
+        pos = F.embedding_bag(interp_indices, table, per_sample_weights=interp_weights.to(table.dtype), mode="sum")
         # Temporal: add a per-frame sinusoid. Row 0 of the table is a zero pad, so single-frame clips
         # (frame index 0) get none.
         pos = pos + self.time_position_embeddings[get_vision_frame_index(grid_thw, kwargs=kwargs)]

@@ -59,7 +59,7 @@ from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defau
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
-    get_vision_bilinear_indices_and_weights,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
@@ -708,15 +708,19 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         warnings.warn(
             f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
             FutureWarning,
             stacklevel=2,
         )
         grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode="bilinear",
+            align_corners=True,
+            spatial_merge_size=1,
         )
-        return (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0).unsqueeze(0)
+        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
     @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
@@ -739,10 +743,15 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size * sequence_len, -1)
 
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode="bilinear",
+            align_corners=True,
+            spatial_merge_size=1,
+            kwargs=kwargs,
         )
-        pos_embeds = (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings

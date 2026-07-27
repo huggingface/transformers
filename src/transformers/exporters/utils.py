@@ -59,7 +59,7 @@ if is_torch_available():
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
         get_vision_attention_seqlens,
-        get_vision_bilinear_indices_and_weights,
+        get_vision_interpolation_indices_and_weights,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -470,15 +470,15 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        if hasattr(module, "get_vision_bicubic_indices_and_weights"):
-            # kimi_k25 resamples its learned grid bicubically (its module imports the shared helper).
-            inputs["bicubic_indices"], inputs["bicubic_weights"] = module.get_vision_bicubic_indices_and_weights(
-                grid_thw, num_grid_per_side
-            )
+        # kimi_k25 (the temporal encoder) resamples its learned grid bicubically with no spatial-merge
+        # reorder; the other grid_thw encoders (qwen3_vl / qwen3_5 / paddleocr_vl) use bilinear.
+        if temporal_encoder:
+            mode, align_corners, interp_merge = "bicubic", False, 1
         else:
-            inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
-                grid_thw, num_grid_per_side, spatial_merge_size
-            )
+            mode, align_corners, interp_merge = "bilinear", True, spatial_merge_size
+        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
+            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=interp_merge
+        )
 
     # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
     if temporal_encoder:
