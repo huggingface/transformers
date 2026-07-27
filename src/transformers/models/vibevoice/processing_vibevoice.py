@@ -19,7 +19,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
-from ...utils.import_utils import requires
+from ...utils.import_utils import requires, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -171,8 +171,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             List[str]: Paths to the saved audio files.
         """
 
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         audio = make_list_of_audio(audio)
         for idx, item in enumerate(audio):
