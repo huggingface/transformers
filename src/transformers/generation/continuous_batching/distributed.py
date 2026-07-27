@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch
 import torch.distributed as _dist
 
+from ...distributed.utils import _is_torch_distributed_initialized
 from .requests import logger
 
 
@@ -39,7 +40,7 @@ class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
     def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
-        self.dist_on = dist.is_available() and dist.is_initialized()
+        self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
 
         # Check validity of the device mesh

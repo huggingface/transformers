@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
+from .distributed.utils import _torch_distributed_available
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
@@ -38,7 +39,6 @@ from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
 
-_torch_distributed_available = torch.distributed.is_available()
 if _torch_distributed_available:
     from torch.distributed.tensor import DTensor
 
