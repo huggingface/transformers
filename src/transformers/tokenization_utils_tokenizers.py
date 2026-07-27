@@ -47,7 +47,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
     generate_merges,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
@@ -517,6 +517,88 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    def save_pretrained(
+        self,
+        save_directory: str | os.PathLike,
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
+        push_to_hub: bool = False,
+        save_format: str | None = None,
+        **kwargs,
+    ) -> tuple[str, ...]:
+        """Save the full tokenizer state.
+
+        Extends the base class method with support for ``save_format="mistral"``, which
+        copies the original ``tekken.json`` file directly into *save_directory* instead
+        of writing the standard HuggingFace format files.
+
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                The path to a directory where the tokenizer will be saved.
+            legacy_format (`bool`, *optional*):
+                Passed to the base class for HuggingFace format saves.
+            filename_prefix (`str`, *optional*):
+                A prefix to add to the names of the saved files.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether to push the saved tokenizer to the HuggingFace Hub.
+            save_format (`str`, *optional*):
+                `"mistral"` to save as a native ``tekken.json`` by copying the original
+                file (requires the original ``tekken.json`` to be available via ``vocab_file``).
+                `"hf"` or `None` for the default HuggingFace format.
+            **kwargs:
+                Additional keyword arguments passed to the base class or
+                [`~utils.PushToHubMixin.push_to_hub`].
+
+        Returns:
+            `tuple[str, ...]`: The paths of the saved files.
+        """
+        if save_format is not None and save_format not in ("hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
+
+        if save_format == "mistral":
+            from .integrations.mistral.constants import TEKKEN_VOCAB_FILE
+
+            os.makedirs(save_directory, exist_ok=True)
+
+            if push_to_hub:
+                commit_message = kwargs.pop("commit_message", None)
+                repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
+                repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+                files_timestamps = self._get_files_timestamps(save_directory)
+
+            vocab_file = self.init_kwargs.get("vocab_file") or getattr(self, "vocab_file", None)
+            if (
+                isinstance(vocab_file, str)
+                and os.path.basename(vocab_file) == TEKKEN_VOCAB_FILE
+                and os.path.isfile(vocab_file)
+            ):
+                dest = os.path.join(save_directory, TEKKEN_VOCAB_FILE)
+                copyfile(vocab_file, dest)
+                save_files = (dest,)
+            else:
+                raise OSError(
+                    "Cannot save in 'mistral' format: the original tekken.json is not available. "
+                    "Load a native checkpoint (that still contains tekken.json) or install "
+                    "mistral-common to use MistralCommonBackend."
+                )
+            if push_to_hub:
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=kwargs.get("token"),
+                )
+            return save_files
+
+        return super().save_pretrained(
+            save_directory,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix,
+            push_to_hub=push_to_hub,
+            **kwargs,
+        )
 
     def update_post_processor(self):
         """
