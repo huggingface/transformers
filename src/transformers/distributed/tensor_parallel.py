@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import re
 
 from ..utils.generic import GeneralInterface
@@ -28,8 +27,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
-
-    from .sharding_utils import _find_strided_shard_placement_from_fused_params
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
@@ -203,29 +200,15 @@ class SequenceParallel(TensorParallelLayer):
 # =============================================================================
 
 
-def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
-    """Stitch a local grad back onto the original DTensor parameter.
-
-    Used when the forward swap detaches the local leaf (``_StridedShard`` params) because
-    DTensor backward redistribute does not support that placement as a source.
-    """
-    tensor_meta = original_param._spec.tensor_meta
-    detached_grad = local_grad.detach()
-    with torch.no_grad():
-        if original_param.grad is None:
-            original_param.grad = DTensor.from_local(
-                detached_grad,
-                original_param.device_mesh,
-                original_param.placements,
-                run_check=False,
-                shape=tensor_meta.shape,
-                stride=tensor_meta.stride,
-            )
-        elif isinstance(original_param.grad, DTensor):
-            original_param.grad._local_tensor.add_(detached_grad)
-        else:
-            original_param.grad.add_(detached_grad)
-    return local_grad
+@contextlib.contextmanager
+def _local_params_for_forward(module):
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    for name, param in originals.items():
+        module._parameters[name] = param.to_local()
+    try:
+        yield
+    finally:
+        module._parameters.update(originals)
 
 
 class PackedColwiseParallel(TensorParallelLayer):
@@ -264,28 +247,8 @@ class PackedColwiseParallel(TensorParallelLayer):
         input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
-    @contextlib.contextmanager
     def context_around_forward(self, module):
-        # grouped_mm etc needs plain tensors, so swap the params
-        to_swap_params = [
-            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
-        ]
-        for name, param in to_swap_params:
-            del module._parameters[name]
-            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
-                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-                if param.requires_grad:
-                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
-            else:
-                local = param.to_local()
-            setattr(module, name, local)
-        try:
-            yield
-        finally:
-            for name, param in to_swap_params:
-                # restore the original DTensor params
-                delattr(module, name)
-                module.register_parameter(name, param)
+        return _local_params_for_forward(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -374,27 +337,8 @@ class MoEExpertsParallel(TensorParallelLayer):
         module.forward = tp_forward
         return module
 
-    @contextlib.contextmanager
     def context_around_forward(self, module):
-        # grouped_mm experts forward needs plain tensors, so swap the params
-        to_swap_params = [
-            (name, param) for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)
-        ]
-        for name, param in to_swap_params:
-            del module._parameters[name]
-            if _find_strided_shard_placement_from_fused_params(param.placements) is not None:
-                local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
-                if param.requires_grad:
-                    local.register_hook(functools.partial(_accumulate_local_param_grad, param))
-            else:
-                local = param.to_local()
-            setattr(module, name, local)
-        try:
-            yield
-        finally:
-            for name, param in to_swap_params:
-                delattr(module, name)
-                module.register_parameter(name, param)
+        return _local_params_for_forward(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
@@ -519,16 +463,3 @@ def apply_tensor_parallelism_dtensor(model, tp_mesh):
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     return model
-
-
-def gather_tp_state_dict(model) -> dict[str, torch.Tensor]:
-    """Reconstruct a full (unsharded) state dict from TP-sharded DTensor params, for checkpoint save."""
-    from .sharding_utils import _replicate_dtensor
-
-    full_state_dict: dict[str, torch.Tensor] = {}
-    for name, param in model.state_dict().items():
-        if isinstance(param, DTensor):
-            full_state_dict[name] = _replicate_dtensor(param).to_local()
-        else:
-            full_state_dict[name] = param.detach()
-    return full_state_dict
