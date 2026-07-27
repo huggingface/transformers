@@ -15,14 +15,18 @@
 import base64
 import gc
 import io
+import json
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import torch
 
+from tests.integrations.mistral.tekken_fixtures import write_fake_tekken_json
 from transformers.image_utils import load_image
+from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     require_mistral_common,
@@ -189,6 +193,74 @@ class TestMistralCommonBackend(unittest.TestCase):
         ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.tokenizer.save_pretrained(tmp_dir, unk_args="")
+
+    def test_save_pretrained_hf_format_produces_loadable_hf_tokenizer(self):
+        """Saving in HF format writes tokenizer.json + tokenizer_config.json, and the reloaded
+        tokenizer encodes identically to a direct convert_tekken_tokenizer call."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = str(tmp_path / "out")
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            backend.save_pretrained(out_dir, save_format="hf")
+
+            out_path = Path(out_dir)
+            self.assertTrue((out_path / "tokenizer.json").exists())
+            self.assertTrue((out_path / "tokenizer_config.json").exists())
+
+            text = "hello world"
+            reloaded = AutoTokenizer.from_pretrained(out_dir, mistral_format=False)
+            expected = convert_tekken_tokenizer(str(tekken_path)).encode(text, add_special_tokens=False)
+            actual = reloaded.encode(text, add_special_tokens=False)
+            self.assertEqual(actual, expected)
+
+    def test_save_pretrained_hf_format_missing_source_raises(self):
+        """save_pretrained(save_format='hf') raises OSError when the source tekken.json is gone."""
+        with tempfile.TemporaryDirectory() as src_dir:
+            src_path = Path(src_dir)
+            tekken_path = write_fake_tekken_json(src_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            # Delete the source file so the path is no longer valid.
+            tekken_path.unlink()
+
+        with tempfile.TemporaryDirectory() as out_dir:
+            with self.assertRaises(OSError):
+                backend.save_pretrained(out_dir, save_format="hf")
+
+    def test_save_pretrained_mistral_format_copy_is_byte_identical(self):
+        """Saving with save_format='mistral' writes the native tekken.json byte-for-byte."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = str(tmp_path / "out")
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            backend.save_pretrained(out_dir, save_format="mistral")
+
+            saved = Path(out_dir) / "tekken.json"
+            self.assertTrue(saved.exists())
+            with open(tekken_path, encoding="utf-8") as f:
+                original = json.load(f)
+            with open(saved, encoding="utf-8") as f:
+                copied = json.load(f)
+            self.assertEqual(original, copied)
+
+    def test_save_pretrained_unknown_format_raises_value_error(self):
+        """save_pretrained rejects any save_format outside 'hf'/'mistral'/None."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            with tempfile.TemporaryDirectory() as out_dir:
+                with self.assertRaises(ValueError) as ctx:
+                    backend.save_pretrained(out_dir, save_format="bogus")
+                self.assertIn("Unknown save_format", str(ctx.exception))
 
     def test_encode(self):
         string = "Hello, world!"

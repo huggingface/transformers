@@ -31,9 +31,9 @@ from tests.integrations.mistral.tekken_fixtures import (
     NUM_SPECIAL_TOKENS,
     write_fake_tekken_json,
 )
-from transformers import AutoTokenizer
 from transformers.integrations.mistral import (
     MistralConverter,
+    TekkenBackend,
     convert_tekken_tokenizer,
     resolve_mistral_format,
 )
@@ -246,7 +246,7 @@ class TestConvertTekkenTokenizer(unittest.TestCase):
             tekken_path = write_fake_tekken_json(tmp_path)
 
             tokenizer = convert_tekken_tokenizer(str(tekken_path))
-            self.assertIsNotNone(tokenizer)
+            self.assertIsInstance(tokenizer, TekkenBackend)
             self.assertEqual(tokenizer.vocab_size, FULL_BYTE_VOCAB)
 
     def test_special_tokens_set(self):
@@ -314,10 +314,10 @@ class TestConvertTekkenTokenizer(unittest.TestCase):
             self.assertEqual(tokenizer.decode(ids), "hello world")
 
 
-class TestSaveMistralFormat(unittest.TestCase):
-    """Tests for the copy-based save_pretrained(save_format='mistral') behavior."""
+class TestTekkenBackend(unittest.TestCase):
+    """Tests for `TekkenBackend`, in particular `save_pretrained` across all `save_format` values."""
 
-    def test_in_session_copy_is_byte_identical(self):
+    def test_save_pretrained_mistral_format_copy_is_byte_identical(self):
         """Saving immediately after conversion copies tekken.json byte-for-byte."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -337,7 +337,7 @@ class TestSaveMistralFormat(unittest.TestCase):
                 copied = json.load(f)
             self.assertEqual(original, copied)
 
-    def test_missing_source_raises_clear_error(self):
+    def test_save_pretrained_mistral_format_missing_source_raises_clear_error(self):
         """save_pretrained(save_format='mistral') raises OSError when source tekken.json is gone."""
         with tempfile.TemporaryDirectory() as src_dir:
             src_path = Path(src_dir)
@@ -351,14 +351,10 @@ class TestSaveMistralFormat(unittest.TestCase):
                 tok.save_pretrained(out_dir, save_format="mistral")
             self.assertIn("tekken.json", str(ctx.exception))
 
-
-@require_mistral_common
-class TestSaveHFFormat(unittest.TestCase):
-    """Tests for MistralCommonBackend.save_pretrained(save_format="hf") native->HF conversion."""
-
-    def test_save_format_hf_produces_loadable_hf_tokenizer(self):
-        """Saving in HF format writes tokenizer.json + tokenizer_config.json, and the reloaded
-        tokenizer encodes identically to a direct convert_tekken_tokenizer call."""
+    @parameterized.expand([(None,), ("hf",)])
+    def test_save_pretrained_hf_or_default_format_produces_loadable_hf_tokenizer(self, save_format):
+        """Saving in HF format (explicit or default) writes tokenizer.json + tokenizer_config.json,
+        and the reloaded tokenizer encodes/decodes identically to the original TekkenBackend."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             src_dir = tmp_path / "src"
@@ -366,31 +362,34 @@ class TestSaveHFFormat(unittest.TestCase):
             tekken_path = write_fake_tekken_json(src_dir)
             out_dir = str(tmp_path / "out")
 
-            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
-            backend.save_pretrained(out_dir, save_format="hf")
+            tok = convert_tekken_tokenizer(str(tekken_path))
+            if save_format is None:
+                tok.save_pretrained(out_dir)
+            else:
+                tok.save_pretrained(out_dir, save_format=save_format)
 
             out_path = Path(out_dir)
             self.assertTrue((out_path / "tokenizer.json").exists())
             self.assertTrue((out_path / "tokenizer_config.json").exists())
 
+            reloaded = TekkenBackend.from_pretrained(out_dir)
             text = "hello world"
-            reloaded = AutoTokenizer.from_pretrained(out_dir, mistral_format=False)
-            expected = convert_tekken_tokenizer(str(tekken_path)).encode(text, add_special_tokens=False)
-            actual = reloaded.encode(text, add_special_tokens=False)
-            self.assertEqual(actual, expected)
+            expected_ids = tok.encode(text, add_special_tokens=False)
+            actual_ids = reloaded.encode(text, add_special_tokens=False)
+            self.assertEqual(actual_ids, expected_ids)
+            self.assertEqual(reloaded.decode(actual_ids), tok.decode(expected_ids))
 
-    def test_save_format_hf_missing_source_raises(self):
-        """save_pretrained(save_format='hf') raises OSError when the source tekken.json is gone."""
-        with tempfile.TemporaryDirectory() as src_dir:
-            src_path = Path(src_dir)
-            tekken_path = write_fake_tekken_json(src_path)
-            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
-            # Delete the source file so the path is no longer valid.
-            tekken_path.unlink()
+    def test_save_pretrained_unknown_format_raises_value_error(self):
+        """save_pretrained rejects any save_format outside 'hf'/'mistral'/None."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            tok = convert_tekken_tokenizer(str(tekken_path))
 
-        with tempfile.TemporaryDirectory() as out_dir:
-            with self.assertRaises(OSError):
-                backend.save_pretrained(out_dir, save_format="hf")
+            with tempfile.TemporaryDirectory() as out_dir:
+                with self.assertRaises(ValueError) as ctx:
+                    tok.save_pretrained(out_dir, save_format="bogus")
+                self.assertIn("Unknown save_format", str(ctx.exception))
 
 
 @require_mistral_common

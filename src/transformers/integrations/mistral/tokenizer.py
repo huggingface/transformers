@@ -19,13 +19,14 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
+from shutil import copyfile
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...convert_slow_tokenizer import bytes_to_unicode
 from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
-from ...utils import cached_file, logging, requires_backends
+from ...utils import cached_file, hf_api, logging, requires_backends
 from ...utils.hub import CHAT_TEMPLATE_FILE, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
 from ...utils.import_utils import is_mistral_common_available
 from .constants import TEKKEN_VOCAB_FILE
@@ -325,11 +326,99 @@ class MistralConverter:
         return tokenizer
 
 
+class TekkenBackend(PreTrainedTokenizerFast):
+    """Fast tokenizer backend for checkpoints originating from a Mistral `tekken.json` file.
+
+    Adds `save_format="mistral"` support to `save_pretrained` for round-tripping back to the
+    native tekken format, on top of the standard HuggingFace `tokenizers`-library backend.
+    """
+
+    def save_pretrained(
+        self,
+        save_directory: str | os.PathLike,
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
+        push_to_hub: bool = False,
+        save_format: str | None = None,
+        **kwargs,
+    ) -> tuple[str, ...]:
+        """Save the full tokenizer state.
+
+        Extends the base class method with support for ``save_format="mistral"``, which
+        copies the original ``tekken.json`` file directly into *save_directory* instead
+        of writing the standard HuggingFace format files.
+
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                The path to a directory where the tokenizer will be saved.
+            legacy_format (`bool`, *optional*):
+                Passed to the base class for HuggingFace format saves.
+            filename_prefix (`str`, *optional*):
+                A prefix to add to the names of the saved files.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether to push the saved tokenizer to the HuggingFace Hub.
+            save_format (`str`, *optional*):
+                `"mistral"` to save as a native ``tekken.json`` by copying the original
+                file (requires the original ``tekken.json`` to be available via ``vocab_file``).
+                `"hf"` or `None` for the default HuggingFace format.
+            **kwargs:
+                Additional keyword arguments passed to the base class or
+                [`~utils.PushToHubMixin.push_to_hub`].
+
+        Returns:
+            `tuple[str, ...]`: The paths of the saved files.
+        """
+        if save_format is not None and save_format not in ("hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
+
+        if save_format == "mistral":
+            os.makedirs(save_directory, exist_ok=True)
+
+            if push_to_hub:
+                commit_message = kwargs.pop("commit_message", None)
+                repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
+                repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+                files_timestamps = self._get_files_timestamps(save_directory)
+
+            vocab_file = self.init_kwargs.get("vocab_file") or getattr(self, "vocab_file", None)
+            if (
+                isinstance(vocab_file, str)
+                and os.path.basename(vocab_file) == TEKKEN_VOCAB_FILE
+                and os.path.isfile(vocab_file)
+            ):
+                dest = os.path.join(save_directory, TEKKEN_VOCAB_FILE)
+                copyfile(vocab_file, dest)
+                save_files = (dest,)
+            else:
+                raise OSError(
+                    "Cannot save in 'mistral' format: the original tekken.json is not available. "
+                    "Load a native checkpoint (that still contains tekken.json) or install "
+                    "mistral-common to use MistralCommonBackend."
+                )
+            if push_to_hub:
+                self._upload_modified_files(
+                    save_directory,
+                    repo_id,
+                    files_timestamps,
+                    commit_message=commit_message,
+                    token=kwargs.get("token"),
+                )
+            return save_files
+
+        return super().save_pretrained(
+            save_directory,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix,
+            push_to_hub=push_to_hub,
+            **kwargs,
+        )
+
+
 def convert_tekken_tokenizer(
     tokenizer_file: str,
     chat_template: str | None = None,
-) -> PreTrainedTokenizerFast:
-    """Build a `PreTrainedTokenizerFast` from a Mistral `tekken.json` file.
+) -> TekkenBackend:
+    """Build a `TekkenBackend` from a Mistral `tekken.json` file.
 
     The chat template is resolved via a fixed precedence order (see
     `_resolve_chat_template`): explicit `chat_template` argument → sibling
@@ -343,12 +432,13 @@ def convert_tekken_tokenizer(
             from sibling files or generated via `mistral-common` if available.
 
     Returns:
-        Configured fast tokenizer with BPE model, special token mappings, and
-        an attached chat template (or `None` when none could be resolved).
+        Configured `TekkenBackend` (a `PreTrainedTokenizerFast` subclass) with BPE model,
+        special token mappings, and an attached chat template (or `None` when none could
+        be resolved).
     """
     resolved = _resolve_chat_template(tokenizer_file, chat_template)
     converter = MistralConverter(vocab_file=tokenizer_file, add_prefix_space=False)
-    fast = PreTrainedTokenizerFast(
+    fast = TekkenBackend(
         tokenizer_object=converter.converted(),
         vocab_file=tokenizer_file,
         chat_template=resolved,
