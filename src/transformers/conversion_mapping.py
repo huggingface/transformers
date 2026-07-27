@@ -873,7 +873,10 @@ def _build_checkpoint_conversion_mapping():
                     r"self_attn.k_proj.weight",
                     r"self_attn.v_proj.weight",
                 ],
-                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
             ),
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_bias",
@@ -882,7 +885,10 @@ def _build_checkpoint_conversion_mapping():
                     r"self_attn.k_proj.bias",
                     r"self_attn.v_proj.bias",
                 ],
-                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
             ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
