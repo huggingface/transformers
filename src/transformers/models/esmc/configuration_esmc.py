@@ -74,10 +74,7 @@ class EsmcConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # Llama fields re-declared only where ESMC's default differs from the parent's; fields whose
-    # defaults already match Llama (hidden_act, max_position_embeddings, initializer_range,
-    # tie_word_embeddings, attention_bias, attention_dropout, mlp_bias, num_key_value_heads,
-    # rope_parameters) are left inherited.
+    # Llama fields re-declared only where ESMC's default differs from the parent's.
     vocab_size: int = 64
     hidden_size: int = 2560
     intermediate_size: int | None = None
@@ -115,9 +112,7 @@ class EsmcConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
-        # ``attribute_map`` (``d_model``/``n_heads``) is only applied inside the base ``__post_init__``,
-        # so the GQA-free key/value head count and head dim must be (re-)derived afterwards -- ESMC never
-        # uses grouped-query attention, so ``num_key_value_heads`` always tracks ``num_attention_heads``.
+        # Derived after the base ``__post_init__`` applies ``attribute_map``. ESMC never uses GQA.
         self.num_key_value_heads = self.num_attention_heads
         self.head_dim = self.hidden_size // self.num_attention_heads
         if self.intermediate_size is None:

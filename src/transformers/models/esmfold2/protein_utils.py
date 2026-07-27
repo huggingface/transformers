@@ -369,14 +369,10 @@ def _encode_atom_name(name: str) -> list[int]:
 
 
 def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
-    """Featurize a single protein sequence for EsmFold2Model.fold.
+    """Featurize a single protein sequence for [`EsmFold2Model.fold`].
 
-    Returns the same keys with the same dtypes/shapes as
-    ``EsmFold2InputBuilder.prepare_input(StructurePredictionInput(...))``
-    restricted to a single-chain protein with no MSA, modifications,
-    distogram conditioning, or covalent bonds. All tensors have a
-    leading batch dim of 1; the caller is responsible for moving them
-    to the model device.
+    Covers a single-chain protein with no MSA, modifications, distogram conditioning or covalent
+    bonds. All tensors have a leading batch dim of 1 and are left on the CPU.
     """
     if not sequence:
         raise ValueError("sequence must be non-empty")
@@ -491,12 +487,8 @@ def _decode_atom_name(name_chars) -> str:
 
 
 def _rank_samples(output) -> int:
-    """Index of the best-scoring diffusion sample.
-
-    These models draw several structures per fold and the best-ranked one is the prediction, so
-    ranking here rather than defaulting to sample 0 (an arbitrary draw). Ranks on ``ptm`` -- the
-    standard global score -- falling back to mean ``plddt`` when the confidence head was not run.
-    """
+    """Index of the best-scoring diffusion sample, ranked on ``ptm`` and falling back to mean
+    ``plddt`` when the confidence head was not run."""
     for key in ("ptm", "complex_plddt"):
         score = output.get(key) if isinstance(output, dict) else getattr(output, key, None)
         if score is not None:
@@ -513,12 +505,8 @@ def _pdb_atom_line(
     position,
     b_factor: float,
 ) -> str:
-    """One PDB ``ATOM`` record. PDB is a columnar format, so every space here matters.
-
-    The column layout follows ``transformers.models.esm.openfold_utils.protein.to_pdb``.
-    """
-    # Names shorter than four characters are indented by one, which is what puts the element
-    # character in its conventional column.
+    """One PDB ``ATOM`` record. PDB is a columnar format, so every space here matters."""
+    # Names shorter than four characters are indented by one, putting the element in its usual column.
     name = atom_name if len(atom_name) == 4 else f" {atom_name}"
     element = atom_name[0] if atom_name else " "
     alt_loc = insertion_code = charge = ""
@@ -541,15 +529,8 @@ def _pdb_terminator_line(atom_index: int, residue_name: str, chain_tag: str, res
 def output_to_pdb(output, features: dict, sample_idx: int | None = None) -> str:
     """Convert an ESMFold2 forward output into a PDB string.
 
-    Reads the predicted ``sample_atom_coords`` and ``plddt`` from ``output`` (an
-    [`~transformers.models.esmfold2.modeling_esmfold2.EsmFold2Output`]) and the featurization tensors
-    it needs (``res_type``, ``atom_to_token``, ``ref_atom_name_chars``, ``atom_attention_mask``,
-    ``token_attention_mask``, ``residue_index``, and ``asym_id`` for the chain column) from the
-    ``features`` dict the model was run on.
-
-    Every predicted atom is written out under its own name, so nothing is restricted to a canonical
-    residue's atom set. Atoms are emitted in featurization order, which is the conventional PDB
-    ordering (``N``, ``CA``, ``C``, ``O``, then side chain).
+    Every predicted atom is written under its own name, in featurization order -- which is the
+    conventional PDB ordering (``N``, ``CA``, ``C``, ``O``, then side chain).
 
     Args:
         output: The model output to render.

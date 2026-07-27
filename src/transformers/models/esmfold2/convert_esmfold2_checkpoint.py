@@ -25,9 +25,8 @@ from safetensors.torch import load_file
 from transformers import AutoTokenizer, EsmcTokenizer, EsmFold2Config
 
 
-# EsmFold2Config paths carried over from the research checkpoint's nested config.json. Paths that are
-# spelled the same on both sides are listed once here; the ones the port renamed live in
-# ``_LEGACY_RENAMES`` below and are resolved with ``.get(path, path)``.
+# EsmFold2Config paths spelled the same in the research checkpoint's config.json; renamed ones live
+# in ``_LEGACY_RENAMES`` below.
 _LEGACY_FIELDS = (
     "n_relative_residx_bins",
     "n_relative_chain_bins",
@@ -89,17 +88,14 @@ _LEGACY_RENAMES = {
 
 _LEGACY_PORT_PATHS = (*_LEGACY_FIELDS, *_LEGACY_RENAMES)
 
-# Leaves intentionally not carried over: backbone id/size (now in esmc_config), fields the flat
-# config re-derives or forces equal to a canonical field, always-on head flags, and training knobs.
+# Leaves not carried over: backbone id/size, re-derived fields, always-on head flags, training knobs.
 _LEGACY_DROP_PATHS = {
     "architectures",
     "model_type",
     "transformers_version",
     "type",  # only the release variant is ported, so the field was dropped entirely
     "esmc_id",
-    # The inputs atom encoder's aggregation width is derived from ``single_inputs_size`` (it is
-    # whatever makes the single-inputs feature concat add up), rather than from this half-width.
-    "inputs.atom_encoder.d_token",
+    "inputs.atom_encoder.d_token",  # derived from ``single_inputs_size``, not from this half-width
     "lm_d_model",
     "lm_num_layers",
     "lm_dropout",
@@ -124,8 +120,8 @@ _LEGACY_DROP_PATHS = {
     "parcae.poisson_mean",
 }
 
-# Trunk weight-key rewrites: turn the research checkpoint's keys into the port's module names so
-# from_pretrained needs no runtime conversion. Literal substring rewrites; shapes/order unchanged.
+# Literal substring rewrites from the research checkpoint's keys to the port's module names, so
+# from_pretrained needs no runtime conversion. Shapes and order are unchanged.
 _WEIGHT_KEY_RENAMES = (
     ("inputs_embedder.atom_attention_encoder.", "inputs_atom_encoder."),
     (".atom_transformer.", "."),
@@ -135,19 +131,16 @@ _WEIGHT_KEY_RENAMES = (
     (".w_down.", ".down_proj."),
     (".lin_swish.", ".ffn.gate_up_proj."),
     (".lin_out.", ".ffn.down_proj."),
-    # pair/msa-transition SwiGLU is already fused as w12/w3 in the research checkpoint (unlike the
-    # w_up/w_down and lin_swish/lin_out blocks above); the port names every SwiGLU gate_up_proj/down_proj.
+    # The pair/msa transitions are already fused as w12/w3, unlike the blocks above.
     (".ffn.w12.", ".ffn.gate_up_proj."),
     (".ffn.w3.", ".ffn.down_proj."),
     ("fourier.w", "fourier.frequencies"),  # fixed Fourier freq/phase buffers
     ("fourier.b", "fourier.phases"),
-    # The parcae recurrence params/coda were loose attributes on the model; the port groups them under
-    # an ``EsmFold2Parcae`` submodule, so ``parcae_<name>`` becomes ``parcae.<name>``.
-    ("parcae_", "parcae."),
+    ("parcae_", "parcae."),  # loose attributes, now grouped under an ``EsmFold2Parcae`` submodule
     ("output_mlp.0.", "output_fc1."),
     ("output_mlp.2.", "output_fc2."),
     ("adaln_modulation.1.", "adaln_linear."),
-    # EsmFold2AdaptiveLayerNorm: descriptive names for the adaLN-Zero conditioning scale + gate/shift projections.
+    # EsmFold2AdaptiveLayerNorm's conditioning scale and gate/shift projections.
     ("adaln.s_gate.", "adaln.gate_proj."),
     ("adaln.s_shift.", "adaln.shift_proj."),
     ("adaln.s_scale", "adaln.norm_scale"),
@@ -157,8 +150,7 @@ _WEIGHT_KEY_RENAMES = (
     ("base_z_mlp.1.", "base_z_output_norm."),
     ("compute_bias.0.", "bias_norm."),
     ("compute_bias.1.", "bias_proj."),
-    # ConfidenceHead loose input projections grouped under an input_embedder submodule (dotted
-    # suffixes so ``s_to_z.`` does not also match ``s_to_z_transpose.`` / ``s_to_z_prod_*``).
+    # Grouped under an input_embedder submodule; the trailing dots keep the prefixes distinct.
     ("confidence_head.s_inputs_norm.", "confidence_head.input_embedder.s_inputs_norm."),
     ("confidence_head.z_norm.", "confidence_head.input_embedder.z_norm."),
     ("confidence_head.s_to_z.", "confidence_head.input_embedder.s_to_z."),
@@ -170,8 +162,7 @@ _WEIGHT_KEY_RENAMES = (
 # The SWA attention packed q/k/v into one Wqkv; the port uses separate projections.
 _PACKED_QKV_SUFFIX = "attn.Wqkv.weight"
 
-# Dead research-checkpoint tensors the port never wired up (vestigial in the fork too — see the PR
-# discussion); the port doesn't allocate them, so drop them rather than emit unexpected keys.
+# Dead research-checkpoint tensors, vestigial in the fork too; the port never allocates them.
 _WEIGHT_KEY_DROPS = (
     "confidence_head.s_norm.",
     "confidence_head.s_inputs_to_single.",
@@ -304,8 +295,7 @@ def merge_state_dict(esmfold2_dir: str, esmc_dir: str) -> dict[str, torch.Tensor
         raise RuntimeError("the ESMFold2 checkpoint already contains esmc.* keys — already bundled?")
     trunk = rename_trunk_keys(trunk)
 
-    # A standalone ESMC checkpoint already stores its encoder under esmc.*; keep those, drop the
-    # standalone LM head and TransformerEngine _extra_state blobs.
+    # A standalone ESMC checkpoint already stores its encoder under esmc.*; keep only those.
     esmc = _load_state_dict(esmc_dir)
     kept = {k: v for k, v in esmc.items() if k.startswith("esmc.") and not k.endswith("_extra_state")}
     if not kept:

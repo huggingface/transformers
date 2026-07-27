@@ -36,29 +36,19 @@ from .generation_esmfold2 import EsmFold2GenerationMixin
 
 @dataclass
 class EsmFold2AtomInputs:
-    """Featurized reference-conformer atom inputs, bundled so the atom stack takes one argument
-    instead of seven.
+    """Featurized reference-conformer atom inputs, bundled so the atom stack takes one argument.
 
-    These are the raw `fold` inputs after `EsmFold2GenerationMixin._prepare_features` has one-hot
-    encoded the categorical fields and zeroed the padding, so some shapes differ from the raw inputs.
-    Consumed by the inputs embedder, the diffusion atom encoder/decoder, and the sampler.
+    Built by ``EsmFold2Model._prepare_features``, which one-hot encodes the categorical fields and
+    zeroes the padding.
 
     Args:
-        ref_pos (`torch.Tensor` of shape `(batch_size, num_atoms, 3)`):
-            Reference-conformer Cartesian coordinates for each atom.
-        ref_charge (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Formal charge of each atom.
-        atom_attention_mask (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Mask marking valid atoms (`1`) versus padding (`0`).
-        ref_element (`torch.Tensor` of shape `(batch_size, num_atoms, max_atomic_number)`):
-            One-hot atomic number of each atom, zeroed at padding.
-        ref_atom_name_chars (`torch.Tensor` of shape `(batch_size, num_atoms, max_chars, char_vocab_size)`):
-            One-hot encoding of each atom's four-character name, zeroed at padding. The atom encoder
-            flattens the last two axes into its feature vector.
-        ref_space_uid (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Per-atom group ID (the atom's token index), used by the atom-encoder 3D RoPE.
-        atom_to_token (`torch.Tensor` of shape `(batch_size, num_atoms)`):
-            Index of the token each atom belongs to, zeroed at padding. A token's atoms are contiguous.
+        ref_pos: `(batch_size, num_atoms, 3)` reference-conformer Cartesian coordinates.
+        ref_charge: `(batch_size, num_atoms)` formal charge of each atom.
+        atom_attention_mask: `(batch_size, num_atoms)` valid atoms (`1`) versus padding (`0`).
+        ref_element: `(batch_size, num_atoms, max_atomic_number)` one-hot atomic number.
+        ref_atom_name_chars: `(batch_size, num_atoms, max_chars, char_vocab_size)` one-hot atom name.
+        ref_space_uid: `(batch_size, num_atoms)` per-atom group ID (the atom's token index).
+        atom_to_token: `(batch_size, num_atoms)` index of the token each atom belongs to.
     """
 
     ref_pos: Tensor
@@ -74,19 +64,9 @@ class EsmFold2AtomInputs:
 class EsmFold2DiffusionStepInvariants:
     """Denoiser conditioning that depends on neither the noise level nor the noisy coordinates.
 
-    Built once per fold by ``EsmFold2DiffusionModule.prepare_step_invariants`` and read by every
-    denoising step. Everything here is derived from the trunk outputs and the frozen weights, so
-    hoisting it out of the module forwards is bit-identical to recomputing it each step.
-
-    ``prepare_step_invariants`` is also where the batch is expanded from ``batch_size`` to
-    ``batch_size * num_diffusion_samples``: each field below is already expanded, and every module
-    downstream of it works on the expanded batch and never sees ``num_diffusion_samples``. The
-    expansion happens on these *outputs* rather than on the raw inputs so that the per-atom
-    featurization and the pair-bias projection still run once at the unexpanded batch size.
-
-    Both masks are folded into their tensors here too, so no module downstream takes an
-    ``attention_mask``: the atom stack's is a prepared 4D mask and the token stack's padding is
-    already added into ``token_attention_bias``.
+    Built once per fold by ``EsmFold2DiffusionModule.prepare_step_invariants``, already expanded to
+    ``batch_size * num_diffusion_samples`` and with both attention masks folded in, so nothing
+    downstream takes a mask or sees ``num_diffusion_samples``.
     """
 
     # Atom stack.
@@ -96,19 +76,13 @@ class EsmFold2DiffusionStepInvariants:
     atom_mask: Tensor
     atom_to_token: Tensor
     n_tokens: int
-    # Token stack. One additive attention bias per token-transformer block,
-    # `[batch_size * num_diffusion_samples, num_heads, num_queries, num_keys]`.
+    # Token stack. One additive bias per block, `[batch * samples, num_heads, num_queries, num_keys]`.
     single_repr_inputs: Tensor
     token_attention_bias: list[Tensor]
 
 
 class EsmFold2LayerNorm(nn.LayerNorm):
-    """LayerNorm that always computes in fp32.
-
-    The weight/bias are pinned to fp32 (see ``_keep_in_fp32_modules_strict``), so they stay full
-    precision even under a bf16 load. The bf16 activation is upcast to compute the norm in fp32 and
-    the result is cast back to the input dtype for the downstream (bf16) ops.
-    """
+    """LayerNorm that computes in fp32 (its weight/bias are fp32-pinned) and returns its input dtype."""
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         return F.layer_norm(hidden_states.float(), self.normalized_shape, self.weight, self.bias, self.eps).to(
@@ -134,29 +108,15 @@ class EsmFold2RMSNorm(torch.nn.Module):
 class EsmFold2Transition(nn.Module):
     """LayerNorm + SwiGLU feed-forward residual block, chunked along the token axis.
 
-    Reuses the single ``EsmFold2SwiGLU`` feed-forward op so there is one SwiGLU implementation across
-    the model: the gate/up projections are the fused ``ffn.gate_up_proj`` and the output is ``ffn.down_proj``.
-
-    Instantiated at four widths -- the pair and MSA streams, and the diffusion conditioning's pair and
-    single streams -- so the two dims are explicit while the chunk size, which is the same wherever it
-    applies, comes from the config.
-
-    ``chunk=False`` opts a call site out of chunking entirely. The diffusion conditioning's two
-    transitions use it: chunking is pointwise along the token axis and so mathematically exact, but it
-    reassociates the projections enough to move the last bf16 bits, and those transitions feed the
-    diffusion sampler, where a one-ULP change amplifies over the denoising steps. They have never been
-    chunked, so they stay unchunked here to keep this refactor bit-exact; enabling them is a separate,
-    measurable change (it would cut the ``[B, L, L, 4 * pairwise_hidden_size]`` intermediate the pair
-    conditioning materializes, ~2 GB at length 1000).
+    ``chunk=False`` keeps a call site unchunked: chunking is exact, but its reassociation moves the
+    last bf16 bits, which the diffusion sampler amplifies over its steps.
     """
 
     def __init__(self, config: EsmFold2Config, hidden_size: int, intermediate_size: int, chunk: bool = True) -> None:
         super().__init__()
         self.norm = EsmFold2LayerNorm(hidden_size)
         self.ffn = EsmFold2SwiGLU(hidden_size, intermediate_size)
-        # Chunk along the token axis on long sequences. A falsy chunk size (``chunk=False``, or a
-        # ``config.chunk_size`` of ``None`` / ``0``) means one chunk spanning the whole axis -- the
-        # same code path, unchunked.
+        # A falsy chunk size means one chunk spanning the whole axis, i.e. unchunked.
         self.chunk_size: int | None = config.chunk_size if chunk else None
 
     def forward(self, hidden_states: Tensor) -> Tensor:
@@ -174,8 +134,7 @@ class EsmFold2AdaptiveLayerNorm(nn.Module):
 
     def __init__(self, config: EsmFold2Config, eps: float = 1e-5) -> None:
         super().__init__()
-        # adaLN-Zero conditions the token stream on the single stream, and both are the diffusion
-        # token width at both call sites (attention pair-bias + conditioned transition).
+        # Both the token and the single stream are the diffusion token width at both call sites.
         self.hidden_size = config.structure_head.diffusion_module.token_hidden_size
         self.eps = eps
         self.norm_scale = nn.Parameter(
@@ -189,16 +148,15 @@ class EsmFold2AdaptiveLayerNorm(nn.Module):
         cond = F.layer_norm(single_repr.float(), (self.hidden_size,), self.norm_scale, None, self.eps).to(
             single_repr.dtype
         )
-        # gate/shift in bf16; ``normed`` is fp32 so the affine promotes to fp32, then
-        # downcast for the next op.
+        # ``normed`` is fp32, so the affine promotes; downcast for the next op.
         gate = torch.sigmoid(self.gate_proj(cond))
         shift = self.shift_proj(cond)
         return (gate * normed + shift).to(hidden_states.dtype)
 
 
 class EsmFold2FourierEmbedding(nn.Module):
-    """Fourier embedding ``cos(2*pi*(t*frequencies + phases))`` with fixed (non-learnable) random
-    frequencies and phases sampled once and stored in the checkpoint."""
+    """Fourier embedding ``cos(2*pi*(t*frequencies + phases))``, with the random frequencies and
+    phases sampled once and stored in the checkpoint rather than learned."""
 
     frequencies: Tensor
     phases: Tensor
@@ -209,17 +167,12 @@ class EsmFold2FourierEmbedding(nn.Module):
         self.register_buffer("phases", torch.randn(embedding_dim))
 
     def forward(self, t_hat: Tensor) -> Tensor:
-        # ``t_hat`` arrives fp32 and flat (the sampler builds it that way) and the buffers are
-        # fp32-pinned, so the angles are built in fp32.
+        # ``t_hat`` and the buffers are both fp32, so the angles are built in fp32.
         return torch.cos(2.0 * torch.pi * (t_hat[:, None] * self.frequencies[None, :] + self.phases[None, :]))
 
 
 class EsmFold2SwiGLU(nn.Module):
-    """SwiGLU feed-forward with a fused gate+up projection (``gate_up_proj``) and output ``down_proj``.
-
-    ``intermediate_size`` is supplied by the caller and registered on the config, so every
-    ESMFold2 SwiGLU feed-forward is this one module regardless of how its width is derived.
-    """
+    """SwiGLU feed-forward with a fused gate+up projection (``gate_up_proj``) and output ``down_proj``."""
 
     def __init__(self, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
@@ -281,9 +234,8 @@ def eager_attention_forward(
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
-    The atom stack keeps heads at dim 2 (``[batch, atoms, heads, head_dim]``) and
-    :class:`EsmFold2RotaryEmbedding3D` builds ``cos``/``sin`` at the full head dim over 3D
-    coordinates plus a space UID, so it calls this with ``unsqueeze_dim=2``.
+    The atom stack keeps heads at dim 2 (``[batch, atoms, heads, head_dim]``), so it passes
+    ``unsqueeze_dim=2``.
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -293,16 +245,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 def _swa_window_mask_function(valid: Tensor, half_window: int) -> Callable:
-    """Sliding-window ``and`` mask over atom index.
-
-    An atom attends to another iff their indices differ by at most ``half_window`` (inputs are
-    right-padded, so index distance is the window distance).
-
-    Padding is masked here rather than through ``create_bidirectional_mask``'s ``attention_mask``
-    argument because that one masks *keys* only (see ``padding_mask_function``). The atom stack needs
-    padded *queries* masked too, so that a fully padded row is all-masked and resolves to zeros via
-    ``torch.nan_to_num`` in the attention forward, instead of emitting values that would then have to
-    be cleaned up downstream.
+    """Sliding-window ``and`` mask over atom index: atoms attend iff their indices differ by at most
+    ``half_window``. Padding is folded in here rather than passed as ``attention_mask`` because the
+    atom stack needs padded queries masked too, not just padded keys.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -313,14 +258,10 @@ def _swa_window_mask_function(valid: Tensor, half_window: int) -> Callable:
 
 
 class EsmFold2SWA3DRoPEAttention(nn.Module):
-    """Sliding window self-attention with 3D RoPE. Has q/k/v/gate/out projections.
+    """Sliding-window self-attention with 3D RoPE and a gated output.
 
-    The plain ``softmax(QKᵀ)V`` core is dispatched through the v5 attention
-    interface (``config._attn_implementation``: ``eager`` / ``sdpa`` / ...), with
-    the sliding window expressed as an additive attention mask. The shared
-    ``config`` is passed in at construction, so ``set_attn_implementation()`` stays
-    live (it mutates the same object); dims come from ``atom_config``, the atom
-    sub-config that :class:`EsmFold2AtomEncoder` resolved for this call site.
+    The sliding window is expressed as an additive attention mask; dims come from ``atom_config``,
+    the atom sub-config [`EsmFold2AtomEncoder`] resolved for this call site.
     """
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
@@ -332,9 +273,7 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the interface happy.
         self.num_key_value_groups = 1
-        # Bidirectional encoder: never let the sdpa/flash interface default to
-        # causal masking when attention_mask happens to be None.
-        self.is_causal = False
+        self.is_causal = False  # bidirectional encoder, even when the mask is None
 
         self.q_proj = nn.Linear(d_model, d_model, bias=False)
         self.k_proj = nn.Linear(d_model, d_model, bias=False)
@@ -374,8 +313,7 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
             scaling=self.scale,
             **kwargs,
         )
-        # Fully padded query rows are all-masked -> NaN in the softmax; zero them (their outputs are
-        # dropped downstream by scatter_atom_to_token regardless). Replaces the old post-hoc valid mul.
+        # Fully padded query rows are all-masked, so the softmax gives NaN; zero them.
         out = torch.nan_to_num(out)
 
         out = out.reshape(B, N, -1)
@@ -384,10 +322,7 @@ class EsmFold2SWA3DRoPEAttention(nn.Module):
 
 
 class EsmFold2SWAAtomLayer(nn.Module):
-    """adaLN-Zero + SWA attention + EsmFold2SwiGLU FFN.
-
-    The adaLN-Zero modulation is ``adaln_linear`` applied to ``silu(atom_cond)`` (zero-init gate).
-    """
+    """adaLN-Zero + SWA attention + SwiGLU FFN, modulated by ``adaln_linear(silu(atom_cond))``."""
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
@@ -424,13 +359,10 @@ class EsmFold2SWAAtomLayer(nn.Module):
 
 
 class EsmFold2RotaryEmbedding3D(nn.Module):
-    """Rotary embedding over continuous 3D atom coordinates plus a discrete space UID.
+    """Rotary embedding over physical position (``ref_pos`` = x/y/z) plus a per-atom space UID,
+    rather than token indices, with separate spatial and UID base frequencies.
 
-    Unlike sequence RoPE, this encodes physical position (``ref_pos`` = x/y/z) and a
-    per-atom space UID rather than token indices, with separate spatial and UID base
-    frequencies. ``forward`` returns cos/sin already at the full head dim, so the caller
-    applies plain rotate-half RoPE (:func:`apply_rotary_pos_emb`). The inverse frequencies
-    are cheap to rebuild each call and are computed on the input device to stay bit-exact.
+    Returns cos/sin at the full head dim, so callers apply plain rotate-half RoPE.
     """
 
     def __init__(self, atom_config: EsmFold2AtomEncoderConfig) -> None:
@@ -456,8 +388,6 @@ class EsmFold2RotaryEmbedding3D(nn.Module):
             ** (torch.arange(0, self.n_uid_pairs, dtype=torch.float32, device=device) / self.n_uid_pairs)
         )
 
-        # ``ref_pos`` is already fp32 (a reference-conformer input, never a model activation);
-        # ``ref_space_uid`` is an integer index, so that one is a real conversion.
         spatial_freqs = (ref_pos.unsqueeze(-1) * spatial_inv_freq).reshape(B, N, n_spatial_total)
         uid_freqs = ref_space_uid.float().unsqueeze(-1) * uid_inv_freq
 
@@ -466,9 +396,7 @@ class EsmFold2RotaryEmbedding3D(nn.Module):
         if n_active < half_dim:
             freqs = torch.cat([freqs, freqs.new_zeros(B, N, half_dim - n_active)], dim=-1)
 
-        # Duplicate to the full head dim so the caller applies standard rotate-half RoPE. The angles are
-        # built in fp32 and returned at the activation dtype (the caller passes it), so ``cos``/``sin``
-        # always match the queries they rotate -- the same contract as the sequence-RoPE modules.
+        # Duplicate to the full head dim; angles are built in fp32 and returned at the caller's dtype.
         emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos().to(dtype), emb.sin().to(dtype)
 
@@ -506,12 +434,10 @@ def scatter_atom_to_token(
 
 
 class EsmFold2AtomEncoder(nn.Module):
-    """SWA atom encoder with atom_linear, atom_norm, atom_to_token_linear, [coords_linear], rotary_emb, blocks.
+    """SWA atom encoder. ``structure_prediction=True`` (the diffusion module) adds ``coords_linear``.
 
-    ``structure_prediction=True`` (diffusion module) adds ``coords_linear``. This is the one place
-    that resolves which of the two atom sub-configs a call site uses; it hands the resolved
-    ``atom_config`` down to the rotary embedding and the layers, so nothing below repeats the
-    choice. All dims come from it, including the atom->token aggregation width ``output_dim``.
+    Resolves which of the two atom sub-configs a call site uses and hands it down, so nothing below
+    repeats the choice.
     """
 
     def __init__(self, config: EsmFold2Config, structure_prediction: bool = True) -> None:
@@ -523,8 +449,7 @@ class EsmFold2AtomEncoder(nn.Module):
         n_blocks = atom_config.num_hidden_layers
         self.structure_prediction = structure_prediction
 
-        # Atom feature width (`config.atom_feature_dim`) = 3 (xyz) + 1 (charge) + 1 (mask) + element +
-        # atom-name-char one-hots; `char_feature_dim` is the atom-name-char slice used by the featurizer.
+        # The atom-name-char slice of `config.atom_feature_dim`.
         self.char_feature_dim = config.char_vocab_size * config.max_chars
         self.atom_linear = nn.Linear(config.atom_feature_dim, d_atom, bias=False)
         self.atom_norm = EsmFold2LayerNorm(d_atom)
@@ -541,8 +466,7 @@ class EsmFold2AtomEncoder(nn.Module):
     def embed_atoms(self, atom_inputs: EsmFold2AtomInputs) -> tuple[Tensor, tuple[Tensor, Tensor]]:
         """Per-atom base embedding and 3D-RoPE position embeddings.
 
-        Depends only on the reference conformer, so the diffusion stack computes this once per fold
-        (before the batch is expanded across diffusion samples) rather than once per denoising step.
+        Depends only on the reference conformer, so the diffusion stack computes it once per fold.
         """
         ref_pos = atom_inputs.ref_pos
         B, N = ref_pos.shape[:2]
@@ -556,20 +480,15 @@ class EsmFold2AtomEncoder(nn.Module):
             ],
             dim=-1,
         )
-        # ``atom_feats`` is fp32 (one-hots and masks), so the downcast into the projection is real;
-        # ``atom_norm`` already computes in fp32 internally and returns its input dtype.
+        # ``atom_feats`` is fp32 (one-hots and masks), so the downcast into the projection is real.
         c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)))
         return c_base, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid, dtype=c_base.dtype)
 
     def build_attention_mask(self, atom_mask: Tensor, position_embeddings: tuple[Tensor, Tensor]) -> Tensor:
-        """Sliding-window attention mask for the atom stack.
+        """Sliding-window attention mask for the atom stack, built once per fold.
 
-        Depends only on the (step- and layer-invariant) valid-atom mask and the window, so it is built
-        once per fold rather than in every atom-stack layer's forward. ``cos`` (bf16, same batch/seq as
-        the attention queries) supplies the mask metadata (dtype/device/shape). ``attention_mask=None``:
-        padding is folded into the ``and`` mask, which masks padded queries as well as padded keys
-        (see :func:`_swa_window_mask_function`). ``atom_mask`` is a boolean mask, as the ``and`` mask
-        composes it with ``&``.
+        ``cos`` only supplies the mask metadata (dtype/device/shape); padding is folded into the
+        ``and`` mask instead of ``attention_mask`` (see ``_swa_window_mask_function``).
         """
         return create_bidirectional_mask(
             config=self.config,
@@ -588,18 +507,14 @@ class EsmFold2AtomEncoder(nn.Module):
         n_tokens: int,
         atom_coords: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        """Returns (token_acts, atom_queries, atom_cond).
-
-        Every argument is already at the caller's batch size — for the diffusion stack that is
-        ``batch_size * num_diffusion_samples``, expanded once by
-        :meth:`EsmFold2DiffusionModule.prepare_step_invariants`.
+        """Returns ``(token_acts, atom_queries, atom_cond)``. Every argument is already at the
+        caller's batch size (for the diffusion stack, ``batch_size * num_diffusion_samples``).
         """
         atom_cond = c_base
         atom_queries = atom_cond
 
         if self.structure_prediction:
-            # The second coord slot (a predicted-coords channel in the research model) is unused in
-            # this release — always zeros — so coords_linear sees [atom_coords, 0].
+            # The second coord slot is unused in this release, so coords_linear sees [atom_coords, 0].
             coord_input = torch.cat([atom_coords, torch.zeros_like(atom_coords)], dim=-1)
             coords_to_queries = self.coords_linear(coord_input.to(self.coords_linear.weight.dtype))
             atom_queries = atom_queries + coords_to_queries
@@ -625,9 +540,7 @@ def _gather_along_dim1(source: Tensor, index: Tensor) -> Tensor:
 
 
 class EsmFold2AtomDecoder(nn.Module):
-    """SWA atom decoder with token_to_atom_linear, blocks, norm, output_linear.
-
-    Only used inside the diffusion module, so its atom dims are always the
+    """SWA atom decoder. Only used inside the diffusion module, so its atom dims are always the
     structure-prediction (diffusion) ones.
     """
 
@@ -636,8 +549,6 @@ class EsmFold2AtomDecoder(nn.Module):
         atom_config = config.structure_head.diffusion_module.atom_encoder
         d_atom = atom_config.hidden_size
         n_blocks = atom_config.num_hidden_layers
-        # The decoder only exists inside the diffusion module, so the token-stream width it projects
-        # from is its parent's -- the single owner of that value.
         self.token_to_atom_linear = nn.Linear(
             config.structure_head.diffusion_module.token_hidden_size, d_atom, bias=False
         )
@@ -699,24 +610,15 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.pair_bias_proj = nn.Linear(d_pair, num_heads, bias=False)
 
     def compute_pair_bias(self, pair_repr: Tensor, attention_mask: Tensor | None = None) -> Tensor:
-        """Build this block's additive attention bias: the per-head projection of the (normed) pair
-        representation, with the token padding mask folded in.
+        """This block's additive attention bias, ``[batch_size, num_heads, num_queries, num_keys]``:
+        the per-head projection of the normed pair representation with token padding folded in.
 
-        Returns ``[batch_size, num_heads, num_queries, num_keys]``, ready to hand straight to the
-        attention interface -- which is why :meth:`forward` takes a bias and never sees a mask.
-
-        Depends only on ``pair_repr``, the token mask and this block's fixed weights, so the sampler
-        computes it once per fold and reuses it across every denoising step. Called before the batch
-        is expanded across diffusion samples, so the norm and projection see ``pairwise_hidden_size``
-        channels at the unexpanded batch size and only the ``num_heads``-wide result is expanded.
+        Step-invariant, so the sampler builds it once per fold and ``forward`` never sees a mask.
         """
         pair_bias = self.pair_bias_proj(self.pair_norm(pair_repr))
         attention_bias = pair_bias.permute(0, 3, 1, 2)  # [B, Q, K, H] -> [B, H, Q, K]
         if attention_mask is not None:
-            # Build the additive mask at the bias dtype (the query dtype -- both come out of a
-            # compute-dtype Linear). Passing python scalars to ``torch.where`` would make it fp32
-            # whatever that dtype is, promoting the whole [B, H, Q, K] bias only for the attention
-            # interface to need it back at the query dtype.
+            # Built at the bias dtype: python scalars would promote the whole bias to fp32.
             attention_bias = attention_bias + torch.where(
                 attention_mask[:, None, None, :],
                 attention_bias.new_zeros(()),
@@ -737,9 +639,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         gate = torch.sigmoid(self.g_proj(hidden_states)).view(bsz, n_queries, self.num_heads, self.head_dim)
 
         qh, kh, vh = (t.transpose(1, 2) for t in (q, k, v))  # [B,H,Q,D]
-        # Route through the attention interface (respects config._attn_implementation) with the
-        # step-invariant per-head bias -- pair bias plus token padding, built once per fold by
-        # :meth:`compute_pair_bias` -- as the additive attention mask. Returns [B, Q, H, D].
+        # The step-invariant per-head bias doubles as the additive attention mask. Returns [B, Q, H, D].
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -781,10 +681,7 @@ class EsmFold2DiffusionTransformer(nn.Module):
         self.transition_blocks = nn.ModuleList([EsmFold2ConditionedTransitionBlock(config) for _ in range(num_blocks)])
 
     def compute_pair_biases(self, pair_repr: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
-        """Per-block additive attention biases (see :meth:`EsmFold2AttentionPairBias.compute_pair_bias`).
-
-        Each depends only on the (step-invariant) conditioning pair repr, the token mask and the
-        block's fixed weights, so the sampler builds them once per fold."""
+        """Per-block additive attention biases; see ``EsmFold2AttentionPairBias.compute_pair_bias``."""
         return [attn.compute_pair_bias(pair_repr, attention_mask) for attn in self.attn_blocks]
 
     def forward(self, token_acts: Tensor, single_repr: Tensor, attention_biases: list[Tensor]) -> Tensor:
@@ -800,21 +697,16 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        # The conditioning's pair/single-inputs widths are the parent's pairwise_hidden_size /
-        # single_inputs_size (the trunk pair rep and the embedder single-inputs tensor flow straight
-        # into the norms below); the conditioning's single output is sized to the diffusion token width.
         c_z = config.pairwise_hidden_size
         c_s = config.structure_head.diffusion_module.token_hidden_size
         c_s_inputs = config.single_inputs_size
         fourier_dim = config.structure_head.diffusion_module.fourier_dim
         transition_multiplier = config.structure_head.diffusion_module.transition_multiplier
-        # The norms/transitions use their default eps (1e-5), as before.
         self.sigma_data = config.structure_head.diffusion_module.sigma_data
 
         self.z_input_norm = EsmFold2LayerNorm(2 * c_z)
         self.z_proj = nn.Linear(2 * c_z, c_z, bias=False)
-        # ``chunk=False``: these two have never been chunked, and they feed the diffusion sampler,
-        # where the reassociation would move the last bf16 bits (see EsmFold2Transition).
+        # ``chunk=False``: chunking these would move the last bf16 bits (see EsmFold2Transition).
         self.z_transitions = nn.ModuleList(
             [EsmFold2Transition(config, c_z, transition_multiplier * c_z, chunk=False) for _ in range(2)]
         )
@@ -829,11 +721,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         )
 
     def compute_pair_repr(self, pair_trunk: Tensor, relative_position_encoding: Tensor) -> Tensor:
-        """The pair half of the conditioning. Independent of the noise level, so the sampler builds it
-        once per fold rather than every denoising step."""
-        # ``pair_trunk`` is fp32 (see ``EsmFold2TrunkOutput.pair_states``), so the concat promotes the
-        # compute-dtype relative-position encoding to match it; ``z_input_norm`` then keeps the result
-        # fp32 and we hand off to z_proj in the compute dtype.
+        """The pair half of the conditioning. Noise-independent, so it is built once per fold."""
+        # ``pair_trunk`` is fp32, so the concat and the norm stay fp32; z_proj downcasts.
         pair_repr = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
         pair_repr = self.z_proj(self.z_input_norm(pair_repr).to(self.z_proj.weight.dtype))
         for block in self.z_transitions:
@@ -843,19 +732,14 @@ class EsmFold2DiffusionConditioning(nn.Module):
     def compute_single_repr(self, single_inputs: Tensor) -> Tensor:
         """Project the single-inputs tensor into the diffusion token width.
 
-        ``single_inputs`` comes from the trunk and does not depend on the noise level, so this half of
-        the single conditioning is step-invariant too — only the Fourier noise embedding added to it in
-        :meth:`forward` varies. Computed once per fold rather than once per denoising step.
+        Noise-independent, so only the Fourier embedding ``forward`` adds to it varies per step.
         """
         return self.s_proj(self.s_input_norm(single_inputs))
 
     def forward(self, t_hat: Tensor, single_repr: Tensor) -> Tensor:
         """The noise-dependent half of the single conditioning: add the Fourier noise embedding to the
-        precomputed ``single_repr`` (see :meth:`compute_single_repr`) and run the transitions."""
-        # ``t_hat`` arrives fp32 and flat at the expanded batch length — the diffusion module, its only
-        # caller, normalizes it once before this call.
+        precomputed ``single_repr`` and run the transitions."""
         t_noise = 0.25 * torch.log((t_hat / self.sigma_data).clamp(min=1e-20))
-        # ``fourier`` holds fp32-pinned buffers, so ``noise_emb`` is already fp32.
         noise_emb = self.fourier(t_noise)
         noise_emb = self.noise_proj(self.noise_norm(noise_emb).to(self.noise_proj.weight.dtype))
         single_repr = single_repr + noise_emb.unsqueeze(1)
@@ -891,16 +775,10 @@ class EsmFold2DiffusionModule(nn.Module):
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
     ) -> EsmFold2DiffusionStepInvariants:
-        """Precompute everything that is constant across denoising steps (see
-        :class:`EsmFold2DiffusionStepInvariants`), and expand the batch across diffusion samples.
+        """Precompute the step-invariant conditioning and expand the batch across diffusion samples.
 
-        Order matters: the per-atom featurization, the attention-bias projection and the single
-        projection all run first, at the unexpanded batch size, and only their (much narrower)
-        results are expanded. Expanding the raw inputs instead would multiply the atom one-hot
-        featurization and the ``pairwise_hidden_size``-wide pair norm by ``num_diffusion_samples``.
-
-        ``token_attention_mask`` is the *unexpanded* token padding mask; it is folded into the
-        per-block attention biases here, so the denoiser's forward takes no mask at all.
+        Order matters: the featurization and the projections run at the unexpanded batch size and
+        only their (much narrower) results are expanded.
         """
         samples = num_diffusion_samples
 
@@ -920,10 +798,7 @@ class EsmFold2DiffusionModule(nn.Module):
             atom_mask=atom_mask,
             atom_to_token=atom_inputs.atom_to_token.repeat_interleave(samples, 0),
             n_tokens=pair_trunk.shape[1],
-            # Projected *after* expanding, unlike the pair bias above: a Linear reassociates
-            # differently at batch_size than at batch_size * num_diffusion_samples (~1 ULP), and the
-            # win here is running this once per fold instead of once per denoising step, not running
-            # it on a smaller batch. Projecting post-expansion keeps the sampler bit-exact.
+            # Projected after expanding, unlike the pair bias: a Linear reassociates per batch size.
             single_repr_inputs=self.conditioning.compute_single_repr(single_inputs.repeat_interleave(samples, 0)),
             token_attention_bias=[bias.repeat_interleave(samples, 0) for bias in token_attention_bias],
         )
@@ -934,11 +809,10 @@ class EsmFold2DiffusionModule(nn.Module):
         t_hat: Tensor,
         step_invariants: EsmFold2DiffusionStepInvariants,
     ) -> Tensor:
-        # ``t_hat`` is the sampler's per-sample noise level, fp32 and flat at the expanded batch
-        # length; everything below (and the conditioning it feeds) relies on that.
+        # ``t_hat`` is the sampler's per-sample noise level: fp32, flat, at the expanded batch length.
         sigma = self.sigma_data
 
-        # Step 1: noise-dependent (single) conditioning; the projection it builds on is step-invariant
+        # Step 1: noise-dependent (single) conditioning
         single_repr = self.conditioning(t_hat=t_hat, single_repr=step_invariants.single_repr_inputs)
 
         # Step 2: normalize noisy coords
@@ -975,8 +849,7 @@ class EsmFold2DiffusionModule(nn.Module):
             atom_to_token=step_invariants.atom_to_token,
         )
 
-        # Step 8: compute denoised output. The fp32 noise-level scalars promote ``coord_update``, so
-        # the returned coordinates are fp32 like the ones that came in.
+        # Step 8: denoised output; the fp32 noise-level scalars keep the coordinates fp32.
         sigma2 = sigma * sigma
         t2 = t_hat * t_hat
         out = (sigma2 / (sigma2 + t2))[:, None, None] * x_noisy
@@ -990,8 +863,7 @@ class EsmFold2DiffusionStructureHead(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        # The sampling hyperparameters below are read from ``config`` at call time rather than copied
-        # here, so editing e.g. ``model.config.structure_head.noise_scale`` after loading takes effect.
+        # Sampling hyperparameters are read from ``config`` at call time, so edits after loading apply.
         self.config = config
         self.diffusion_module = EsmFold2DiffusionModule(config)
 
@@ -1062,8 +934,7 @@ class EsmFold2DiffusionStructureHead(nn.Module):
 
     @staticmethod
     def _weighted_rigid_align(x: Tensor, x_gt: Tensor, w: Tensor, mask: Tensor) -> Tensor:
-        """Kabsch alignment: align x to x_gt with weights w. Coordinates are fp32 throughout the
-        sampling loop, so the SVD already runs at full precision."""
+        """Kabsch alignment: align x to x_gt with weights w."""
         w = (mask * w).unsqueeze(-1)  # [B, N, 1]
         denominator = w.sum(dim=-2, keepdim=True).clamp(min=1e-8)
         centroid = (x * w).sum(dim=-2, keepdim=True) / denominator
@@ -1079,15 +950,13 @@ class EsmFold2DiffusionStructureHead(nn.Module):
 
     @torch.inference_mode()
     def _build_noise_schedule(self, num_sampling_steps: int | None, device: torch.device) -> tuple[Tensor, Tensor]:
-        """Karras σ schedule (Algorithm 18) + per-step γ churn factors.
-
-        The schedule is capped at ``config.structure_head.max_inference_sigma``: the high-σ tail above
-        the cap is truncated and the cap re-prepended so sampling still starts from it.
-        """
+        """Karras σ schedule (Algorithm 18) + per-step γ churn factors, capped at
+        ``config.structure_head.max_inference_sigma``."""
         sampling = self.config.structure_head
         steps = sampling.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
         schedule = self.inference_noise_schedule(steps, device)
         max_inference_sigma = sampling.max_inference_sigma
+        # Truncate the high-σ tail above the cap and re-prepend the cap, so sampling starts from it.
         if max_inference_sigma is not None:
             schedule = schedule[schedule <= max_inference_sigma]
             schedule = F.pad(schedule, (1, 0), value=max_inference_sigma)
@@ -1121,11 +990,8 @@ class EsmFold2RowAttentionPooling(nn.Module):
 
 
 def _relative_position_one_hot(diff: Tensor, n_bins: int, keep_mask: Tensor) -> Tensor:
-    """One-hot encode a relative index difference into ``2 * n_bins + 2`` classes.
-
-    Classes ``[0, 2 * n_bins]`` hold the clipped relative offset; the final class
-    ``2 * n_bins + 1`` is the "out-of-context" bin assigned wherever ``keep_mask`` is False
-    (e.g. a pair spanning two chains).
+    """One-hot encode a relative index difference into ``2 * n_bins + 2`` classes: the clipped offset,
+    plus a final "out-of-context" bin wherever ``keep_mask`` is False (e.g. a cross-chain pair).
     """
     binned = torch.clip(diff + n_bins, 0, 2 * n_bins)
     binned = torch.where(keep_mask, binned, 2 * n_bins + 1)
@@ -1164,9 +1030,7 @@ class EsmFold2RelativePositionEncoding(nn.Module):
         bij_same_residue = residue_index.unsqueeze(2) == residue_index.unsqueeze(1)
         bij_same_entity = entity_id.unsqueeze(2) == entity_id.unsqueeze(1)
 
-        # Three relative encodings, all clip -> mask-out -> one-hot (see _relative_position_one_hot):
-        # residue offset within a chain, token offset within a residue, and chain (sym_id) offset
-        # across chains. The chain encoding keeps *cross*-chain pairs, so its mask is inverted.
+        # Residue, token and chain offsets; the last keeps cross-chain pairs, so its mask is inverted.
         residx_bins, chain_bins = self.n_relative_residx_bins, self.n_relative_chain_bins
         aij_rel_pos = _relative_position_one_hot(
             residue_index.unsqueeze(2) - residue_index.unsqueeze(1), residx_bins, bij_same_chain
@@ -1178,9 +1042,7 @@ class EsmFold2RelativePositionEncoding(nn.Module):
             sym_id.unsqueeze(2) - sym_id.unsqueeze(1), chain_bins, ~bij_same_chain
         )
 
-        # Cast the one-hots straight to the projection dtype rather than via fp32: the values are 0/1
-        # so the narrowing is exact, and it avoids materializing an [B, L, L, n_features] fp32 tensor
-        # (two thirds of a GB at length 1k) only to halve it on the next line.
+        # Cast the 0/1 one-hots straight to the projection dtype: exact, and skips a large fp32 tensor.
         dtype = self.embed.weight.dtype
         feats = torch.cat(
             [
@@ -1196,11 +1058,7 @@ class EsmFold2RelativePositionEncoding(nn.Module):
 
 
 class EsmFold2SingleToPair(nn.Module):
-    """downproject -> outer product/difference -> two-layer MLP (fc1, GELU, fc2).
-
-    Only used by :class:`EsmFold2LanguageModelShim`, whose input, downprojection and output are all
-    the pair width, so this runs entirely at ``pairwise_hidden_size``.
-    """
+    """downproject -> outer product/difference -> two-layer MLP, all at ``pairwise_hidden_size``."""
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
@@ -1222,13 +1080,8 @@ class EsmFold2SingleToPair(nn.Module):
 
 
 class EsmFold2LanguageModelShim(nn.Module):
-    """Shim holding the trainable projection weights for LM integration.
-
-    Contains:
-    - base_z_combine: nn.Parameter [num_layers+1]
-    - base_z_input_norm -> base_z_proj: EsmFold2LayerNorm(d_model) then Linear(d_model, d_z, bias=False)
-    - base_z_to_pair -> base_z_output_norm: EsmFold2SingleToPair then EsmFold2LayerNorm(d_z)
-    """
+    """Projects the ESMC hidden states into a pair representation, learning a per-layer mixture
+    (``base_z_combine``) over them."""
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
@@ -1243,21 +1096,13 @@ class EsmFold2LanguageModelShim(nn.Module):
         self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
 
     def forward(self, hidden_states: Tensor) -> Tensor:
-        """Project pre-computed ESMC hidden states to pair representation.
-
-        Args:
-            hidden_states: [B, L, num_layers+1, d_model] from ESMC 6B.
-
-        Returns:
-            [B, L, L, d_pair] pair representation.
-        """
+        """Project ESMC hidden states ``[B, L, num_layers + 1, d_model]`` to a ``[B, L, L, d_pair]``
+        pair representation."""
         hidden_states = hidden_states.to(self.base_z_proj.weight.dtype)
-        # base_z_input_norm is an fp32-pinned LayerNorm; upcast in, downcast out.
         normed = self.base_z_input_norm(hidden_states)
-        lm_z = self.base_z_proj(normed)  # [B, L, 81, d_z]
-        weights = self.base_z_combine.softmax(0)  # [81]
+        lm_z = self.base_z_proj(normed)  # [B, L, num_layers + 1, d_z]
+        weights = self.base_z_combine.softmax(0)
         lm_z = (weights @ lm_z).squeeze(-2)  # [B, L, d_z]
-        # base_z_output_norm is an fp32-pinned LayerNorm; upcast in, downcast out.
         pair = self.base_z_to_pair(lm_z)
         lm_z = self.base_z_output_norm(pair)  # [B, L, L, d_z]
         return lm_z
@@ -1267,9 +1112,8 @@ class EsmFold2LanguageModelShim(nn.Module):
 class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
     """Triangle multiplicative update with gated signal routing and explicit orientation.
 
-    The O(N^3) contraction is the trunk's dominant cost; ``use_kernels=True`` (CUDA +
-    inference) swaps this whole forward for a fused Triton Hub kernel matching the
-    ``(pair_grid, visibility)`` signature and returning the residual-free delta.
+    The O(N^3) contraction is the trunk's dominant cost, so ``use_kernels=True`` swaps this forward
+    for a fused Triton Hub kernel (CUDA, inference only).
     """
 
     def __init__(self, config: EsmFold2Config, outgoing: bool = True) -> None:
@@ -1287,11 +1131,8 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         self.chunk_size: int | None = config.chunk_size
 
     def _triangular_contract(self, left_stream: Tensor, right_stream: Tensor) -> Tensor:
-        """Triangular einsum, chunked along the output i-dimension.
-
-        A falsy ``chunk_size`` (``None`` / ``0``) means one chunk spanning the whole sequence, i.e.
-        the unchunked contraction — same single code path, bit-identical result.
-        """
+        """Triangular einsum, chunked along the output i-dimension (a falsy ``chunk_size`` means one
+        full-length chunk, i.e. unchunked)."""
         seq_len = left_stream.shape[1] if self.flow == "outgoing" else left_stream.shape[2]
         chunk_size = self.chunk_size or seq_len
         chunks = []
@@ -1311,10 +1152,7 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         bundled = self.proj_bundle(normalized_grid)
         signal, gate_logits = bundled.split(2 * self.dim, dim=-1)
         routed = signal * torch.sigmoid(gate_logits)
-        # ``visibility`` is the fp32 pair mask; cast it so masking does not silently promote ``routed``
-        # and run the O(N^3) contraction in fp32. The reference contracts at the ambient precision --
-        # it upcasts explicitly, but its own bf16 autocast overrides that, so a bf16 model contracts in
-        # bf16 and an fp32 model in fp32. Keeping ``routed`` in the activation dtype reproduces both.
+        # Cast the fp32 pair mask, so masking does not promote the O(N^3) contraction to fp32.
         routed = routed * visibility.unsqueeze(-1).to(routed.dtype)
 
         left_stream, right_stream = routed.chunk(2, dim=-1)
@@ -1344,12 +1182,7 @@ class EsmFold2PairUpdateBlock(GradientCheckpointingLayer):
 
 
 class EsmFold2PairUpdateStack(nn.Module):
-    """A stack of ``num_layers`` [`EsmFold2PairUpdateBlock`] layers refining the pair representation.
-
-    Instantiated four times -- as the folding trunk, the LM encoder, the parcae coda and the
-    confidence head's own trunk -- which differ only in depth, so ``num_layers`` is the one argument
-    and everything else comes from the config.
-    """
+    """A stack of ``num_layers`` [`EsmFold2PairUpdateBlock`] layers refining the pair representation."""
 
     def __init__(self, config: EsmFold2Config, num_layers: int) -> None:
         super().__init__()
@@ -1364,14 +1197,8 @@ class EsmFold2PairUpdateStack(nn.Module):
 class EsmFold2OuterProductMean(nn.Module):
     """Outer-product mean: maps an MSA representation into a pair update.
 
-    The order of the ``/ n_valid`` divide vs. the ``Wout`` projection is
-    selectable via ``divide_outer_before_proj`` because different ESMFold2
-    checkpoints were trained with different orderings:
-
-    * ``False`` (default): ``Wout(outer) / n_valid`` — the projection bias
-      is scaled by 1/n_valid alongside the outer product.
-    * ``True``: ``Wout(outer / n_valid)`` — the projection bias is added
-      unscaled, post-divide.
+    ``divide_outer_before_proj`` selects ``Wout(outer / n_valid)`` over ``Wout(outer) / n_valid``,
+    as different released checkpoints were trained with different orderings.
     """
 
     def __init__(self, config: EsmFold2Config) -> None:
@@ -1383,10 +1210,7 @@ class EsmFold2OuterProductMean(nn.Module):
         self.norm = EsmFold2LayerNorm(d_msa)
         self.W = nn.Linear(d_msa, 2 * d_hidden, bias=False)
         self.Wout = nn.Linear(d_hidden * d_hidden, config.pairwise_hidden_size, bias=True)
-        # Its own chunk size (``config.msa_encoder.outer_product_chunk_size``, defaulting to off)
-        # rather than the shared ``config.chunk_size``: unlike the other chunked ops, chunking this
-        # einsum is not always bit-exact in bf16 (the kernel picked depends on the operand shape).
-        # A falsy value means one full-length chunk.
+        # Its own chunk size, off by default: chunking this einsum is not always bit-exact in bf16.
         self.chunk_size: int | None = config.msa_encoder.outer_product_chunk_size
 
     def forward(self, msa_repr: Tensor, msa_attention_mask: Tensor) -> Tensor:
@@ -1395,8 +1219,7 @@ class EsmFold2OuterProductMean(nn.Module):
         left, right = x.chunk(2, dim=-1)
         mask_f = msa_attention_mask.to(left.dtype)
         n_valid = (mask_f @ mask_f.transpose(-1, -2)).unsqueeze(-1).clamp(min=1.0)
-        # Chunk along the left (i) axis so the peak einsum intermediate is
-        # [B, chunk, L, c, d] instead of [B, L, L, c, d].
+        # Chunk along the left (i) axis, shrinking the peak intermediate to [B, chunk, L, c, d].
         seq_len = left.shape[1]
         chunk_size = self.chunk_size or seq_len
         out_chunks: list[Tensor] = []
@@ -1512,9 +1335,9 @@ class EsmFold2Output(ModelOutput):
 @dataclass
 class EsmFold2TrunkOutput(ModelOutput):
     """
-    Output of [`EsmFold2Model`]: the folding trunk's pair representation, the distogram read off it,
-    and the conditioning tensors that the structure and confidence heads consume. Everything here is
-    deterministic given the inputs apart from the trunk's random initial pair state.
+    Output of [`EsmFold2Model.forward`]: the folding trunk's pair representation, the distogram read
+    off it, and the conditioning tensors that the structure and confidence heads consume. Everything
+    here is deterministic given the inputs apart from the trunk's random initial pair state.
 
     Args:
         distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
@@ -1540,16 +1363,9 @@ class EsmFold2TrunkOutput(ModelOutput):
 
 
 def _compute_intra_token_idx(atom_to_token: Tensor) -> Tensor:
-    """Compute local atom index within each token (vectorised).
+    """Local atom index within each token, from the ``[B, A]`` atom->token map.
 
-    Atoms belonging to the same token are contiguous, so this computes a
-    running count that resets at each token boundary.
-
-    Args:
-        atom_to_token: [B, A] flat index mapping each atom to its token.
-
-    Returns:
-        [B, A] tensor with values in [0, max_atoms_per_token - 1].
+    A token's atoms are contiguous, so this is a running count that resets at each token boundary.
     """
     same_as_prev = F.pad(atom_to_token[:, 1:] == atom_to_token[:, :-1], (1, 0), value=False)
     ones = torch.ones_like(atom_to_token)
@@ -1560,18 +1376,8 @@ def _compute_intra_token_idx(atom_to_token: Tensor) -> Tensor:
 
 
 def _categorical_mean(logits: Tensor, start: float, end: float) -> Tensor:
-    """Expected value of a categorical distribution over evenly-spaced bins.
-
-    Equivalent to ``CategoricalMixture(logits, bins=logits.shape[-1], start, end).mean()``.
-
-    Args:
-        logits: [..., n_bins]
-        start: left boundary
-        end: right boundary
-
-    Returns:
-        [...] expected value
-    """
+    """Expected value of a categorical distribution over ``logits.shape[-1]`` evenly-spaced bins
+    spanning ``[start, end]``."""
     n_bins = logits.shape[-1]
     edges = torch.linspace(start, end, n_bins + 1, device=logits.device, dtype=torch.float32)
     v_bins = (edges[:-1] + edges[1:]) / 2  # [n_bins]
@@ -1623,8 +1429,6 @@ class EsmFold2ConfidenceHead(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        # Additive guard for masked-mean denominators (empty chains / all-padding rows), kept as an
-        # explicit ``+ eps`` (rather than clamping the denominator to 1) to reproduce the reference numerics.
         self.eps = config.confidence_head.eps
         d_single = config.hidden_size
         d_pair = config.pairwise_hidden_size
@@ -1694,14 +1498,10 @@ class EsmFold2ConfidenceHead(nn.Module):
 
         pair_mask = mask[:, :, None].float() * mask[:, None, :].float()
 
-        # `pair` is fp32 here (built from the fp32 trunk output `z`); run the folding trunk in the
-        # model's compute dtype, then accumulate in fp32. ``add_`` widens the delta as it accumulates,
-        # so no explicit upcast -- which would duplicate this [B * samples, L, L, c_z] tensor in fp32,
-        # over a gigabyte at length 384 with the default eight samples.
+        # ``pair`` is fp32; ``add_`` widens the compute-dtype delta without a second fp32 copy of it.
         pair_delta = self.folding_trunk(pair.to(self.pae_head.weight.dtype), pair_attention_mask=pair_mask)
         pair.add_(pair_delta)
         del pair_delta
-        # Accumulated in fp32; hand the downstream confidence heads the compute dtype.
         pair = pair.to(self.pae_head.weight.dtype)
         single = self.row_attention_pooling(pair, mask)
 
@@ -1728,16 +1528,14 @@ class EsmFold2ConfidenceHead(nn.Module):
         w_plddt = self.plddt_weight[intra_idx]
         plddt_logits = torch.einsum("...c,...cb->...b", s_at_atoms_ln, w_plddt)
 
-        # The pLDDT-family metrics are reported summaries derived from the logits, not loss
-        # targets (only the logits are trained), so build them under no_grad rather than
-        # detaching each one afterward.
+        # The pLDDT-family metrics are reported summaries, not loss targets: only the logits train.
         with torch.no_grad():
             plddt_per_atom = _categorical_mean(plddt_logits, start=0.0, end=1.0)
 
             L = single.shape[1]
             plddt_sum = torch.zeros(Bm, L, device=single.device, dtype=plddt_per_atom.dtype)
             atom_count = torch.zeros(Bm, L, device=single.device, dtype=plddt_per_atom.dtype)
-            # ``atom_mask_f`` and ``plddt_per_atom`` are both fp32, as ``scatter_add_`` requires.
+            # Both operands are fp32, as ``scatter_add_`` requires.
             plddt_sum.scatter_add_(1, atom_to_token_m, plddt_per_atom * atom_mask_f)
             atom_count.scatter_add_(1, atom_to_token_m, atom_mask_f)
             plddt = plddt_sum / atom_count.clamp(min=1e-6)
@@ -1800,9 +1598,7 @@ class EsmFold2ConfidenceHead(nn.Module):
         max_chain_id = int(expanded_asym.max().item()) if Bm > 0 else 0
         n_chains = max_chain_id + 1
         pair_chains_iptm = torch.zeros(Bm, n_chains, n_chains, device=tm_expected.device, dtype=tm_expected.dtype)
-        # pair_chains_iptm[c1, c2] = max over rows i in chain c2 of the mean over
-        # columns j in chain c1 of tm_expected[i, j] (max-of-row-mean, as in the
-        # global iptm above), so iptm equals the max off-diagonal entry.
+        # Max-of-row-mean per chain pair, as in the global iptm above, so iptm is the max off-diagonal.
         for c1 in range(n_chains):
             chain_c1 = (expanded_asym == c1).float() * mask_f
             if chain_c1.sum() == 0:
@@ -1955,11 +1751,7 @@ class EsmFold2Parcae(nn.Module):
     """The trunk's linear-recurrence state update (internally "parcae") and its coda pair stack.
 
     Each trunk loop injects the refreshed pair representation into a discretized linear state-space
-    recurrence -- ``state_decay`` (Ā) and ``input_matrix`` (B̄) come from ``log_a``/``log_delta``/
-    ``b_cont`` via :meth:`discretized_dynamics` -- and the final state is read out through ``readout``
-    and refined by ``coda``. The parameters are allocated here and initialized in
-    ``EsmFold2PreTrainedModel._init_weights`` (``log_a`` -> 0, ``log_delta`` -> a fixed decay constant,
-    ``b_cont``/``readout`` -> identity).
+    recurrence; the final state is read out through ``readout`` and refined by ``coda``.
     """
 
     def __init__(self, config: EsmFold2Config) -> None:
@@ -1995,22 +1787,12 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
     ]
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
-    # Keep every normalization weight (and the Fourier noise-embedding features) in fp32 even under
-    # dtype=bf16, matching the transformers norm convention. Tokens:
-    #   - "norm"/"_ln": every LayerNorm weight/bias across the trunk and the bundled ESMC backbone
-    #     (the backbone's norms would otherwise round to bf16; here they stay fp32), plus the
-    #     adaLN-Zero conditioning scale (``norm_scale``). No linear/proj parameter in either
-    #     sub-model contains these tokens, so only norms are matched.
-    #   - "fourier": the random-Gaussian noise-embedding frequencies/phases whose precision drives
-    #     the diffusion conditioning.
+    # Every norm weight/bias, plus the Fourier noise-embedding buffers, stay fp32 under a bf16 load.
     _keep_in_fp32_modules_strict = ["fourier", "norm", "_ln"]
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        # The non-default weight inits (adaLN-Zero gates, the parcae recurrence, zeroed output
-        # projections). They live here rather than in each submodule's __init__ so post_init()
-        # applies them; on a from_pretrained load the init.* helpers below no-op, leaving the
-        # checkpoint weights untouched.
+        # The non-default inits: adaLN-Zero gates, the parcae recurrence, zeroed output projections.
         super()._init_weights(module)
         if isinstance(module, EsmFold2Parcae):
             init.eye_(module.readout.weight)
@@ -2052,17 +1834,13 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         d_inputs = config.single_inputs_size
         d_pair = config.pairwise_hidden_size
 
-        # structure_prediction=False: no coords_linear, and it aggregates to the inputs-embedder
-        # ``output_dim`` the config derives from ``single_inputs_size``.
         self.inputs_atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=False)
         self.z_init_1 = nn.Linear(d_inputs, d_pair, bias=False)
         self.z_init_2 = nn.Linear(d_inputs, d_pair, bias=False)
         self.rel_pos = EsmFold2RelativePositionEncoding(config)
         self.token_bonds = nn.Linear(1, d_pair, bias=False)
         self.language_model = EsmFold2LanguageModelShim(config)
-        # ESMC backbone built here with random weights (no I/O), then populated by
-        # from_pretrained from the checkpoint's ``esmc.*`` weights. Frozen in effect:
-        # forward detaches its hidden states before they enter the trunk.
+        # Populated by from_pretrained from the checkpoint's ``esmc.*`` weights; run frozen (no_grad).
         self.esmc = AutoModel.from_config(config.esmc_config)
 
         self.folding_trunk = EsmFold2PairUpdateStack(config, config.folding_trunk_num_hidden_layers)
@@ -2088,14 +1866,11 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         mol_type: Tensor,
         tok_mask: Tensor,
     ) -> Tensor:
-        """Run ESMC with BOS/EOS wrapping, return hidden states [B, L, N, D] with N=81 layers.
+        """Run ESMC with BOS/EOS wrapping; returns hidden states ``[B, L, n_layers + 1, D]``.
 
-        Atom-tokenized modified residues (HYP, MSE, ACE, NH2, ...) span multiple
-        structure tokens but share a single ``(asym_id, residue_index)`` key —
-        collapse them to one LM token per residue before running the LM (the LM
-        was trained on per-residue inputs, not per-atom), then scatter the
-        hidden states back to the per-token layout. The frozen backbone runs
-        under ``no_grad``, so no gradients are tracked (no detach needed).
+        Atom-tokenized modified residues (HYP, MSE, ACE, NH2, ...) span several structure tokens but
+        share one ``(asym_id, residue_index)`` key, so they are collapsed to a single LM token -- the
+        LM was trained per-residue -- and the hidden states scattered back to the per-token layout.
         """
         B, L = input_ids.shape
         device = input_ids.device
@@ -2111,9 +1886,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             asym_b = asym_id[b][mask_b]
             res_b = residue_index[b][mask_b]
 
-            # Collapse: keep first token per (asym_id, residue_index) key, in
-            # input order. ``inverse`` maps each original protein-token to its
-            # collapsed residue index.
+            # Keep the first token per (asym_id, residue_index) key, in input order.
             keys = torch.stack((asym_b, res_b), dim=1)
             unique_keys, inverse = torch.unique(keys, dim=0, return_inverse=True)
             n_unique = unique_keys.size(0)
@@ -2165,8 +1938,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         sequence_id = (lm_input_ids == 0).cumsum(dim=1) - 1  # BOS=0
         sequence_id = sequence_id.masked_fill(lm_input_ids == 1, -1)  # PAD=1
 
-        # bf16 autocast scoped to the ESMC backbone (norms/softmax fp32, matmuls/rotary
-        # bf16); a no-op for an fp32 backbone, and the trunk stays dtype-honest.
+        # bf16 autocast scoped to the backbone; a no-op when it is already fp32.
         use_amp = next(self.esmc.parameters()).dtype == torch.bfloat16
         with (
             torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=use_amp),
@@ -2174,8 +1946,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         ):
             esmc_out = self.esmc(input_ids=lm_input_ids, sequence_id=sequence_id, output_hidden_states=True)
 
-        # ESMC returns hidden states as the standard tuple of per-layer tensors; stack
-        # them into the single [n_layers+1, B, max_len, D] tensor the projection expects.
+        # Stack the per-layer tuple into the single tensor the projection expects.
         hs = torch.stack(esmc_out.hidden_states, dim=0)  # [n_layers+1, B, max_len, D]
         n_layers_plus_1, _, _, D = hs.shape
         result = torch.zeros(B, L, n_layers_plus_1, D, device=device, dtype=hs.dtype)
@@ -2263,8 +2034,6 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         )
         # Bias-free EsmFold2MSAEncoder.embed requires zeroed padding.
         msa_oh = msa_oh * msa_attn.unsqueeze(-1)
-        # ``has_deletion`` is a boolean flag, so that one is a real conversion; ``deletion_value`` is
-        # already float and, either way, the concat in the encoder promotes it.
         has_deletion_t = (
             has_deletion.permute(0, 2, 1).float()
             if has_deletion is not None
@@ -2294,14 +2063,13 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         input_matrix: Tensor,
         total_steps: int,
     ) -> Tensor:
-        # A helper rather than an inline loop so the per-iteration L^2 x c_z locals are freed on
-        # return instead of staying alive through the distogram/sampling scope (~2 GB at length 1k).
-        # ``training=True`` forces the per-loop LM dropout to resample under ``eval()``.
+        # A helper rather than an inline loop, so the per-iteration L^2 x c_z locals are freed on return.
         lm_dropout_p = self.config.lm_encoder.lm_dropout
         per_loop_lm_dropout = lm_z is not None and self.config.lm_encoder.per_loop_lm_dropout and lm_dropout_p > 0.0
 
         for _ in range(total_steps):
             if per_loop_lm_dropout:
+                # ``training=True`` forces the per-loop LM dropout to resample under ``eval()``.
                 lm_z_i: Tensor | None = F.dropout(lm_z, p=lm_dropout_p, training=True)
             else:
                 lm_z_i = lm_z
@@ -2407,9 +2175,9 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         input_ids (`torch.Tensor` of shape `(batch_size, num_tokens)`, *optional*):
             ESMC-vocabulary token ids for the sequence. Fed to the bundled ESMC backbone to produce
             `lm_hidden_states` when those are not passed directly; ignored when `lm_hidden_states` is given.
-        lm_hidden_states (`torch.Tensor` of shape `(batch_size, num_tokens, hidden_size)`, *optional*):
-            Precomputed ESMC backbone hidden states. When provided, the backbone is not run and `input_ids`
-            is unused.
+        lm_hidden_states (`torch.Tensor` of shape `(batch_size, num_tokens, num_esmc_layers + 1, esmc_hidden_size)`, *optional*):
+            Precomputed ESMC backbone hidden states, one per backbone layer plus the embeddings. When
+            provided, the backbone is not run and `input_ids` is unused.
         num_loops (`int`, *optional*):
             Number of trunk refinement loops. Defaults to `config.num_loops`.
         """
@@ -2441,8 +2209,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             atom_to_token=atom_to_token,
         )
 
-        # The inputs embedder runs its atom stack exactly once and never expands across diffusion
-        # samples, so it just builds what it needs and calls straight through.
+        # The inputs embedder runs its atom stack once, at the unexpanded batch size.
         c_base, position_embeddings = self.inputs_atom_encoder.embed_atoms(atom_inputs)
         atom_encoding = self.inputs_atom_encoder(
             c_base=c_base,
@@ -2452,8 +2219,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             atom_to_token=atom_to_token,
             n_tokens=tok_mask.shape[1],
         )[0]
-        # The continuous input features are fp32; fold them into the atom encoding's
-        # (compute) dtype so the single representation is one dtype.
+        # Fold the fp32 input features into the atom encoding's dtype, so single_inputs is one dtype.
         dtype = atom_encoding.dtype
         single_inputs = torch.cat(
             [
