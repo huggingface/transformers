@@ -173,16 +173,17 @@ class EsmFold2GenerationMixin:
         # Everything that doesn't depend on the noise level or the noisy coordinates is built once
         # here, so each denoising step is a plain forward with no caching branch inside it. This is
         # also the one place the batch is expanded across diffusion samples: from here down every
-        # tensor is at ``target_batch`` and no module takes ``num_diffusion_samples``.
+        # tensor is at ``target_batch`` and no module takes ``num_diffusion_samples``. The token
+        # padding mask goes in here too -- it is folded into the per-block attention biases, so the
+        # denoiser's forward takes no mask and rebuilds nothing per step.
         step_invariants = denoiser.prepare_step_invariants(
             atom_inputs=atom_inputs,
             pair_trunk=pair_trunk,
             relative_position_encoding=relative_position_encoding,
             single_inputs=single_inputs,
+            token_attention_mask=token_attention_mask,
             num_diffusion_samples=num_diffusion_samples,
         )
-        if token_attention_mask is not None:
-            token_attention_mask = token_attention_mask.repeat_interleave(num_diffusion_samples, 0)
 
         schedule, gammas = self.structure_head._build_noise_schedule(num_sampling_steps, device)
 
@@ -212,7 +213,6 @@ class EsmFold2GenerationMixin:
                 x_noisy=x_noisy,
                 t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
                 step_invariants=step_invariants,
-                token_attention_mask=token_attention_mask,
             )
 
             # Reverse diffusion alignment (Kabsch). Coordinates are fp32 for the whole loop: ``x``
