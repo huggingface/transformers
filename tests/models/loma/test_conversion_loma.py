@@ -13,7 +13,11 @@
 # limitations under the License.
 
 from transformers import LoMaConfig, LoMaForKeypointMatching
-from transformers.models.loma.convert_loma_to_hf import convert_checkpoint, convert_matcher_state_dict, convert_state_dict
+from transformers.models.loma.convert_loma_to_hf import (
+    convert_checkpoint,
+    convert_matcher_state_dict,
+    convert_state_dict,
+)
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 

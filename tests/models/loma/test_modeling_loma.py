@@ -16,7 +16,7 @@ import unittest
 
 from transformers.models.loma.configuration_loma import LoMaConfig
 from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -32,7 +32,6 @@ if is_torch_available():
         LoMaPositionalEncoder,
         LoMaTransformerLayer,
     )
-
 
 
 class LoMaModelTester:
@@ -357,8 +356,6 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(ValueError, cm.exception.__class__)
 
 
-
-
 @require_torch
 @require_vision
 class LoMaModelIntegrationTest(unittest.TestCase):
@@ -384,4 +381,3 @@ class LoMaModelIntegrationTest(unittest.TestCase):
     def test_inference_batched(self):
         """Test LoMa inference with batched image pairs."""
         pass
-
