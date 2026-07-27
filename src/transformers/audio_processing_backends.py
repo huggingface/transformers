@@ -127,60 +127,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
         shape = x.shape[:-1] + (n_frames, frame_length)
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
 
-    def _frame_waveform(self, waveform, frame_length, hop_length, n_fft, center, pad_mode):
-        squeezed = waveform.ndim == 1
-        if squeezed:
-            waveform = waveform[np.newaxis, :]
-
-        if center:
-            start_k = int(np.ceil(n_fft // 2 / hop_length))
-            tail_k = (waveform.shape[-1] + n_fft // 2 - n_fft) // hop_length + 1
-
-            if tail_k <= start_k:
-                # Short audio: simple center-pad and index-based framing
-                waveform = np.pad(waveform, ((0, 0), (frame_length // 2, frame_length // 2)), mode=pad_mode)
-                num_frames = 1 + (waveform.shape[-1] - frame_length) // hop_length
-                frame_starts = np.arange(num_frames) * hop_length
-                frames = waveform[:, frame_starts[:, np.newaxis] + np.arange(frame_length)]
-            else:
-                # Long audio: split into pre (left-padded), middle (no pad), post (right-padded)
-                # to handle edge effects from center padding correctly
-                padding = [(0, 0) for _ in range(waveform.ndim)]
-
-                padding[-1] = (frame_length // 2, 0)
-                y_pre = np.pad(waveform[..., : (start_k - 1) * hop_length - n_fft // 2 + n_fft + 1], padding, mode=pad_mode)
-                y_frames_pre = self._np_frame(y_pre, frame_length, hop_length)[..., :start_k, :]
-
-                padding[-1] = (0, frame_length // 2)
-                tail = waveform[..., tail_k * hop_length - n_fft // 2 :]
-                pad_width = frame_length // 2
-                if pad_mode == "reflect" and tail.shape[-1] <= pad_width:
-                    # np.pad would re-reflect inside the short tail segment; reflect from
-                    # the full signal instead so segmented framing stays bit-identical to
-                    # full-signal padding (canonical semantics, matches torch.stft/scipy)
-                    reflected = waveform[..., -pad_width - 1 : -1][..., ::-1]
-                    y_post = np.concatenate([tail, reflected], axis=-1)
-                else:
-                    y_post = np.pad(tail, padding, mode=pad_mode)
-                y_frames_post = self._np_frame(y_post, frame_length, hop_length)
-
-                start = start_k * hop_length - n_fft // 2
-                y_frames_middle = self._np_frame(np.ascontiguousarray(waveform[..., start:]), frame_length, hop_length)
-
-                num_frames = y_frames_pre.shape[-2] + y_frames_middle.shape[-2] + y_frames_post.shape[-2]
-                frames = np.concatenate([y_frames_pre, y_frames_middle, y_frames_post], axis=-2)
-        else:
-            # Non-centered: simple index-based framing
-            num_frames = 1 + (waveform.shape[-1] - frame_length) // hop_length
-            frame_starts = np.arange(num_frames) * hop_length
-            frames = waveform[:, frame_starts[:, np.newaxis] + np.arange(frame_length)]
-
-        if squeezed:
-            frames = frames.squeeze(0)
-        return frames, num_frames
-
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        frames, _ = self._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
+        if stft_cfg.center:
+            pad_width = [(0, 0)] * (audio.ndim - 1) + [(frame_length // 2, frame_length // 2)]
+            audio = np.pad(audio, pad_width, mode=stft_cfg.pad_mode)
+        frames = self._np_frame(np.ascontiguousarray(audio), frame_length, hop_length)
         compute_dtype = np.result_type(audio.dtype, window.dtype)
         return frames.astype(compute_dtype, copy=False)
 
@@ -201,13 +152,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
         return np.moveaxis(spec, -1, -2)
 
     def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        frames, _ = self._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
-        compute_dtype = np.result_type(audio.dtype, window.dtype)
-        frames = frames.astype(compute_dtype, copy=False) * window
-        spec = np.fft.rfft(frames, n=n_fft, axis=-1).astype(np.complex64)
-        if stft_cfg.normalized:
-            spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
-        return np.moveaxis(spec, -1, -2)
+        # No numpy-native STFT exists; compose the manual framing + FFT leaves. This path
+        # receives the center-padded window and frame_length == n_fft from
+        # `_prepare_window_and_framing`, unlike the manual path (left-aligned window).
+        frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+        return self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg)
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # computation_dtype signals that upstream FE used float64 magnitudes
