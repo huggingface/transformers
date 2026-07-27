@@ -18,7 +18,7 @@ Handler for the /v1/audio/transcriptions endpoint.
 import io
 from typing import TYPE_CHECKING
 
-from ...utils import logging
+from ...utils import logging, requires_backends
 from ...utils.import_utils import is_serve_available
 
 
@@ -92,10 +92,9 @@ class TranscriptionHandler:
         Returns:
             `JSONResponse | StreamingResponse`: Transcription result or SSE stream.
         """
-        from transformers.utils.import_utils import is_librosa_available, is_multipart_available
+        from transformers.utils.import_utils import is_multipart_available
 
-        if not is_librosa_available():
-            raise ImportError("Missing librosa dependency for audio transcription. Install with `pip install librosa`")
+        requires_backends(self, ["librosa"])
         if not is_multipart_available():
             raise ImportError(
                 "Missing python-multipart dependency for file uploads. Install with `pip install python-multipart`"

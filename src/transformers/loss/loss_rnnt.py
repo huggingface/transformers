@@ -14,7 +14,7 @@
 
 import torch
 
-from ..utils import is_torchaudio_available, logging
+from ..utils import logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -56,8 +56,7 @@ def rnnt_loss(
 
     """
     # Import torchaudio lazily rather than at module scope, see https://github.com/huggingface/transformers/pull/47422
-    if not is_torchaudio_available():
-        raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
+    requires_backends(rnnt_loss, ["torchaudio"])
 
     import torchaudio
 
