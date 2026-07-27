@@ -29,7 +29,7 @@ class RegNetConfig(PreTrainedConfig):
         The layer to use, it can be either `"x" or `"y"`. An `x` layer is a ResNet's BottleNeck layer with
         `reduction` fixed to `1`. While a `y` layer is a `x` but with squeeze and excitation. Please refer to the
         paper for a detailed explanation of how these layers were constructed.
-    downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
+    downsample_in_first_stage (`bool`, *optional*, defaults to `True`):
         If `True`, the first stage will downsample the inputs using a `stride` of 2.
 
     Example:
