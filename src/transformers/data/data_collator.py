@@ -1383,6 +1383,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self,
         *args,
         return_position_ids=True,
+        position_ids_start=0,
         separator_id=-100,
         return_flash_attn_kwargs=False,
         return_seq_idx=False,
@@ -1390,6 +1391,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     ):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.position_ids_start = position_ids_start
         self.separator_id = separator_id
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
@@ -1427,7 +1429,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                batch["position_ids"] += list(range(len(input_ids)))
+                batch["position_ids"] += list(range(self.position_ids_start, self.position_ids_start + len(input_ids)))
             if self.return_seq_idx:
                 batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
             if self.return_flash_attn_kwargs:
