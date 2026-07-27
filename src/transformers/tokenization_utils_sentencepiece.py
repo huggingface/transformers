@@ -83,6 +83,8 @@ class SentencePieceBackend(PreTrainedTokenizer):
                 tokenizer.LoadFromSerializedProto(proto.SerializeToString())
 
         self.sp_model = tokenizer
+        # `piece_to_id` returns the unk id when "<0x00>" is not in the vocab, and unk is never a byte piece
+        self._byte_fallback = tokenizer.IsByte(tokenizer.piece_to_id("<0x00>"))
 
         # Initialize total_vocab_size before parent __init__ (which may call _add_tokens -> len(self))
         self.total_vocab_size = self.sp_model.get_piece_size()
@@ -231,7 +233,31 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        if not self._byte_fallback:
+            return "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+
+        # Byte-fallback pieces (e.g. `<0x0A>`) can only be turned back into characters by the
+        # sentencepiece model itself. Special tokens are kept out of `sp_model.decode`, which
+        # drops control pieces (e.g. `<s>`) and renders the unk piece as ` ⁇ `.
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens and tokens[0].startswith(SPIECE_UNDERLINE) and self.legacy:
+            tokens = [tokens[0][1:], *tokens[1:]]
+
+        all_special_tokens = self.all_special_tokens
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for i, token in enumerate(tokens):
+            if token in all_special_tokens:
+                if not prev_is_special and i != 0 and self.legacy:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:

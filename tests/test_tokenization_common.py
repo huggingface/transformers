@@ -27,6 +27,7 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
@@ -35,6 +36,7 @@ from transformers import (
     BertTokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
+    SentencePieceBackend,
     T5Tokenizer,
     T5TokenizerFast,
     TokenizersBackend,
@@ -45,6 +47,7 @@ from transformers import (
 from transformers.testing_utils import (
     get_tests_dir,
     require_jinja,
+    require_sentencepiece,
     require_tokenizers,
     require_torch,
     slow,
@@ -2894,3 +2897,32 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
                 except Exception as e:
                     # if the pretrained model is not loadable how could it pass locally :)
                     print(f"Could not load pretrained tokenizer: {e}")
+
+
+@require_sentencepiece
+class SentencePieceBackendByteFallbackTest(unittest.TestCase):
+    """
+    Regression tests for #47473 — `SentencePieceBackend.convert_tokens_to_string` must let the
+    sentencepiece model decode the pieces, so that byte-fallback tokens (e.g. `<0x0A>`) are
+    converted back to their original characters instead of being emitted as literal text.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        vocab_file = hf_hub_download("hf-internal-testing/llama-tokenizer", "tokenizer.model")
+        cls.tokenizer = SentencePieceBackend(
+            vocab_file=vocab_file, bos_token="<s>", eos_token="</s>", unk_token="<unk>"
+        )
+
+    def test_decode_byte_fallback_round_trip(self):
+        text = "\nfoo 🤗 bar\t生活   "
+        ids = self.tokenizer(text, add_special_tokens=False).input_ids
+        self.assertEqual(self.tokenizer.decode(ids), text)
+
+    def test_decode_keeps_special_tokens(self):
+        tokenizer = self.tokenizer
+        ids = [tokenizer.bos_token_id, *tokenizer("hello", add_special_tokens=False).input_ids, tokenizer.eos_token_id]
+        decoded = tokenizer.decode(ids, skip_special_tokens=False)
+        self.assertIn(tokenizer.bos_token, decoded)
+        self.assertIn(tokenizer.eos_token, decoded)
+        self.assertEqual(tokenizer.decode(ids, skip_special_tokens=True), "hello")
