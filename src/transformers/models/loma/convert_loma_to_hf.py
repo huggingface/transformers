@@ -27,6 +27,7 @@ Example:
 """
 
 import argparse
+import logging
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -34,6 +35,8 @@ from pathlib import Path
 import torch
 
 from transformers import LoMaConfig, LoMaForKeypointMatching
+
+logger = logging.getLogger(__name__)
 
 
 VARIANT_CONFIGS = {
@@ -137,20 +140,39 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
     config = LoMaConfig(**VARIANT_CONFIGS[variant])
     model = LoMaForKeypointMatching(config)
     converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers)
-    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
 
-    # Only keypoint_detector keys are expected to be missing (they come from SuperPoint).
-    converted_prefixes = (
-        "input_projection",
-        "positional_encoder",
-        "transformer_layers",
-        "match_assignment",
-        "descriptor_network",
-    )
-    missing_converted_keys = [key for key in missing_keys if key.startswith(converted_prefixes)]
-    if missing_converted_keys or unexpected_keys:
+    # Filter to only keys present in the model — the reference checkpoint's descriptor decoder
+    # was trained with DINOv2 context which changes decoder input dimensions, so some keys will
+    # have incompatible shapes and must be skipped.
+    model_keys = set(model.state_dict().keys())
+    compatible_state_dict = {}
+    skipped_keys = []
+    for key, tensor in converted_state_dict.items():
+        if key in model_keys:
+            model_shape = model.state_dict()[key].shape
+            if tensor.shape == model_shape:
+                compatible_state_dict[key] = tensor
+            else:
+                skipped_keys.append(f"{key} (checkpoint: {tensor.shape}, model: {model_shape})")
+        else:
+            skipped_keys.append(f"{key} (not in model)")
+
+    if skipped_keys:
+        logger.warning(
+            f"Skipped {len(skipped_keys)} descriptor keys due to shape mismatch or missing model key "
+            f"(the reference decoder uses DINOv2 context which the HF model does not support): "
+            f"{skipped_keys[:5]}{'...' if len(skipped_keys) > 5 else ''}"
+        )
+
+    missing_keys, unexpected_keys = model.load_state_dict(compatible_state_dict, strict=False)
+
+    # Only keypoint_detector keys and descriptor_network keys (due to DINOv2 incompatibility)
+    # are expected to be missing.
+    matcher_prefixes = ("input_projection", "positional_encoder", "transformer_layers", "match_assignment")
+    missing_matcher_keys = [key for key in missing_keys if key.startswith(matcher_prefixes)]
+    if missing_matcher_keys or unexpected_keys:
         raise ValueError(
-            f"Conversion failed. Missing keys: {missing_converted_keys}. Unexpected keys: {unexpected_keys}."
+            f"Conversion failed. Missing matcher keys: {missing_matcher_keys}. Unexpected keys: {unexpected_keys}."
         )
 
     model.save_pretrained(output_dir)
