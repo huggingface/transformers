@@ -15,8 +15,8 @@
 import os
 from typing import Any, TypeVar
 
-from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .image_utils import is_valid_image, load_image
+from .preprocessing_base import BatchFeature as BaseBatchFeature
 from .preprocessing_base import PreprocessingMixin
 from .utils import (
     IMAGE_PROCESSOR_NAME,

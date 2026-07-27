@@ -19,6 +19,7 @@ save/load/serialization logic.
 import copy
 import json
 import os
+from collections import UserDict
 from copy import deepcopy
 from typing import Any, TypeVar
 
@@ -30,7 +31,14 @@ from .dynamic_module_utils import custom_object_save
 from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
+    TensorType,
+    _is_tensor_or_array_like,
+    is_numpy_array,
+    is_torch_available,
+    is_torch_device,
+    is_torch_dtype,
     logging,
+    requires_backends,
     safe_load_json_file,
 )
 from .utils.hub import cached_file
@@ -39,6 +47,214 @@ from .utils.hub import cached_file
 logger = logging.get_logger(__name__)
 
 PreprocessingMixinType = TypeVar("PreprocessingMixinType", bound="PreprocessingMixin")
+
+
+class BatchFeature(UserDict):
+    r"""
+    Holds the output of the [`~SequenceFeatureExtractor.pad`] and feature extractor specific `__call__` methods.
+
+    This class is derived from a python dictionary and can be used as a dictionary.
+
+    Args:
+        data (`dict`, *optional*):
+            Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('input_values', 'attention_mask',
+            etc.).
+        tensor_type (`Union[None, str, TensorType]`, *optional*):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
+            initialization.
+        skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+            List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Any] | None = None,
+        tensor_type: None | str | TensorType = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
+    ):
+        super().__init__(data)
+        self.skip_tensor_conversion = skip_tensor_conversion
+        self.convert_to_tensors(tensor_type=tensor_type)
+
+    def __getitem__(self, item: str) -> Any:
+        """
+        If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
+        etc.).
+        """
+        if isinstance(item, str):
+            return self.data[item]
+        else:
+            raise KeyError("Indexing with integers is not available when using Python based feature extractors")
+
+    def __getattr__(self, item: str):
+        try:
+            return self.data[item]
+        except KeyError:
+            raise AttributeError
+
+    def __getstate__(self):
+        return {"data": self.data}
+
+    def __setstate__(self, state):
+        if "data" in state:
+            self.data = state["data"]
+
+    def _get_is_as_tensor_fns(self, tensor_type: str | TensorType | None = None):
+        if tensor_type is None:
+            return None, None
+
+        # Convert to TensorType
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
+
+        if tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            import torch
+
+            def as_tensor(value):
+                if torch.is_tensor(value):
+                    return value
+
+                # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
+                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    return torch.stack(value)
+
+                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        value = np.array(value)
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
+                        value = np.array(value)
+                if isinstance(value, np.ndarray):
+                    return torch.from_numpy(value)
+                else:
+                    return torch.tensor(value)
+
+            is_tensor = torch.is_tensor
+        else:
+
+            def as_tensor(value, dtype=None):
+                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                    value_lens = [len(val) for val in value]
+                    if len(set(value_lens)) > 1 and dtype is None:
+                        # we have a ragged list so handle explicitly
+                        value = as_tensor([np.asarray(val) for val in value], dtype=object)
+                return np.asarray(value, dtype=dtype)
+
+            is_tensor = is_numpy_array
+        return is_tensor, as_tensor
+
+    def convert_to_tensors(
+        self,
+        tensor_type: str | TensorType | None = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
+    ):
+        """
+        Convert the inner content to tensors.
+
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+            skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+                List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+
+        Note:
+            Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
+            automatically skipped and won't be converted to tensors. Ragged arrays (lists of arrays with
+            different lengths) are still attempted, though they may raise errors during conversion.
+        """
+        if tensor_type is None:
+            return self
+
+        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
+        skip_tensor_conversion = (
+            skip_tensor_conversion if skip_tensor_conversion is not None else self.skip_tensor_conversion
+        )
+
+        # Do the tensor conversion in batch
+        for key, value in self.items():
+            # Skip keys explicitly marked for no conversion
+            if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
+            # Skip values that are not array-like
+            if not _is_tensor_or_array_like(value):
+                continue
+
+            try:
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
+                    self[key] = tensor
+            except Exception as e:
+                if key == "overflowing_values":
+                    raise ValueError(
+                        f"Unable to create tensor for '{key}' with overflowing values of different lengths. "
+                        f"Original error: {str(e)}"
+                    ) from e
+                raise ValueError(
+                    f"Unable to convert output '{key}' (type: {type(value).__name__}) to tensor: {str(e)}\n"
+                    f"You can try:\n"
+                    f"  1. Use padding=True to ensure all outputs have the same shape\n"
+                    f"  2. Set return_tensors=None to return Python objects instead of tensors"
+                ) from e
+
+        return self
+
+    def to(self, *args, **kwargs) -> "BatchFeature":
+        """
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
+
+        Args:
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
+                To enable asynchronous data transfer, set the `non_blocking` flag in `kwargs` (defaults to `False`).
+
+        Returns:
+            [`BatchFeature`]: The same instance after modification.
+        """
+        requires_backends(self, ["torch"])
+        import torch
+
+        device = kwargs.get("device")
+        non_blocking = kwargs.get("non_blocking", False)
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # The first argument is a dtype
+                pass
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        def maybe_to(v):
+            # check if v is a floating point tensor
+            if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
+                # cast and send to device
+                return v.to(*args, **kwargs)
+            elif isinstance(v, torch.Tensor) and device is not None:
+                return v.to(device=device, non_blocking=non_blocking)
+            # recursively handle lists and tuples
+            elif isinstance(v, (list, tuple)):
+                return type(v)(maybe_to(item) for item in v)
+            else:
+                return v
+
+        self.data = {k: maybe_to(v) for k, v in self.items()}
+        return self
 
 
 class PreprocessingMixin(PushToHubMixin):
@@ -70,6 +286,9 @@ class PreprocessingMixin(PushToHubMixin):
 
     # --- Optional overrides ---
     _excluded_dict_keys: set[str] = set()
+    # Drop None-valued attrs whose class default is None from to_dict(). On by default for the
+    # modern processor classes; legacy FeatureExtractionMixin opts out to keep full serialization.
+    _filter_none_class_defaults: bool = True
     _extra_init_pops: list[str] = []
     _config_filename_kwarg: str | None = None
     _subfolder_default: str | None = ""
@@ -449,7 +668,23 @@ class PreprocessingMixin(PushToHubMixin):
         for key in self._excluded_dict_keys:
             if key in output:
                 del output[key]
+        output = {key: self._serialize_value(key, value) for key, value in output.items()}
+        if self._filter_none_class_defaults:
+            output = {key: value for key, value in output.items() if self._keep_in_dict(key, value)}
         return output
+
+    def _serialize_value(self, key, value):
+        """Hook: coerce a modality-specific attribute to a JSON-friendly form for `to_dict`
+        (e.g. `SizeDict`/`SpectrogramConfig` → plain dict). Default: identity."""
+        return value
+
+    def _keep_in_dict(self, key, value) -> bool:
+        """Keep non-None values; keep an explicit None only when the class default is itself
+        non-None (i.e. the user deliberately overrode a real default with None)."""
+        if value is not None:
+            return True
+        class_default = getattr(type(self), key, "NOT_FOUND")
+        return class_default != "NOT_FOUND" and class_default is not None
 
     @classmethod
     def from_json_file(cls, json_file: str | os.PathLike):

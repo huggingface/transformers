@@ -189,6 +189,11 @@ class BaseImageProcessor(ImageProcessingMixin):
     default_to_square = True
     rescale_factor = 1 / 255
     model_input_names = ["pixel_values"]
+    _excluded_dict_keys = {"_valid_processor_keys"}
+
+    def _serialize_value(self, key, value):
+        # Coerce SizeDict attributes to plain dicts for JSON persistence.
+        return dict(value) if isinstance(value, SizeDict) else value
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
@@ -373,26 +378,6 @@ class BaseImageProcessor(ImageProcessingMixin):
     def _preprocess_like_inputs(self, images: ImageInput, *args, **kwargs) -> BatchFeature:
         """Dispatch hook called by `PreprocessingMixin.preprocess` with validated kwargs."""
         return self._preprocess_image_like_inputs(images, *args, **kwargs)
-
-    def to_dict(self) -> dict[str, Any]:
-        processor_dict = super().to_dict()
-
-        # Filter out None values that are class defaults
-        filtered_dict = {}
-        for key, value in processor_dict.items():
-            if isinstance(value, SizeDict):
-                value = dict(value)
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
-
-        filtered_dict.pop("_valid_processor_keys", None)
-        filtered_dict.pop("_valid_kwargs_names", None)
-        return filtered_dict
 
     def rescale(
         self,

@@ -17,7 +17,7 @@ import warnings
 from typing import Any, ClassVar, TypeVar
 
 from .audio_utils import is_valid_audio, load_audio
-from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .preprocessing_base import BatchFeature as BaseBatchFeature
 from .preprocessing_base import PreprocessingMixin
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
