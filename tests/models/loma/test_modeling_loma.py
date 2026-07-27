@@ -13,9 +13,6 @@
 # limitations under the License.
 import inspect
 import unittest
-from functools import cached_property
-
-from datasets import load_dataset
 
 from transformers.models.loma.configuration_loma import LoMaConfig
 from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
@@ -36,8 +33,6 @@ if is_torch_available():
         LoMaTransformerLayer,
     )
 
-if is_vision_available():
-    from transformers import AutoImageProcessor
 
 
 class LoMaModelTester:
@@ -339,11 +334,10 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
             check_attention_output(inputs_dict, config, model_class)
 
     @slow
+    @unittest.skip(reason="No LoMa checkpoint on the Hub yet — will be enabled after upload")
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["ETH-CVG/lightglue_superpoint"]
-        for model_name in from_pretrained_ids:
-            model = LoMaForKeypointMatching.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        # TODO: Replace with actual LoMa checkpoint ID once uploaded to the Hub
+        pass
 
     # Copied from tests.models.superglue.test_modeling_superglue.SuperGlueModelTest.test_forward_labels_should_be_none
     def test_forward_labels_should_be_none(self):
@@ -363,283 +357,31 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(ValueError, cm.exception.__class__)
 
 
-def prepare_imgs():
-    dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
-    image0 = dataset[0]["image"]
-    image1 = dataset[1]["image"]
-    image2 = dataset[2]["image"]
-    # [image1, image1] on purpose to test the model early stopping
-    return [[image2, image0], [image1, image1]]
 
 
 @require_torch
 @require_vision
 class LoMaModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint") if is_vision_available() else None
+    # TODO: Update with actual LoMa checkpoint ID once uploaded to the Hub.
+    # The tests below are placeholders that will be filled with real expected
+    # values from a verified parity run against the reference implementation.
 
     @slow
+    @unittest.skip(reason="No LoMa checkpoint on the Hub yet — will be enabled after upload and parity verification")
     def test_inference(self):
-        model = LoMaForKeypointMatching.from_pretrained(
-            "ETH-CVG/lightglue_superpoint", attn_implementation="eager"
-        ).to(torch_device)
-        preprocessor = self.default_image_processor
-        images = prepare_imgs()
-        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+        """Test LoMa inference on a real image pair and verify numerical parity.
 
-        predicted_number_of_matches0 = torch.sum(outputs.matches[0][0] != -1).item()
-        predicted_matches_values0 = outputs.matches[0, 0, 10:30]
-        predicted_matching_scores_values0 = outputs.matching_scores[0, 0, 10:30]
-
-        predicted_number_of_matches1 = torch.sum(outputs.matches[1][0] != -1).item()
-        predicted_matches_values1 = outputs.matches[1, 0, 10:30]
-        predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
-
-        expected_number_of_matches0 = 866
-        expected_matches_values0 = torch.tensor(
-            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
-            dtype=torch.int64,
-            device=torch_device,
-        )
-        expected_matching_scores_values0 = torch.tensor(
-            [
-                0.6188,0.7817,0.5686,0.9353,0.9801,0.9193,0.8632,0.9111,0.9821,0.5496,
-                0.9906,0.8682,0.9679,0.9914,0.9318,0.1910,0.9669,0.3240,0.9971,0.9923,
-            ],
-            device=torch_device
-        )  # fmt:skip
-
-        expected_number_of_matches1 = 140
-        expected_matches_values1 = torch.tensor(
-            [14, -1, -1, 15, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11],
-            dtype=torch.int64,
-            device=torch_device,
-        )
-        expected_matching_scores_values1 = torch.tensor(
-            [0.3796, 0, 0, 0.3772, 0.4439, 0.2411, 0, 0, 0.0032, 0, 0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583],
-            device=torch_device,
-        )
-
-        # expected_early_stopping_layer = 2
-        # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()
-        # self.assertEqual(predicted_early_stopping_layer, expected_early_stopping_layer)
-        # self.assertEqual(predicted_number_of_matches, expected_second_number_of_matches)
-
+        Once a converted checkpoint is available on the Hub:
+        1. Load the LoMa checkpoint with from_pretrained
+        2. Process a real image pair
+        3. Compare outputs to reference implementation values
+        4. Assert numerical parity (fp32: ~1e-5 tolerance)
         """
-        Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies
-        on SuperPoint, which may, depending on CUDA version, return different number of keypoints (866 or 867 in this
-        specific test example). The consequence of having different number of keypoints is that the number of matches
-        will also be different. In the 20 first matches being checked, having one keypoint less will result in 1 less
-        match. The matching scores will also be different, as the keypoints are different. The checks here are less
-        strict to account for these inconsistencies.
-        Therefore, the test checks that the predicted number of matches, matches and matching scores are close to the
-        expected values, individually. Here, the tolerance of the number of values changing is set to 2.
-
-        This was discussed [here](https://github.com/huggingface/transformers/pull/29886#issuecomment-2482752787)
-        Such CUDA inconsistencies can be found
-        [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
-        """
-        self.assertTrue(abs(predicted_number_of_matches0 - expected_number_of_matches0) < 4)
-        self.assertTrue(abs(predicted_number_of_matches1 - expected_number_of_matches1) < 4)
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values0, expected_matching_scores_values0, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values1, expected_matching_scores_values1, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(torch.sum(predicted_matches_values0 != expected_matches_values0) < 4)
-        self.assertTrue(torch.sum(predicted_matches_values1 != expected_matches_values1) < 4)
+        pass
 
     @slow
-    def test_inference_without_early_stop(self):
-        model = LoMaForKeypointMatching.from_pretrained(
-            "ETH-CVG/lightglue_superpoint", attn_implementation="eager", depth_confidence=1.0
-        ).to(torch_device)
-        preprocessor = self.default_image_processor
-        images = prepare_imgs()
-        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+    @unittest.skip(reason="No LoMa checkpoint on the Hub yet — will be enabled after upload and parity verification")
+    def test_inference_batched(self):
+        """Test LoMa inference with batched image pairs."""
+        pass
 
-        predicted_number_of_matches0 = torch.sum(outputs.matches[0][0] != -1).item()
-        predicted_matches_values0 = outputs.matches[0, 0, 10:30]
-        predicted_matching_scores_values0 = outputs.matching_scores[0, 0, 10:30]
-
-        predicted_number_of_matches1 = torch.sum(outputs.matches[1][0] != -1).item()
-        predicted_matches_values1 = outputs.matches[1, 0, 10:30]
-        predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
-
-        expected_number_of_matches0 = 134
-        expected_matches_values0 = torch.tensor(
-            [-1, -1, 17, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
-        ).to(torch_device)
-        expected_matching_scores_values0 = torch.tensor(
-            [0.0083, 0, 0.2022, 0.0621, 0, 0.0828, 0, 0, 0.0003, 0, 0, 0, 0.0960, 0, 0, 0.6940, 0, 0.7167, 0, 0.1512]
-        ).to(torch_device)
-
-        expected_number_of_matches1 = 862
-        expected_matches_values1 = torch.tensor(
-            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], dtype=torch.int64
-        ).to(torch_device)
-        expected_matching_scores_values1 = torch.tensor(
-            [
-                0.4772,
-                0.3781,
-                0.0631,
-                0.9559,
-                0.8746,
-                0.9271,
-                0.4882,
-                0.5406,
-                0.9439,
-                0.1526,
-                0.5028,
-                0.4107,
-                0.5591,
-                0.9130,
-                0.7572,
-                0.0302,
-                0.4532,
-                0.0893,
-                0.9490,
-                0.4880,
-            ]
-        ).to(torch_device)
-
-        # expected_early_stopping_layer = 2
-        # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()
-        # self.assertEqual(predicted_early_stopping_layer, expected_early_stopping_layer)
-        # self.assertEqual(predicted_number_of_matches, expected_second_number_of_matches)
-
-        """
-        Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies
-        on SuperPoint, which may, depending on CUDA version, return different number of keypoints (866 or 867 in this
-        specific test example). The consequence of having different number of keypoints is that the number of matches
-        will also be different. In the 20 first matches being checked, having one keypoint less will result in 1 less
-        match. The matching scores will also be different, as the keypoints are different. The checks here are less
-        strict to account for these inconsistencies.
-        Therefore, the test checks that the predicted number of matches, matches and matching scores are close to the
-        expected values, individually. Here, the tolerance of the number of values changing is set to 2.
-
-        This was discussed [here](https://github.com/huggingface/transformers/pull/29886#issuecomment-2482752787)
-        Such CUDA inconsistencies can be found
-        [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
-        """
-
-        self.assertTrue(abs(predicted_number_of_matches0 - expected_number_of_matches0) < 4)
-        self.assertTrue(abs(predicted_number_of_matches1 - expected_number_of_matches1) < 4)
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values0, expected_matching_scores_values0, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values1, expected_matching_scores_values1, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(torch.sum(predicted_matches_values0 != expected_matches_values0) < 4)
-        self.assertTrue(torch.sum(predicted_matches_values1 != expected_matches_values1) < 4)
-
-    @slow
-    def test_inference_without_early_stop_and_keypoint_pruning(self):
-        model = LoMaForKeypointMatching.from_pretrained(
-            "ETH-CVG/lightglue_superpoint",
-            attn_implementation="eager",
-            depth_confidence=1.0,
-            width_confidence=1.0,
-        ).to(torch_device)
-        preprocessor = self.default_image_processor
-        images = prepare_imgs()
-        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
-
-        predicted_number_of_matches0 = torch.sum(outputs.matches[0][0] != -1).item()
-        predicted_matches_values0 = outputs.matches[0, 0, 10:30]
-        predicted_matching_scores_values0 = outputs.matching_scores[0, 0, 10:30]
-
-        predicted_number_of_matches1 = torch.sum(outputs.matches[1][0] != -1).item()
-        predicted_matches_values1 = outputs.matches[1, 0, 10:30]
-        predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
-
-        expected_number_of_matches0 = 143
-        expected_matches_values0 = torch.tensor(
-            [-1, -1, -1, -1, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
-        ).to(torch_device)
-        # fmt: off
-        expected_matching_scores_values0 = torch.tensor(
-            [0.0696, 0.0283, 0.0000, 0.0863, 0.2834, 0.2308, 0.0000, 0.0000, 0.0189, 0.0000, 0.0000, 0.0000, 0.1792, 0.0000, 0.0000, 0.8197, 0.0000, 0.8194, 0.0000, 0.3058]
-        ).to(torch_device)
-        # fmt: on
-
-        expected_number_of_matches1 = 862
-        expected_matches_values1 = torch.tensor(
-            [10, 11, -1, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, -1, 26, -1, 28, 29], dtype=torch.int64
-        ).to(torch_device)
-        # fmt: off
-        expected_matching_scores_values1 = torch.tensor(
-            [0.4744, 0.3749, 0.0628, 0.9572, 0.8744, 0.9277, 0.4843, 0.5365, 0.9441, 0.1519, 0.5004, 0.4058, 0.5569, 0.9113, 0.7525, 0.0301, 0.4510, 0.0892, 0.9483, 0.4815]
-        ).to(torch_device)
-        # fmt: on
-
-        # expected_early_stopping_layer = 2
-        # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()
-        # self.assertEqual(predicted_early_stopping_layer, expected_early_stopping_layer)
-        # self.assertEqual(predicted_number_of_matches, expected_second_number_of_matches)
-
-        """
-        Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies
-        on SuperPoint, which may, depending on CUDA version, return different number of keypoints (866 or 867 in this
-        specific test example). The consequence of having different number of keypoints is that the number of matches
-        will also be different. In the 20 first matches being checked, having one keypoint less will result in 1 less
-        match. The matching scores will also be different, as the keypoints are different. The checks here are less
-        strict to account for these inconsistencies.
-        Therefore, the test checks that the predicted number of matches, matches and matching scores are close to the
-        expected values, individually. Here, the tolerance of the number of values changing is set to 2.
-
-        This was discussed [here](https://github.com/huggingface/transformers/pull/29886#issuecomment-2482752787)
-        Such CUDA inconsistencies can be found
-        [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
-        """
-
-        self.assertTrue(abs(predicted_number_of_matches0 - expected_number_of_matches0) < 4)
-        self.assertTrue(abs(predicted_number_of_matches1 - expected_number_of_matches1) < 4)
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values0, expected_matching_scores_values0, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(
-            torch.sum(~torch.isclose(predicted_matching_scores_values1, expected_matching_scores_values1, atol=1e-2))
-            < 4
-        )
-        self.assertTrue(torch.sum(predicted_matches_values0 != expected_matches_values0) < 4)
-        self.assertTrue(torch.sum(predicted_matches_values1 != expected_matches_values1) < 4)
-
-    @slow
-    def test_inference_order_with_early_stop(self):
-        model = LoMaForKeypointMatching.from_pretrained(
-            "ETH-CVG/lightglue_superpoint", attn_implementation="eager"
-        ).to(torch_device)
-        preprocessor = self.default_image_processor
-        images = prepare_imgs()
-        # [[image2, image0], [image1, image1]] -> [[image2, image0], [image2, image0], [image1, image1]]
-        images = [images[0]] + images  # adding a 3rd pair to test batching with early stopping
-        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
-
-        predicted_number_of_matches_pair0 = torch.sum(outputs.matches[0][0] != -1).item()
-        predicted_number_of_matches_pair1 = torch.sum(outputs.matches[1][0] != -1).item()
-        predicted_number_of_matches_pair2 = torch.sum(outputs.matches[2][0] != -1).item()
-
-        # pair 0 and 1 are the same, so should have the same number of matches
-        # pair 2 is [image1, image1] so should have more matches than first two pairs
-        # This ensures that early stopping does not affect the order of the outputs
-        # See : https://huggingface.co/ETH-CVG/lightglue_superpoint/discussions/6
-        # The bug made the pairs switch order when early stopping was activated
-        self.assertTrue(predicted_number_of_matches_pair0 == predicted_number_of_matches_pair1)
-        self.assertTrue(predicted_number_of_matches_pair0 < predicted_number_of_matches_pair2)
