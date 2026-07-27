@@ -409,7 +409,7 @@ class EntropyBoundSampler:
         denoiser_canvas: torch.LongTensor,
         logits: torch.FloatTensor,
         cur_step: int,
-    ) -> torch.LongTensor:
+    ) -> tuple[torch.LongTensor, torch.FloatTensor]:
         """
         Accepts tokens from the denoiser based on an entropy bound. More concretely, sampling proceeds by accepting
         k tokens with lowest entropy, such that
@@ -432,7 +432,9 @@ class EntropyBoundSampler:
                 The current step.
 
         Returns:
-            torch.LongTensor: The accepted canvas.
+            tuple[torch.LongTensor, torch.FloatTensor]: The accepted canvas, and the per-token entropy of
+            `logits` computed along the way. It is returned so that callers which also need it (e.g.
+            `StableAndConfidentStoppingCriteria`) do not recompute it on the same tensor.
         """
         dist = torch.distributions.Categorical(logits=logits)
         token_entropy = dist.entropy()  # (batch_size, canvas_length)
@@ -445,7 +447,7 @@ class EntropyBoundSampler:
             input=torch.zeros_like(sorted_selection_mask), dim=-1, index=sorted_indices, src=sorted_selection_mask
         )
         accepted_canvas = torch.where(self.accepted_token_mask, denoiser_canvas, current_canvas)
-        return accepted_canvas
+        return accepted_canvas, token_entropy
 
     def renoise_canvas(self, accepted_canvas: torch.LongTensor, cur_step: int) -> torch.LongTensor:
         """
@@ -500,7 +502,13 @@ class StableAndConfidentStoppingCriteria(DiffusionGemmaAdaptiveStopping):
         self.confidence_threshold = confidence_threshold
         self.argmax_canvas_history = None
 
-    def __call__(self, argmax_canvas: torch.LongTensor, logits: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self,
+        argmax_canvas: torch.LongTensor,
+        logits: torch.FloatTensor,
+        token_entropy: torch.FloatTensor | None = None,
+        **kwargs,
+    ) -> torch.BoolTensor:
         """
         Applies the stable and confident adaptive stopping strategy, returning a boolean tensor indicating whether to
         stop for each sample in the batch.
@@ -510,6 +518,10 @@ class StableAndConfidentStoppingCriteria(DiffusionGemmaAdaptiveStopping):
                 The argmax of the latest denoiser prediction.
             logits (`torch.FloatTensor`):
                 The predicted logits, after applying logits processors.
+            token_entropy (`torch.FloatTensor`, *optional*):
+                Precomputed per-token entropy of `logits`. When the sampler has already computed the entropy of
+                this exact tensor in the current denoising step, it is passed in to avoid recomputing it. If
+                `None`, it is computed here.
 
         Returns:
             torch.BoolTensor: A boolean tensor indicating whether to stop.
@@ -530,8 +542,9 @@ class StableAndConfidentStoppingCriteria(DiffusionGemmaAdaptiveStopping):
             self.argmax_canvas_history[-1] = argmax_canvas
 
         # 2. Confidence criteria
-        dist = torch.distributions.Categorical(logits=logits)
-        token_entropy = dist.entropy()
+        if token_entropy is None:
+            dist = torch.distributions.Categorical(logits=logits)
+            token_entropy = dist.entropy()
         confident = torch.mean(token_entropy, dim=-1) < self.confidence_threshold
 
         return stable & confident
@@ -1047,8 +1060,11 @@ class DiffusionGemmaGenerationMixin:
         new_argmax_canvas = torch.argmax(processed_logits, dim=-1)
 
         # 1.c.iii Apply the sampler acceptance and renoising logic.
-        accepted_canvas = sampler.accept_canvas(current_canvas, denoiser_canvas, processed_logits, cur_step)
+        accepted_canvas, token_entropy = sampler.accept_canvas(
+            current_canvas, denoiser_canvas, processed_logits, cur_step
+        )
         accepted_canvas = accepted_canvas.clone()  # clone needed for compiled sampler
+        token_entropy = token_entropy.clone()  # ditto: held across the `renoise_canvas` call below
         new_current_canvas = sampler.renoise_canvas(accepted_canvas, cur_step)
         new_current_canvas = new_current_canvas.clone()  # clone needed for compiled sampler
 
@@ -1061,8 +1077,13 @@ class DiffusionGemmaGenerationMixin:
                 processed_logits = torch.where(
                     finished_denoising[:, None, None], self_conditioning_logits, processed_logits
                 )
+                # `processed_logits` was just rebuilt, so the entropy computed by the sampler above no longer
+                # describes it -- fall back to recomputing it inside the stopping criteria.
+                token_entropy = None
 
-            finished_denoising |= diffusion_stopping_criteria(new_argmax_canvas, processed_logits)
+            finished_denoising |= diffusion_stopping_criteria(
+                new_argmax_canvas, processed_logits, token_entropy=token_entropy
+            )
 
         # 1.c.v Use the output logits as self-conditioning logits for the next step.
         embeddings_dtype = self.model.decoder.embed_tokens.weight.dtype

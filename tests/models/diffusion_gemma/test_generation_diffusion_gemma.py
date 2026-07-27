@@ -142,10 +142,10 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         logits[0, 2, 2] = 1.45e1  # token entropy at position 2 = 7.8e-2 -> accepted only in the high eb case
 
         # higher EB -> more accepted tokens
-        accepted_high_eb = sampler_high_eb.accept_canvas(
+        accepted_high_eb, _ = sampler_high_eb.accept_canvas(
             current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
         )
-        accepted_low_eb = sampler_low_eb.accept_canvas(
+        accepted_low_eb, _ = sampler_low_eb.accept_canvas(
             current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
         )
         num_accepted_high_eb = (accepted_high_eb == denoiser_canvas).sum().item()
@@ -169,7 +169,7 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         # (but the first token above the threshold is also accepted, so we'll have 9+1 accepted tokens)
         logits[0, :9, 0] = 1e6
 
-        accepted_canvas = sampler.accept_canvas(
+        accepted_canvas, _ = sampler.accept_canvas(
             current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
         )
         renoised_canvas = sampler.renoise_canvas(accepted_canvas=accepted_canvas, cur_step=None)
