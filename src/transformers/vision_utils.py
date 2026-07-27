@@ -299,7 +299,7 @@ def get_vision_bilinear_indices_and_weights(
     `align_corners=True`. Returns the legacy `(4, total_thw)` layout (transpose of the unified helper's
     `(total_thw, 4)`)."""
     logger.warning_once(
-        "`get_vision_bilinear_indices_and_weights` is deprecated and will be removed in v5.11. Use "
+        "`get_vision_bilinear_indices_and_weights` is deprecated and will be removed in v5.17. Use "
         "`get_vision_interpolation_indices_and_weights(..., mode='bilinear', align_corners=True)` "
         "instead (it returns `(total_thw, n_taps)`, the transpose of this function's output)."
     )
