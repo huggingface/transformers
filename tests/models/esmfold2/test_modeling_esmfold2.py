@@ -218,8 +218,8 @@ class EsmFold2ModelTest(unittest.TestCase):
         )
         with torch.no_grad():
             encoder = model.inputs_atom_encoder
-            _c_base, position_embeddings = encoder.embed_atoms(atom_inputs)
-            mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, position_embeddings)
+            c_base, _position_embeddings = encoder.embed_atoms(atom_inputs)
+            mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, c_base)
 
         per_head = mask[0, 0]
         self.assertFalse(bool(per_head[valid][:, ~valid].any()), "a valid atom may not attend to padding")
@@ -233,17 +233,9 @@ class EsmFold2ModelTest(unittest.TestCase):
         """
         from unittest.mock import patch
 
-        from transformers.models.esmfold2.protein_utils import prepare_protein_features
-
-        long_features = prepare_protein_features("MKLVAAGKLQ")
-        short_features = prepare_protein_features(self.seq)
-        num_tokens = long_features["token_attention_mask"].shape[1]
-        num_atoms = long_features["atom_attention_mask"].shape[1]
+        batch, short_features = self._build_padded_batch()
         short_length = short_features["token_attention_mask"].shape[1]
-        self.assertLess(short_length, num_tokens)  # there is genuinely something to pad
-
-        padded_short = self._pad_features(short_features, num_tokens, num_atoms)
-        batch = {key: torch.cat([long_features[key], padded_short[key]], dim=0) for key in long_features}
+        self.assertLess(short_length, batch["token_attention_mask"].shape[1])  # something to pad
 
         model = self._build()
         # The trunk is stochastic and batch size perturbs the draws, so pin both sources of randomness.
@@ -265,6 +257,76 @@ class EsmFold2ModelTest(unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(batched.distogram_logits).all())
         self.assertTrue(torch.isfinite(batched.sample_atom_coords).all())
+
+    def _build_padded_batch(self):
+        """A batch of two right-padded sequences, plus the shorter one on its own."""
+        from transformers.models.esmfold2.protein_utils import prepare_protein_features
+
+        long_features = prepare_protein_features("MKLVAAGKLQ")
+        short_features = prepare_protein_features(self.seq)
+        num_tokens = long_features["token_attention_mask"].shape[1]
+        num_atoms = long_features["atom_attention_mask"].shape[1]
+        padded_short = self._pad_features(short_features, num_tokens, num_atoms)
+        batch = {key: torch.cat([long_features[key], padded_short[key]], dim=0) for key in long_features}
+        return batch, short_features
+
+    def test_denoiser_conditioning_broadcasts_over_diffusion_samples(self):
+        """The denoiser's two attention masks must not be materialised per diffusion sample at batch 1.
+
+        They are the largest tensors held across the sampling loop (the per-block token biases are
+        ~2.9 GB at length 1000 with eight samples if expanded), they are identical across samples, and
+        they are only ever broadcast against — so at `batch_size == 1` their leading dim stays 1 however
+        many samples are drawn. A batch of 2 cannot broadcast over the flattened sample batch, so there
+        they must be expanded; both shapes are asserted to keep the two paths honest.
+        """
+        model = self._build()
+        denoiser = model.structure_head.diffusion_module
+        batch, single = self._build_padded_batch()
+
+        def conditioning_for(features, samples):
+            feature_kwargs = {k: v for k, v in features.items() if k != "distogram_atom_idx"}
+            with torch.no_grad():
+                trunk = model(**feature_kwargs)
+                return denoiser.prepare_conditioning(
+                    atom_inputs=trunk.atom_inputs,
+                    pair_trunk=trunk.pair_states,
+                    relative_position_encoding=trunk.relative_position_encoding,
+                    single_inputs=trunk.single_inputs,
+                    token_attention_mask=features["token_attention_mask"],
+                    num_diffusion_samples=samples,
+                )
+
+        for samples in (1, 4):
+            with self.subTest(batch_size=1, num_diffusion_samples=samples):
+                conditioning = conditioning_for(single, samples)
+                self.assertEqual(conditioning.attention_mask.shape[0], 1)
+                self.assertTrue(all(bias.shape[0] == 1 for bias in conditioning.token_attention_bias))
+                # The per-sample tensors *are* expanded, which is what the masks broadcast against.
+                self.assertEqual(conditioning.c_base.shape[0], samples)
+                self.assertEqual(conditioning.single_repr_inputs.shape[0], samples)
+
+        with self.subTest(batch_size=2, num_diffusion_samples=3):
+            conditioning = conditioning_for(batch, 3)
+            self.assertEqual(conditioning.attention_mask.shape[0], 6)
+            self.assertTrue(all(bias.shape[0] == 6 for bias in conditioning.token_attention_bias))
+
+    def test_batched_fold_with_multiple_diffusion_samples(self):
+        """Batch > 1 combined with several diffusion samples: the path where the masks are expanded.
+
+        `test_padded_batch_matches_single_sequence` only draws one sample, so nothing else exercises
+        the batch-and-samples combination end-to-end.
+        """
+        batch, _ = self._build_padded_batch()
+        model = self._build()
+        model.config.lm_encoder.lm_dropout = 0.0
+        with torch.no_grad():
+            output = model.fold(**batch, num_loops=1, num_diffusion_samples=3, num_sampling_steps=2)
+
+        num_atoms = batch["atom_attention_mask"].shape[1]
+        # Sampler output is flattened over (batch, samples).
+        self.assertEqual(output["sample_atom_coords"].shape, (2 * 3, num_atoms, 3))
+        self.assertTrue(torch.isfinite(output["sample_atom_coords"]).all())
+        self.assertTrue(torch.isfinite(output["plddt"]).all())
 
     def test_output_to_pdb(self):
         """The PDB writer must round-trip every predicted atom, tag chains, and rank samples."""

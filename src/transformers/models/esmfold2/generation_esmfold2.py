@@ -135,9 +135,9 @@ class EsmFold2GenerationMixin:
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples
 
-        # Built once, so each denoising step is a plain forward with no caching branch inside it, and
-        # everything below is at ``target_batch`` (no module takes samples or a mask).
-        step_invariants = denoiser.prepare_step_invariants(
+        # Built once, so each denoising step is a plain forward with no caching branch inside it. The
+        # coordinates below are at ``target_batch`` and no module takes a mask or sees the sample count.
+        conditioning = denoiser.prepare_conditioning(
             atom_inputs=atom_inputs,
             pair_trunk=pair_trunk,
             relative_position_encoding=relative_position_encoding,
@@ -172,7 +172,7 @@ class EsmFold2GenerationMixin:
             x_denoised = denoiser(
                 x_noisy=x_noisy,
                 t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
-                step_invariants=step_invariants,
+                conditioning=conditioning,
             )
 
             # Reverse diffusion alignment (Kabsch); coordinates are fp32 for the whole loop.

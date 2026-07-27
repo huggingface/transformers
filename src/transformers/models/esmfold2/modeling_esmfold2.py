@@ -61,22 +61,22 @@ class EsmFold2AtomInputs:
 
 
 @dataclass
-class EsmFold2DiffusionStepInvariants:
+class EsmFold2DenoiserConditioning:
     """Denoiser conditioning that depends on neither the noise level nor the noisy coordinates.
 
-    Built once per fold by ``EsmFold2DiffusionModule.prepare_step_invariants``, already expanded to
-    ``batch_size * num_diffusion_samples`` and with both attention masks folded in, so nothing
-    downstream takes a mask or sees ``num_diffusion_samples``.
+    Built once per fold by ``EsmFold2DiffusionModule.prepare_conditioning``, with both attention masks
+    folded in, so nothing downstream takes a mask. See there for which fields are expanded across
+    diffusion samples and which are left broadcastable.
     """
 
-    # Atom stack.
+    # Atom stack. ``attention_mask`` is the prepared 4D sliding-window mask; ``atom_mask`` the 2D
+    # valid-atom mask that the atom->token scatter needs.
     c_base: Tensor
     attention_mask: Tensor
     position_embeddings: tuple[Tensor, Tensor]
     atom_mask: Tensor
     atom_to_token: Tensor
-    n_tokens: int
-    # Token stack. One additive bias per block, `[batch * samples, num_heads, num_queries, num_keys]`.
+    # Token stack. One additive bias per block, `[batch, num_heads, num_queries, num_keys]`.
     single_repr_inputs: Tensor
     token_attention_bias: list[Tensor]
 
@@ -484,15 +484,16 @@ class EsmFold2AtomEncoder(nn.Module):
         c_base = self.atom_norm(self.atom_linear(atom_feats.to(self.atom_linear.weight.dtype)))
         return c_base, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid, dtype=c_base.dtype)
 
-    def build_attention_mask(self, atom_mask: Tensor, position_embeddings: tuple[Tensor, Tensor]) -> Tensor:
+    def build_attention_mask(self, atom_mask: Tensor, atom_embeds: Tensor) -> Tensor:
         """Sliding-window attention mask for the atom stack, built once per fold.
 
-        ``cos`` only supplies the mask metadata (dtype/device/shape); padding is folded into the
-        ``and`` mask instead of ``attention_mask`` (see ``_swa_window_mask_function``).
+        ``atom_embeds`` (the ``embed_atoms`` output) only supplies the mask metadata
+        (dtype/device/shape); padding is folded into the ``and`` mask instead of ``attention_mask``
+        (see ``_swa_window_mask_function``).
         """
         return create_bidirectional_mask(
             config=self.config,
-            inputs_embeds=position_embeddings[0],
+            inputs_embeds=atom_embeds,
             attention_mask=None,
             and_mask_function=_swa_window_mask_function(atom_mask, self.config.sliding_window // 2),
         )
@@ -766,7 +767,7 @@ class EsmFold2DiffusionModule(nn.Module):
         self.s_step_norm = EsmFold2LayerNorm(c_token)
         self.token_norm = EsmFold2LayerNorm(c_token)
 
-    def prepare_step_invariants(
+    def prepare_conditioning(
         self,
         atom_inputs: EsmFold2AtomInputs,
         pair_trunk: Tensor,
@@ -774,46 +775,58 @@ class EsmFold2DiffusionModule(nn.Module):
         single_inputs: Tensor,
         token_attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
-    ) -> EsmFold2DiffusionStepInvariants:
-        """Precompute the step-invariant conditioning and expand the batch across diffusion samples.
+    ) -> EsmFold2DenoiserConditioning:
+        """Precompute the conditioning that every denoising step reuses.
 
-        Order matters: the featurization and the projections run at the unexpanded batch size and
-        only their (much narrower) results are expanded.
+        Order matters: the featurization and the projections run at the unexpanded batch size and only
+        their (much narrower) results are expanded.
+
+        ``num_diffusion_samples`` is a replica axis rather than a batch axis -- every tensor built here
+        is identical across samples, while the sampler runs the denoiser at
+        ``batch_size * num_diffusion_samples``. The two attention masks are only ever broadcast
+        against, so they stay at the unexpanded batch size whenever that broadcasts over the sample
+        batch (``batch_size == 1``, i.e. every single-sequence fold) and are materialized only when it
+        cannot. They are also the only large tensors here: at length 1000 with the default eight
+        samples the per-block token biases are ~2.9 GB expanded against ~370 MB unexpanded. Everything
+        else is a few MB, and expanding it keeps the scatter/gather helpers on a single shape.
         """
         samples = num_diffusion_samples
+        # A batch dim of 1 broadcasts over the sample batch; anything else has to be materialized.
+        masks_broadcast = single_inputs.shape[0] == 1
 
-        # --- unexpanded: batch_size ---
+        # --- precomputed at batch_size ---
         c_base, position_embeddings = self.atom_encoder.embed_atoms(atom_inputs)
+        attention_mask = self.atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, c_base)
         pair_repr = self.conditioning.compute_pair_repr(pair_trunk, relative_position_encoding)
         token_attention_bias = self.token_transformer.compute_pair_biases(pair_repr, token_attention_mask)
+        if not masks_broadcast:
+            attention_mask = attention_mask.repeat_interleave(samples, 0)
+            token_attention_bias = [bias.repeat_interleave(samples, 0) for bias in token_attention_bias]
 
-        # --- expansion boundary: batch_size -> batch_size * num_diffusion_samples ---
+        # --- everything else: batch_size -> batch_size * num_diffusion_samples ---
         cos, sin = position_embeddings
-        atom_mask = atom_inputs.atom_attention_mask.repeat_interleave(samples, 0)
-        position_embeddings = (cos.repeat_interleave(samples, 0), sin.repeat_interleave(samples, 0))
-        return EsmFold2DiffusionStepInvariants(
+        return EsmFold2DenoiserConditioning(
             c_base=c_base.repeat_interleave(samples, 0),
-            attention_mask=self.atom_encoder.build_attention_mask(atom_mask, position_embeddings),
-            position_embeddings=position_embeddings,
-            atom_mask=atom_mask,
+            attention_mask=attention_mask,
+            position_embeddings=(cos.repeat_interleave(samples, 0), sin.repeat_interleave(samples, 0)),
+            atom_mask=atom_inputs.atom_attention_mask.repeat_interleave(samples, 0),
             atom_to_token=atom_inputs.atom_to_token.repeat_interleave(samples, 0),
-            n_tokens=pair_trunk.shape[1],
             # Projected after expanding, unlike the pair bias: a Linear reassociates per batch size.
             single_repr_inputs=self.conditioning.compute_single_repr(single_inputs.repeat_interleave(samples, 0)),
-            token_attention_bias=[bias.repeat_interleave(samples, 0) for bias in token_attention_bias],
+            token_attention_bias=token_attention_bias,
         )
 
     def forward(
         self,
         x_noisy: Tensor,
         t_hat: Tensor,
-        step_invariants: EsmFold2DiffusionStepInvariants,
+        conditioning: EsmFold2DenoiserConditioning,
     ) -> Tensor:
         # ``t_hat`` is the sampler's per-sample noise level: fp32, flat, at the expanded batch length.
         sigma = self.sigma_data
 
         # Step 1: noise-dependent (single) conditioning
-        single_repr = self.conditioning(t_hat=t_hat, single_repr=step_invariants.single_repr_inputs)
+        single_repr = self.conditioning(t_hat=t_hat, single_repr=conditioning.single_repr_inputs)
 
         # Step 2: normalize noisy coords
         denominator = torch.sqrt(t_hat * t_hat + sigma * sigma)
@@ -821,12 +834,12 @@ class EsmFold2DiffusionModule(nn.Module):
 
         # Step 3: atom encoder
         token_acts, atom_queries_skip, atom_cond_skip = self.atom_encoder(
-            c_base=step_invariants.c_base,
-            attention_mask=step_invariants.attention_mask,
-            position_embeddings=step_invariants.position_embeddings,
-            atom_mask=step_invariants.atom_mask,
-            atom_to_token=step_invariants.atom_to_token,
-            n_tokens=step_invariants.n_tokens,
+            c_base=conditioning.c_base,
+            attention_mask=conditioning.attention_mask,
+            position_embeddings=conditioning.position_embeddings,
+            atom_mask=conditioning.atom_mask,
+            atom_to_token=conditioning.atom_to_token,
+            n_tokens=single_repr.shape[1],
             atom_coords=normalized_coords,
         )
 
@@ -834,7 +847,7 @@ class EsmFold2DiffusionModule(nn.Module):
         token_acts = token_acts + self.s_to_token(self.s_step_norm(single_repr))
 
         # Step 5: token transformer
-        token_acts = self.token_transformer(token_acts, single_repr, step_invariants.token_attention_bias)
+        token_acts = self.token_transformer(token_acts, single_repr, conditioning.token_attention_bias)
 
         # Step 6: token norm
         token_acts = self.token_norm(token_acts)
@@ -844,9 +857,9 @@ class EsmFold2DiffusionModule(nn.Module):
             token_acts=token_acts,
             atom_queries=atom_queries_skip,
             atom_cond=atom_cond_skip,
-            attention_mask=step_invariants.attention_mask,
-            position_embeddings=step_invariants.position_embeddings,
-            atom_to_token=step_invariants.atom_to_token,
+            attention_mask=conditioning.attention_mask,
+            position_embeddings=conditioning.position_embeddings,
+            atom_to_token=conditioning.atom_to_token,
         )
 
         # Step 8: denoised output; the fp32 noise-level scalars keep the coordinates fp32.
@@ -2213,7 +2226,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         c_base, position_embeddings = self.inputs_atom_encoder.embed_atoms(atom_inputs)
         atom_encoding = self.inputs_atom_encoder(
             c_base=c_base,
-            attention_mask=self.inputs_atom_encoder.build_attention_mask(atom_attention_mask, position_embeddings),
+            attention_mask=self.inputs_atom_encoder.build_attention_mask(atom_attention_mask, c_base),
             position_embeddings=position_embeddings,
             atom_mask=atom_attention_mask,
             atom_to_token=atom_to_token,
