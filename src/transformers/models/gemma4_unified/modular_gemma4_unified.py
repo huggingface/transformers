@@ -334,7 +334,7 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
 
 
 class Gemma4UnifiedProcessor(Gemma4Processor):
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
 
         Unlike standard Gemma4 which has a conformer audio encoder with two stride-2
