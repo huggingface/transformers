@@ -343,6 +343,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 "embed_tokens": "embedding_rowwise",
             }
 
+        self.base_model_fsdp_plan = {
+            "embed_tokens": "free_full_weight",
+            "layers.*": "free_full_weight",
+            "norm": "keep_full_weight",
+        }
+
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__

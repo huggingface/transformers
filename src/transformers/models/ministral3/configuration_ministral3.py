@@ -69,12 +69,6 @@ class Ministral3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"llama_4_scaling_beta", "max_position_embeddings"}
 
     vocab_size: int = 131072
