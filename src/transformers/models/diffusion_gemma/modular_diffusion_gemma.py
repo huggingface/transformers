@@ -96,7 +96,6 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
     enable_moe_block = AttributeError()
     attention_k_eq_v = AttributeError()
     use_double_wide_mlp = AttributeError()

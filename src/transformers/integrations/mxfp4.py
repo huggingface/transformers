@@ -20,6 +20,7 @@ if is_torch_available():
     from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 
 
@@ -473,9 +474,7 @@ def routing_torch_dist(
 
 
 def mlp_forward(self, hidden_states):
-    import torch.distributed as dist
-
-    if dist.is_available() and dist.is_initialized() and hasattr(self, "_is_hooked"):
+    if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
         routing = routing_torch_dist
     else:
         routing = triton_kernels_hub.routing.routing
