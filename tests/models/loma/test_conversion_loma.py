@@ -41,7 +41,7 @@ class TestLoMaConversion:
             "transformers.0.cross_attn.ffn.3.bias": torch.ones(2),
             "log_assignment.0.final_proj.weight": torch.ones(2, 2),
             "log_assignment.1.matchability.bias": torch.ones(1),
-            "_descriptor.encoder.layers.0.weight": torch.ones(2, 2),
+            "_descriptor.encoder.vgg.layers.0.weight": torch.ones(2, 2),
         }
 
         converted_state_dict = convert_state_dict(reference_state_dict, num_hidden_layers=2)
@@ -63,10 +63,11 @@ class TestLoMaConversion:
     def test_convert_descriptor_keys(self):
         """Verify that _descriptor.* keys are correctly renamed to descriptor_network.*."""
         reference_state_dict = {
-            "_descriptor.encoder.layers.0.weight": torch.ones(64, 3, 3, 3),
-            "_descriptor.encoder.layers.1.weight": torch.ones(64),
+            "_descriptor.encoder.vgg.layers.0.weight": torch.ones(64, 3, 3, 3),
+            "_descriptor.encoder.vgg.layers.1.weight": torch.ones(64),
             "_descriptor.decoder.layers.1.block1.0.weight": torch.ones(256, 128, 1, 1),
             "_descriptor.decoder.layers.1.out_conv.bias": torch.ones(256),
+            "_descriptor.encoder.frozen_dinov2.some.param": torch.ones(10),
         }
 
         converted = convert_state_dict(reference_state_dict, num_hidden_layers=9)
@@ -77,9 +78,11 @@ class TestLoMaConversion:
             "descriptor_network.decoder.layers.1.block1.0.weight",
             "descriptor_network.decoder.layers.1.out_conv.bias",
         }
+        # Verify DINOv2 keys are skipped
+        assert not any(k for k in converted if "frozen_dinov2" in k)
         # Verify tensors are the same objects (no copy)
         for src_key, dst_key in [
-            ("_descriptor.encoder.layers.0.weight", "descriptor_network.encoder.layers.0.weight"),
+            ("_descriptor.encoder.vgg.layers.0.weight", "descriptor_network.encoder.layers.0.weight"),
             ("_descriptor.decoder.layers.1.out_conv.bias", "descriptor_network.decoder.layers.1.out_conv.bias"),
         ]:
             assert torch.equal(converted[dst_key], reference_state_dict[src_key])
@@ -88,7 +91,7 @@ class TestLoMaConversion:
         """Verify that the deprecated convert_matcher_state_dict still works."""
         reference_state_dict = {
             "posenc.Wr.weight": torch.ones(2, 2),
-            "_descriptor.encoder.layers.0.weight": torch.ones(2, 2),
+            "_descriptor.encoder.vgg.layers.0.weight": torch.ones(2, 2),
         }
         result = convert_matcher_state_dict(reference_state_dict, num_hidden_layers=2)
         assert "positional_encoder.projector.weight" in result
@@ -135,7 +138,9 @@ class TestLoMaConversion:
                 _, source_name, parameter_name = key.split(".")
                 source_name = "final_proj" if source_name == "final_projection" else source_name
                 reference_key = f"log_assignment.8.{source_name}.{parameter_name}"
-            elif key.startswith("descriptor_network."):
+            elif key.startswith("descriptor_network.encoder."):
+                reference_key = key.replace("descriptor_network.encoder.", "_descriptor.encoder.vgg.", 1)
+            elif key.startswith("descriptor_network.decoder."):
                 reference_key = key.replace("descriptor_network.", "_descriptor.", 1)
             else:
                 continue

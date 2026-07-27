@@ -87,9 +87,16 @@ def _rename_descriptor_key(key: str) -> str | None:
     """Rename a descriptor network key from the reference checkpoint format.
 
     The reference checkpoint stores descriptor network weights under the ``_descriptor.`` prefix.
-    The HF model stores them under ``descriptor_network.``.
+    The HF model stores them under ``descriptor_network.``.  The encoder weights have an extra
+    ``vgg.`` prefix in the reference (``_descriptor.encoder.vgg.layers.*``) that maps to
+    ``descriptor_network.encoder.layers.*`` in HF.  DINOv2 encoder keys and detector keys are
+    skipped as they are not part of the HF model.
     """
-    if key.startswith("_descriptor."):
+    if key.startswith("_descriptor.encoder.frozen_dinov2."):
+        return None
+    if key.startswith("_descriptor.encoder.vgg."):
+        return key.replace("_descriptor.encoder.vgg.", "descriptor_network.encoder.", 1)
+    if key.startswith("_descriptor.decoder."):
         return key.replace("_descriptor.", "descriptor_network.", 1)
     return None
 
