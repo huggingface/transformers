@@ -53,10 +53,6 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
     r"""
     Adds support for the `no_repeat_ngram_window_size` generation option. If set together with `no_repeat_ngram_size`,
     n-gram repetitions are blocked only within this many trailing tokens instead of over the whole sequence.
-
-    `no_repeat_ngram_window_size` is a model specific option and must already be present on the generation config
-    before it can be passed to `generate`, either through the checkpoint's `generation_config.json` or by setting
-    `model.generation_config.no_repeat_ngram_window_size` after loading the model.
     """
 
     def _get_logits_processor(
