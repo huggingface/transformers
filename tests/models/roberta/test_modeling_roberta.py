@@ -14,8 +14,17 @@
 
 import unittest
 
-from transformers import RobertaConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+import pytest
+
+from transformers import DataCollatorWithFlattening, RobertaConfig, is_torch_available
+from transformers.testing_utils import (
+    TestCasePlus,
+    require_flash_attn,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -504,6 +513,38 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds, embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    def test_flash_attn_padding_free_position_ids_start(self):
+        """Test that flattening a batch with position_ids_start=pad_token_id + 1 matches the padded batched run."""
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        config.attn_implementation = "flash_attention_2"
+        model = RobertaModel(config).to(dtype=torch.bfloat16, device=torch_device).eval()
+
+        # Sample from [2, vocab_size) so no token collides with pad_token_id, which would shift
+        # the position ids the model computes internally in the batched reference run
+        seq_len_a, seq_len_b = 3, 4
+        input_ids = ids_tensor([2, seq_len_b], config.vocab_size - 2) + 2
+        attention_mask = torch.tensor([[1, 1, 1, 0], [1, 1, 1, 1]], device=torch_device)
+        input_ids[attention_mask == 0] = config.pad_token_id
+
+        with torch.no_grad():
+            batched = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        collator = DataCollatorWithFlattening(position_ids_start=config.pad_token_id + 1)
+        packed = collator([{"input_ids": input_ids[0, :seq_len_a]}, {"input_ids": input_ids[1, :seq_len_b]}])
+        self.assertEqual(packed["position_ids"][0].tolist(), [2, 3, 4, 2, 3, 4, 5])
+        # Without attention_mask and cu_seq_lens, FlashAttention infers the boundaries from position_ids
+        with torch.no_grad():
+            flattened = model(
+                input_ids=packed["input_ids"].to(torch_device), position_ids=packed["position_ids"].to(torch_device)
+            ).last_hidden_state
+
+        # bf16 noise between the padded and packed kernel shapes reaches ~3e-2, wrong position ids differ by >1.9
+        torch.testing.assert_close(batched[0, :seq_len_a], flattened[0, :seq_len_a], atol=1e-1, rtol=1e-1)
+        torch.testing.assert_close(batched[1, :seq_len_b], flattened[0, seq_len_a:], atol=1e-1, rtol=1e-1)
 
 
 @require_torch
