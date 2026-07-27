@@ -18,14 +18,15 @@ import numpy as np
 
 from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
 # fmt: off
-# The ASR model was trained with these full names as system prompts.
+# The ASR model was trained with these full names in the forced-language suffix
+# appended after the generation prompt: "language <NAME><asr_text>".
 LANGUAGE_CODE_TO_NAME = {
     "ar": "Arabic",
     "yue": "Cantonese",
@@ -444,14 +445,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs.pop("mm_token_type_ids")
-            for token_id in [
-                self.audio_token_id,
-                self.tokenizer.pad_token_id,
-                self.audio_bos_token_id,
-                self.audio_eos_token_id,
-            ]:
-                labels[labels == token_id] = -100
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
+            labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
 
         return BatchFeature(data=model_inputs, tensor_type="pt")
@@ -496,7 +493,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self,
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
-        **kwargs,
+        prompt: str | list[str] | None = None,
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
@@ -505,37 +503,52 @@ class Qwen3ASRProcessor(ProcessorMixin):
             audio (`AudioInput` or `list[AudioInput]`):
                 Audio to transcribe. Can be a URL string, local path, numpy array, or a list of these.
             language (`str` or `list[str]`, *optional*):
-                Language hint(s) to include in the system prompt. Accepts full names
+                Language(s) to force for transcription. Accepts full names
                 (e.g. ``"English"``, ``"Chinese"``) or ISO codes (e.g. ``"en"``, ``"zh"``).
                 A list must be the same length as the audio batch.
-                When ``None``, the model performs automatic language detection.
+                Following the original implementation, the language is forced by appending
+                ``language <NAME><asr_text>`` after the generation prompt, so the model
+                generates only the transcription text. When ``None``, the model performs
+                automatic language detection and outputs ``language <NAME><asr_text>...`` itself.
+            prompt (`str` or `list[str]`, *optional*):
+                Context/hotwords to include as the system prompt, e.g. domain-specific words or
+                phrases to bias the transcription towards. A list must be the same length as the
+                audio batch. When `None`, the system prompt is left empty.
             **kwargs:
-                Additional keyword arguments forwarded to
-                [`~Qwen3ASRProcessor.apply_chat_template`].
+                Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
+                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
-        audio_items = make_list_of_audio_chat_template(audio)
+        audio_items = list(make_list_of_audio_chat_template(audio))
+
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
         languages = _prepare_language_inputs(language, batch_size)
 
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
+
         conversations = []
-        for lang, audio_item in zip(languages, audio_items):
+        for prompt_text, audio_item in zip(prompts, audio_items):
             messages = []
-            if lang is not None:
-                messages.append({"role": "system", "content": [{"type": "text", "text": lang}]})
+            if prompt_text is not None:
+                messages.append({"role": "system", "content": [{"type": "text", "text": prompt_text}]})
             messages.append({"role": "user", "content": [_audio_content_item(audio_item)]})
             conversations.append(messages)
 
+        # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
+        # so that the model only generates the transcription text in the desired language
+        for messages, lang in zip(conversations, languages):
+            prefill = f"language {lang}<asr_text>" if lang is not None else ""
+            messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
             tokenize=True,
-            add_generation_prompt=True,
             return_dict=True,
+            continue_final_message=True,
             **kwargs,
         )
 
@@ -807,6 +820,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
+
+    @property
+    def audio_token_ids(self):
+        return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
 
 __all__ = ["Qwen3ASRProcessor"]
