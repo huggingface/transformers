@@ -464,8 +464,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
-            mode="bilinear",
-            align_corners=True,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
             spatial_merge_size=self.config.spatial_merge_size,
             kwargs=kwargs,
         )

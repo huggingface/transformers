@@ -131,9 +131,10 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(
             torch.zeros(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
-        # Side of the (square) learned grid; the exporter's input preparer reads it to precompute
-        # the bicubic gather indices.
+        # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = config.pos_emb_height
+        self.interpolation_align_corners = False
+        self.interpolation_mode = "bicubic"
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -153,7 +154,11 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
         # single traceable op over all patches — and faster.
         table = self.position_embeddings.flatten(0, 1)
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw, self.num_grid_per_side, mode="bicubic", align_corners=False, kwargs=kwargs
+            grid_thw,
+            self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            kwargs=kwargs,
         )
         pos = F.embedding_bag(interp_indices, table, per_sample_weights=interp_weights.to(table.dtype), mode="sum")
         # Temporal: add a per-frame sinusoid. Row 0 of the table is a zero pad, so single-frame clips

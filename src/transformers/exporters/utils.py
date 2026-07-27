@@ -470,14 +470,13 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        # kimi_k25 (the temporal encoder) resamples its learned grid bicubically with no spatial-merge
-        # reorder; the other grid_thw encoders (qwen3_vl / qwen3_5 / paddleocr_vl) use bilinear.
-        if temporal_encoder:
-            mode, align_corners, interp_merge = "bicubic", False, 1
-        else:
-            mode, align_corners, interp_merge = "bilinear", True, spatial_merge_size
+        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
+        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear); read it rather than
+        # inferring, so the precomputed tensors match exactly what the model computes.
+        mode = _find_submodule_attr(model, "interpolation_mode")
+        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
         inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
-            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=interp_merge
+            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=spatial_merge_size
         )
 
     # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.

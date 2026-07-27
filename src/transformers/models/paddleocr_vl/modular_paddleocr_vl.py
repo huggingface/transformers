@@ -703,7 +703,10 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
 class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
+        # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = True
+        self.interpolation_mode = "bilinear"
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         warnings.warn(
@@ -716,8 +719,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
-            mode="bilinear",
-            align_corners=True,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
             spatial_merge_size=1,
         )
         return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
@@ -746,8 +749,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
-            mode="bilinear",
-            align_corners=True,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
             spatial_merge_size=1,
             kwargs=kwargs,
         )
