@@ -162,9 +162,11 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
     factor = rope_parameters_dict["factor"]
@@ -222,9 +224,11 @@ def _compute_proportional_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
@@ -300,9 +304,11 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
@@ -387,9 +393,11 @@ def _compute_yarn_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
@@ -516,9 +524,11 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
@@ -601,9 +611,11 @@ def _compute_llama3_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
-    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-    config = config.per_layer_config[layer_type] if layer_type is not None else config
+    # Sloppy workaround for per-layer-config in gemma4 family
+    if layer_type is not None and layer_type in config.per_layer_config:
+        config = config.per_layer_config[layer_type]
 
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
