@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 def flash_attn_supports_top_left_mask():
     warnings.warn(
-        "`flash_attn_supports_top_left_mask` is deprecated and will be removed in v5.8. "
+        "`flash_attn_supports_top_left_mask` is deprecated and will be removed in v5.16. "
         "This is no longer needed as the minimum required FA version is no longer affected by this.",
         FutureWarning,
     )
@@ -54,7 +54,7 @@ def flash_attn_supports_top_left_mask():
 def is_flash_attn_available():
     warnings.warn(
         "`is_flash_attn_available` has been moved to `utils` (and `utils.import_utils`). "
-        "This alias will be removed in v5.8.",
+        "This alias will be removed in v5.16.",
         FutureWarning,
     )
     return utils_is_flash_attn_available()
@@ -673,10 +673,6 @@ def _flash_attention_mask_varlen(
     Manually unpads the tensors based on the attention mask, runs it through the varlen API and sticks
     back the to the original sequence lengths by padding with zeros where we manually removed padding values.
     """
-    # Default create an all 1 (True) mask if nothing is given
-    if attention_mask is None:
-        attention_mask = torch.ones(size=(key_states.shape[:2]), device=key_states.device, dtype=torch.bool)
-
     q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
         query_states, key_states, value_states, attention_mask, query_length, unpad_fn
     )
@@ -856,6 +852,49 @@ def _flash_attention_pure(
     return out
 
 
+def _flash_attention_pure_varlen_alt(
+    flash_varlen_fn: Callable,
+    flash_kwargs: Callable,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
+    value_states: torch.Tensor,
+):
+    """Native FA varlen API without any padding or masks."""
+    batch_size, max_length_q = query_states.shape[:2]
+    max_length_k = key_states.shape[1]
+
+    cu_seq_lens_q = torch.arange(
+        batch_size + 1,
+        device=query_states.device,
+        dtype=torch.int32,
+    ) * max_length_q
+
+    cu_seq_lens_k = torch.arange(
+        batch_size + 1,
+        device=key_states.device,
+        dtype=torch.int32,
+    ) * max_length_k
+
+    q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
+    k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
+    v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
+
+    out = flash_varlen_fn(
+        q,
+        k,
+        v,
+        **flash_kwargs(
+            cu_seqlens_q=cu_seq_lens_q,
+            cu_seqlens_k=cu_seq_lens_k,
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
+        ),
+    )
+    if isinstance(out, tuple):
+        out = out[0]
+    return out
+
+
 def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -980,34 +1019,16 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        # Case 1: No native base FA, we fallback to simulating varlen (but with no padding)
-        if flash_fn is None:
-            if not is_tracing(query_states):
-                logger.warning_once(
-                    "We detected that your current underlying Flash Attention implementation does not implement a simple base"
-                    "Flash Attention function (non-varlen). This can lead to slight inefficiencies (generation speed) and "
-                    "changes in generation."
-                )
+        # Varlen imitates no masks based on the seq len of the input
+        flash_fwd = flash_varlen_fn if flash_fn is None else flash_fn
+        flash_wrapper = _flash_attention_pure_varlen_alt if flash_fn is None else _flash_attention_pure
 
-            out = _flash_attention_mask_varlen(
-                flash_varlen_fn=flash_varlen_fn,
-                flash_kwargs=flash_kwargs,
-                unpad_fn=unpad_fn,
-                pad_fn=pad_fn,
-                query_states=query_states,
-                key_states=key_states,
-                value_states=value_states,
-                attention_mask=attention_mask,
-                query_length=query_length,
-            )
-        # Case 2: Normal base FA as intended
-        else:
-            out = _flash_attention_pure(
-                flash_fn=flash_fn,
-                flash_kwargs=flash_kwargs,
-                query_states=query_states,
-                key_states=key_states,
-                value_states=value_states,
-            )
+        out = flash_wrapper(
+            flash_fwd,
+            flash_kwargs=flash_kwargs,
+            query_states=query_states,
+            key_states=key_states,
+            value_states=value_states,
+        )
 
     return out

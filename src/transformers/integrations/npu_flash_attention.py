@@ -46,7 +46,7 @@ def get_attn_mask_npu(device):
 
 def is_npu_fa2_top_left_aligned_causal_mask():
     warnings.warn(
-        "`is_npu_fa2_top_left_aligned_causal_mask` is deprecated and will be removed in v5.8. "
+        "`is_npu_fa2_top_left_aligned_causal_mask` is deprecated and will be removed in v5.16. "
         "This is no longer needed as the minimum required FA version is no longer affected by this.",
         FutureWarning,
     )
