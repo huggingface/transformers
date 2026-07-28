@@ -53,7 +53,6 @@ class BuildGithubHeadersTest(unittest.TestCase):
                 self.assertNotIn("Authorization", build_github_headers(token))
 
 
-
 class RateLimitWaitTest(unittest.TestCase):
     def test_non_rate_limit_status_returns_none(self):
         self.assertIsNone(gh._rate_limit_wait(200, Headers({}), "", 0))
@@ -107,7 +106,9 @@ class LogTokenStatusTest(unittest.TestCase):
     def test_no_ci_without_token_does_not_raise(self):
         env = {k: v for k, v in os.environ.items() if k != "CI"}
         with patch.dict(os.environ, env, clear=True):
-            self._patch_request([_response(200, body='{"resources": {"core": {"limit": 60, "remaining": 59, "reset": 9999999999}}}')])
+            self._patch_request(
+                [_response(200, body='{"resources": {"core": {"limit": 60, "remaining": 59, "reset": 9999999999}}}')]
+            )
             gh._log_token_status(token=None)  # must not raise
 
     def test_token_rejected_401_raises(self):
@@ -129,17 +130,23 @@ class LogTokenStatusTest(unittest.TestCase):
         self.assertIn("unexpected", str(ctx.exception).lower())
 
     def test_remaining_zero_raises(self):
-        self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 0, "reset": 9999999999}}}')])
+        self._patch_request(
+            [_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 0, "reset": 9999999999}}}')]
+        )
         with self.assertRaises(RuntimeError) as ctx:
             gh._log_token_status(token="t")
         self.assertIn("exhausted", str(ctx.exception).lower())
 
     def test_remaining_nonzero_does_not_raise(self):
-        self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')])
+        self._patch_request(
+            [_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')]
+        )
         gh._log_token_status(token="t")  # must not raise
 
     def test_called_only_once(self):
-        mock = self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')])
+        mock = self._patch_request(
+            [_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')]
+        )
         gh._log_token_status(token="t")
         gh._log_token_status(token="t")
         self.assertEqual(mock.call_count, 1)
