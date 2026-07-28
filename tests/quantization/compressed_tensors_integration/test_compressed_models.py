@@ -52,13 +52,13 @@ class StackCompressedModelTest(unittest.TestCase):
                     uncompressed_model,
                     device_map="auto",
                     dtype="auto",
-                    quantization_config=CompressedTensorsConfig(run_compressed=False),
+                    quantization_config=CompressedTensorsConfig(dequantize=True),
                 )
                 compressed_decompressed = AutoModelForCausalLM.from_pretrained(
                     compressed_model,
                     device_map="auto",
                     dtype="auto",
-                    quantization_config=CompressedTensorsConfig(run_compressed=False),
+                    quantization_config=CompressedTensorsConfig(dequantize=True),
                 )
 
                 for name, submodule in uncompressed.named_modules():
@@ -87,7 +87,7 @@ class StackCompressedModelTest(unittest.TestCase):
                         model_stub,
                         device_map="auto",
                         dtype="auto",
-                        quantization_config=CompressedTensorsConfig(run_compressed=False),
+                        quantization_config=CompressedTensorsConfig(dequantize=True),
                     )
                     for warning in caught_warnings:
                         self.assertNotIn(
