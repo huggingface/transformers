@@ -237,15 +237,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def get_rope_index(self):
-        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
-
-    def get_vision_position_ids(self):
-        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
-
-    def compute_3d_position_ids(self):
-        raise AttributeError("HyperCLOVAX Vision V2 does not need 3D positions")
-
 
 @auto_docstring
 class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedModel, GenerationMixin):
@@ -337,20 +328,18 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
         >>> from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
 
         >>> model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
-        ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
-        ...     torch_dtype="auto",
-        ...     device_map="auto",
+        ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B", device_map="auto"
         ... )
         >>> processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> messages = [
         ...     {"role": "user", "content": [
-        ...         {"type": "image_url", "image_url": {"url": "http://images.cocodataset.org/val2017/000000039769.jpg"}},
+        ...         {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
         ...         {"type": "text", "text": "Describe this image in detail."},
         ...     ]}
         ... ]
-        >>> inputs = processor.tokenizer.apply_chat_template(
-        ...     messages, tokenize=True, return_dict=True, return_tensors="pt"
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, return_dict=True, add_generation_prompt=True, return_tensors="pt"
         ... ).to(model.device)
         >>> output = model.generate(**inputs, max_new_tokens=200)
         >>> processor.decode(output[0], skip_special_tokens=True)
@@ -415,12 +404,11 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
-
-        # HyperCLOVAX Vision V2 uses 1D position_ids — do NOT force None like Exaone4.5 does for 2D-RoPE
         return model_inputs
 
     def _get_image_nums_and_video_nums(
