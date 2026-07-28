@@ -1313,7 +1313,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         full_value_states = torch.cat([self.values, value_states], dim=-2)
 
         # Prefill
-        if self.prefill_length is None:
+        if self.prefill_length is None or self.record_past:
             self.keys = full_key_states
             self.values = full_value_states
             return self.keys, self.values
@@ -1383,13 +1383,27 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
+        # If we are beyond the sliding window, we need to be more careful
         if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length + self.sliding_window:
-            raise ValueError(
-                "Cannot `crop` a `UnlimitedOcrDynamicReferenceSlidingWindowLayer` after it has seen more tokens than its"
-                "prefill + sliding window (otherwise some states are lost)"
-            )
-        DynamicLayer.crop(self, max_length)
-        self.cumulative_length = self.keys.shape[-2]
+            if not self.record_past:
+                raise RuntimeError(
+                    "`crop` was called, but the current layer does not track past states, and the sliding window size was already "
+                    "reached. Call `activate_past_recording` before `crop` to be able to rollback the cache."
+                )
+            if max_length > 0:
+                raise RuntimeError(
+                    "Once the sliding window size has been reached, `UnlimitedOcrDynamicReferenceSlidingWindowLayer` can only "
+                    "be cropped by passing a negative int, to specify how many tokens to remove"
+                )
+            tokens_to_remove = abs(max_length)
+            # We crop, and restrict the size back to the sliding window if still larger
+            self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.cumulative_length = self.cumulative_length - tokens_to_remove
+        # If we did not reach the sliding window, we can do the same as for a full attention layer
+        else:
+            DynamicLayer.crop(self, max_length)
+            self.cumulative_length = self.keys.shape[-2]
 
 
 class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
@@ -1477,7 +1491,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
             # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
             if key_states.shape[-2] == 1:
-                # Roll the window region to the left by 1 position (the pinned prefill in front stays put)
+                # Roll the window region to the left by 1 position
                 new_keys = self.keys[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
                 new_values = self.values[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
                 # Overwrite the last position with new states
@@ -1544,26 +1558,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         )
         return full_key_states, full_value_states
 
-    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.batch_size, self.num_heads = key_states.shape[:2]
-        self.v_head_dim = value_states.shape[-1]
-        self.k_head_dim = key_states.shape[-1]
-
-        self.cumulative_length = self.cumulative_length.to(self.device)
-        # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
-        # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
-        # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
-        # will still be run (except when users compile prefill explicitly, but this should be avoided!)
-        # Without this, we cannot use cudagraphs!!
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.cumulative_length)
-
-        prefill_length = key_states.shape[-2] if self.prefill_length is None else self.prefill_length
-        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_length + self.sliding_window))
-
-        self.is_initialized = True
-
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
         is_full = (
@@ -1604,6 +1598,26 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     def reset(self) -> None:
         super().reset()
         self.prefill_length = None
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        self.dtype, self.device = key_states.dtype, key_states.device
+        self.batch_size, self.num_heads = key_states.shape[:2]
+        self.v_head_dim = value_states.shape[-1]
+        self.k_head_dim = key_states.shape[-1]
+
+        self.cumulative_length = self.cumulative_length.to(self.device)
+        # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
+        # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
+        # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
+        # will still be run (except when users compile prefill explicitly, but this should be avoided!)
+        # Without this, we cannot use cudagraphs!!
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cumulative_length)
+
+        prefill_length = key_states.shape[-2] if self.prefill_length is None else self.prefill_length
+        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_length + self.sliding_window))
+
+        self.is_initialized = True
 
     def _allocate_key_value_buffers(self, physical_length: int, copy_existing: bool = False) -> None:
         """(Re)allocate the static key/value buffers to `physical_length` slots and (re)tag the static address.
