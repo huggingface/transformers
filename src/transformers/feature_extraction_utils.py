@@ -40,7 +40,7 @@ from .utils import (
     requires_backends,
     safe_load_json_file,
 )
-from .utils.hub import cached_file, hf_api
+from .utils.hub import cached_file, hf_api, resolve_revision
 
 
 if TYPE_CHECKING:
@@ -371,7 +371,15 @@ class FeatureExtractionMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=kwargs.get("proxies"),
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -450,6 +458,16 @@ class FeatureExtractionMixin(PushToHubMixin):
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)

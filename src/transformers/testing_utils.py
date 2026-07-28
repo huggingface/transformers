@@ -2684,16 +2684,17 @@ def run_command(command: list[str], return_stdout=False):
 
 class RequestCounter:
     """
-    Helper class that will count all requests made online.
+    Helper class that will count all requests made online, per HTTP method.
 
-    Might not be robust if urllib3 changes its logging format but should be good enough for us.
+    Only the requests sent from the thread entering the context manager are counted, so that background work (e.g. the
+    safetensors auto-conversion thread) does not make the counts unpredictable.
 
     Usage:
     ```py
     with RequestCounter() as counter:
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
-    assert counter["GET"] == 0
-    assert counter["HEAD"] == 1
+    assert counter["HEAD"] == 0
+    assert counter["GET"] == 1
     assert counter.total_calls == 1
     ```
     """
@@ -2701,36 +2702,20 @@ class RequestCounter:
     def __enter__(self):
         self._counter = defaultdict(int)
         self._thread_id = threading.get_ident()
-        self._extra_info = []
 
-        def patched_with_thread_info(func):
-            def wrap(*args, **kwargs):
-                self._extra_info.append(threading.get_ident())
-                return func(*args, **kwargs)
+        # `huggingface_hub` (and therefore every Hub call made by transformers) goes through `httpx`.
+        original_send = httpx.Client.send
 
-            return wrap
+        def send(client, request, **kwargs):
+            if threading.get_ident() == self._thread_id:
+                self._counter[request.method.upper()] += 1
+            return original_send(client, request, **kwargs)
 
-        import urllib3
-
-        self.patcher = patch.object(
-            urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
-        )
-        self.mock = self.patcher.start()
+        self.patcher = patch.object(httpx.Client, "send", send)
+        self.patcher.start()
         return self
 
     def __exit__(self, *args, **kwargs) -> None:
-        assert len(self.mock.call_args_list) == len(self._extra_info)
-        for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
-            if thread_id != self._thread_id:
-                continue
-            # code 307: the URL being requested by the user has moved to a temporary location
-            if call.args[-2] == 307:
-                continue
-            log = call.args[0] % call.args[1:]
-            for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
-                if method in log:
-                    self._counter[method] += 1
-                    break
         self.patcher.stop()
 
     def __getitem__(self, key: str) -> int:

@@ -48,7 +48,6 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    extract_commit_hash,
     hf_api,
     is_mlx_available,
     is_numpy_array,
@@ -60,6 +59,7 @@ from .utils import (
     list_repo_templates,
     logging,
     requires_backends,
+    resolve_revision,
     to_py_obj,
 )
 from .utils.chat_parsing import ResponseParser
@@ -1587,7 +1587,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
         gguf_file = kwargs.get("gguf_file")
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class}
@@ -1597,6 +1597,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
+
+        # Resolve the revision once: the repo listings and all the files below then come from the same repo state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
@@ -1654,14 +1664,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     subfolder=subfolder,
                     user_agent=user_agent,
                     _raise_exceptions_for_missing_entries=False,
-                    _commit_hash=commit_hash,
                 )
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 vocab_files["tokenizer_file"] = fast_tokenizer_file
 
             # This block looks for any extra chat template files
@@ -1724,7 +1732,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
                     )
                 except OSError:
                     # Re-raise any error raised by cached_file in order to get a helpful error message
@@ -1737,7 +1744,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
                         f"containing all relevant files for a {cls.__name__} tokenizer."
                     )
-                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         for file_id, file_path in vocab_files.items():
             if file_id not in resolved_vocab_files:
@@ -1751,7 +1757,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             token=token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
-            _commit_hash=commit_hash,
             _is_local=is_local,
             trust_remote_code=trust_remote_code,
             **kwargs,
@@ -1767,7 +1772,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
         _is_local=False,
         trust_remote_code=False,
         **kwargs,

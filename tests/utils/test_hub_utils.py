@@ -21,7 +21,15 @@ from pathlib import Path
 from huggingface_hub import constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
-from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    cached_file,
+    has_file,
+    is_commit_hash,
+    list_repo_templates,
+    resolve_revision,
+)
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -195,6 +203,68 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class ResolveRevisionTests(unittest.TestCase):
+    def test_is_commit_hash(self):
+        self.assertTrue(is_commit_hash(FULL_COMMIT_HASH))
+        self.assertFalse(is_commit_hash(None))
+        self.assertFalse(is_commit_hash("main"))
+        self.assertFalse(is_commit_hash("9b8c223"))  # short hashes are not immutable enough for us
+
+    def test_resolve_revision(self):
+        self.assertEqual(resolve_revision(RANDOM_BERT), resolve_revision(RANDOM_BERT, "main"))
+        self.assertTrue(is_commit_hash(resolve_revision(RANDOM_BERT)))
+
+    def test_resolve_revision_is_a_no_op_when_nothing_to_resolve(self):
+        with mock.patch("transformers.utils.hub.HfApi.repo_info") as mock_repo_info:
+            # Already immutable
+            self.assertEqual(resolve_revision(RANDOM_BERT, FULL_COMMIT_HASH), FULL_COMMIT_HASH)
+            # Not on the Hub
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                self.assertEqual(resolve_revision(tmp_dir, "main"), "main")
+            # Explicitly not allowed to reach the Hub
+            self.assertEqual(resolve_revision(RANDOM_BERT, "main", local_files_only=True), "main")
+            # Cannot honor the caller's proxies
+            self.assertEqual(resolve_revision(RANDOM_BERT, "main", proxies={"https": "https://proxy"}), "main")
+        mock_repo_info.assert_not_called()
+
+    def test_resolve_revision_fails_open(self):
+        """Any Hub error must leave the requested revision untouched, and be reported by the regular loading path."""
+        for error in (HfHubHTTPError("failed", response=mock.Mock(status_code=429)), OfflineModeIsEnabled()):
+            with mock.patch("transformers.utils.hub.HfApi.repo_info", side_effect=error):
+                self.assertEqual(resolve_revision(RANDOM_BERT, "main"), "main")
+                self.assertIsNone(resolve_revision(RANDOM_BERT))
+
+    def test_resolve_revision_records_the_ref_in_the_cache(self):
+        """
+        Files are downloaded under the resolved commit hash, so the cache needs to know which commit the mutable
+        revision pointed to. Otherwise a later load could not fall back to the cache when the Hub is unreachable.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            commit_hash = resolve_revision(RANDOM_BERT, cache_dir=tmp_dir)
+            cached_file(RANDOM_BERT, CONFIG_NAME, revision=commit_hash, cache_dir=tmp_dir)
+
+            resolved_file = cached_file(RANDOM_BERT, CONFIG_NAME, cache_dir=tmp_dir, local_files_only=True)
+            self.assertIn(commit_hash, resolved_file)
+
+    def test_cached_file_with_commit_hash_does_not_call_the_hub(self):
+        """A commit hash is immutable, so a file already in the cache must be returned without any Hub call."""
+        commit_hash = resolve_revision(RANDOM_BERT)
+        cached_file(RANDOM_BERT, CONFIG_NAME, revision=commit_hash)
+
+        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=AssertionError("called the Hub")):
+            self.assertIsNotNone(cached_file(RANDOM_BERT, CONFIG_NAME, revision=commit_hash))
+
+    def test_cached_file_with_commit_hash_serves_missing_files_from_the_cache(self):
+        """Same for a file that is known to be missing at that commit: the negative cache must be enough."""
+        commit_hash = resolve_revision(RANDOM_BERT)
+        cached_file(RANDOM_BERT, "conf", revision=commit_hash, _raise_exceptions_for_missing_entries=False)
+
+        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=AssertionError("called the Hub")):
+            self.assertIsNone(
+                cached_file(RANDOM_BERT, "conf", revision=commit_hash, _raise_exceptions_for_missing_entries=False)
+            )
 
 
 class OfflineModeTests(unittest.TestCase):

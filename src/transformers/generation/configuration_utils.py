@@ -28,10 +28,10 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    extract_commit_hash,
     hf_api,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 
 
@@ -489,7 +489,8 @@ class GenerationConfig(PushToHubMixin):
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Common attributes
-        self._commit_hash = kwargs.pop("_commit_hash", None)
+        # BC: generation configs saved by older versions may still carry `_commit_hash`, it is not used anymore.
+        kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -1023,7 +1024,16 @@ class GenerationConfig(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name,
+            revision,
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1052,9 +1062,7 @@ class GenerationConfig(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    _commit_hash=commit_hash,
                 )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -1071,7 +1079,6 @@ class GenerationConfig(PushToHubMixin):
         try:
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
-            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
@@ -1116,9 +1123,6 @@ class GenerationConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
-        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
-        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
-            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # The line below allows model-specific config to be loaded as well through kwargs, with safety checks.
         # See https://github.com/huggingface/transformers/pull/21269

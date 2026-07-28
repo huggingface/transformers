@@ -29,6 +29,7 @@ from ...utils import (
     cached_file,
     is_torchvision_available,
     logging,
+    resolve_revision,
     safe_load_json_file,
 )
 from ...utils.import_utils import requires
@@ -313,6 +314,16 @@ class AutoVideoProcessor:
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            proxies=kwargs.get("proxies"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)

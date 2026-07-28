@@ -98,7 +98,6 @@ def auto_conversion(
         if sha is None:
             return None, None
         cached_file_kwargs["revision"] = sha
-        del cached_file_kwargs["_commit_hash"]
 
         # This is an additional HEAD call that could be removed if we could infer sharded/non-sharded from the PR
         # description.
