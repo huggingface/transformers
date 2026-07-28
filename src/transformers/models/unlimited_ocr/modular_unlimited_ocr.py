@@ -194,7 +194,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
         )
 
 
-class UnlimitedOcrProcessorKwargs(DeepseekOcr2ProcessorKwargs, total=False):
+class UnlimitedOcrProcessorKwargs(DeepseekOcr2ProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
