@@ -16,8 +16,9 @@ from PIL import Image
 
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -32,8 +33,7 @@ model = Apertus1p5ForConditionalGeneration.from_pretrained(CHECKPOINT, dtype=tor
 
 def decode_new(output, inputs):
     return [
-        tokenizer.decode(sequence[inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        for sequence in output
+        tokenizer.decode(sequence[inputs["input_ids"].shape[1] :], skip_special_tokens=True) for sequence in output
     ]
 
 

@@ -19,8 +19,9 @@ from PIL import Image
 
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -46,8 +47,9 @@ assert int(vocab_ids.min()) >= config.image_token_offset
 assert int(vocab_ids.max()) < config.image_token_offset + config.vision_tokenizer_config.codebook_size
 first = int(vocab_ids[0])
 assert tokenizer.convert_ids_to_tokens(first) == f"<|visual token {first - config.image_token_offset}|>"
-print(f"[OK] processor path: {vocab_ids.numel()} codes, first id {first} -> "
-      f"{tokenizer.convert_ids_to_tokens(first)!r}")
+print(
+    f"[OK] processor path: {vocab_ids.numel()} codes, first id {first} -> {tokenizer.convert_ids_to_tokens(first)!r}"
+)
 
 # --- 2) fully manual preprocessing -> vision tokenizer ---------------------------------------------
 # resize to the same target the processor chose (multiples of 16), PIL BICUBIC like the reference pipeline
@@ -61,8 +63,10 @@ with torch.no_grad():
 assert code_grid.shape == (target_h // 16, target_w // 16)
 manual_vocab_ids = code_grid.flatten() + config.image_token_offset
 agreement = (manual_vocab_ids == vocab_ids).float().mean().item()
-print(f"[OK] manual path: grid {tuple(code_grid.shape)}, same geometry; "
-      f"code agreement vs processor path {agreement:.1%} (PIL vs torchvision resize kernels)")
+print(
+    f"[OK] manual path: grid {tuple(code_grid.shape)}, same geometry; "
+    f"code agreement vs processor path {agreement:.1%} (PIL vs torchvision resize kernels)"
+)
 assert agreement > 0.9, "the two resize kernels should only flip a small fraction of codes"
 
 print("\nALL IMAGE TOKENIZATION CHECKS PASSED")
