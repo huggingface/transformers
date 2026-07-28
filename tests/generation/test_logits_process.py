@@ -317,6 +317,25 @@ class LogitsProcessorTest(unittest.TestCase):
 
         torch.testing.assert_close(processed_3d[:, -1, :], processed_2d)
 
+    def test_encoder_repetition_penalty_gauge_invariance(self):
+        input_ids = torch.tensor([[0, 1]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = (torch.arange(vocab_size, device=torch_device, dtype=torch.float) / vocab_size - 0.5).unsqueeze(0)
+        shifted_scores = scores + 100.0
+
+        # softmax is invariant to a constant shift of the logits, the normalized penalty should work the same way
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=1.3, normalize=True)
+        probs = torch.softmax(rep_penalty_proc(input_ids, scores), dim=-1)
+        shifted_probs = torch.softmax(rep_penalty_proc(input_ids, shifted_scores), dim=-1)
+        self.assertTrue(torch.allclose(probs, shifted_probs))
+
+        # the raw-logit penalty is gauge-variant, the shift should cause a change in output distribution
+        raw_rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=1.3)
+        probs = torch.softmax(raw_rep_penalty_proc(input_ids, scores), dim=-1)
+        shifted_probs = torch.softmax(raw_rep_penalty_proc(input_ids, shifted_scores), dim=-1)
+        self.assertFalse(torch.allclose(probs, shifted_probs))
+
     def test_encoder_repetition_penalty_dist_process(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         vocab_size = 10
