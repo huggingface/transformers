@@ -139,7 +139,7 @@ class UnlimitedOcrProcessor(ProcessorMixin):
             detections.append(
                 {
                     "region_type": region_type,
-                    "box": [x1, y1, x2, y2],
+                    "box": [int(x1), int(y1), int(x2), int(y2)],
                     "text": text,
                 }
             )
