@@ -822,6 +822,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     @can_return_tuple
     @auto_docstring
