@@ -30,6 +30,7 @@ imported by GitHub Actions steps that run a bare Python with no third-party pack
 """
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -45,6 +46,105 @@ def build_github_headers(token=None):
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+def _log_rate_limit_headers(response_headers, prefix=""):
+    """Print all GitHub rate-limit response headers for diagnostics."""
+    limit = response_headers.get("X-RateLimit-Limit", "n/a")
+    used = response_headers.get("X-RateLimit-Used", "n/a")
+    remaining = response_headers.get("X-RateLimit-Remaining", "n/a")
+    reset_ts = response_headers.get("X-RateLimit-Reset")
+    resource = response_headers.get("X-RateLimit-Resource", "n/a")
+    retry_after = response_headers.get("Retry-After")
+
+    if reset_ts is not None:
+        secs_until = int(reset_ts) - int(time.time())
+        reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+    else:
+        reset_str = "n/a"
+
+    parts = [
+        f"limit={limit}",
+        f"used={used}",
+        f"remaining={remaining}",
+        f"reset={reset_str}",
+        f"resource={resource}",
+    ]
+    if retry_after is not None:
+        parts.append(f"Retry-After={retry_after}s")
+
+    tag = f"[{prefix}] " if prefix else ""
+    print(f"{tag}GitHub rate-limit: {', '.join(parts)}")
+
+
+_token_status_logged = False
+
+
+def _log_token_status(token=None):
+    """Call GET /rate_limit once to confirm token validity and log quota.
+
+    ``/rate_limit`` does not consume quota, so it is safe to call as a pure diagnostic.
+    Prints whether the token is accepted (authenticated, limit=5000+) or rejected (401).
+
+    Raises ``RuntimeError`` immediately if:
+      * running in CI (``CI`` env var) with no token — anonymous 60 req/hr is never enough;
+      * a token was provided but rejected (HTTP 401) — all subsequent calls will fail the same way;
+      * the quota is already exhausted (remaining=0) — no point starting any API calls.
+    """
+    global _token_status_logged
+    if _token_status_logged:
+        return
+    _token_status_logged = True
+
+    if not token and os.environ.get("CI"):
+        raise RuntimeError(
+            "[token check] No GitHub token provided in a CI environment. "
+            "Set the GITHUB_TOKEN env var — anonymous requests are limited to 60/hr and will "
+            "exhaust immediately on any multi-page crawl."
+        )
+
+    try:
+        status, response_headers, body = _request("https://api.github.com/rate_limit", build_github_headers(token))
+    except urllib.error.URLError as e:
+        print(f"[token check] Could not reach GitHub API: {e}")
+        return
+
+    if status == 401:
+        msg = "[token check] Token REJECTED by GitHub (HTTP 401) — token is invalid, expired, or revoked."
+        print(msg)
+        if token:
+            raise RuntimeError(f"{msg} Refresh the token and rerun.")
+        return
+
+    if status != 200:
+        print(f"[token check] Unexpected status {status} from /rate_limit: {body[:200]!r}")
+        return
+
+    # Parse the JSON body for richer quota info (headers only carry a subset).
+    try:
+        data = json.loads(body)
+        core = data.get("resources", {}).get("core", data.get("rate", {}))
+        remaining = str(core.get("remaining", "n/a"))
+        limit = str(core.get("limit", "n/a"))
+        reset_ts = core.get("reset")
+    except Exception:
+        remaining = response_headers.get("X-RateLimit-Remaining", "n/a")
+        limit = response_headers.get("X-RateLimit-Limit", "n/a")
+        reset_ts = response_headers.get("X-RateLimit-Reset")
+        reset_ts = int(reset_ts) if reset_ts is not None else None
+
+    if reset_ts is not None:
+        secs_until = int(reset_ts) - int(time.time())
+        reset_str = f"{reset_ts} (resets in {secs_until}s, i.e. {secs_until // 60}m {secs_until % 60}s)"
+    else:
+        reset_str = "n/a"
+
+    auth_status = "AUTHENTICATED" if token else "UNAUTHENTICATED"
+    print(f"[token check] {auth_status} — limit={limit}, remaining={remaining}, reset={reset_str}")
+
+    if remaining == "0":
+        msg = f"[token check] Rate-limit quota EXHAUSTED (remaining=0). Resets at {reset_str}."
+        raise RuntimeError(msg)
 
 
 def _rate_limit_wait(status, response_headers, body, attempt):
@@ -91,23 +191,6 @@ def _rate_limit_wait(status, response_headers, body, attempt):
     return min(max(wait, 30), 300)
 
 
-def _is_expired_or_bad_token(status, body):
-    """Return why a 401 rejected the token (``"expired"`` / ``"bad credentials"`` / ``"rejected"``), else ``None``.
-
-    A 401 (Unauthorized) is fundamentally a statement about the credential, not the resource: if a
-    token was sent and GitHub still answered 401, the token itself was refused. GitHub spells this
-    out in the body (``"Bad credentials"``; expired credentials also mention ``"expired"``), but any
-    401 received *while sending a token* is by definition a rejected token, so the body is only used
-    to sharpen the error message, never to decide.
-    """
-    if status != 401:
-        return None
-    body = (body or "").lower()
-    if "expired" in body:
-        return "expired"
-    return "bad credentials" if "bad credentials" in body else "rejected"
-
-
 def _request(url, headers, method="GET", data=None):
     """Perform a single HTTP request and return ``(status, headers, body_text)``.
 
@@ -145,6 +228,10 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
         raised at once so callers fail loudly instead of indexing into an error payload or masking a
         real outage behind silent retries.
     """
+    # Check token validity and quota once before entering the retry loop. Raises immediately if
+    # running in CI without a token, the token is rejected, or the quota is already exhausted.
+    _log_token_status(token)
+
     headers = build_github_headers(token)
     data = None
     if payload is not None:
@@ -152,31 +239,25 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
         headers["Content-Type"] = "application/json"
 
     for attempt in range(max_retries):
+        label = "initial" if attempt == 0 else f"retry {attempt}/{max_retries - 1}"
+
         try:
             status, response_headers, body = _request(url, headers, method=method, data=data)
         except urllib.error.URLError as error:
             # Network-level failure (DNS, connection reset, timeout): not a rate limit, so fail hard.
             raise RuntimeError(f"GitHub API request to {method} {url} failed: {error}") from error
 
+        print(f"[{label}] {method} {url} → HTTP {status}")
+        # Rate-limit headers are absent on 401 (auth rejected before rate-limit machinery runs).
+        if status != 401:
+            _log_rate_limit_headers(response_headers, prefix=label)
+
         wait = _rate_limit_wait(status, response_headers, body, attempt)
         if wait is not None:
-            print(
-                f"GitHub API rate limited on {method} {url} (status {status}); waiting {wait}s before "
-                f"retry {attempt + 1}/{max_retries}"
-            )
+            next_label = f"retry {attempt + 1}/{max_retries - 1}"
+            print(f"[{label}] Rate limited (HTTP {status}) — waiting {wait}s before {next_label}")
             time.sleep(wait)
             continue
-
-        # A rejected token (401) must not be retried and must not fall back to anonymous requests
-        # (that only trips the anonymous rate limit into a cascade of 403s). Fail hard so the
-        # operator refreshes the token instead of chasing phantom rate limits.
-        token_state = _is_expired_or_bad_token(status, body)
-        if token_state is not None:
-            raise RuntimeError(
-                f"GitHub rejected the token on {method} {url} with 401 ({token_state}). Not retrying "
-                "unauthenticated (that only trips the anonymous rate limit and returns 403s). Refresh "
-                "the token and rerun."
-            )
 
         if 200 <= status < 300:
             return json.loads(body) if body else None
