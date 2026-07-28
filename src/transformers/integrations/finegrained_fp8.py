@@ -30,7 +30,6 @@ from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
-    is_kernels_available,
     is_torchdynamo_compiling,
 )
 from .deepgemm import (
@@ -90,13 +89,6 @@ def _load_finegrained_fp8_kernel() -> FineGrainedFP8:
     Raises `ImportError` if the `kernels` package is missing, or the kernel or required
     symbols cannot be found.
     """
-    if not is_torchdynamo_compiling():
-        if not is_kernels_available():
-            raise ImportError(
-                "finegrained-fp8 kernel requires the `kernels` package. "
-                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-            )
 
     kernel = lazy_load_kernel("finegrained-fp8")
     if kernel is None:
