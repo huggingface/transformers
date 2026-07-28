@@ -367,7 +367,7 @@ class DogeAttention(nn.Module):
             if attention_mask.dtype == torch.bool:
                 dtype = hidden_states.dtype
                 attention_mask = torch.where(
-                    attention_mask, torch.tensor(0.0, device=attention_mask.device, dtype=dtype), min_dtype
+                    attention_mask, torch.full((), 0.0, device=attention_mask.device, dtype=dtype), min_dtype
                 )
             attn_mask = attn_mask.masked_fill(attention_mask[:, :, :, : attn_mask.shape[-1]] != 0, min_dtype)
         if attn_mask.shape[-1] > keep_window_size:
