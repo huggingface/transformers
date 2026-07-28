@@ -34,11 +34,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import (
-    lazy_load_kernel,
-    use_kernel_forward_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import lazy_load_kernel, use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs

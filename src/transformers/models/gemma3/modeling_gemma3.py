@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,

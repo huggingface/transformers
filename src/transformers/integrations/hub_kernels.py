@@ -91,9 +91,11 @@ if is_kernels_available():
             )
             return lambda cls: cls
 
-    def use_kernelized_func(module_names: Callable):
+    def use_kernelized_func(module_names: list[Callable] | Callable):
         if _kernels_enabled:
-            return _kernels_use_kernelized_func(module_names)
+            if isinstance(module_names, Callable):
+                module_names = [module_names]
+            return _kernels_use_kernelized_func(*module_names)
         else:
             logger.warning_once(
                 f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
