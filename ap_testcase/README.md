@@ -1,6 +1,7 @@
 # Apertus 1.5 integration: hands-on test scripts
 
-Standalone scripts to exercise the transformers integration against a local composite checkpoint.
+Standalone scripts to exercise the transformers integration against the composite checkpoint
+(the official hub release by default, or a locally assembled copy).
 Each script is self-contained and prints `[OK]`-style checks.
 
 ## Setup (from scratch)
@@ -36,13 +37,13 @@ All referenced hub repos are currently public, so no `hf auth login` is needed.
 The scripts read the checkpoint from the `APERTUS1P5_CHECKPOINT` environment variable, which accepts a
 local directory or a hub repo id (optionally `repo_id@revision`).
 
-**Fast path (the default):** with the variable unset, the scripts use the published composite
-`apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2` directly, downloading it into the HF cache on first
+**Fast path (the default):** with the variable unset, the scripts use the official release
+`swiss-ai/Apertus-v1.5-8B` directly, downloading it into the HF cache on first
 use (the two processor-only scripts skip the 17 GB weight shards and fetch only the small files). To keep
 a persistent local copy instead:
 
 ```bash
-hf download apertus-ai/Apertus-v1.5-8B-integration --revision refs/pr/2 \
+hf download swiss-ai/Apertus-v1.5-8B \
   --local-dir ~/Apertus-1.5-8B-composite-hf
 export APERTUS1P5_CHECKPOINT=~/Apertus-1.5-8B-composite-hf
 ```
@@ -96,6 +97,9 @@ python ap_testcase/01_processor_single_inputs.py
 | `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading) | yes |
 | `06_generation_raw_text.py` | Full generation from raw text with placeholders (base-model style), incl. a batch | yes |
 | `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
+| `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, padded-logits contract, generation parity vs single device) and `tp_plan="auto"` tensor parallelism over the text backbone via torchrun | yes |
+| `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, `-100` masking enforced), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |
 
-The model-loading scripts run on CPU and take a few minutes each (bf16 8B load is about 1 minute).
-The URL-fetching section in 01 and the media auto-loading in 05 need network access.
+The model-loading scripts 03-07 run on CPU and take a few minutes each (bf16 8B load is about
+1 minute); 08 and 09 need CUDA devices and skip themselves otherwise. The URL-fetching section in 01
+and the media auto-loading in 05 need network access.

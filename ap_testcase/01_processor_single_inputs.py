@@ -14,9 +14,10 @@ import numpy as np
 
 from transformers import AutoProcessor
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite.
 # This script only needs the processor stack, so the weight shards are not downloaded.
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -42,8 +43,10 @@ assert decoded.count("<|image|>") == grid_h * grid_w, "one placeholder per 16x16
 assert decoded.count("<|img_end_of_row|>") == grid_h - 1, "rows joined by exactly H-1 separators"
 assert f"<|img_start|>{grid_h}*{grid_w}<|img_token_start|>" in decoded, "height-first size header"
 assert out["pixel_values"].shape == (1, 3, height, width)
-print(f"[OK] text+image: 300x200 px resized to {height}x{width} -> {grid_h}x{grid_w} grid "
-      f"({grid_h * grid_w} placeholders); stream starts: {decoded[:80]}...")
+print(
+    f"[OK] text+image: 300x200 px resized to {height}x{width} -> {grid_h}x{grid_w} grid "
+    f"({grid_h * grid_w} placeholders); stream starts: {decoded[:80]}..."
+)
 
 # --- text + one audio clip -------------------------------------------------------------------------
 out = processor(text="Transcribe: <|audio|>", audio=[audio], return_tensors="pt")
@@ -55,12 +58,24 @@ assert int(out["feature_attention_mask"].sum()) == 24000
 print(f"[OK] text+audio: 1 s clip -> 40 placeholders, input_features {tuple(out['input_features'].shape)}")
 
 # --- text + image + audio in one prompt ------------------------------------------------------------
-out = processor(text="<|image|> What do you see, and what is said here: <|audio|>",
-                images=[image], audio=[audio], return_tensors="pt")
-assert {"input_ids", "attention_mask", "pixel_values", "image_sizes",
-        "input_features", "feature_attention_mask"} <= set(out.keys())
-print(f"[OK] text+image+audio: sequence length {out['input_ids'].shape[-1]} "
-      f"(structure tokens + {grid_h * grid_w} image + 40 audio placeholders + text)")
+out = processor(
+    text="<|image|> What do you see, and what is said here: <|audio|>",
+    images=[image],
+    audio=[audio],
+    return_tensors="pt",
+)
+assert {
+    "input_ids",
+    "attention_mask",
+    "pixel_values",
+    "image_sizes",
+    "input_features",
+    "feature_attention_mask",
+} <= set(out.keys())
+print(
+    f"[OK] text+image+audio: sequence length {out['input_ids'].shape[-1]} "
+    f"(structure tokens + {grid_h * grid_w} image + 40 audio placeholders + text)"
+)
 
 # --- media given as URLs: the processor fetches and (for audio files) resamples itself --------------
 image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
@@ -70,8 +85,10 @@ try:
     samples = int(out["feature_attention_mask"].sum())
     placeholders = tokenizer.decode(out["input_ids"][0]).count("<|audio|>")
     assert placeholders == -(-samples // 600), "fetched audio is resampled to 24 kHz before counting"
-    print(f"[OK] URL fetch: image {tuple(out['pixel_values'].shape)}, "
-          f"audio {samples} samples -> {placeholders} placeholders")
+    print(
+        f"[OK] URL fetch: image {tuple(out['pixel_values'].shape)}, "
+        f"audio {samples} samples -> {placeholders} placeholders"
+    )
 except Exception as error:  # offline or missing librosa
     print(f"[SKIP] URL fetch (needs network + librosa): {type(error).__name__}: {error}")
 
