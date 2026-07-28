@@ -1082,10 +1082,9 @@ if __name__ == "__main__":
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
         ci_details = get_github_json(ci_detail_url, token=github_token)
 
-        # We use `.get()` to avoid failures when the GitHub API returns an unexpected response (e.g. due to rate
-        # limiting, where the response won't contain the expected fields). It's preferred to continue the CI run
-        # without failing even if we can't retrieve the author info. That said, the GITHUB_TOKEN should always be
-        # set during CI runs to avoid hitting the rate limit in the first place.
+        # get_github_json either returns valid data or raises (e.g. on rate limiting). We still use
+        # .get() defensively in case the response shape changes — it's preferred to continue the CI
+        # run without author info rather than abort the whole report.
         ci_author = (ci_details.get("author") or {}).get("login")
 
         merged_by = None

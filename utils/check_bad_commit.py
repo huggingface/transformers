@@ -296,7 +296,8 @@ def get_commit_info(commit, pr_number=None, github_token=None):
             commit_to_query = match.group(1)
 
     # If no PR number yet, try to discover it from the commit.
-    # The API can return an error dict (e.g. rate limit) instead of a list, so guard with isinstance.
+    # get_github_json either returns valid data or raises. Guard with isinstance in case the endpoint
+    # returns an unexpected shape (e.g. a single object instead of a list).
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
         pr_info_for_commit = get_github_json(url, token=github_token)
@@ -304,7 +305,8 @@ def get_commit_info(commit, pr_number=None, github_token=None):
             pr_number = pr_info_for_commit[0].get("number")
 
     # If we have a PR number, get author and merged_by info.
-    # Use .get() throughout: on rate-limit/403 the API returns an error dict, not the expected PR object.
+    # get_github_json either returns valid data or raises. Use .get() defensively in case the
+    # response shape differs from what is expected (e.g. API changes or missing fields).
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = get_github_json(url, token=github_token)
