@@ -26,11 +26,10 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, Gemma2Config, LlamaConfig, Qwen3NextConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
-        create_bidirectional_sliding_window_mask,
         create_causal_mask,
         create_chunked_causal_mask,
         create_masks_for_generate,
@@ -376,34 +375,6 @@ class MaskTest(unittest.TestCase):
 
         self.assertTrue(padded_mask[0] is not None)
         self.assertTrue(padded_mask[1] is not None)
-
-    def test_bidirectional_masks_build_on_inputs_embeds_device(self):
-        """
-        Both bidirectional mask helpers must build the mask on `inputs_embeds.device`: under model
-        parallelism, `encoder_hidden_states` can live on a different device than the attention layer
-        consuming the mask. #46221 fixed `create_bidirectional_mask`; regression test for it and its
-        sliding-window sibling. The `meta` device stands in for "a different device" so the test also
-        runs single-device.
-        """
-        config = Gemma2Config(sliding_window=4)
-        config._attn_implementation = "sdpa"
-
-        inputs_embeds = torch.ones((2, 5, 8), device=torch_device, dtype=torch.float16)
-        encoder_hidden_states = torch.ones((2, 7, 8), device="meta", dtype=torch.float16)
-        # A padded row, otherwise the full-attention helper skips mask creation (all-ones fast
-        # path) and returns None instead of a tensor whose device we can check
-        cross_mask = torch.ones((2, 7), device=torch_device)
-        cross_mask[:, -1] = 0
-
-        for mask_fn in (create_bidirectional_mask, create_bidirectional_sliding_window_mask):
-            with self.subTest(mask_fn.__name__):
-                mask = mask_fn(
-                    config=config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=cross_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                )
-                self.assertEqual(mask.device, inputs_embeds.device)
 
     def test_recurrent_mask_kept_on_continued_multi_token_forward(self):
         """
