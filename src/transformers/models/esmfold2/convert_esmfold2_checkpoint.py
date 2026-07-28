@@ -88,6 +88,13 @@ _LEGACY_RENAMES = {
 
 _LEGACY_PORT_PATHS = (*_LEGACY_FIELDS, *_LEGACY_RENAMES)
 
+# The published ESMC backbone repos predate the port and spell these three fields the old way.
+_LEGACY_ESMC_RENAMES = {
+    "d_model": "hidden_size",
+    "n_heads": "num_attention_heads",
+    "n_layers": "num_hidden_layers",
+}
+
 # Leaves not carried over: backbone id/size, re-derived fields, always-on head flags, training knobs.
 _LEGACY_DROP_PATHS = {
     "architectures",
@@ -143,7 +150,7 @@ _WEIGHT_KEY_RENAMES = (
     # EsmFold2AdaptiveLayerNorm's conditioning scale and gate/shift projections.
     ("adaln.s_gate.", "adaln.gate_proj."),
     ("adaln.s_shift.", "adaln.shift_proj."),
-    ("adaln.s_scale", "adaln.norm_scale"),
+    ("adaln.s_scale", "adaln.cond_norm.weight"),
     ("base_z_linear.0.", "base_z_input_norm."),
     ("base_z_linear.1.", "base_z_proj."),
     ("base_z_mlp.0.", "base_z_to_pair."),
@@ -226,10 +233,16 @@ def _load_state_dict(directory: str) -> dict[str, torch.Tensor]:
     return state_dict
 
 
+def build_esmc_config(esmc_dir: str) -> dict:
+    """The backbone repo's config.json, with the pre-port field spellings renamed."""
+    esmc = _read_json(esmc_dir)
+    return {_LEGACY_ESMC_RENAMES.get(key, key): value for key, value in esmc.items()}
+
+
 def build_config(esmfold2_dir: str, esmc_dir: str) -> EsmFold2Config:
     config = build_legacy_config(_read_json(esmfold2_dir))
     config["architectures"] = ["EsmFold2Model"]  # experimental repos ship a now-removed architecture string
-    config["esmc_config"] = _read_json(esmc_dir)
+    config["esmc_config"] = build_esmc_config(esmc_dir)
     return EsmFold2Config.from_dict(config)
 
 

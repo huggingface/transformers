@@ -55,7 +55,7 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "single_inputs_size": 83,
         "num_loops": 1,
         "num_diffusion_samples": 1,
-        "esmc_config": {"d_model": 32, "n_heads": 2, "n_layers": 1, "vocab_size": 64},
+        "esmc_config": {"hidden_size": 32, "num_attention_heads": 2, "num_hidden_layers": 1, "vocab_size": 64},
         "folding_trunk_num_hidden_layers": 1,
         "sliding_window": 8,
         "parcae_num_coda_layers": 1,
@@ -463,7 +463,7 @@ class EsmFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            expected_distogram = torch.tensor([6.03, 7.38, 9.00, 8.94, 15.75, 18.25, 19.25, 22.25])
+            expected_distogram = torch.tensor([6.22, 7.44, 9.19, 9.19, 16.00, 18.50, 19.50, 22.50])
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )

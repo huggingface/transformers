@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-26.*
+*This model was contributed to Hugging Face Transformers on 2026-07-28.*
 
 # ESMFold2
 
@@ -105,3 +105,15 @@ pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
     - fold
     - infer_protein
     - infer_protein_as_pdb
+
+## EsmFold2Output
+
+[[autodoc]] models.esmfold2.modeling_esmfold2.EsmFold2Output
+
+## EsmFold2TrunkOutput
+
+[[autodoc]] models.esmfold2.modeling_esmfold2.EsmFold2TrunkOutput
+
+## EsmFold2AtomInputs
+
+[[autodoc]] models.esmfold2.modeling_esmfold2.EsmFold2AtomInputs

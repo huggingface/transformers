@@ -44,9 +44,9 @@ class EsmcModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=33,
-        d_model=32,
-        n_layers=2,
-        n_heads=4,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
         initializer_range=0.02,
         num_labels=3,
         scope=None,
@@ -58,16 +58,12 @@ class EsmcModelTester:
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.n_layers = n_layers
-        self.n_heads = n_heads
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.scope = scope
-        # aliases consumed by ModelTesterMixin
-        self.hidden_size = d_model
-        self.num_hidden_layers = n_layers
-        self.num_attention_heads = n_heads
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -88,9 +84,9 @@ class EsmcModelTester:
     def get_config(self):
         return EsmcConfig(
             vocab_size=self.vocab_size,
-            d_model=self.d_model,
-            n_heads=self.n_heads,
-            n_layers=self.n_layers,
+            hidden_size=self.hidden_size,
+            num_attention_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
             pad_token_id=1,
             initializer_range=self.initializer_range,
             num_labels=self.num_labels,
@@ -102,7 +98,7 @@ class EsmcModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.d_model))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, input_ids, input_mask, sequence_labels, token_labels):
         model = EsmcForMaskedLM(config=config)
@@ -164,7 +160,7 @@ class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EsmcModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmcConfig, common_properties=["d_model", "n_heads"])
+        self.config_tester = ConfigTester(self, config_class=EsmcConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
