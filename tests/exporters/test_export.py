@@ -77,9 +77,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
         ),
         "GlmImageModel": (
-            "Autoregressive image generation with data-dependent 2D-grid position bookkeeping in "
-            "`forward`; export support isn't worth the model-specific machinery (it's used as part of a "
-            "diffusers pipeline). TODO: revisit if there's demand for exporting it directly."
+            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` "
+            "over `cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
+            "vision-attention export patch, and even with it the export runs long (further guards / slow "
+            "symbolic lowering). Not worth the model-specific export support for a diffusers-pipeline "
+            "model. TODO: revisit on demand."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
     },
