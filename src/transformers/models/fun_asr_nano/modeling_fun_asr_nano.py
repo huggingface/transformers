@@ -646,7 +646,7 @@ class FunAsrNanoMultiModalProjector(nn.Module):
         return hidden_states
 
 
-class FunAsrNanoAdapter(nn.Module):
+class FunAsrNanoAdaptor(nn.Module):
     """Bidirectional self-attention adaptor applied to the projected audio features."""
 
     def __init__(self, config: FunAsrNanoConfig):
