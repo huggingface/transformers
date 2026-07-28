@@ -610,6 +610,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         return special_image_mask, special_video_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -1364,8 +1364,8 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1580,8 +1580,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

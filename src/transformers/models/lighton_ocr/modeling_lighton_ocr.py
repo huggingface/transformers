@@ -177,7 +177,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
-        image_features = torch.split(image_features, split_sizes)
+        image_outputs.pooler_output = torch.split(image_features, split_sizes)
         return image_outputs
 
     def get_placeholder_mask(

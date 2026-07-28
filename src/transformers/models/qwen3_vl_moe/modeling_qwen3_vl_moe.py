@@ -1279,8 +1279,8 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
