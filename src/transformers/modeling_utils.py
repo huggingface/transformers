@@ -2462,7 +2462,7 @@ class PreTrainedModel(
                 for buffer in module.buffers(recurse=False)
                 if buffer is not None
             )
-            and not any(param.device.type == "meta" for param in module.parameters(recurse=False))
+            and not any(param.device.type == "meta" for param in module.parameters(recurse=True))
         ):
             module._is_hf_initialized = True
             return
