@@ -31,11 +31,7 @@ if is_torch_available():
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        }
-    }
+    _defaults = {}
 
 
 @auto_docstring
