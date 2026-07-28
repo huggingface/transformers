@@ -447,7 +447,7 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should be repeated within the decoder ids.
         normalize (`bool`, *optional*, defaults to `False`):
-            Apply the penalty to the normalized log-probilities instead of the raw logits.
+            Apply the penalty to the normalized log-probabilities instead of the raw logits.
             See [`RepetitionPenaltyLogitsProcessor`] and [this paper](https://arxiv.org/abs/2607.09791) for more details.
 
     Examples:
