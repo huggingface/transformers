@@ -303,3 +303,6 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["Qwen3VLVideoProcessor"]

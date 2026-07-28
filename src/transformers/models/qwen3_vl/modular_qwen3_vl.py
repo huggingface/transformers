@@ -1304,4 +1304,5 @@ __all__ = [
     "Qwen3VLPreTrainedModel",
     "Qwen3VLProcessor",
     "Qwen3VLTextModel",
+    "Qwen3VLVideoProcessor",
 ]
