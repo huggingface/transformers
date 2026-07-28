@@ -121,6 +121,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
+    resolve_revision,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
@@ -554,7 +555,6 @@ def _get_resolved_checkpoint_files(
     token = download_kwargs.get("token")
     revision = download_kwargs.get("revision") or "main"
     subfolder = download_kwargs.get("subfolder", "")
-    commit_hash = download_kwargs.get("commit_hash")
     if transformers_explicit_filename is not None:
         if not transformers_explicit_filename.endswith(".safetensors") and not transformers_explicit_filename.endswith(
             ".safetensors.index.json"
@@ -657,7 +657,6 @@ def _get_resolved_checkpoint_files(
                 "subfolder": subfolder,
                 "_raise_exceptions_for_gated_repo": False,
                 "_raise_exceptions_for_missing_entries": False,
-                "_commit_hash": commit_hash,
                 "tqdm_class": tqdm_class,
                 **has_file_kwargs,
             }
@@ -784,7 +783,6 @@ def _get_resolved_checkpoint_files(
                 "subfolder": subfolder,
                 "_raise_exceptions_for_gated_repo": False,
                 "_raise_exceptions_for_missing_entries": False,
-                "_commit_hash": commit_hash,
             }
 
             resolved_archive_file = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
@@ -803,7 +801,6 @@ def _get_resolved_checkpoint_files(
             user_agent=user_agent,
             revision=revision,
             subfolder=subfolder,
-            _commit_hash=commit_hash,
             tqdm_class=tqdm_class,
         )
     else:
@@ -4135,7 +4132,7 @@ class PreTrainedModel(
         offload_buffers = kwargs.pop("offload_buffers", False)
         quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
-        commit_hash = kwargs.pop("_commit_hash", None)
+        kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
         variant = kwargs.pop("variant", None)
         adapter_kwargs = (kwargs.pop("adapter_kwargs", {}) or {}).copy()
         adapter_name = kwargs.pop("adapter_name", "default")
@@ -4164,6 +4161,18 @@ class PreTrainedModel(
         if is_offline_mode() and not local_files_only:
             local_files_only = True
 
+        # Resolve the revision once and for all: config, weights, generation config and adapters are then all loaded
+        # from the exact same repository state, without any further call to the Hub to revalidate a mutable revision.
+        requested_revision = revision
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
+
         download_kwargs = {
             "cache_dir": cache_dir,
             "force_download": force_download,
@@ -4173,7 +4182,6 @@ class PreTrainedModel(
             "revision": revision,
             "subfolder": subfolder,
         }
-        download_kwargs_with_commit = {**download_kwargs, "commit_hash": commit_hash}
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
@@ -4218,11 +4226,24 @@ class PreTrainedModel(
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
+        adapter_repo_id = pretrained_model_name_or_path
         _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs = maybe_load_adapters(
             pretrained_model_name_or_path,
-            download_kwargs_with_commit,
+            download_kwargs,
             **adapter_kwargs,
         )
+        if pretrained_model_name_or_path != adapter_repo_id:
+            # We were pointed at an adapter, and now load the base model it refers to: the revision we resolved
+            # above belongs to the adapter repository, so resolve the base model's own.
+            revision = resolve_revision(
+                pretrained_model_name_or_path,
+                requested_revision,
+                token=token,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                cache_dir=cache_dir,
+            )
+            download_kwargs["revision"] = revision
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -4248,16 +4269,12 @@ class PreTrainedModel(
             )
             if "gguf_file" in model_kwargs:
                 model_kwargs.pop("gguf_file")
-            commit_hash = model_kwargs.pop("_commit_hash", commit_hash)
         else:
             config = copy.deepcopy(config)
             model_kwargs = kwargs
-            commit_hash = getattr(config, "_commit_hash", commit_hash)
 
         if distributed_config is not None:
             config.distributed_config = distributed_config
-
-        download_kwargs_with_commit["commit_hash"] = commit_hash
 
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
         # to correctly redispatch recursively if the kwarg is provided
@@ -4295,7 +4312,7 @@ class PreTrainedModel(
             variant=variant,
             gguf_file=gguf_file,
             use_safetensors=use_safetensors,
-            download_kwargs=download_kwargs_with_commit,
+            download_kwargs=download_kwargs,
             user_agent=user_agent,
             is_remote_code=cls.is_remote_code(),
             transformers_explicit_filename=getattr(config, "transformers_weights", None),
