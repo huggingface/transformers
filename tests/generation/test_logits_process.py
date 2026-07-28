@@ -257,6 +257,66 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
+    def test_repetition_penalty_normalized(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0, normalize=True)
+
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # seen tokens are penalized in log-probability space
+        log_probs = torch.log_softmax(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 2, places=4)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 2, places=4)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() * 2, places=4)
+
+        # unseen tokens keep their log-probability
+        self.assertAlmostEqual(processed_scores[0, 2].item(), log_probs[0, 2].item(), places=4)
+
+        # processor should not change logits in-place
+        self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_repetition_penalty_normalized_reward(self):
+        input_ids = torch.tensor([[0, 1]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=1, length=vocab_size)
+        scores[0, 0] = 0.5
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=0.5, normalize=True)
+
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        log_probs = torch.log_softmax(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() * 0.5, places=4)
+        self.assertAlmostEqual(processed_scores[0, 1].item(), log_probs[0, 1].item() * 0.5, places=4)
+
+        # rewarded tokens move toward 0 in log-probability space, i.e. their probability increases
+        self.assertGreater(processed_scores[0, 0].item(), log_probs[0, 0].item())
+
+    def test_repetition_penalty_normalized_3d_scores(self):
+        # the continuous-batching (3D scores) path must match the standard 2D path on the last position
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        batch_size, seq_len, vocab_size = 2, 3, 10
+
+        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0, normalize=True)
+
+        scores_3d = torch.arange(batch_size * seq_len * vocab_size, device=torch_device, dtype=torch.float)
+        scores_3d = scores_3d.reshape(batch_size, seq_len, vocab_size) / vocab_size - 5.0
+        processed_3d = rep_penalty_proc(input_ids, scores_3d.clone())
+
+        scores_2d = scores_3d[:, -1, :].clone()
+        processed_2d = rep_penalty_proc(input_ids, scores_2d)
+
+        torch.testing.assert_close(processed_3d[:, -1, :], processed_2d)
+
     def test_encoder_repetition_penalty_dist_process(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         vocab_size = 10
@@ -281,6 +341,33 @@ class LogitsProcessorTest(unittest.TestCase):
         # check that values not in the encoder ids were NOT changed
         self.assertAlmostEqual(processed_scores[0, 2].item(), (1 / vocab_size))
         self.assertAlmostEqual(processed_scores[1, 2].item(), (1 / vocab_size))
+
+        # processor should not change logits in-place
+        self.assertFalse(torch.all(scores == processed_scores))
+
+    def test_encoder_repetition_penalty_normalized(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
+            penalty=2.0, encoder_input_ids=input_ids, normalize=True
+        )
+
+        processed_scores = rep_penalty_proc(input_ids, scores)
+
+        # prompt tokens are rewarded in log-probability space, regardless of the sign of their raw logit
+        log_probs = torch.log_softmax(scores, dim=-1)
+        self.assertAlmostEqual(processed_scores[0, 0].item(), log_probs[0, 0].item() / 2, places=4)
+        self.assertAlmostEqual(processed_scores[1, 5].item(), log_probs[1, 5].item() / 2, places=4)
+
+        # tokens not in the encoder ids keep their log-probability
+        self.assertAlmostEqual(processed_scores[0, 2].item(), log_probs[0, 2].item(), places=4)
 
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
