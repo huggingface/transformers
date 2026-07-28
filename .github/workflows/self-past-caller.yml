@@ -19,25 +19,32 @@ on:
 permissions:
   contents: read
 
+# NOTE: Past CI is currently dormant and cannot run as configured. Both jobs
+# below are missing the required `report_repo_id` input, so the calls fail
+# validation before any runner is allocated. This predates the move to the
+# shared `transformers-ci` reusable workflow: the `runner: past-ci` input
+# removed here stopped existing in #40880 ("Remove `runner_map`"), and
+# `report_repo_id` became required in #38298 without this caller being updated.
+# Unlike the other CI families, Past CI has no report dataset on the Hub
+# (`hf-internal-testing/transformers_past_ci` does not exist), so reviving it
+# needs a maintainer to decide where its reports should land.
 jobs:
   model-ci:
     name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-past-future"
-      runner: past-ci
       docker: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       ci_event: Past CI - ${{ inputs.framework }}-${{ inputs.version }}
     secrets: inherit
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#transformers-ci-past-future"
-      runner: past-ci
       docker: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       ci_event: Past CI - ${{ inputs.framework }}-${{ inputs.version }}
     secrets: inherit
