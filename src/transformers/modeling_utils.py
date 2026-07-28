@@ -149,8 +149,6 @@ if TYPE_CHECKING:
     from ._typing import DeviceMeshLike
 
 
-_torch_distributed_available = torch.distributed.is_available()
-
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
