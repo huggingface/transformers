@@ -1775,6 +1775,42 @@ class DynamicCache(Cache):
         else:
             super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
+    @classmethod
+    def from_kv_tensors(
+        cls,
+        kv_pairs: list[tuple[torch.Tensor, torch.Tensor]],
+    ) -> "DynamicCache":
+        """
+        Create a ``DynamicCache`` from pre-existing KV tensors, for example after KV cache compression.
+
+        This is the safe way to reconstruct a cache for use with ``model.generate()``.
+        When passing an externally-built cache to ``generate()``, always also pass
+        ``attention_mask`` and ``position_ids`` to ensure correct decoding.
+
+        Args:
+            kv_pairs (``list[tuple[torch.Tensor, torch.Tensor]]``):
+                List of ``(key, value)`` tuples, one per transformer layer.
+                Each tensor should have shape ``[batch, num_kv_heads, seq_len, head_dim]``.
+
+        Returns:
+            ``DynamicCache`` populated with the provided KV tensors, ready for ``model.generate()``.
+
+        Example:
+
+        ```python
+        >>> from transformers import DynamicCache
+        >>> # After prefill and compression:
+        >>> out = model(**inputs)
+        >>> compressed_kv = [(compress_k(k), compress_v(v)) for k, v in out.past_key_values]
+        >>> cache = DynamicCache.from_kv_tensors(compressed_kv)
+        >>> model.generate(..., past_key_values=cache, attention_mask=..., position_ids=...)
+        ```
+        """
+        cache = cls()
+        for layer_idx, (key, value) in enumerate(kv_pairs):
+            cache.update(key, value, layer_idx)
+        return cache
+
     def __iter__(self):
         for layer in self.layers:
             yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)

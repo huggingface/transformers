@@ -3919,6 +3919,28 @@ class GenerationMixin(ContinuousMixin):
                 if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
+                elif (
+                    attention_mask is not None
+                    and past_length > 0
+                    and input_ids.shape[1] < attention_mask.shape[1]
+                ):
+                    # External cache continuation: the attention_mask covers the full
+                    # cached history, but input_ids only contains the new tokens.
+                    # Slice input_ids to just the new portion.
+                    next_sequence_length = input_ids.shape[1]
+
+                if (
+                    past_length > 0
+                    and attention_mask is None
+                    and input_ids.shape[-1] == 1
+                ):
+                    logger.warning_once(
+                        "`past_key_values` is provided with %d cached tokens but no "
+                        "`attention_mask`. If `past_key_values` was built externally "
+                        "(e.g. after KV cache compression with `DynamicCache.from_kv_tensors()`), "
+                        "pass `attention_mask` and `position_ids` to ensure correct decoding.",
+                        past_length,
+                    )
 
         # Usual prefill
         if generation_config.prefill_chunk_size is None:
