@@ -80,7 +80,7 @@ class FlashAttentionParityTest(unittest.TestCase):
     @require_all_flash_attn
     @pytest.mark.all_flash_attn_test
     def test_flash_attention_parity(self):
-        flash_attn_versions = [2, 3, 4]
+        flash_attn_versions = [2, 3, 4, "torch"]
 
         model_id = "meta-llama/Llama-3.2-1B-Instruct"
         prompt = ["The ETH AI Center is", "What is life?"]

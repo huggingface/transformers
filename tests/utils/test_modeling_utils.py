@@ -89,6 +89,7 @@ from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_attn_torch_available,
     is_kernels_available,
     is_torch_npu_available,
 )
@@ -771,6 +772,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_4_available():
             attn_implementation_available.append("flash_attention_4")
 
+        if is_flash_attn_torch_available():
+            attn_implementation_available.append("flash_attention_torch")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -798,6 +802,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_4_available():
             attn_implementation_available.append("flash_attention_4")
+
+        if is_flash_attn_torch_available():
+            attn_implementation_available.append("flash_attention_torch")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -3061,6 +3068,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 self.assertFalse(is_flash_attn_2_available())
                 self.assertFalse(is_flash_attn_3_available())
                 self.assertFalse(is_flash_attn_4_available())
+                self.assertFalse(is_flash_attn_torch_available())
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():

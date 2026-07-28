@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_flash_attn_torch,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -1876,6 +1877,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
             "flash_attention_4": "_supports_flash_attn",
+            "flash_attention_torch": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1982,6 +1984,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_eager_matches_fa4_generate(self):
         """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_4")
+
+    @pytest.mark.flash_attn_torch_test
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa_torch_generate(self):
+        """Tests that generate has equivalent outputs with FA Torch and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_torch")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2094,6 +2104,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
             "flash_attention_4": "_supports_flash_attn",
+            "flash_attention_torch": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2255,6 +2266,22 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_4", fa_kwargs=True
+        )
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @pytest.mark.flash_attn_torch_test
+    @slow
+    def test_flash_attention_torch_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_torch")
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @pytest.mark.flash_attn_torch_test
+    @slow
+    def test_flash_attention_torch_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_torch", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):
