@@ -79,6 +79,10 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["hyperclovax"]()
 
+        # This is necessary to properly find the weight conversion mapping.
+        if kwargs.get("model_type") == "vlm":
+            kwargs["model_type"] = "hyperclovax_vision_v2"
+
         super().__post_init__(**kwargs)
 
 
@@ -141,7 +145,10 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
             The temporal, height and width of feature shape of each image in LLM.
         """
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
+        image_embeds = self.projector(vision_outputs.pooler_output)
+
+        split_sizes = (image_grid_thw.prod(-1) // self.vision_model.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
         return vision_outputs
 
@@ -182,7 +189,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -190,7 +197,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
