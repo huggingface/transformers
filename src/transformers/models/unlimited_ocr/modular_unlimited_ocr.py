@@ -1189,10 +1189,9 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             else:
                 all_features.append(torch.cat([global_flat, view_separator], dim=0))
 
-        image_features = torch.cat(all_features, dim=0)
         return UnlimitedOcrModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=all_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1228,7 +1227,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, patches_grid, return_dict=True
             ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
