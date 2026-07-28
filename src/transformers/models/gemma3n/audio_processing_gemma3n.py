@@ -12,92 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorNumpy
+from .audio_processing_numpy_gemma3n import Gemma3nAudioProcessorMixin
 
 
-class Gemma3nAudioProcessor(TorchAudioBackend):
-    """Torch sibling of [`Gemma3nAudioProcessorNumpy`]. Unfold-based STFT framed at
-    `win_length + 1` samples so `_apply_frame_processing` can apply HTK-style preemphasis
-    before reducing to `win_length`."""
-
-    sampling_rate = 16000
-    force_mono = True
-    max_length = 480000  # 30 seconds
-    truncation = True
-    pad_to_multiple_of = 128
-    preemphasis_htk_flavor = True
-
-
-    spectrogram_config = Gemma3nAudioProcessorNumpy.spectrogram_config
-
-    def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):
-        super().__init__(**kwargs)
-
-        win_length = self.spectrogram_config.stft_config.win_length
-        # Match the numpy sibling's manual hann formula to keep the windows bit-equivalent
-        # before being cast across backends.
-        hann_arange = np.arange(win_length, dtype=np.float32)
-        window_np = (0.5 * (1 - np.cos(2 * np.pi * hann_arange / win_length))).astype(np.float32)
-        self.window = torch.from_numpy(window_np)
-
-        n_mels = self.spectrogram_config.mel_scale_config.n_mels
-        self.per_bin_mean = torch.as_tensor(per_bin_mean).reshape(1, n_mels) if per_bin_mean is not None else None
-        self.per_bin_stddev = torch.as_tensor(per_bin_stddev).reshape(1, n_mels) if per_bin_stddev is not None else None
-
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None and preemphasis > 0.0:
-            if self.preemphasis_htk_flavor:
-                first = frames[..., :1] * (1.0 - preemphasis)
-                rest = frames[..., 1:-1] - preemphasis * frames[..., :-2]
-                return torch.cat([first, rest], dim=-1)
-            return frames[..., 1:] - preemphasis * frames[..., :-1]
-        return frames[..., :-1]
-
-    def _stft(self, audio, *, spectrogram_config, **kwargs):
-        stft_cfg = spectrogram_config.stft_config
-        frame_size_for_unfold = stft_cfg.win_length + 1
-        # `audio.unfold` returns (..., num_frames, frame_size). After rfft along the last axis
-        # we have (..., num_frames, freq); transpose to the canonical (..., freq, num_frames)
-        # layout that the base `_apply_mel_scale` expects (it transposes again internally for
-        # the `features_first` matmul).
-        frames = audio.unfold(-1, frame_size_for_unfold, stft_cfg.hop_length)
-        frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-        window = self.window.to(device=audio.device, dtype=frames.dtype)
-        frames = frames * window
-        if spectrogram_config.computation_dtype:
-            # The legacy FE frames/preemphasizes/windows in float32 and lets np.fft.rfft
-            # promote to float64; replicate by upcasting only at the FFT boundary.
-            frames = frames.to(getattr(torch, spectrogram_config.computation_dtype))
-        stft = torch.fft.rfft(frames, n=stft_cfg.n_fft, dim=-1)
-        return stft.abs().transpose(-2, -1)
-
-    # Mel filters: the base dispatcher resolves the top-level `computation_dtype="float64"`
-    # into float64 torch-native filters (matching the legacy FE's float64 create_fb_matrix
-    # build within float64 exp/pow rounding), kept float64 for the mel matmul.
+class Gemma3nAudioProcessor(Gemma3nAudioProcessorMixin, TorchAudioBackend):
+    """Torch sibling of [`Gemma3nAudioProcessorNumpy`]. USM-style unfold-based STFT framed
+    at `win_length + 1` samples with HTK-flavor preemphasis, driven by `spectrogram_config`."""
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        # Per-bin shift/scale is Gemma-family-specific; it lives here rather than in the base
-        # `_apply_post_log_normalization` so non-Gemma models don't need to think about it.
+        # stats cast to float32 BEFORE subtracting (legacy rounding, unlike the numpy sibling)
         if self.per_bin_mean is not None:
-            mean = self.per_bin_mean.to(device=result.device, dtype=result.dtype)
-            result = result - mean
+            result = result - self.per_bin_mean.to(device=result.device, dtype=result.dtype)
         if self.per_bin_stddev is not None:
-            stddev = self.per_bin_stddev.to(device=result.device, dtype=result.dtype)
-            result = result / stddev
+            result = result / self.per_bin_stddev.to(device=result.device, dtype=result.dtype)
         return result.to(torch.float32)
-
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        hop_length = spectrogram_config.stft_config.hop_length
-        if include_center_frame:
-            frame_size = spectrogram_config.stft_config.win_length + 1
-            return (audio_lengths - frame_size) // hop_length + 1
-        return (audio_lengths + hop_length - 1) // hop_length
 
 
 __all__ = ["Gemma3nAudioProcessor"]

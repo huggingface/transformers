@@ -74,13 +74,22 @@ class StftConfig:
     window_fn: str = "hann_window"
     wkwargs: dict | None = None
     power: float = 2.0
-    center: bool = True
+    # True: symmetric center padding; False: none; "left": semicausal (USM/Gemma),
+    # `win_length // 2` zeros prepended — forces manual framing.
+    center: bool | str = True
     pad_mode: str = "reflect"
     normalized: bool = False
     onesided: bool | None = None
     periodic: bool = True
     left_align_fft: bool = False
     window_dtype: str | None = None
+    # USM-style extended framing: frame at `win_length + 1`, reduced back to `win_length`
+    # by the per-frame preemphasis. Only 1 is supported.
+    frame_extension: int = 0
+    # Manual-framing FFT dtype. None: legacy rounding (numpy complex64, torch float32);
+    # "float64": both backends; "native": each backend's own (numpy float64, torch float32).
+    # Complements `computation_dtype` (which still controls magnitude dtype).
+    fft_dtype: str | None = None
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -102,6 +111,7 @@ class MelScaleConfig:
     frequency_bin_mode: str = "rfft"
     computation_dtype: str | None = None
     bands_to_zero: int = 0
+    # Precision knob only; `_apply_mel_scale` input is always `(..., freq, time)`.
     matmul_order: str = "filters_first"
 
     def to_dict(self) -> dict:
@@ -723,7 +733,6 @@ def window_function(
     return padded_window
 
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Audio math helpers (numpy/torch agnostic)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -987,5 +996,3 @@ def amplitude_to_db(
         spectrogram = _clamp_min(spectrogram, spectrogram.max() - db_range)
 
     return spectrogram
-
-

@@ -15,17 +15,15 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _array_namespace
 
 
 EPSILON = 1e-5
 
 
-class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`CohereAsrAudioProcessor`]. Bit-exact to the torch sibling within
-    the float32 noise floor (ADR 0001) when ``dither=0`` — the deterministic torch-RNG dither
-    cannot be reproduced bit-exactly with numpy's RNG, so the parity test disables it. See
-    [`CohereAsrAudioProcessor`] for the full pipeline description."""
+class CohereAsrAudioProcessorMixin:
+    """Backend-agnostic Cohere-ASR logic shared by the numpy and torch siblings; only the
+    RNG-dependent dither and the torch mel/magnitude leaves live in the sibling classes."""
 
     sampling_rate = 16000
     force_mono = True
@@ -63,89 +61,34 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         pre_log_offset=2**-24,
     )
 
-    def __init__(
-        self,
-        dither: float | None = None,
-        max_audio_clip_s: float | None = None,
-        overlap_chunk_second: float | None = None,
-        min_energy_window_samples: int | None = None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        if dither is not None:
-            self.dither = dither
-        if max_audio_clip_s is not None:
-            self.max_audio_clip_s = max_audio_clip_s
-        if overlap_chunk_second is not None:
-            self.overlap_chunk_second = overlap_chunk_second
-        if min_energy_window_samples is not None:
-            self.min_energy_window_samples = min_energy_window_samples
-
-    # The base numpy backend already builds librosa's per-band float32 filters and applies
-    # the mel matmul / magnitude / `log(x + pre_log_offset)` forms this model needs.
-
-    def _apply_dither(self, audio, audio_lengths):
-        """Deterministic per-utterance dither. Numpy RNG state differs from torch's, so this
-        path is NOT bit-exact across backends — the parity test fixture sets ``dither=0`` to
-        avoid the divergence (ADR 0001)."""
-        if self.dither <= 0:
-            return audio
-        for i in range(audio.shape[0]):
-            valid_samples = min(int(audio_lengths[i]), audio.shape[1])
-            if valid_samples <= 0:
-                continue
-            rng = np.random.RandomState(valid_samples)
-            noise = rng.standard_normal(valid_samples).astype(audio.dtype)
-            audio[i, :valid_samples] = audio[i, :valid_samples] + self.dither * noise
-        return audio
-
-    def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
-        # Deterministic dither only; the base then applies waveform-level preemphasis and
-        # padding-zeroing (spectrogram_config.preemphasis_mode == "waveform").
-        if audio_ranges is not None:
-            audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-            audio = self._apply_dither(audio.copy(), audio_lengths)
-        return super()._stft(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
-
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        # Base handles the legacy `log(x + guard)` form via `pre_log_offset`;
-        # transpose to (batch, frames, mels).
+        # transpose to (batch, frames, mels)
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        return np.transpose(features, axes=(0, 2, 1))
+        return features.swapaxes(-2, -1)
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
-
-        features = output["audio_features"]
         stft_cfg = self.spectrogram_config.stft_config
-        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        features_lengths = np.floor_divide(
-            audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
+        feature_lengths = [
+            (end - start + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft) // stft_cfg.hop_length
+            for start, end in audio_ranges
+        ]
+        output["audio_features"] = self._masked_mean_var_normalize(
+            output["audio_features"], feature_lengths, epsilon=EPSILON
         )
-        attention_mask = np.arange(features.shape[1])[None, :] < features_lengths[:, None]
-        mask = np.expand_dims(attention_mask, axis=-1)
-        features_lengths_f = features_lengths.astype(features.dtype)
-        mel_masked = features * mask
-        mean = np.expand_dims(mel_masked.sum(axis=1) / np.expand_dims(features_lengths_f, axis=-1), axis=1)
-        variance = ((mel_masked - mean) ** 2 * mask).sum(axis=1) / np.expand_dims(
-            features_lengths_f - 1, axis=-1
-        )
-        std = np.expand_dims(np.sqrt(variance), axis=1)
-        output["audio_features"] = (features - mean) / (std + EPSILON) * mask
         return output
 
-    # ── Long-audio chunking (mirrors the torch sibling) ─────────────────────────────────
-
     def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
+        # long-audio chunking (1 audio → N chunks) happens before padding/extraction
         prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
         chunked, audio_chunk_index = self._split_audio_chunks(prepared)
         result = self._preprocess(chunked, *args, **kwargs)
-        return_tensors = kwargs.get("return_tensors")
-        result["audio_chunk_index"] = self._encode_chunk_index(audio_chunk_index, return_tensors)
+        result["audio_chunk_index"] = self._encode_chunk_index(audio_chunk_index, kwargs.get("return_tensors"))
         return result
 
     def _encode_chunk_index(self, audio_chunk_index, return_tensors):
+        # integer-encode so it survives `convert_to_tensors`; no-chunking marker None -> -1
         encoded = [[s, -1 if c is None else c] for s, c in audio_chunk_index]
         if return_tensors == "pt":
             import torch
@@ -154,6 +97,8 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         return np.asarray(encoded, dtype=np.int64)
 
     def _split_audio_chunks(self, prepared_audio):
+        """Split audio longer than ``max_audio_clip_s - overlap_chunk_second`` at the
+        quietest window. Returns (chunks, [(sample_idx, chunk_idx or None)])."""
         fast_path_threshold_s = max(0.0, self.max_audio_clip_s - self.overlap_chunk_second)
         chunked: list = []
         audio_chunk_index: list[tuple[int, int | None]] = []
@@ -163,8 +108,7 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
                 chunked.append(waveform)
                 audio_chunk_index.append((sample_idx, None))
             else:
-                chunks = self._split_single_audio(waveform)
-                for chunk_idx, chunk in enumerate(chunks):
+                for chunk_idx, chunk in enumerate(self._split_single_audio(waveform)):
                     chunked.append(chunk)
                     audio_chunk_index.append((sample_idx, chunk_idx))
         return chunked, audio_chunk_index
@@ -196,16 +140,40 @@ class CohereAsrAudioProcessorNumpy(NumpyAudioBackend):
         if segment.shape[0] <= self.min_energy_window_samples:
             return (start_idx + end_idx) // 2
 
+        xp = _array_namespace(segment)
         min_energy = float("inf")
         quietest_idx = start_idx
         upper = segment.shape[0] - self.min_energy_window_samples
         for i in range(0, upper, self.min_energy_window_samples):
             window = segment[i : i + self.min_energy_window_samples]
-            energy = float(np.sqrt(np.mean(window * window)))
+            energy = float(xp.sqrt(xp.mean(window * window)))
             if energy < min_energy:
                 min_energy = energy
                 quietest_idx = start_idx + i
         return quietest_idx
+
+
+class CohereAsrAudioProcessorNumpy(CohereAsrAudioProcessorMixin, NumpyAudioBackend):
+    """NumPy sibling of [`CohereAsrAudioProcessor`]. Bit-exact to the torch sibling within
+    the float32 noise floor when ``dither=0`` — the deterministic torch-RNG dither cannot
+    be reproduced bit-exactly with numpy's RNG, so the parity test disables it. See
+    [`CohereAsrAudioProcessor`] for the full pipeline description."""
+
+    def _apply_dither(self, audio, audio_ranges=None):
+        """Deterministic per-utterance dither, seeded by valid sample count. Numpy and torch
+        RNGs differ, so the parity fixture sets ``dither=0``. Runs before `waveform_scale`
+        and waveform preemphasis in the base `_stft` (ordering is load-bearing)."""
+        if self.dither <= 0 or audio_ranges is None:
+            return audio
+        audio = audio.copy()
+        for i, (start, end) in enumerate(audio_ranges):
+            valid_samples = min(end - start, audio.shape[1])
+            if valid_samples <= 0:
+                continue
+            rng = np.random.RandomState(valid_samples)
+            noise = rng.standard_normal(valid_samples).astype(audio.dtype)
+            audio[i, :valid_samples] = audio[i, :valid_samples] + self.dither * noise
+        return audio
 
 
 __all__ = ["CohereAsrAudioProcessorNumpy"]

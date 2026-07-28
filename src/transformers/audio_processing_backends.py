@@ -11,18 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Numpy and torch backends for the audio processing pipeline.
-
-`BaseAudioProcessor` (audio_processing_utils) orchestrates the pipeline; the backends
-implement the array-API leaf operations. Numerical contracts, enforced bit-exactly by
-the test-spectrogram harness (ADR 0001/0003):
-
-- `NumpyAudioBackend` matches librosa: float64 windows over float32 frames, float64 FFT
-  stored as complex64, librosa per-band float32 mel filters.
-- `TorchAudioBackend` matches torchaudio (native float32, `F.linear` mel projection) and
-  `torchaudio.compliance.kaldi` (symmetric windows, left-aligned FFT padding, kaldi-exact
-  mel banks, replicate-pad preemphasis).
-"""
 
 import math
 from typing import Unpack
@@ -44,11 +32,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# NumpyAudioBackend
-# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class NumpyAudioBackend(BaseAudioProcessor):
@@ -104,6 +87,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
     # ── STFT pipeline ─────────────────────────────────────────────────────
 
     def _create_stft_window(self, win_length, stft_cfg, audio):
+        if stft_cfg.window_fn == "hann_window_f32":
+            # fixed USM float32 periodic Hann (bit-exact with the legacy Gemma extractors);
+            # ignores `periodic`/`window_dtype`/`wkwargs`
+            arange = np.arange(win_length, dtype=np.float32)
+            return (0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32)
         N = win_length + 1 if stft_cfg.periodic else win_length
         fac = np.linspace(-np.pi, np.pi, N)
         name = stft_cfg.window_fn
@@ -128,7 +116,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
 
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        if stft_cfg.center:
+        if stft_cfg.center == "left":
+            # semicausal (USM/Gemma): zeros prepended only
+            audio = self._pad_axis(audio, (stft_cfg.win_length or n_fft) // 2, 0, axis=-1)
+        elif stft_cfg.center:
             pad_width = [(0, 0)] * (audio.ndim - 1) + [(frame_length // 2, frame_length // 2)]
             audio = np.pad(audio, pad_width, mode=stft_cfg.pad_mode)
         frames = self._np_frame(np.ascontiguousarray(audio), frame_length, hop_length)
@@ -144,9 +135,15 @@ class NumpyAudioBackend(BaseAudioProcessor):
             out = np.where(mask, out, 0.0).astype(audio.dtype, copy=False)
         return out
 
+    def _apply_dither(self, audio, audio_ranges=None):
+        return audio + (self.dither * np.random.randn(*audio.shape)).astype(audio.dtype)
+
     def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
-        spec = np.fft.rfft(frames, n=n_fft, axis=-1).astype(np.complex64)
+        spec = np.fft.rfft(frames, n=n_fft, axis=-1)
+        if stft_cfg.fft_dtype is None:
+            # librosa contract: FFT output rounded through complex64
+            spec = spec.astype(np.complex64)
         if stft_cfg.normalized:
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
         return np.moveaxis(spec, -1, -2)
@@ -155,6 +152,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
         # No numpy-native STFT exists; compose the manual framing + FFT leaves. This path
         # receives the center-padded window and frame_length == n_fft from
         # `_prepare_window_and_framing`, unlike the manual path (left-aligned window).
+        # `fft_dtype` can't leak in here: `_stft` rejects it on native-STFT configurations.
         frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
         return self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg)
 
@@ -194,12 +192,19 @@ class NumpyAudioBackend(BaseAudioProcessor):
                 upper = ramps[i + 2] / filter_diff[i + 1]
                 mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(np.float32)
             return mel_filters
-        return _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(
-            np.dtype(computation_dtype), copy=False
-        )
+        return _create_triangular_filter_bank(fft_freqs, filter_freqs).astype(np.dtype(computation_dtype), copy=False)
 
-    def _kaldi_exact_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
-                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_exact_mel_banks(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Mel-space triangularization, numpy-ecosystem semantics.
 
         Bit-exact against the legacy numpy feature extractors (e.g. SeamlessM4T):
@@ -215,8 +220,17 @@ class NumpyAudioBackend(BaseAudioProcessor):
         fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_cfg.mel_scale)
         return self._np_triangular_banks(fft_freqs, filter_freqs, computation_dtype)
 
-    def _kaldi_mel_banks_with_zero_bands(self, num_mel_filters, num_frequency_bins, min_frequency,
-                                         max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_mel_banks_with_zero_bands(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Mel-space triangularization (numpy-ecosystem semantics, see
         `_kaldi_exact_mel_banks`) with the lowest ``bands_to_zero`` bins zeroed."""
         mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
@@ -231,8 +245,17 @@ class NumpyAudioBackend(BaseAudioProcessor):
             mel_filters = np.pad(mel_filters, ((mel_cfg.bands_to_zero, 0), (0, 0)))
         return mel_filters
 
-    def _standard_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
-                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _standard_mel_banks(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Standard triangular mel filter bank, numpy-ecosystem semantics.
 
         Bit-exact against librosa's filters (and the legacy numpy feature extractors
@@ -263,7 +286,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.astype(features.dtype, copy=False)
         if spectrogram_config.mel_scale_config.matmul_order == "features_first":
-            mel_spec = np.matmul(features, mel_filters)
+            mel_spec = np.matmul(features.swapaxes(-2, -1), mel_filters)
         else:
             mel_spec = np.matmul(mel_filters.T, features)
         return np.maximum(spectrogram_config.mel_floor, mel_spec)
@@ -282,18 +305,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
             import torchaudio.compliance.kaldi as ta_kaldi
 
             waveform_tensor = torch.from_numpy(np.asarray(waveform)).unsqueeze(0)
-            fbank = ta_kaldi.fbank(waveform_tensor, num_mel_bins=num_mel_bins,
-                                   sample_frequency=sample_frequency, **kwargs)
+            fbank = ta_kaldi.fbank(
+                waveform_tensor, num_mel_bins=num_mel_bins, sample_frequency=sample_frequency, **kwargs
+            )
             return fbank.numpy()
 
         waveform = np.squeeze(waveform)
         features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
         return features[0].T
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TorchAudioBackend
-# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -353,6 +372,12 @@ class TorchAudioBackend(BaseAudioProcessor):
         dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
         wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": dtype}
         name = stft_cfg.window_fn
+        if name == "hann_window_f32":
+            # numpy build + convert, so both backends' windows are bit-identical;
+            # ignores `periodic`/`window_dtype`/`wkwargs`
+            arange = np.arange(win_length, dtype=np.float32)
+            window = torch.from_numpy((0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32))
+            return window.to(device=audio.device)
         if name in ("hann", "hann_window"):
             window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
         elif name in ("hamming", "hamming_window"):
@@ -366,7 +391,10 @@ class TorchAudioBackend(BaseAudioProcessor):
         return window.to(device=audio.device)
 
     def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        if stft_cfg.center:
+        if stft_cfg.center == "left":
+            pad_left = (stft_cfg.win_length or n_fft) // 2
+            audio = torch.nn.functional.pad(audio, (pad_left, 0), mode="constant", value=0.0)
+        elif stft_cfg.center:
             audio = torch.nn.functional.pad(audio, (frame_length // 2, frame_length // 2), mode=stft_cfg.pad_mode)
         return audio.unfold(-1, frame_length, hop_length)
 
@@ -378,8 +406,14 @@ class TorchAudioBackend(BaseAudioProcessor):
             audio = audio.masked_fill(~mask, 0.0)
         return audio
 
+    def _apply_dither(self, audio, audio_ranges=None):
+        noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
+        return audio + self.dither * noise
+
     def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
+        if stft_cfg.fft_dtype == "float64":
+            frames = frames.to(torch.float64)  # mirrors numpy's rfft float64 promotion
         if frame_length < n_fft:
             frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
         spec = torch.fft.rfft(frames, n=n_fft)
@@ -389,9 +423,15 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         stft_out = torch.stft(
-            audio, n_fft=n_fft, hop_length=hop_length, win_length=frame_length,
-            window=window, center=stft_cfg.center, pad_mode=stft_cfg.pad_mode,
-            normalized=False, return_complex=True,
+            audio,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=frame_length,
+            window=window,
+            center=stft_cfg.center,
+            pad_mode=stft_cfg.pad_mode,
+            normalized=False,
+            return_complex=True,
         )
         if stft_cfg.normalized:
             stft_out = stft_out / window.pow(2.0).sum().sqrt()
@@ -415,8 +455,16 @@ class TorchAudioBackend(BaseAudioProcessor):
     # are numerically equivalent but NOT bit-identical.
 
     @staticmethod
-    def _kaldi_exact_mel_banks(num_mel_filters, num_frequency_bins, min_frequency,
-                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_exact_mel_banks(
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Matches torchaudio.compliance.kaldi.get_mel_banks exactly.
 
         Hardcoded ``1127 * log`` kaldi mel scale and ``get_mel_banks``'s edge arithmetic,
@@ -446,8 +494,16 @@ class TorchAudioBackend(BaseAudioProcessor):
         return banks.T
 
     @staticmethod
-    def _kaldi_mel_banks_with_zero_bands(num_mel_filters, num_frequency_bins, min_frequency,
-                                         max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_mel_banks_with_zero_bands(
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Kaldi-style (triangularize in mel space) with optional zeroed low bands."""
         dtype = getattr(torch, computation_dtype) if computation_dtype else None
         mel_min = hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
@@ -464,8 +520,16 @@ class TorchAudioBackend(BaseAudioProcessor):
         return mel_filters
 
     @staticmethod
-    def _standard_mel_banks(num_mel_filters, num_frequency_bins, min_frequency,
-                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _standard_mel_banks(
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Standard (non-kaldi) triangular mel filter bank, torchaudio-ecosystem semantics.
 
         Bit-exact against ``torchaudio.functional.melscale_fbanks`` in the default-dtype

@@ -12,36 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import replace
+
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
-def _unfold(array, dimension, size, step):
-    """NumPy equivalent of PyTorch's unfold for 2D arrays along the last dim."""
-    if array.ndim == 1:
-        array = array[np.newaxis, :]
-    batch_size, original_length = array.shape
-    num_frames = (original_length - size) // step + 1
-    if num_frames <= 0:
-        return np.zeros((batch_size, 0, size), dtype=array.dtype)
-    output_shape = (batch_size, num_frames, size)
-    output_strides = (array.strides[0], array.strides[1] * step, array.strides[1])
-    return np.lib.stride_tricks.as_strided(array, shape=output_shape, strides=output_strides)
-
-
-class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
-    """NumPy sibling of [`Gemma3nAudioProcessor`]. Unfold-based STFT with HTK-style
-    preemphasis on `win_length + 1` frames, matching the legacy `Gemma3nAudioFeatureExtractor`
-    bit-exact (ADR 0001)."""
+class Gemma3nAudioProcessorMixin:
+    """Gemma3n audio logic shared by the numpy and torch siblings; the USM-style pipeline
+    is fully described by `spectrogram_config`."""
 
     sampling_rate = 16000
     force_mono = True
     max_length = 480000  # 30 seconds
     truncation = True
     pad_to_multiple_of = 128
+    # Gemma3n-specific kwargs, folded into config/arrays by `_set_attributes`
     preemphasis_htk_flavor = True
+    per_bin_mean = None
+    per_bin_stddev = None
 
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
@@ -50,6 +41,9 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
             hop_length=160,
             power=1.0,
             center=False,
+            window_fn="hann_window_f32",
+            frame_extension=1,
+            fft_dtype="float64",
         ),
         mel_scale_config=MelScaleConfig(
             n_mels=128,
@@ -61,55 +55,42 @@ class Gemma3nAudioProcessorNumpy(NumpyAudioBackend):
         mel_floor=1e-5,
         log_mode="log",
         preemphasis=0.97,
+        preemphasis_mode="htk_per_frame",
         computation_dtype="float64",
     )
 
-    def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):
-        super().__init__(**kwargs)
-
-        win_length = self.spectrogram_config.stft_config.win_length
-        hann_arange = np.arange(win_length, dtype=np.float32)
-        self.window = (0.5 * (1 - np.cos(2 * np.pi * hann_arange / win_length))).astype(np.float32)
-
+    def _set_attributes(self, **kwargs):
+        super()._set_attributes(**kwargs)
+        if not self.preemphasis_htk_flavor and self.spectrogram_config.preemphasis_mode == "htk_per_frame":
+            self.spectrogram_config = replace(self.spectrogram_config, preemphasis_mode="per_frame")
         n_mels = self.spectrogram_config.mel_scale_config.n_mels
-        self.per_bin_mean = np.array(per_bin_mean).reshape(1, n_mels) if per_bin_mean is not None else None
-        self.per_bin_stddev = np.array(per_bin_stddev).reshape(1, n_mels) if per_bin_stddev is not None else None
+        if self.per_bin_mean is not None:
+            self.per_bin_mean = self._as_backend_array(np.asarray(self.per_bin_mean)).reshape(1, n_mels)
+        if self.per_bin_stddev is not None:
+            self.per_bin_stddev = self._as_backend_array(np.asarray(self.per_bin_stddev)).reshape(1, n_mels)
 
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
-        preemphasis = spectrogram_config.preemphasis
-        if preemphasis is not None and preemphasis > 0.0:
-            if self.preemphasis_htk_flavor:
-                first = frames[..., :1] * (1.0 - preemphasis)
-                rest = frames[..., 1:-1] - preemphasis * frames[..., :-2]
-                return np.concatenate([first, rest], axis=-1)
-            return frames[..., 1:] - preemphasis * frames[..., :-1]
-        return frames[..., :-1]
-
-    def _stft(self, audio, *, spectrogram_config, **kwargs):
+    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
+        """Extended-frame count for the mask width; per-utterance validity is
+        ``ceil(L / hop)`` (legacy strided-sample-mask semantics)."""
         stft_cfg = spectrogram_config.stft_config
-        frame_size_for_unfold = stft_cfg.win_length + 1
-        frames = _unfold(audio, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
-        frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-        frames = frames * self.window
-        stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
-        return np.abs(stft)
+        if include_center_frame:
+            frame_size = stft_cfg.win_length + 1
+            return (audio_lengths - frame_size) // stft_cfg.hop_length + 1
+        return (audio_lengths + stft_cfg.hop_length - 1) // stft_cfg.hop_length
+
+
+class Gemma3nAudioProcessorNumpy(Gemma3nAudioProcessorMixin, NumpyAudioBackend):
+    """NumPy sibling of [`Gemma3nAudioProcessor`], bit-exact with the legacy
+    `Gemma3nAudioFeatureExtractor`."""
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         result = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        # Per-bin shift/scale is Gemma-family-specific; it lives here rather than in the base
-        # `_apply_post_log_normalization` so non-Gemma models don't need to think about it.
+        # float64 stats promote the result before the final float32 cast (legacy rounding)
         if self.per_bin_mean is not None:
             result = result - self.per_bin_mean
         if self.per_bin_stddev is not None:
             result = result / self.per_bin_stddev
         return result.astype(np.float32)
-
-    def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
-        hop_length = spectrogram_config.stft_config.hop_length
-        if include_center_frame:
-            frame_size = spectrogram_config.stft_config.win_length + 1
-            return (audio_lengths - frame_size) // hop_length + 1
-        return (audio_lengths + hop_length - 1) // hop_length
 
 
 __all__ = ["Gemma3nAudioProcessorNumpy"]

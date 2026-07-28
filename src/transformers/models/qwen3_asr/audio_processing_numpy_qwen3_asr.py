@@ -65,10 +65,6 @@ class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
             computation_dtype="float64",
         ),
         log_mode="log10",
-        # NOTE: the legacy FE's `skip_last_frame` is implemented in `_extract_spectrogram`
-        # (pre-mel) rather than via the config flag (post-mel): the mel matmul is
-        # shape-sensitive at 1 ulp (BLAS blocking), so the center frame must be dropped
-        # before the projection to stay bit-exact with the legacy FE.
         clip_max_offset=8.0,
         post_log_shift=4.0,
         post_log_scale=0.25,
@@ -81,15 +77,8 @@ class Qwen3ASRAudioProcessorNumpy(NumpyAudioBackend):
         "nb_max_frames": None,
     }
 
-    def __init__(self, min_length: int = 8000, **kwargs):
-        super().__init__(**kwargs)
-        self.min_length = min_length
-
     def _process_audio(self, audio_el):
         audio_el = super()._process_audio(audio_el)
-        # Zero-pad clips shorter than `min_length`, matching the original Qwen3-ASR library.
-        # Done before batch padding so the padded samples count as valid in the mask
-        # (as original: do not adjust the mask, it hurts performance on AMI).
         if self.min_length and audio_el.shape[-1] < self.min_length:
             audio_el = self._pad_single(audio_el, self.min_length)
         return audio_el

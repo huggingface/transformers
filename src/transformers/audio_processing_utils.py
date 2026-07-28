@@ -48,6 +48,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     mask_level = None
     do_batch_spectrogram = True
     model_input_names = ["audio"]
+    dither: float = 0.0
 
     def __init__(
         self,
@@ -78,9 +79,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         **kwargs,
     ) -> dict:
         if isinstance(kwargs.get("spectrogram_config"), dict):
-            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(
-                kwargs["spectrogram_config"]
-            )
+            kwargs["spectrogram_config"] = SpectrogramConfig.from_dict(kwargs["spectrogram_config"])
         if kwargs.get("spectrogram_config") is not None and kwargs.get("do_extract_spectrogram") is None:
             kwargs["do_extract_spectrogram"] = True
         return kwargs
@@ -95,9 +94,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         **kwargs,
     ):
         if truncation and max_length is None:
-            raise ValueError(
-                "When setting `truncation=True`, make sure that `max_length` is defined."
-            )
+            raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
 
     def _serialize_value(self, key, value):
         if key == "spectrogram_config" and hasattr(value, "to_dict"):
@@ -170,7 +167,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
             feature_lengths = [f.shape[0] for f in features]
             features = self._postprocess_features(features, feature_lengths)
             features, feature_ranges = self._pad_features(
-                features, padding, max_length, truncation, pad_to_multiple_of,
+                features,
+                padding,
+                max_length,
+                truncation,
+                pad_to_multiple_of,
             )
             output = {"audio_features": self._stack_features(features)}
             if self.return_padding_mask:
@@ -184,9 +185,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
         batched = self._to_batch(audio)
 
         if do_extract_spectrogram:
-            output = {"audio_features": self.extract_spectrogram(
-                batched, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs,
-            )}
+            output = {
+                "audio_features": self.extract_spectrogram(
+                    batched,
+                    spectrogram_config=spectrogram_config,
+                    audio_ranges=audio_ranges,
+                    **kwargs,
+                )
+            }
         else:
             output = {"audio_values": batched}
 
@@ -297,9 +303,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if max_length is not None and pad_to_multiple_of is not None and max_length % pad_to_multiple_of != 0:
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
         if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
-            features = [
-                f if f.shape[0] >= max_length else self._pad_feature_single(f, max_length) for f in features
-            ]
+            features = [f if f.shape[0] >= max_length else self._pad_feature_single(f, max_length) for f in features]
         return features, [(0, length) for length in actual_lengths]
 
     def _pad_feature_single(self, feature, max_length):
@@ -345,6 +349,19 @@ class BaseAudioProcessor(AudioProcessingMixin):
             mask[i, start:end] = 1
         return mask
 
+    def _masked_mean_var_normalize(self, features, feature_lengths, epsilon=1e-5):
+        """NeMo/Cohere-style per-utterance mean/variance normalization over the first
+        `feature_lengths` frames of `features` (batch, frames, feature_dim), zeroing padded
+        frames. `feature_lengths` is a CPU sequence/array of float32-representable counts."""
+        xp = _array_namespace(features)
+        lengths = self._astype(self._as_backend_array(np.asarray(feature_lengths)), "float32")
+        mask = (xp.arange(features.shape[1])[None, :] < lengths[:, None])[..., None]
+        masked = features * mask
+        mean = (masked.sum(axis=1) / lengths[:, None])[:, None, :]
+        variance = (((masked - mean) ** 2) * mask).sum(axis=1) / (lengths - 1)[:, None]
+        std = xp.sqrt(variance)[:, None, :]
+        return (features - mean) / (std + epsilon) * mask
+
     # ── Spectrogram core ─────────────────────────────────────────────────
 
     def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
@@ -359,18 +376,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
         norm_kwargs = {k: v for k, v in kwargs.items() if k not in ("audio_ranges", "feature_ranges")}
 
         if isinstance(audio, list):
-            features = [
-                self._extract_spectrogram(a, spectrogram_config=spectrogram_config, **kwargs)
-                for a in audio
-            ]
+            features = [self._extract_spectrogram(a, spectrogram_config=spectrogram_config, **kwargs) for a in audio]
             if spectrogram_config.mel_scale_config is not None:
                 features = [
-                    self._apply_mel_scale(f, spectrogram_config=spectrogram_config, **kwargs)
-                    for f in features
+                    self._apply_mel_scale(f, spectrogram_config=spectrogram_config, **kwargs) for f in features
                 ]
             features = [
-                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **norm_kwargs)
-                for f in features
+                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **norm_kwargs) for f in features
             ]
         else:
             features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
@@ -385,24 +397,42 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         stft_cfg = spectrogram_config.stft_config
+        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
+        if stft_cfg.frame_extension:
+            if stft_cfg.frame_extension != 1:
+                raise ValueError(f"Only frame_extension=1 is supported, got {stft_cfg.frame_extension}.")
+            if stft_cfg.center is True:
+                raise ValueError("frame_extension requires center=False or center='left', not symmetric centering.")
+            if spectrogram_config.remove_dc_offset:
+                raise ValueError("remove_dc_offset is not supported with frame_extension.")
+        elif spectrogram_config.preemphasis_mode == "htk_per_frame":
+            raise ValueError("preemphasis_mode='htk_per_frame' requires frame_extension=1.")
+        if stft_cfg.fft_dtype is not None:
+            if stft_cfg.fft_dtype not in ("float64", "native"):
+                raise ValueError(f"fft_dtype must be None, 'float64' or 'native', got {stft_cfg.fft_dtype!r}.")
+            if not needs_manual_framing:
+                raise ValueError(
+                    "fft_dtype applies to the manual-framing path only; this configuration uses the native STFT."
+                )
         n_fft = stft_cfg.n_fft
         win_length = stft_cfg.win_length or n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
-        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
 
-        if spectrogram_config.computation_dtype:
+        if spectrogram_config.computation_dtype and stft_cfg.fft_dtype is None:
+            # with `fft_dtype`, the cast happens at the FFT boundary instead
             dtype_str = spectrogram_config.computation_dtype
             if isinstance(audio, np.ndarray):
                 audio = audio.astype(dtype_str)
             else:
                 import torch
+
                 audio = audio.to(getattr(torch, dtype_str))
+        if self.dither > 0:
+            audio = self._apply_dither(audio, kwargs.get("audio_ranges"))
         if spectrogram_config.waveform_scale is not None:
             audio = audio * spectrogram_config.waveform_scale
         if spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "waveform":
-            audio = self._preemphasize_waveform(
-                audio, spectrogram_config.preemphasis, kwargs.get("audio_ranges")
-            )
+            audio = self._preemphasize_waveform(audio, spectrogram_config.preemphasis, kwargs.get("audio_ranges"))
 
         # Cache window on first call; reuse on subsequent calls with same config
         if self._cached_stft_window is not None and spectrogram_config is self.spectrogram_config:
@@ -415,7 +445,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if needs_manual_framing:
             audio_dtype = audio.dtype
-            frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+            frames = self._frame_audio(
+                audio, window, frame_length + stft_cfg.frame_extension, hop_length, n_fft, stft_cfg
+            )
             frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
             stft_out = self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
         else:
@@ -429,8 +461,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _needs_manual_framing(self, spectrogram_config):
         """Whether the STFT requires manual framing (unfold-based) instead of a native STFT."""
         return (
-            (spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "per_frame")
+            (
+                spectrogram_config.preemphasis is not None
+                and spectrogram_config.preemphasis_mode in ("per_frame", "htk_per_frame")
+            )
             or spectrogram_config.remove_dc_offset
+            or bool(spectrogram_config.stft_config.frame_extension)
+            or spectrogram_config.stft_config.center == "left"  # truthy string would center-pad natively
         )
 
     def _cast_stft_output(self, magnitudes, spectrogram_config):
@@ -451,6 +488,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         stft_cfg = spectrogram_config.stft_config
         win_length = stft_cfg.win_length or stft_cfg.n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
+        if stft_cfg.center == "left":
+            lengths = (audio_lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+            return max(0, lengths) if isinstance(lengths, int) else lengths.clip(min=0)
         if not stft_cfg.center:
             return (audio_lengths - win_length) // hop_length + 1
         lengths = audio_lengths // hop_length
@@ -483,12 +523,25 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
         """Hook: per-frame signal conditioning after frame extraction.
 
-        Called after framing, before windowing and FFT. Applies DC-offset
-        removal and standard per-frame preemphasis.
-
-        Override for non-standard frame processing, e.g. HTK-style
-        preemphasis (Gemma3n).
+        Called after framing, before windowing and FFT. Applies DC-offset removal, per-frame
+        (kaldi-style) preemphasis, and USM/HTK-style extended-frame preemphasis when
+        ``stft_config.frame_extension`` is set. Override for non-standard frame processing
+        that doesn't fit these knobs, e.g. boundary-frame masking (Phi4-multimodal).
         """
+        if spectrogram_config.stft_config.frame_extension:
+            # USM-style extended frames: preemphasis consumes the extra trailing sample,
+            # reducing the frame back to `win_length`.
+            preemphasis = spectrogram_config.preemphasis
+            if preemphasis is None or preemphasis <= 0.0:
+                return frames[..., :-1]
+            if spectrogram_config.preemphasis_mode == "htk_per_frame":
+                # HTK flavor: first sample scaled by (1 - p) instead of replicate-padded
+                first = frames[..., :1] * (1.0 - preemphasis)
+                rest = frames[..., 1:-1] - preemphasis * frames[..., :-2]
+                return self._concat_last([first, rest])
+            if spectrogram_config.preemphasis_mode == "per_frame":
+                return frames[..., 1:] - preemphasis * frames[..., :-1]
+            return frames[..., :-1]  # "waveform" mode: already applied upstream
         if spectrogram_config.remove_dc_offset:
             frames = frames - self._mean_last(frames)
         preemphasis = spectrogram_config.preemphasis
@@ -505,9 +558,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
         (ASR models: Parakeet/Cohere/Nemotron). Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
         Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _apply_dither(self, audio, audio_ranges=None):
+        """Additive dither, applied when ``self.dither`` is nonzero. Backend defaults add
+        unseeded Gaussian noise; deterministic implementations (Cohere-ASR) override.
+        ``audio_ranges`` is ``None`` on unbatched calls. Implemented by backend subclasses."""
         raise NotImplementedError
 
     def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
@@ -523,8 +582,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Apply mel filterbank to spectrogram features."""
         raise NotImplementedError
 
-    def _normalize_magnitude(self, features, *, spectrogram_config,
-                             reference=1.0, min_value=1e-10, db_range=None, **kwargs):
+    def _normalize_magnitude(
+        self, features, *, spectrogram_config, reference=1.0, min_value=1e-10, db_range=None, **kwargs
+    ):
         log_mel = spectrogram_config.log_mode
         if log_mel is None:
             return self._astype(features, "float32")
@@ -628,18 +688,36 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
             mel_filters = self._kaldi_exact_mel_banks(
-                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
+                mel_cfg.n_mels,
+                num_frequency_bins,
+                min_frequency,
+                max_frequency,
+                self.sampling_rate,
+                n_fft,
+                mel_cfg,
+                computation_dtype,
             )
         elif mel_cfg.triangularize_in_mel_space:
             mel_filters = self._kaldi_mel_banks_with_zero_bands(
-                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
+                mel_cfg.n_mels,
+                num_frequency_bins,
+                min_frequency,
+                max_frequency,
+                self.sampling_rate,
+                n_fft,
+                mel_cfg,
+                computation_dtype,
             )
         else:
             mel_filters = self._standard_mel_banks(
-                mel_cfg.n_mels, num_frequency_bins, min_frequency, max_frequency,
-                self.sampling_rate, n_fft, mel_cfg, computation_dtype,
+                mel_cfg.n_mels,
+                num_frequency_bins,
+                min_frequency,
+                max_frequency,
+                self.sampling_rate,
+                n_fft,
+                mel_cfg,
+                computation_dtype,
             )
 
         # Cast back when only the mel-level dtype requested higher precision.
@@ -647,8 +725,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
             mel_filters = self._cast_mel_filters_to_default_float(mel_filters)
         return mel_filters
 
-    def _kaldi_exact_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
-                               max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_exact_mel_banks(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Mel filter bank triangularized in mel space, without zeroed bands.
 
         Each backend leaf owns its ecosystem's rounding pattern: the torch leaf matches
@@ -657,14 +744,32 @@ class BaseAudioProcessor(AudioProcessingMixin):
         Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _kaldi_mel_banks_with_zero_bands(self, num_mel_filters, num_frequency_bins, min_frequency,
-                                         max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _kaldi_mel_banks_with_zero_bands(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Mel filter bank triangularized in mel space with the lowest ``bands_to_zero``
         frequency bins zeroed out. Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _standard_mel_banks(self, num_mel_filters, num_frequency_bins, min_frequency,
-                            max_frequency, sampling_rate, n_fft, mel_cfg, computation_dtype):
+    def _standard_mel_banks(
+        self,
+        num_mel_filters,
+        num_frequency_bins,
+        min_frequency,
+        max_frequency,
+        sampling_rate,
+        n_fft,
+        mel_cfg,
+        computation_dtype,
+    ):
         """Standard (non-kaldi) triangular mel filter bank. Each backend leaf owns its
         ecosystem's rounding pattern (numpy: librosa/legacy numpy FEs; torch: torchaudio).
         Implemented by backend subclasses."""

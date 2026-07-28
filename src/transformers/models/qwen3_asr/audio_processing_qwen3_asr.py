@@ -19,15 +19,6 @@ from .audio_processing_numpy_qwen3_asr import Qwen3ASRAudioKwargs, Qwen3ASRAudio
 
 
 class Qwen3ASRAudioProcessor(TorchAudioBackend):
-    """Qwen3 ASR audio processor. Whisper-style 128-bin log-mel features with three
-    Qwen3-ASR-specific twists:
-
-    - clips shorter than ``min_length`` samples are zero-padded up to it (and counted as
-      valid in the padding mask, matching the original Qwen3-ASR library),
-    - the padding mask lives on the mel-frame axis (sample mask strided by ``hop_length``),
-    - the mel time axis (features and mask) is right-padded to a multiple of
-      ``2 * n_window`` frames, as required by ``Qwen3ASREncoder``'s chunked attention.
-    """
 
     sampling_rate = 16000
     force_mono = True
@@ -40,15 +31,8 @@ class Qwen3ASRAudioProcessor(TorchAudioBackend):
     spectrogram_config = Qwen3ASRAudioProcessorNumpy.spectrogram_config
     legacy_field_mapping = Qwen3ASRAudioProcessorNumpy.legacy_field_mapping
 
-    def __init__(self, min_length: int = 8000, **kwargs):
-        super().__init__(**kwargs)
-        self.min_length = min_length
-
     def _process_audio(self, audio_el):
         audio_el = super()._process_audio(audio_el)
-        # Zero-pad clips shorter than `min_length`, matching the original Qwen3-ASR library.
-        # Done before batch padding so the padded samples count as valid in the mask
-        # (as original: do not adjust the mask, it hurts performance on AMI).
         if self.min_length and audio_el.shape[-1] < self.min_length:
             audio_el = self._pad_single(audio_el, self.min_length)
         return audio_el
