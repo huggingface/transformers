@@ -37,7 +37,14 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import and_masks, causal_mask_function, create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import (
+    BlockMask,
+    and_masks,
+    causal_mask_function,
+    create_causal_mask,
+    create_sliding_window_causal_mask,
+    or_masks,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1707,10 +1714,17 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def create_reference_sliding_window_causal_mask(**kwargs):
-    past_key_values = kwargs["past_key_values"]
-    inputs_embeds = kwargs["inputs_embeds"]
-
+def create_reference_sliding_window_causal_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None = None,
+    or_mask_function: Callable | None = None,
+    and_mask_function: Callable | None = None,
+    block_sequence_ids: torch.Tensor | None = None,
+    layer_idx: int | None = None,
+) -> torch.Tensor | BlockMask | None:
     if past_key_values is None:
         prefill_length = float("inf")
         kv_offset = 0
@@ -1724,8 +1738,20 @@ def create_reference_sliding_window_causal_mask(**kwargs):
         # Remove kv_offset to retrieve the kv_index with respect to prefill
         return kv_idx - kv_offset < prefill_length
 
+    prefill_mask_function = and_masks(causal_mask_function, prefill_overlay)
+    if or_mask_function is not None:
+        prefill_mask_function = or_masks(prefill_mask_function, or_mask_function)
+
     return create_sliding_window_causal_mask(
-        or_mask_function=and_masks(causal_mask_function, prefill_overlay), **kwargs
+        config=config,
+        inputs_embeds=inputs_embeds,
+        attention_mask=attention_mask,
+        past_key_values=past_key_values,
+        position_ids=position_ids,
+        or_mask_function=prefill_mask_function,
+        and_mask_function=and_mask_function,
+        block_sequence_ids=block_sequence_ids,
+        layer_idx=layer_idx,
     )
 
 
