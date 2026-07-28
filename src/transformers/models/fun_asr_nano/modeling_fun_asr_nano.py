@@ -71,7 +71,6 @@ class FunAsrNanoPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-
         if isinstance(module, SinusoidsPositionEmbedding):
             position_embeddings = module.compute_default_singular_positional_embedding()
             init.copy_(module.positional_embedding, position_embeddings)
@@ -128,8 +127,7 @@ class FunAsrNanoAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        input_dim = input_dim if input_dim is not None else config.d_model
-        if input_dim != config.d_model:
+        if input_dim is not None:
             self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
             self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
             self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
@@ -164,7 +162,7 @@ class FunAsrNanoAttention(nn.Module):
 
 
 class FunAsrNanoFSMN(nn.Module):
-    """Depthwise feedforward sequential memory network used alongside self-attention."""
+    """Depthwise feedforward sequential memory network (FSMN) used alongside self-attention."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
@@ -199,6 +197,7 @@ class FunAsrNanoFSMN(nn.Module):
         return hidden_states
 
 
+# TODO: check other implementation
 def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     if mask.ndim == 3:
         mask = mask[:, 0]
@@ -206,7 +205,7 @@ def _prepare_4d_attention_mask(mask: torch.Tensor, dtype: torch.dtype) -> torch.
 
 
 class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
-    """SAN-M encoder layer combining standard self-attention with a separate FSMN branch."""
+    """SAN-M encoder layer combining standard self-attention with a separate feedforward sequential memory FSMN branch."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
@@ -263,11 +262,6 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class FunAsrNanoStemAttention(FunAsrNanoAttention):
-    def __init__(self, config: FunAsrNanoEncoderConfig):
-        super().__init__(config, input_dim=config.input_size)
-
-
 class SinusoidsPositionEmbedding(nn.Module):
     def __init__(self, length, channels, max_timescale=10000):
         super().__init__()
@@ -295,7 +289,7 @@ class FunAsrNanoEncoderStem(GradientCheckpointingLayer):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = FunAsrNanoStemAttention(config)
+        self.self_attn = FunAsrNanoAttention(config, input_dim=config.input_size)
         self.self_attn_layer_norm = nn.LayerNorm(config.input_size)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -523,7 +517,6 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
         "hidden_states": FunAsrNanoAudioEncoderLayer,
         "attentions": FunAsrNanoAudioAttention,
     }
-    config_class = FunAsrNanoEncoderConfig
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
@@ -635,28 +628,36 @@ class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
 
 
 class FunAsrNanoMultiModalProjector(nn.Module):
-    """Audio adaptor projecting encoder output to the language-model dimension."""
+    """
+    Audio adaptor (small MLP) that projects FunAsrNanoEncoder features
+    to the LLM embedding space so they can replace `<sound>` tokens.
+    """
 
     def __init__(self, config: FunAsrNanoConfig):
-        nn.Module.__init__(self)
-        self.config = config
+        super().__init__()
+        self.linear_1 = nn.Linear(config.encoder_config.d_model, config.projector_hidden_size)
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.d_model)
 
-        encoder_dim = config.encoder_config.d_model
+    def forward(self, audio_features):
+        hidden_states = self.linear_1(audio_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class FunAsrNanoAdapter(nn.Module):
+    """Bidirectional self-attention adaptor applied to the projected audio features."""
+
+    def __init__(self, config: FunAsrNanoConfig):
+        super().__init__()
         adaptor_config = config.adaptor_config
         adaptor_config._attn_implementation = config.encoder_config._attn_implementation
-
-        self.linear_1 = nn.Linear(encoder_dim, adaptor_config.intermediate_size)
-        self.act = ACT2FN[adaptor_config.activation_function]
-        self.linear_2 = nn.Linear(adaptor_config.intermediate_size, adaptor_config.d_model)
         self.blocks = nn.ModuleList(
             [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.encoder_layers)]
         )
 
-    def forward(self, encoder_out: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.linear_1(encoder_out)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-
+    def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
         attention_mask = _prepare_4d_attention_mask(input_features_mask, hidden_states.dtype)
         for block in self.blocks:
             hidden_states = block(hidden_states, attention_mask)
@@ -679,6 +680,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
+        self.audio_adapter = FunAsrNanoAdapter(config)
         self.post_init()
 
     @can_return_tuple
@@ -714,7 +716,8 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         )
         encoder_out = encoder_outputs.last_hidden_state
 
-        audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask)
+        audio_embeds = self.multi_modal_projector(encoder_out)
+        audio_embeds = self.audio_adapter(audio_embeds, input_features_mask)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(

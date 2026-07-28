@@ -289,7 +289,6 @@ conversation = [
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
-    add_generation_prompt=True,
     return_dict=True,
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)

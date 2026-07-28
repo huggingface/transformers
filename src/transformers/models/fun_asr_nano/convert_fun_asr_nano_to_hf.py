@@ -16,22 +16,26 @@
 
 Usage:
 
-1) Download the original Fun-ASR-Nano checkpoint:
+1) Run the conversion script, downloading the original checkpoint directly from the Hub:
+
+```bash
+python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
+    --model_id FunAudioLLM/Fun-ASR-Nano-2512 \
+    --output_path ./fun-asr-nano-hf
+```
+
+Alternatively, convert an already-downloaded local checkpoint:
 
 ```bash
 hf download FunAudioLLM/Fun-ASR-Nano-2512 \
     --local-dir /path/to/Fun-ASR-Nano-2512
-```
 
-2) Run the conversion script:
-
-```bash
 python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
     --model_path /path/to/Fun-ASR-Nano-2512 \
     --output_path ./fun-asr-nano-hf
 ```
 
-3) Verify the converted checkpoint can be loaded:
+2) Verify the converted checkpoint can be loaded:
 
 ```bash
 python - <<'PY'
@@ -43,14 +47,13 @@ AutoModelForSpeechSeq2Seq.from_pretrained(model_id)
 PY
 ```
 
-4) Optionally push the converted checkpoint to the Hub:
+3) Optionally push the converted checkpoint to the Hub:
 
 ```bash
 python src/transformers/models/fun_asr_nano/convert_fun_asr_nano_to_hf.py \
-    --model_path /path/to/Fun-ASR-Nano-2512 \
+    --model_id FunAudioLLM/Fun-ASR-Nano-2512 \
     --output_path ./fun-asr-nano-hf \
-    --push_to_hub \
-    --hub_model_id your-username/Fun-ASR-Nano-2512-hf
+    --push_to_hub your-username/Fun-ASR-Nano-2512-hf
 ```
 """
 
@@ -61,17 +64,17 @@ import re
 
 import torch
 import yaml
+from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    Qwen3Config,
-)
-
-from .configuration_fun_asr_nano import (
     FunAsrNanoConfig,
     FunAsrNanoEncoderConfig,
+    FunAsrNanoFeatureExtractor,
+    FunAsrNanoForConditionalGeneration,
+    FunAsrNanoProcessor,
+    Qwen3Config,
 )
-from .modeling_fun_asr_nano import FunAsrNanoForConditionalGeneration
 
 
 ROOT_STATE_DICT_MAPPING = (
@@ -80,7 +83,7 @@ ROOT_STATE_DICT_MAPPING = (
     (r"^audio_encoder\.tp_encoders\.", "model.audio_tower.timestamp_prediction_layers."),
     (r"^audio_encoder\.after_norm\.", "model.audio_tower.layer_norm."),
     (r"^audio_encoder\.tp_norm\.", "model.audio_tower.timestamp_prediction_layer_norm."),
-    (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
+    (r"^audio_adaptor\.blocks\.", "model.audio_adapter.blocks."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
@@ -99,7 +102,7 @@ COMPONENT_STATE_DICT_MAPPING = (
     (r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
     (r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
     (r"\.self_attn\.linear_out\.", ".self_attn.out_proj."),
-    (r"\.self_attn\.fsmn_block\.", ".fsmn.conv."),
+    (r"\.self_attn\.fsmn_block\.", ".feedforward_sequential_memory.conv."),
 )
 
 
@@ -209,9 +212,6 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
         kernel_size=enc_conf.get("kernel_size", 11),
     )
 
-    # Adaptor params live directly on the main config (the adaptor is not a standalone model).
-    adp_conf = cfg.get("audio_adaptor_conf", {})
-
     # Text (LLM) config
     with open(os.path.join(qwen3_config_path, "config.json"), "r") as f:
         qwen3_cfg = json.load(f)
@@ -220,29 +220,32 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     config = FunAsrNanoConfig(
         encoder_config=encoder_config,
         text_config=text_config,
-        adaptor_intermediate_size=adp_conf.get("ffn_dim", 2048),
-        adaptor_num_hidden_layers=adp_conf.get("n_layer", 2),
-        adaptor_num_attention_heads=8,
-        activation_function="relu",
     )
 
     return config
 
 
 def convert_checkpoint(
-    model_path: str,
     output_path: str,
-    push_to_hub: bool = False,
-    hub_model_id: str | None = None,
+    model_path: str | None = None,
+    model_id: str | None = None,
+    push_to_hub: str | None = None,
 ):
     """Convert Fun-ASR-Nano checkpoint to HuggingFace format.
 
     Args:
-        model_path: Path to the original Fun-ASR-Nano model directory (containing config.yaml, model.pt, Qwen3-0.6B/).
         output_path: Output directory for the converted model.
-        push_to_hub: Whether to push the converted model to HuggingFace Hub.
-        hub_model_id: Hub model ID for pushing.
+        model_path: Path to the original Fun-ASR-Nano model directory (containing config.yaml, model.pt, Qwen3-0.6B/).
+        model_id: Hub repo ID to download the original Fun-ASR-Nano checkpoint from, as an alternative to
+            `model_path`.
+        push_to_hub: Hub model ID to push the converted model to, or None to skip pushing.
     """
+    if model_id is not None:
+        print(f"Downloading original checkpoint from {model_id}...")
+        model_path = snapshot_download(model_id)
+    elif model_path is None:
+        raise ValueError("Either `model_path` or `model_id` must be provided.")
+
     config_yaml_path = os.path.join(model_path, "config.yaml")
     checkpoint_path = os.path.join(model_path, "model.pt")
     qwen3_path = os.path.join(model_path, "Qwen3-0.6B")
@@ -291,10 +294,11 @@ def convert_checkpoint(
     # Build and save the processor; this also writes the chat template to its own file in the checkpoint
     # (`chat_template.jinja`), so `processor.apply_chat_template` works without any Python-side default.
     print("Building processor (with chat template)...")
-    from .feature_extraction_fun_asr_nano import FunAsrNanoFeatureExtractor
-    from .processing_fun_asr_nano import FunAsrNanoProcessor
 
-    tokenizer = AutoTokenizer.from_pretrained(qwen3_path)
+    tokenizer = AutoTokenizer.from_pretrained(
+        qwen3_path,
+        padding=True,
+    )
     feature_extractor = FunAsrNanoFeatureExtractor()
     processor = FunAsrNanoProcessor(
         feature_extractor=feature_extractor,
@@ -305,10 +309,10 @@ def convert_checkpoint(
 
     print("Done!")
 
-    if push_to_hub and hub_model_id:
-        print(f"Pushing to hub: {hub_model_id}")
-        model.push_to_hub(hub_model_id)
-        processor.push_to_hub(hub_model_id)
+    if push_to_hub:
+        print(f"Pushing to hub: {push_to_hub}")
+        model.push_to_hub(push_to_hub)
+        processor.push_to_hub(push_to_hub)
 
 
 if __name__ == "__main__":
@@ -316,8 +320,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        required=True,
-        help="Path to the original Fun-ASR-Nano model directory",
+        default=None,
+        help="Path to the original Fun-ASR-Nano model directory (alternative to --model_id)",
+    )
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default=None,
+        help="Hugging Face Hub repo ID to download the original Fun-ASR-Nano checkpoint from",
     )
     parser.add_argument(
         "--output_path",
@@ -327,20 +337,15 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--push_to_hub",
-        action="store_true",
-        help="Push converted model to HuggingFace Hub",
-    )
-    parser.add_argument(
-        "--hub_model_id",
         type=str,
         default=None,
-        help="HuggingFace Hub model ID",
+        help="Push converted model to this HuggingFace Hub repo ID",
     )
     args = parser.parse_args()
 
     convert_checkpoint(
-        model_path=args.model_path,
         output_path=args.output_path,
+        model_path=args.model_path,
+        model_id=args.model_id,
         push_to_hub=args.push_to_hub,
-        hub_model_id=args.hub_model_id,
     )

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Tests for Fun-ASR-Nano model."""
 
-import os
 import unittest
 
 from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
@@ -357,15 +356,14 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
     - EN (example/en.mp3): "The tribal chieftain called for the boy, and presented him with fifty pieces of gold."
     """
 
-    # Allow pointing at a local checkpoint for pre-upload verification via env override.
-    model_id = os.environ.get("FUN_ASR_NANO_MODEL_ID", "FunAudioLLM/Fun-ASR-Nano-2512-hf")
-
     @classmethod
     def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+        # TODO: set to final version at `FunAudioLLM/Fun-ASR-Nano-2512-hf`
+        model_id = "bezzam/Fun-ASR-Nano-2512-hf"
+        cls.processor = AutoProcessor.from_pretrained(model_id)
         cls.processor.tokenizer.padding_side = "left"
         cls.model = FunAsrNanoForConditionalGeneration.from_pretrained(
-            cls.model_id, torch_dtype=torch.bfloat16, device_map="auto"
+            model_id, dtype=torch.bfloat16, device_map="auto"
         )
 
     def _load_audio(self, filename):
