@@ -351,8 +351,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3VLMoeCausalLMOutputWithPast:
@@ -419,8 +418,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            image_outputs=image_outputs,
-            video_outputs=video_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

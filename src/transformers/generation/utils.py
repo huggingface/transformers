@@ -505,8 +505,7 @@ class GenerationMixin(ContinuousMixin):
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        image_outputs: dict | None = None,
-        video_outputs: dict | None = None,
+        encoder_outputs: dict | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
@@ -607,9 +606,15 @@ class GenerationMixin(ContinuousMixin):
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["image_outputs"] = image_outputs
-            model_inputs["video_outputs"] = video_outputs
+        if (
+            not is_first_iteration
+            and kwargs.get("use_cache", True)
+            and encoder_outputs is not None
+            and "last_hidden_states" not in encoder_outputs
+        ):
+            encoder_outputs = None
+        else:
+            model_inputs["encoder_outputs"] = encoder_outputs
 
         # 6. Move the tensors the forward consumes onto the model device, right before the call.
         # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
@@ -831,9 +836,10 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs,
     ) -> torch.FloatTensor:
         # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
+        model_kwargs.setdefault("encoder_outputs", {})
         if (
             "image" in self.input_modalities
-            and model_kwargs.get("image_outputs") is None
+            and model_kwargs["encoder_outputs"].get("images") is None
             and hasattr(self.base_model, "get_image_features")
         ):
             image_signature = {
@@ -849,13 +855,11 @@ class GenerationMixin(ContinuousMixin):
                     argument: model_kwargs.get(argument, None) for argument in set(image_signature)
                 }
                 image_encoder_kwargs["return_dict"] = True
-                model_kwargs["image_outputs"]: torch.FloatTensor = self.base_model.get_image_features(
-                    **image_encoder_kwargs
-                )
+                model_kwargs["encoder_outputs"]["images"] = self.base_model.get_image_features(**image_encoder_kwargs)
 
         if (
             "video" in self.input_modalities
-            and model_kwargs.get("video_outputs") is None
+            and model_kwargs["encoder_outputs"].get("videos") is None
             and hasattr(self.base_model, "get_video_features")
         ):
             video_signature = {
@@ -871,9 +875,7 @@ class GenerationMixin(ContinuousMixin):
                     argument: model_kwargs.get(argument, None) for argument in set(video_signature)
                 }
                 video_encoder_kwargs["return_dict"] = True
-                model_kwargs["video_outputs"]: torch.FloatTensor = self.base_model.get_video_features(
-                    **video_encoder_kwargs
-                )
+                model_kwargs["encoder_outputs"]["videos"] = self.base_model.get_video_features(**video_encoder_kwargs)
 
         return model_kwargs
 
@@ -957,10 +959,10 @@ class GenerationMixin(ContinuousMixin):
             else:
                 return inputs * repeat_times
 
-        def _expand_multimodal_outputs(outputs_key, token_id_key):
-            outputs = model_kwargs.get(outputs_key)
-            if outputs is None:
+        def _expand_multimodal_outputs(model_outputs, token_id_key):
+            if model_outputs is None:
                 return
+
             if input_ids is None or input_ids.numel() == 0:
                 special_image_mask = model_kwargs["inputs_embeds"] == self.get_input_embeddings()(
                     torch.tensor(
@@ -973,7 +975,7 @@ class GenerationMixin(ContinuousMixin):
             else:
                 num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
             num_image_tokens_in_text = torch.tensor(num_image_tokens_in_text).cumsum(-1)
-            num_image_tokens_in_vision = [len(out) for out in outputs.pooler_output]
+            num_image_tokens_in_vision = [len(out) for out in model_outputs.pooler_output]
             num_image_tokens_in_vision = torch.tensor(num_image_tokens_in_vision).cumsum(-1)
             offsets = [0] + [
                 i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
@@ -981,16 +983,16 @@ class GenerationMixin(ContinuousMixin):
             expanded_pooler_output = [
                 out
                 for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(outputs.pooler_output[start:end], expand_size)
+                for out in repeat_tensor_or_list(model_outputs.pooler_output[start:end], expand_size)
             ]
 
-            if isinstance(outputs.pooler_output, torch.Tensor):
-                outputs.pooler_output = torch.stack(expanded_pooler_output, dim=0)
+            if isinstance(model_outputs.pooler_output, torch.Tensor):
+                model_outputs.pooler_output = torch.stack(expanded_pooler_output, dim=0)
             else:
-                outputs.pooler_output = expanded_pooler_output
+                model_outputs.pooler_output = expanded_pooler_output
 
-        _expand_multimodal_outputs("image_outputs", "image_token_id")
-        _expand_multimodal_outputs("video_outputs", "video_token_id")
+        _expand_multimodal_outputs(model_kwargs.get("encoder_outputs", {}).get("images"), "image_token_id")
+        _expand_multimodal_outputs(model_kwargs.get("encoder_outputs", {}).get("videos"), "video_token_id")
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
@@ -1680,10 +1682,6 @@ class GenerationMixin(ContinuousMixin):
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
                 model_kwargs.pop(key, None)
-
-        # Excludes arguments that might not be in signature of older models
-        for key in ["image_outputs", "video_outputs"]:
-            model_kwargs.pop(key, None)
 
         unused_model_args = []
         model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)

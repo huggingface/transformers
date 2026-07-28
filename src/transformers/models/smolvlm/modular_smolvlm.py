@@ -223,7 +223,7 @@ class SmolVLMModel(Idefics3Model):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_outputs: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
@@ -236,15 +236,18 @@ class SmolVLMModel(Idefics3Model):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        if pixel_values is not None and image_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values and image_outputs at the same time")
+        if pixel_values is not None and encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and encoder_outputs at the same time")
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
 
-        if image_outputs is not None:
+        if encoder_outputs.get("images") is not None:
             image_hidden_states = (
-                image_outputs.pooler_output if not isinstance(image_outputs, torch.Tensor) else image_outputs
+                encoder_outputs["images"].pooler_output
+                if not isinstance(encoder_outputs, torch.Tensor)
+                else encoder_outputs
             )
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 
@@ -268,7 +271,7 @@ class SmolVLMModel(Idefics3Model):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_outputs,
+            image_hidden_states=encoder_outputs.get("images"),
         )
 
 

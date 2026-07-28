@@ -2031,8 +2031,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
         r"""
@@ -2108,27 +2107,28 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
-        if video_outputs is None and pixel_values_videos is not None:
+        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
-        if image_outputs is not None:
-            image_embeds = torch.cat(image_outputs.pooler_output, dim=0)
-            image_embeds_multiscale = image_outputs.deepstack_features
+        if encoder_outputs.get("images") is not None:
+            image_embeds = torch.cat(encoder_outputs["images"].pooler_output, dim=0)
+            image_embeds_multiscale = encoder_outputs["images"].deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if video_outputs is not None:
-            video_embeds = torch.cat(video_outputs.pooler_output, dim=0)
+        if encoder_outputs.get("videos") is not None:
+            video_embeds = torch.cat(encoder_outputs["videos"].pooler_output, dim=0)
             video_embeds_multiscale = video_outputs.deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
@@ -2299,11 +2299,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             model_kwargs["position_ids"] = position_ids
 
         if expand_size != 1:
-            if image_outputs := model_kwargs.get("image_outputs"):
+            if image_outputs := model_kwargs.get("encoder_outputs", {}).get("images"):
                 image_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
                 ]
-            if video_outputs := model_kwargs.get("video_outputs"):
+            if video_outputs := model_kwargs.get("encoder_outputs", {}).get("videos"):
                 video_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
                 ]

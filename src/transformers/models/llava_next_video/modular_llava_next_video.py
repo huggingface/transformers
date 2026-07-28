@@ -405,8 +405,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextVideoModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -415,8 +414,9 @@ class LlavaNextVideoModel(LlavaNextModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -424,8 +424,8 @@ class LlavaNextVideoModel(LlavaNextModel):
                 return_dict=True,
             )
 
-        if image_outputs is not None:
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+        if encoder_outputs.get("images") is not None:
+            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask, _ = self.get_placeholder_mask(
@@ -433,16 +433,16 @@ class LlavaNextVideoModel(LlavaNextModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        if video_outputs is None and pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
+        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            encoder_outputs["videos"] = self.get_video_features(
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
-        if video_outputs is not None:
-            video_features = [feature.flatten(0, 1) for feature in video_outputs.pooler_output]
+        if encoder_outputs.get("videos") is not None:
+            video_features = [feature.flatten(0, 1) for feature in encoder_outputs["videos"].pooler_output]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
@@ -467,8 +467,8 @@ class LlavaNextVideoModel(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
-            video_hidden_states=video_features if video_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
+            video_hidden_states=video_features if encoder_outputs.get("videos") is not None else None,
         )
 
 
@@ -519,8 +519,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextVideoCausalLMOutputWithPast:
@@ -601,8 +600,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             vision_feature_select_strategy=vision_feature_select_strategy,
             use_cache=use_cache,
             image_sizes=image_sizes,
-            image_outputs=image_outputs,
-            video_outputs=video_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

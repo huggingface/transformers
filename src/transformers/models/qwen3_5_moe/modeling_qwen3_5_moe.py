@@ -1548,42 +1548,40 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        modality: str | None = None,
+        features: torch.FloatTensor | None = None,
+        **kwargs,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-            special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_video_mask = special_video_mask.all(-1)
+        if modality is None:
+            modalities = ["image", "video"]
         else:
-            special_image_mask = input_ids == self.config.image_token_id
-            special_video_mask = input_ids == self.config.video_token_id
+            modalities = [modality]
 
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
-        if image_features is not None:
-            torch_compilable_check(
-                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
-                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
-            )
+        masks = []
+        for modality in modalities:
+            modality_token_id = getattr(self.config, f"{modality}_token_id")
+            if input_ids is None:
+                mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(modality_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                mask = mask.all(-1)
+            else:
+                mask = input_ids == modality_token_id
 
-        n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
-        if video_features is not None:
-            torch_compilable_check(
-                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
-                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
-            )
-        return special_image_mask, special_video_mask
+            n_modality_tokens = mask.sum()
+            mask = mask.unsqueeze(-1).to(inputs_embeds.device)
+            if features is not None:
+                torch_compilable_check(
+                    n_modality_tokens * inputs_embeds.shape[-1] == features.numel(),
+                    f"{modality} seq_length and num_tokens do not match, num_tokens: {n_modality_tokens * inputs_embeds.shape[-1]}, seq_length: {features.numel()}",
+                )
+            masks.append(mask)
+
+        return masks[0] if len(masks) == 1 else tuple(masks)
 
     def compute_3d_position_ids(
         self,
@@ -1649,8 +1647,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3_5MoeModelOutputWithPast:
         r"""
@@ -1663,23 +1660,32 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
 
-        if video_outputs is None and pixel_values_videos is not None:
-            video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            encoder_outputs["videos"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
 
-        if image_outputs is not None:
-            image_embeds = torch.cat(image_outputs.pooler_output, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+        if encoder_outputs.get("images") is not None:
+            image_embeds = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, features=image_embeds, modality="image"
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if video_outputs is not None:
-            video_embeds = torch.cat(video_outputs.pooler_output, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            _, video_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+        if encoder_outputs.get("videos") is not None:
+            video_embeds = torch.cat(encoder_outputs["videos"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, features=video_embeds, modality="video"
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -1709,7 +1715,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            image_hidden_states=image_embeds if image_outputs is not None else None,
+            image_hidden_states=image_embeds if encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -1960,8 +1966,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3_5MoeCausalLMOutputWithPast:
@@ -2025,8 +2030,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            image_outputs=image_outputs,
-            video_outputs=video_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 
@@ -2164,11 +2168,11 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
             model_kwargs["position_ids"] = position_ids
 
         if expand_size != 1:
-            if image_outputs := model_kwargs.get("image_outputs"):
+            if image_outputs := model_kwargs.get("encoder_outputs", {}).get("images"):
                 image_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
                 ]
-            if video_outputs := model_kwargs.get("video_outputs"):
+            if video_outputs := model_kwargs.get("encoder_outputs", {}).get("videos"):
                 video_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
                 ]

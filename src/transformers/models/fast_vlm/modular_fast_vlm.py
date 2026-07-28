@@ -181,7 +181,7 @@ class FastVlmModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmModelOutputWithPast:
         r"""
@@ -197,16 +197,17 @@ class FastVlmModel(LlavaModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
-        if image_outputs is not None:
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+        if encoder_outputs.get("images") is not None:
+            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(
@@ -227,7 +228,7 @@ class FastVlmModel(LlavaModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -254,7 +255,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmCausalLMOutputWithPast:
@@ -314,7 +315,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            image_outputs=image_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

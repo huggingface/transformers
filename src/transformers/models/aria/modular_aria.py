@@ -893,23 +893,24 @@ class AriaModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | AriaModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         # 2. Merge text and images
-        if image_outputs is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
-            image_outputs = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
+            encoder_outputs["images"] = self.get_image_features(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
             )
 
-        if image_outputs is not None:
-            image_features = image_outputs.pooler_output
+        if encoder_outputs.get("images") is not None:
+            image_features = encoder_outputs["images"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -930,7 +931,7 @@ class AriaModel(LlavaModel):
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -973,7 +974,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AriaCausalLMOutputWithPast:
@@ -1047,7 +1048,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            image_outputs=image_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

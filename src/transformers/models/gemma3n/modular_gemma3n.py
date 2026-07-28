@@ -2174,7 +2174,7 @@ class Gemma3nModel(PaliGemmaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nModelOutputWithPast:
         r"""
@@ -2243,11 +2243,12 @@ class Gemma3nModel(PaliGemmaModel):
             per_layer_inputs = None
 
         # Merge text and images
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, return_dict=True)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
 
-        if image_outputs is not None:
-            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if encoder_outputs.get("images") is not None:
+            image_features = encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -2296,7 +2297,7 @@ class Gemma3nModel(PaliGemmaModel):
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
@@ -2353,7 +2354,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
@@ -2417,7 +2418,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            image_outputs=image_outputs,
+            encoder_outputs=encoder_outputs,
             return_dict=True,
             **lm_kwargs,
         )

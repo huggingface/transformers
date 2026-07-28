@@ -216,8 +216,7 @@ class PerceptionLMModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **lm_kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -231,22 +230,27 @@ class PerceptionLMModel(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_features = None
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
-        if image_outputs is not None:
-            image_features = image_outputs.pooler_output.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if encoder_outputs.get("images") is not None:
+            image_features = encoder_outputs["images"].pooler_output.to(
+                inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
-        if video_outputs is None and pixel_values_videos is not None:
-            video_outputs = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            encoder_outputs["videos"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
 
-        if video_outputs is not None:
-            video_features = video_outputs.pooler_output.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if encoder_outputs.get("videos") is not None:
+            video_features = encoder_outputs["videos"].pooler_output.to(
+                inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -266,8 +270,8 @@ class PerceptionLMModel(LlavaModel):
             hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
-            video_hidden_states=video_features if video_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
+            video_hidden_states=video_features if encoder_outputs.get("videos") is not None else None,
         )
 
 
@@ -319,8 +323,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
@@ -381,8 +384,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            image_outputs=image_outputs,
-            video_outputs=video_outputs,
+            encoder_outputs=encoder_outputs,
             **lm_kwargs,
         )
 

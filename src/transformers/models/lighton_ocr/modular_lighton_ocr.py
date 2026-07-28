@@ -252,7 +252,7 @@ class LightOnOcrModel(Mistral3Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         image_sizes: torch.Tensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -261,13 +261,14 @@ class LightOnOcrModel(Mistral3Model):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(
                 pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
             )
 
-        if image_outputs is not None:
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+        if encoder_outputs.get("images") is not None:
+            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(
@@ -289,7 +290,7 @@ class LightOnOcrModel(Mistral3Model):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
         )
 
 

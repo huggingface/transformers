@@ -1027,7 +1027,7 @@ class Emu3Model(Emu3PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -1044,11 +1044,12 @@ class Emu3Model(Emu3PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_sizes)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(pixel_values, image_sizes)
 
-        if image_outputs is not None:
-            image_features = torch.cat(image_outputs.pooler_output, dim=0)
+        if encoder_outputs.get("images") is not None:
+            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -1103,7 +1104,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1164,7 +1165,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             pixel_values=pixel_values,
             image_sizes=image_sizes,
-            image_outputs=image_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

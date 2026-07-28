@@ -1276,6 +1276,7 @@ class HunYuanVLModel(Qwen2VLModel):
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
         r"""
@@ -1290,11 +1291,12 @@ class HunYuanVLModel(Qwen2VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_embeds = None
-        if pixel_values is not None and image_grid_thw is not None:
-            image_outputs = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-            image_embeds = image_outputs.pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, dtype=inputs_embeds.dtype, non_blocking=True)
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values is not None:
+            encoder_outputs["images"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if encoder_outputs.get("images") is not None:
+            image_embeds = encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1326,7 +1328,7 @@ class HunYuanVLModel(Qwen2VLModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_embeds if encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -1367,6 +1369,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -1420,6 +1423,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 

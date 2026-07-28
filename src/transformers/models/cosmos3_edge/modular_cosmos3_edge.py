@@ -579,6 +579,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)
+        self.spatial_merge_size = config.spatial_merge_size
         self.embeddings = Cosmos3EdgeVisionEmbeddings(config)
         self.encoder = Cosmos3EdgeEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -597,7 +598,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         hidden_states = self.embeddings(pixel_values, grid_thw)
         hidden_states = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
         last_hidden_state = self.post_layernorm(hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state)
 
 
 class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
@@ -625,6 +626,24 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         super().__init__(self)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
         self.projector = Cosmos3EdgePatchMerger(config)
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, image_grid_thw.prod(-1).tolist())
+
+        return vision_outputs
 
     def get_rope_index(
         self,

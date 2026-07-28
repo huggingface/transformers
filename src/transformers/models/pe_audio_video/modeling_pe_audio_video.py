@@ -923,7 +923,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 return_dict=True,
             )
             video_plus_text_embeds = torch.cat(
-                [outputs.video_outputs.pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
+                [outputs.encoder_outputs["videos"].pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
             )
             video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
             return PeAudioVideoOutput(video_plus_text_embeds=video_plus_text_embeds, **outputs)

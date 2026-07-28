@@ -310,8 +310,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | VideoLlavaModelOutputWithPast:
         r"""
@@ -326,28 +325,29 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if image_outputs is None and pixel_values_images is not None:
-            image_outputs = self.get_image_features(
+        encoder_outputs = encoder_outputs if encoder_outputs else {}
+        if encoder_outputs.get("images") is None and pixel_values_images is not None:
+            encoder_outputs["images"] = self.get_image_features(
                 pixel_values_images,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
-        if image_outputs is not None:
-            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if encoder_outputs.get("images") is not None:
+            image_features = encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        if video_outputs is None and pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
+        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            encoder_outputs["videos"] = self.get_video_features(
                 pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer, return_dict=True
             )
 
-        if video_outputs is not None:
-            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if encoder_outputs.get("videos") is not None:
+            video_features = encoder_outputs["videos"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -367,8 +367,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if image_outputs is not None else None,
-            video_hidden_states=video_features if video_outputs is not None else None,
+            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
+            video_hidden_states=video_features if encoder_outputs.get("videos") is not None else None,
         )
 
 
@@ -433,8 +433,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        image_outputs: BaseModelOutputWithPooling | None = None,
-        video_outputs: BaseModelOutputWithPooling | None = None,
+        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlavaCausalLMOutputWithPast:
@@ -525,8 +524,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             use_cache=use_cache,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            image_outputs=image_outputs,
-            video_outputs=video_outputs,
+            encoder_outputs=encoder_outputs,
             **kwargs,
         )
 
