@@ -363,7 +363,7 @@ class FunAsrNanoMultiModalProjector(AudioFlamingo3MultiModalProjector):
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.d_model)
 
 
-class FunAsrNanoAdapter(nn.Module):
+class FunAsrNanoAdaptor(nn.Module):
     """Bidirectional self-attention adaptor applied to the projected audio features."""
 
     def __init__(self, config: FunAsrNanoConfig):
