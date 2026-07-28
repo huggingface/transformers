@@ -37,6 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
     TensorType,
+    TransformersKwargs,
     add_start_docstrings,
     auto_docstring,
     is_torchvision_available,
