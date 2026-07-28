@@ -614,6 +614,9 @@ class Apertus1p5TextPreTrainedModel(ApertusPreTrainedModel):
 
     def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
         # Mirrors Apertus1p5PreTrainedModel: post-hoc `tie_word_embeddings` flips must not tie a pruned head.
+        # The duplication is forced: sharing the guards via a mixin or dual inheritance is not converter-safe
+        # (the modular converter reorders the generated bases, which either breaks the MRO or silently shadows
+        # the mixin methods).
         _check_pruned_head_tie(self.config)
         return PreTrainedModel.tie_weights(self, missing_keys, recompute_mapping)
 
