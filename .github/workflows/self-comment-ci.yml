@@ -28,7 +28,7 @@ env:
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan", "guarin"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan", "guarin", "hmellor"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -177,7 +177,7 @@ jobs:
   model-ci:
     name: Model CI
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     needs: [get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_models_gpu
@@ -188,12 +188,13 @@ jobs:
       commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
       subdirs: ${{ needs.get-tests.outputs.models }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+      pytest_marker: slow
     secrets: inherit
 
   quantization-ci:
     name: Quantization CI
     if: ${{ needs.get-tests.outputs.quantizations != '[]' }}
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     needs: [get-pr-number, check-timestamps, get-tests, create_run]
     with:
       job: run_quantization_torch_gpu
