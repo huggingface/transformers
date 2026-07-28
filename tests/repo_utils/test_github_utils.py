@@ -53,21 +53,6 @@ class BuildGithubHeadersTest(unittest.TestCase):
                 self.assertNotIn("Authorization", build_github_headers(token))
 
 
-class IsExpiredOrBadTokenTest(unittest.TestCase):
-    def test_non_401_is_never_a_token_problem(self):
-        for status in (200, 403, 404, 429, 500):
-            with self.subTest(status=status):
-                self.assertIsNone(gh._is_expired_or_bad_token(status, "Bad credentials"))
-
-    def test_401_is_always_a_rejected_token_even_without_a_body(self):
-        self.assertEqual(gh._is_expired_or_bad_token(401, ""), "rejected")
-        self.assertEqual(gh._is_expired_or_bad_token(401, None), "rejected")
-
-    def test_401_body_sharpens_the_reason(self):
-        self.assertEqual(gh._is_expired_or_bad_token(401, "Bad credentials"), "bad credentials")
-        # GitHub wording is not guaranteed; matching is case-insensitive and substring based.
-        self.assertEqual(gh._is_expired_or_bad_token(401, "This token has EXPIRED"), "expired")
-
 
 class RateLimitWaitTest(unittest.TestCase):
     def test_non_rate_limit_status_returns_none(self):
@@ -103,12 +88,81 @@ class RateLimitWaitTest(unittest.TestCase):
         self.assertLess(first, later)
 
 
+class LogTokenStatusTest(unittest.TestCase):
+    def setUp(self):
+        # Reset the once-per-process guard before every test.
+        gh._token_status_logged = False
+
+    def _patch_request(self, side_effect):
+        patcher = patch.object(gh, "_request", side_effect=side_effect)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def test_ci_without_token_raises(self):
+        with patch.dict(os.environ, {"CI": "true"}):
+            with self.assertRaises(RuntimeError) as ctx:
+                gh._log_token_status(token=None)
+        self.assertIn("no github token", str(ctx.exception).lower())
+
+    def test_no_ci_without_token_does_not_raise(self):
+        env = {k: v for k, v in os.environ.items() if k != "CI"}
+        with patch.dict(os.environ, env, clear=True):
+            self._patch_request([_response(200, body='{"resources": {"core": {"limit": 60, "remaining": 59, "reset": 9999999999}}}')])
+            gh._log_token_status(token=None)  # must not raise
+
+    def test_token_rejected_401_raises(self):
+        self._patch_request([_response(401, body="Bad credentials")])
+        with self.assertRaises(RuntimeError) as ctx:
+            gh._log_token_status(token="bad-token")
+        self.assertIn("rejected", str(ctx.exception).lower())
+
+    def test_401_with_token_raises_with_refresh_message(self):
+        self._patch_request([_response(401, body="Bad credentials")])
+        with self.assertRaises(RuntimeError) as ctx:
+            gh._log_token_status(token="bad-token")
+        self.assertIn("refresh the token", str(ctx.exception).lower())
+
+    def test_401_without_token_raises_with_unexpected_message(self):
+        self._patch_request([_response(401, body="")])
+        with self.assertRaises(RuntimeError) as ctx:
+            gh._log_token_status(token=None)
+        self.assertIn("unexpected", str(ctx.exception).lower())
+
+    def test_remaining_zero_raises(self):
+        self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 0, "reset": 9999999999}}}')])
+        with self.assertRaises(RuntimeError) as ctx:
+            gh._log_token_status(token="t")
+        self.assertIn("exhausted", str(ctx.exception).lower())
+
+    def test_remaining_nonzero_does_not_raise(self):
+        self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')])
+        gh._log_token_status(token="t")  # must not raise
+
+    def test_called_only_once(self):
+        mock = self._patch_request([_response(200, body='{"resources": {"core": {"limit": 5000, "remaining": 4999, "reset": 9999999999}}}')])
+        gh._log_token_status(token="t")
+        gh._log_token_status(token="t")
+        self.assertEqual(mock.call_count, 1)
+
+    def test_network_error_does_not_raise(self):
+        # A connectivity failure is logged but must not abort the caller.
+        self._patch_request(gh.urllib.error.URLError("timeout"))
+        gh._log_token_status(token="t")  # must not raise
+
+
 class GithubRequestTest(unittest.TestCase):
     def setUp(self):
         # Never actually sleep while exercising the retry loop.
         sleep_patcher = patch.object(gh.time, "sleep", return_value=None)
         self.addCleanup(sleep_patcher.stop)
         sleep_patcher.start()
+
+        # Bypass the pre-flight token check — it is tested separately in LogTokenStatusTest
+        # and would otherwise consume mock responses intended for the actual API call.
+        token_check_patcher = patch.object(gh, "_log_token_status", return_value=None)
+        self.addCleanup(token_check_patcher.stop)
+        token_check_patcher.start()
+        gh._token_status_logged = False
 
     def _patch_request(self, side_effect):
         patcher = patch.object(gh, "_request", side_effect=side_effect)
@@ -134,6 +188,7 @@ class GithubRequestTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as ctx:
             github_request("https://api.github.com/x", token="expired")
         self.assertIn("bad credentials", str(ctx.exception).lower())
+        self.assertIn("401", str(ctx.exception))
         # Fail hard: the transport is hit exactly once, never retried.
         self.assertEqual(mock.call_count, 1)
 

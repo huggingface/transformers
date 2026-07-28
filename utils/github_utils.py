@@ -110,11 +110,16 @@ def _log_token_status(token=None):
         return
 
     if status == 401:
-        msg = "[token check] Token REJECTED by GitHub (HTTP 401) — token is invalid, expired, or revoked."
-        print(msg)
         if token:
-            raise RuntimeError(f"{msg} Refresh the token and rerun.")
-        return
+            raise RuntimeError(
+                "[token check] GitHub rejected the token (HTTP 401) — it is invalid, expired, or revoked. "
+                "Refresh the token and rerun."
+            )
+        else:
+            raise RuntimeError(
+                "[token check] GitHub rejected an anonymous /rate_limit request (HTTP 401) — unexpected, "
+                "as anonymous access should always be allowed. Check for a GitHub outage or network proxy issue."
+            )
 
     if status != 200:
         print(f"[token check] Unexpected status {status} from /rate_limit: {body[:200]!r}")
