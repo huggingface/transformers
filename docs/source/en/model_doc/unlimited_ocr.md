@@ -122,7 +122,6 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 Set `skip_special_tokens=False` to wrap all detections and region types in `<|det|>...<|/det|>` markers. This is useful for further post-processing of the output, for example to plot the detected bounding boxes on the image. Each detection is wrapped as `<|det|>region_type [x1, y1, x2, y2]<|/det|>text...` with coordinates normalized to a `[0, 999]` range. Set `return_detections=True` to get an additional list of dictionaries with all detections parsed as `{"region_type": region_type, "box": [x1, y1, x2, y2], "text": "..."}`.
 
 ```python
-import re
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
@@ -173,7 +172,7 @@ plt.show()
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/unlimited_ocr_suggestion_form_boxes.jpg" width="600">
 
-
+</hfoption>
 <hfoption id="Multi-page OCR">
 
 Multi-page documents can be parsed jointly in a single forward pass by passing all page images together. Add one image block per page to the message so the model processes all pages as a continuous document.
