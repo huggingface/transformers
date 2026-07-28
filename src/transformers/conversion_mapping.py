@@ -1624,7 +1624,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(^|model\.)sam_model", r"\1vision_tower.sam_encoder"),
             WeightRenaming(r"(^|model\.)vision_model", r"\1vision_tower.vision_encoder"),
             WeightRenaming(r"(^|model\.)view_seperator", r"\1view_separator"),
-            WeightRenaming(r"(^|model\.)image_newline", r"\1image_newline"),
             WeightRenaming(r"(^|model\.)projector\.layers\.weight", r"\1multi_modal_projector.weight"),
             WeightRenaming(r"(^|model\.)projector\.layers\.bias", r"\1multi_modal_projector.bias"),
             WeightRenaming(r"(^|model\.)embed_tokens\.", r"\1language_model.embed_tokens."),
