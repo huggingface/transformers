@@ -84,6 +84,10 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For kernels
 RUN python3 -m pip install --no-cache-dir kernels
 
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
+# graph on GPU for faster export testing)
+RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime-gpu
+
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
 
@@ -94,7 +98,22 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+# Notes on the install command below (see https://github.com/huggingface/transformers/pull/47251):
+# - wheel is upgraded before flash-attn: torch 2.13.0 added an unconditional setuptools>=77.0.3
+#   requirement, which pip resolves to setuptools 83.0.0 (which removed pkg_resources). The Ubuntu
+#   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
+#   (Feb 2024) uses importlib.metadata instead and is not affected.
+# - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
+#   now only FLASH_ATTN=false skips gracefully, and any actual install error will correctly
+#   fail the Docker build.
+RUN if [ "$FLASH_ATTN" != "false" ]; then \
+        python3 -m pip uninstall -y ninja && \
+        python3 -m pip install --no-cache-dir ninja && \
+        python3 -m pip install --no-cache-dir -U wheel && \
+        python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
+    else \
+        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
+    fi
 
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
@@ -122,3 +141,16 @@ RUN python3 -m pip uninstall -y kernels
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Smoke test: fail the image build immediately if a later `pip install` replaced or broke the pinned
+# CUDA torch stack (e.g. a dep that drags in a different torch/CUDA/NCCL — which surfaces as
+# `undefined symbol: ncclCommResume` at `import torch`; see run 28991812987). We import torch (which
+# eagerly loads `libtorch_cuda.so`) AND assert the version still matches the `${PYTORCH}` pin, since
+# transformers only requires `torch>=2.4` — a silent swap to a newer torch otherwise passes every
+# version check and reaches the GPU test jobs. No GPU is present at build time, so we only exercise
+# the import + CUDA runtime load, not device availability.
+RUN set -e; \
+    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
+    if [ "$PYTORCH" != "pre" ]; then \
+        python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
+    fi

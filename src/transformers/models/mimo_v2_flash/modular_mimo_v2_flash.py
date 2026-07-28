@@ -25,6 +25,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
@@ -61,6 +62,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     """
 
     model_type = "mimo_v2_flash"
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -103,6 +105,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
     use_qk_norm = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
@@ -239,6 +242,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@no_inherit_decorator
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         # SWA layers double the kv heads vs full-attention and have attention sinks.

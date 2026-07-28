@@ -39,6 +39,15 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_input_name = "pixel_values"
 
     @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # Default size=448x448 with max_patches=12 produces up to 27 MB pixel_values tensors.
+        # Use 64x64 with max_patches=1 for tests — assertions only check patch count, not spatial dims.
+        return image_processor_class.from_pretrained(
+            cls.tiny_model_id, size={"height": 64, "width": 64}, max_patches=1
+        )
+
+    @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_placeholder_token
 

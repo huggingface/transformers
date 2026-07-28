@@ -46,7 +46,7 @@ from .configuration_zaya import ZayaConfig
 class ZayaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: ZayaConfig):
+    def __init__(self, config: ZayaConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -62,7 +62,7 @@ class ZayaRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -232,7 +232,7 @@ class ZayaCCAProjection(nn.Module):
         qk_states = qk_states.transpose(1, 2)
         use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states
+            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states[0]
             qk_states = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))
@@ -254,7 +254,7 @@ class ZayaCCAProjection(nn.Module):
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
         if use_precomputed_states:
-            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states.unsqueeze(1)
+            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states[0].unsqueeze(1)
         else:
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
@@ -797,6 +797,8 @@ class ZayaModel(ZayaPreTrainedModel):
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
 class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _is_stateful = True
 
     def __init__(self, config, **kwargs):

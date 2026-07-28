@@ -36,18 +36,27 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     model_id = "HuggingFaceM4/idefics2-8b"
 
     @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # Use size=64 to keep pixel_values tensors small in tests.
+        # Default shortest_edge=378 would upscale 64x64 inputs to 378x378 (~9x larger tensors).
+        return image_processor_class.from_pretrained(cls.tiny_model_id, size={"shortest_edge": 64, "longest_edge": 64})
+
+    @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
-                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
             )
         )
         cls.image2 = load_image(
-            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/chicago_64x64.jpg"
+            )
         )
         cls.image3 = load_image(
             url_to_local_path(
-                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -74,8 +83,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 64, 64))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 64, 64))
         # fmt: on
 
         # Test a single sample with image and text
@@ -89,8 +98,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_input_ids = [[bos_token_id] + [fake_image_token_id] + [image_token_id] * image_seq_len + [fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 1, 3, 64, 64))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 1, 64, 64))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -122,8 +131,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(inputs['pixel_values'].shape, (2, 2, 3, 767, 980))
-        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 2, 767, 980))
+        self.assertEqual(inputs['pixel_values'].shape, (2, 2, 3, 64, 64))
+        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 2, 64, 64))
         # fmt: on
 
     def test_process_interleaved_images_prompts_image_splitting(self):
@@ -133,8 +142,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
-        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 64, 64))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 64, 64))
         # fmt: on
 
         # Test a single sample with image and text
@@ -148,8 +157,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_input_ids = [[self.bos_token_id] + ([self.fake_image_token_id] + [self.image_token_id] * self.image_seq_len) * 5 + [self.fake_image_token_id] + tokenized_sentence["input_ids"]]
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 653, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 653, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (1, 5, 3, 64, 64))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (1, 5, 64, 64))
         # fmt: on
 
         # Test that batch is correctly processed
@@ -181,8 +190,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs["attention_mask"],
             [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * len(expected_input_ids_2)]
         )
-        self.assertEqual(inputs['pixel_values'].shape, (2, 10, 3, 767, 980))
-        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 10, 767, 980))
+        self.assertEqual(inputs['pixel_values'].shape, (2, 10, 3, 64, 64))
+        self.assertEqual(inputs['pixel_attention_mask'].shape, (2, 10, 64, 64))
         # fmt: on
 
     def test_add_special_tokens_processor(self):
@@ -221,8 +230,8 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         inputs = processor(text=text, images=images, padding=True)
 
-        self.assertEqual(inputs["pixel_values"].shape, (2, 2, 3, 767, 980))
-        self.assertEqual(inputs["pixel_attention_mask"].shape, (2, 2, 767, 980))
+        self.assertEqual(inputs["pixel_values"].shape, (2, 2, 3, 64, 64))
+        self.assertEqual(inputs["pixel_attention_mask"].shape, (2, 2, 64, 64))
 
     def test_process_interleaved_images_prompts_image_error(self):
         processor = self.get_processor()

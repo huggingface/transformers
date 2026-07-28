@@ -171,7 +171,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": url_to_local_path(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
             ),
         }
 

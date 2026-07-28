@@ -16,6 +16,7 @@
 import copy
 import json
 import os
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
-DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
 DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
     "sliding_window",
@@ -154,6 +155,8 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
+        use_mtp: (`bool`):
+            Whether or not to use Multi-Token Prediction (MTP) if the model supports it.
 
         > Parameters that control the cache
 
@@ -348,6 +351,12 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        assistant_ensemble_weight (`float`, *optional*):
+            Enables static ensemble verification in speculative decoding. If set to a value in `(0.0, 1.0)`,
+            the verifier accepts tokens against the mixture `w * p_target + (1 - w) * q_draft` instead of
+            `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
+            to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
+            is not compatible with prompt lookup decoding.
 
         > Parameters related to performances and compilation
 
@@ -389,6 +398,7 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", None)
         self.num_beams = kwargs.pop("num_beams", None)
+        self.use_mtp = kwargs.pop("use_mtp", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", None)
@@ -452,12 +462,20 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
+        self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
+        # Depreacted in 5.13
         self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
+        if self.continuous_batching_config is not None:
+            msg = (
+                "Passing ContinuousBatchingConfig through GenerationConfig is deprecated and will be removed in v5.19. "
+                "Please pass it separately using the continuous_batching_config kwarg."
+            )
+            warnings.warn(msg, FutureWarning, stacklevel=2)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
@@ -550,6 +568,7 @@ class GenerationConfig(PushToHubMixin):
         # Assisted generation may extend some generation modes
         if (
             assistant_model is not None
+            or self.use_mtp
             or self.prompt_lookup_num_tokens is not None
             or self.assistant_early_exit is not None
         ):
@@ -557,7 +576,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 logger.warning(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "You've set `assistant_model`or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
@@ -646,6 +665,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
+            raise ValueError(
+                f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
+                f"but is {self.assistant_ensemble_weight}. Use `None` for standard (lossless) speculative decoding."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -1798,6 +1822,12 @@ class ContinuousBatchingConfig:
     max_cached_graphs: int | None = None
 
     def __post_init__(self):
+        # Convert dicts to CompileConfig objects
+        if isinstance(self.varlen_compile_config, dict):
+            self.varlen_compile_config = CompileConfig(**self.varlen_compile_config)
+        if isinstance(self.decode_compile_config, dict):
+            self.decode_compile_config = CompileConfig(**self.decode_compile_config)
+
         # Only turn off graph mixing support if TP is on
         graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
         distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
@@ -1806,6 +1836,7 @@ class ContinuousBatchingConfig:
                 "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
             os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
+
         # Warn about deprecated arguments
         if self.use_default_compile_configs is not None:  # Deprecated in 5.11
             if self.use_default_compile_configs:

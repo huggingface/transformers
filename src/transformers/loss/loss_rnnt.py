@@ -19,9 +19,6 @@ from ..utils import is_torchaudio_available, logging
 
 logger = logging.get_logger(__name__)
 
-if is_torchaudio_available():
-    import torchaudio
-
 
 def rnnt_loss(
     logits: torch.Tensor,
@@ -58,9 +55,11 @@ def rnnt_loss(
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
-
+    # Import torchaudio lazily rather than at module scope, see https://github.com/huggingface/transformers/pull/47422
     if not is_torchaudio_available():
         raise ImportError("Computing the RNN-T loss requires torchaudio. Install it with `pip install torchaudio`.")
+
+    import torchaudio
 
     valid_reductions = ("mean_volume", "mean_batch", "mean", "sum", "none")
     if reduction not in valid_reductions:

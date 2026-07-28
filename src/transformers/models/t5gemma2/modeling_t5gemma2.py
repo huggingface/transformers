@@ -110,7 +110,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -669,14 +669,8 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": [T5Gemma2EncoderLayer, T5Gemma2DecoderLayer],
-        "attentions": [
-            OutputRecorder(T5Gemma2SelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=2, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on the text encoder/decoder classes; None avoids inheriting the gemma3 dict
+    _can_record_outputs = None
     input_modalities = ("image", "text")
 
     @torch.no_grad()

@@ -300,7 +300,7 @@ class CTRLModel(CTRLPreTrainedModel):
         else:
             token_type_embeds = 0
 
-        if attention_mask is not None and attention_mask.ndim < 4:
+        if attention_mask is not None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim < 4:
             attention_mask = attention_mask.view(batch_size, -1)
 
         causal_mask = create_causal_mask(
