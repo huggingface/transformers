@@ -2455,13 +2455,15 @@ class PreTrainedModel(
         # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
         # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
         # otherwise
+        # Check persistent buffers only (non-persistent buffers shouldn't block initialization)
+        persistent_buffers = [
+            b
+            for name, b in module.named_buffers(recurse=False)
+            if b is not None and name not in getattr(module, "_non_persistent_buffers", set())
+        ]
         if (
             all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
-            and all(
-                getattr(buffer, "_is_hf_initialized", False)
-                for buffer in module.buffers(recurse=False)
-                if buffer is not None
-            )
+            and all(getattr(buffer, "_is_hf_initialized", False) for buffer in persistent_buffers)
             and not any(param.device.type == "meta" for param in module.parameters(recurse=True))
         ):
             module._is_hf_initialized = True
