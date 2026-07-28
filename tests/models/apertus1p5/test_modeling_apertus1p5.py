@@ -328,7 +328,8 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Apertus1p5Model(config).to(torch_device).eval()
         with torch.no_grad():
-            model.audio_tokenizer.quantizer.codebook.embed.normal_(generator=torch.Generator().manual_seed(0))
+            embed = model.audio_tokenizer.quantizer.codebook.embed
+            embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
         hop = config.audio_tokenizer_config.hop_length
         lengths = [1, hop - 1, hop, hop + 1, 5 * hop, 5 * hop + 2]
         input_features = torch.zeros(len(lengths), 1, max(lengths), device=torch_device)
@@ -365,7 +366,8 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
             # the wavtokenizer codebook is zero-initialized (degenerate argmin); randomize it deterministically
-            model.model.audio_tokenizer.quantizer.codebook.embed.normal_(generator=torch.Generator().manual_seed(0))
+            embed = model.model.audio_tokenizer.quantizer.codebook.embed
+            embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
         torch.manual_seed(1)
         loud_noise = torch.randn_like(inputs_dict["input_features"]) * 5.0
         with torch.no_grad():
@@ -726,20 +728,19 @@ class Apertus1p5VisionTokenizerModelTest(unittest.TestCase):
 @slow
 @require_torch
 class Apertus1p5IntegrationTest(unittest.TestCase):
-    """Integration tests against a locally assembled Apertus 1.5 composite checkpoint (none is published yet).
+    """Integration tests against the released Apertus 1.5 composite checkpoint (`swiss-ai/Apertus-v1.5-8B`).
 
-    Build the composite with `src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py`, then run:
+    Set `APERTUS1P5_CHECKPOINT` to a local composite directory (e.g. one assembled with
+    `src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py`) to test against it instead:
 
     ```
-    RUN_SLOW=1 APERTUS1P5_CHECKPOINT=/path/to/composite python -m pytest tests/models/apertus1p5/ -k Integration
+    RUN_SLOW=1 python -m pytest tests/models/apertus1p5/ -k Integration
     ```
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = os.environ.get("APERTUS1P5_CHECKPOINT")
-        if not cls.checkpoint:
-            raise unittest.SkipTest("set APERTUS1P5_CHECKPOINT to a composite checkpoint directory")
+        cls.checkpoint = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
         cls.model = Apertus1p5ForConditionalGeneration.from_pretrained(cls.checkpoint, dtype=torch.bfloat16).eval()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint)
 
