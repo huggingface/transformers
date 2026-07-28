@@ -248,4 +248,12 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         return grid_h * grid_w
 
 
-__all__ = ["Ernie4_5_VLMoeImageProcessorPil"]
+class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "`Ernie4_5_VL_MoeImageProcessorPil` is deprecated; please use `Ernie4_5_VLMoeImageProcessorPil` instead.",
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["Ernie4_5_VL_MoeImageProcessorPil", "Ernie4_5_VLMoeImageProcessorPil"]
