@@ -249,7 +249,7 @@ class RopeTest(unittest.TestCase):
                 1.0000e-03, 8.6596e-04, 7.4989e-04, 6.4938e-04, 5.6234e-04, 4.8697e-04,
                 4.2170e-04, 3.6517e-04, 3.1623e-04, 2.7384e-04, 2.3714e-04, 2.0535e-04,
                 1.7783e-04, 1.5399e-04, 1.3335e-04, 1.1548e-04
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -262,10 +262,8 @@ class RopeTest(unittest.TestCase):
 
         self.assertFalse(hasattr(config, "partial_rotary_factor"))
 
-        inv_freq, attention_scale = LlamaRotaryEmbedding.compute_default_rope_parameters(
-            config=config, device=torch_device
-        )
-        rope_module = LlamaRotaryEmbedding(config, device=torch_device)
+        inv_freq, attention_scale = LlamaRotaryEmbedding.compute_default_rope_parameters(config=config)
+        rope_module = LlamaRotaryEmbedding(config)
 
         self.assertTrue(hasattr(rope_module, "inv_freq"))
         self.assertTrue(hasattr(rope_module, "attention_scaling"))
@@ -301,7 +299,7 @@ class RopeTest(unittest.TestCase):
             4.2170e-04, 3.9242e-04, 3.6517e-04, 3.3982e-04, 3.1623e-04, 2.9427e-04,
             2.7384e-04, 2.5483e-04, 2.3714e-04, 2.2067e-04, 2.0535e-04, 1.9110e-04,
             1.7783e-04, 1.6548e-04, 1.5399e-04, 1.4330e-04, 1.3335e-04, 1.2409e-04,
-            1.1548e-04, 1.0746e-04], device=torch_device)
+            1.1548e-04, 1.0746e-04])
         # fmt: on
 
         # input sanity checks: if these change, the output will also change
@@ -317,10 +315,10 @@ class RopeTest(unittest.TestCase):
             self.assertFalse(hasattr(config.rope_parameters[layer_type], "partial_rotary_factor"))
             self.assertEqual(config.rope_parameters[layer_type], {"rope_type": "default", "rope_theta": 10000.0})
 
-        rope_module = Gemma3RotaryEmbedding(config, device=torch_device)
+        rope_module = Gemma3RotaryEmbedding(config)
         for layer_type in config.layer_types:
             inv_freq, attention_scale = Gemma3RotaryEmbedding.compute_default_rope_parameters(
-                config=config, layer_type=layer_type, device=torch_device
+                config=config, layer_type=layer_type
             )
 
             self.assertTrue(hasattr(rope_module, f"{layer_type}_inv_freq"))
@@ -334,16 +332,16 @@ class RopeTest(unittest.TestCase):
         # This is a linear scaling strategy, the **frequencies** are scaled linearly with respect to the default
         # frequencies (= the inverse frequencies are scaled **inversely**)
         config = LlamaConfig()
-        default_inv_freq, _ = LlamaRotaryEmbedding.compute_default_rope_parameters(config=config, device=torch_device)
+        default_inv_freq, _ = LlamaRotaryEmbedding.compute_default_rope_parameters(config=config)
 
         rope_fn = ROPE_INIT_FUNCTIONS["linear"]
         for factor in (2.0, 10.0, 20.0):
             config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": factor}
-            inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
+            inv_freq, attention_scale = rope_fn(config=config)
             self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for linear RoPE
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
 
-            rope_module = LlamaRotaryEmbedding(config, device=torch_device)
+            rope_module = LlamaRotaryEmbedding(config)
             self.assertEqual(rope_module.attention_scaling, attention_scale)
             torch.testing.assert_close(rope_module.inv_freq, inv_freq)
 
@@ -368,7 +366,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(default_config.rope_parameters[layer_type], expected_defaults[layer_type])
 
         default_inv_freq, _ = Gemma3RotaryEmbedding.compute_default_rope_parameters(
-            config=default_config, layer_type="full_attention", device=torch_device
+            config=default_config, layer_type="full_attention"
         )
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
         rope_fn = ROPE_INIT_FUNCTIONS["linear"]
@@ -379,11 +377,11 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                inv_freq, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                inv_freq, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for linear RoPE
                 torch.testing.assert_close(inv_freq, default_inv_freq / factor)
 
-                rope_module = Gemma3RotaryEmbedding(config, device=torch_device)
+                rope_module = Gemma3RotaryEmbedding(config)
                 self.assertEqual(getattr(rope_module, f"{layer_type}_attention_scaling"), attention_scale)
                 torch.testing.assert_close(getattr(rope_module, f"{layer_type}_inv_freq"), inv_freq)
 
@@ -402,7 +400,7 @@ class RopeTest(unittest.TestCase):
                 3.8861e-05, 3.1451e-05, 2.5453e-05, 2.0600e-05, 1.6672e-05, 1.3492e-05,
                 1.0920e-05, 8.8374e-06, 7.1522e-06, 5.7883e-06, 4.6845e-06, 3.7912e-06,
                 3.0683e-06, 2.4832e-06, 2.0097e-06, 1.6265e-06
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -414,28 +412,28 @@ class RopeTest(unittest.TestCase):
         self.assertFalse(hasattr(config, "partial_rotary_factor"))
 
         rope_fn = LlamaRotaryEmbedding.compute_default_rope_parameters
-        default_inv_freq, _ = rope_fn(config=config, device=torch_device)
+        default_inv_freq, _ = rope_fn(config=config)
 
         # Check 1: this is a dynamic scaling strategy, it will not scale unless we provide `seq_len` larger than the
         # model's original training sequence length
         rope_fn = ROPE_INIT_FUNCTIONS["dynamic"]
         for factor in (2.0, 10.0, 20.0):
             config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": factor}
-            inv_freq, attention_scale = rope_fn(config=config, device=torch_device)
+            inv_freq, attention_scale = rope_fn(config=config)
             self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for dynamic RoPE
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
-            inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=1)
+            inv_freq, _ = rope_fn(config=config, seq_len=1)
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
-            inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=torch.tensor(1, dtype=torch.int64))
+            inv_freq, _ = rope_fn(config=config, seq_len=torch.tensor(1, dtype=torch.int64))
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
         # Check 2: if we provide `seq_len` larger than the model's original training sequence length, the frequencies
         # will scale up (i.e., the inverse frequencies will scale down).
         factor = 10.0
         config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": factor}
-        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=16384)
+        inv_freq, _ = rope_fn(config=config, seq_len=16384)
         with self.assertRaises(AssertionError):  # It is NOT a linear factor
             torch.testing.assert_close(inv_freq, default_inv_freq / factor)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
@@ -468,7 +466,7 @@ class RopeTest(unittest.TestCase):
                 5.2789e-05, 4.8419e-05, 4.4412e-05, 4.0736e-05, 3.7364e-05, 3.4271e-05,
                 3.1435e-05, 2.8833e-05, 2.6446e-05, 2.4257e-05, 2.2250e-05, 2.0408e-05,
                 1.8719e-05, 1.7170e-05
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -489,7 +487,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(default_config.rope_parameters[layer_type], expected_defaults[layer_type])
 
         default_inv_freq, _ = Gemma3RotaryEmbedding.compute_default_rope_parameters(
-            config=default_config, layer_type="full_attention", device=torch_device
+            config=default_config, layer_type="full_attention"
         )
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
 
@@ -503,17 +501,16 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                inv_freq, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                inv_freq, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(attention_scale, 1.0)  # attention scale is always 1 for dynamic RoPE
                 torch.testing.assert_close(inv_freq, default_inv_freq)
 
-                inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device, seq_len=1)
+                inv_freq, _ = rope_fn(config=config, layer_type=layer_type, seq_len=1)
                 torch.testing.assert_close(inv_freq, default_inv_freq)
 
                 inv_freq, _ = rope_fn(
                     config=config,
                     layer_type=layer_type,
-                    device=torch_device,
                     seq_len=torch.tensor(1, dtype=torch.int64),
                 )
                 torch.testing.assert_close(inv_freq, default_inv_freq)
@@ -528,7 +525,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device, seq_len=200000)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, seq_len=200000)
             with self.assertRaises(AssertionError):  # It is NOT a linear factor
                 torch.testing.assert_close(inv_freq, default_inv_freq / factor)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
@@ -581,7 +578,7 @@ class RopeTest(unittest.TestCase):
         config.max_position_embeddings = 8  # restore small max_position_embeddings for dynamic scaling test
 
         layer_types = config.layer_types if same_rope_per_layer else ["full_attention"]
-        rotary_embedding = Gemma3RotaryEmbedding(config, device=torch_device)
+        rotary_embedding = Gemma3RotaryEmbedding(config)
 
         for layer_type in layer_types:
             original_inv_freq = getattr(rotary_embedding, f"{layer_type}_original_inv_freq").clone()
@@ -621,7 +618,7 @@ class RopeTest(unittest.TestCase):
                 1.0000e-04, 8.6596e-05, 7.4989e-05, 6.4938e-05, 5.6234e-05, 4.8697e-05,
                 4.2170e-05, 3.6517e-05, 3.1623e-05, 2.7384e-05, 2.3714e-05, 2.0535e-05,
                 1.7783e-05, 1.5399e-05, 1.3335e-05, 1.1548e-05
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -633,14 +630,14 @@ class RopeTest(unittest.TestCase):
         self.assertFalse(hasattr(config, "partial_rotary_factor"))
 
         rope_fn = LlamaRotaryEmbedding.compute_default_rope_parameters
-        default_inv_freq, _ = rope_fn(config=config, device=torch_device)
+        default_inv_freq, _ = rope_fn(config=config)
 
         # Check 1: according to the paper, if `attention_factor` is not specified, then it has a specific default --
         # `0.1 * math.log(factor) + 1.0`
         rope_fn = ROPE_INIT_FUNCTIONS["yarn"]
         for factor in (2.0, 10.0, 20.0):
             config.rope_parameters = {"rope_type": "yarn", "rope_theta": 10000.0, "factor": factor}
-            _, attention_scale = rope_fn(config=config, device=torch_device)
+            _, attention_scale = rope_fn(config=config)
             self.assertEqual(attention_scale, 0.1 * math.log(factor) + 1.0)
 
             config.rope_parameters = {
@@ -649,7 +646,7 @@ class RopeTest(unittest.TestCase):
                 "factor": factor,
                 "attention_factor": 0.5,
             }
-            _, attention_scale = rope_fn(config=config, device=torch_device, seq_len=1)
+            _, attention_scale = rope_fn(config=config, seq_len=1)
             self.assertEqual(attention_scale, 0.5)
 
         # Check 2: based on `beta_fast` and `beta_slow`, the frequencies will be scaled between 1 and `factor`.
@@ -665,7 +662,7 @@ class RopeTest(unittest.TestCase):
             "beta_fast": 32,
             "beta_slow": 1,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         is_bounded_by_factor = [
             ((default_inv_freq[idx] / factor) - margin) <= yarn_inv_freq_value <= (default_inv_freq[idx] + margin)
             for idx, yarn_inv_freq_value in enumerate(inv_freq)
@@ -681,7 +678,7 @@ class RopeTest(unittest.TestCase):
             "beta_fast": 1000,
             "beta_slow": 1,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         is_interpolating = [
             yarn_inv_freq_value < (default_inv_freq[idx] + margin) for idx, yarn_inv_freq_value in enumerate(inv_freq)
         ]
@@ -697,7 +694,7 @@ class RopeTest(unittest.TestCase):
             "beta_fast": 32,
             "beta_slow": 1,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     @parameterized.expand([True, False])
@@ -728,7 +725,7 @@ class RopeTest(unittest.TestCase):
                 1.5313e-04, 1.3782e-04, 1.2389e-04, 1.1124e-04, 9.9743e-05, 8.9308e-05,
                 7.9841e-05, 7.1258e-05, 6.3483e-05, 5.6443e-05, 5.0075e-05, 4.4319e-05,
                 3.9121e-05, 3.4431e-05
-            ], device=torch_device
+            ],
         )
         # fmt: on
 
@@ -749,7 +746,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(default_config.rope_parameters[layer_type], expected_defaults[layer_type])
 
         default_inv_freq, _ = Gemma3RotaryEmbedding.compute_default_rope_parameters(
-            config=default_config, layer_type="full_attention", device=torch_device
+            config=default_config, layer_type="full_attention"
         )
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
 
@@ -773,12 +770,10 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                _, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                _, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(attention_scale, 0.1 * math.log(factor) + 1.0)
 
-                _, attention_scale = rope_fn(
-                    config=config_attn_factor, layer_type=layer_type, device=torch_device, seq_len=1
-                )
+                _, attention_scale = rope_fn(config=config_attn_factor, layer_type=layer_type, seq_len=1)
                 self.assertEqual(attention_scale, 0.5)
 
         # Check 2: based on `beta_fast` and `beta_slow`, the frequencies will be scaled between 1 and `factor`.
@@ -800,7 +795,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             is_bounded_by_factor = [
                 ((default_inv_freq[idx] / factor) - margin) <= yarn_inv_freq_value <= (default_inv_freq[idx] + margin)
                 for idx, yarn_inv_freq_value in enumerate(inv_freq)
@@ -824,7 +819,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             is_interpolating = [
                 yarn_inv_freq_value < (default_inv_freq[idx] + margin)
                 for idx, yarn_inv_freq_value in enumerate(inv_freq)
@@ -846,7 +841,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     def test_longrope_rope_numerically(self):
@@ -863,7 +858,7 @@ class RopeTest(unittest.TestCase):
         long_factor = torch.ones(dim // 2).cumsum(0).tolist()  # scaling applied when seq_len > max_position_embeddings
 
         rope_fn = LlamaRotaryEmbedding.compute_default_rope_parameters
-        default_inv_freq, _ = rope_fn(config=config, device=torch_device)
+        default_inv_freq, _ = rope_fn(config=config)
 
         # Check 1: according to the paper, if `attention_factor` is not specified, then it has a specific default --
         # `math.sqrt(1 + math.log(factor) / math.log(original_max_position_embeddings))`
@@ -876,7 +871,7 @@ class RopeTest(unittest.TestCase):
                 "short_factor": short_factor,
                 "long_factor": long_factor,
             }
-            _, attention_scale = rope_fn(config=config, device=torch_device)
+            _, attention_scale = rope_fn(config=config)
             self.assertEqual(
                 attention_scale, math.sqrt(1 + math.log(factor) / math.log(config.max_position_embeddings))
             )
@@ -889,7 +884,7 @@ class RopeTest(unittest.TestCase):
                 "long_factor": long_factor,
                 "attention_factor": 0.5,
             }
-            _, attention_scale = rope_fn(config=config, device=torch_device, seq_len=1)
+            _, attention_scale = rope_fn(config=config, seq_len=1)
             self.assertEqual(attention_scale, 0.5)
 
             config.rope_parameters = {
@@ -912,11 +907,11 @@ class RopeTest(unittest.TestCase):
             "short_factor": short_factor,
             "long_factor": long_factor,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=0)
+        inv_freq, _ = rope_fn(config=config, seq_len=0)
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device))
 
         # Check 3: seq_len > max_position_embeddings -> long factor is applied to the default frequencies
-        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=config.max_position_embeddings + 1)
+        inv_freq, _ = rope_fn(config=config, seq_len=config.max_position_embeddings + 1)
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device))
 
     @parameterized.expand([True, False])
@@ -945,7 +940,7 @@ class RopeTest(unittest.TestCase):
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
 
         default_inv_freq, _ = Gemma3RotaryEmbedding.compute_default_rope_parameters(
-            config=default_config, layer_type="full_attention", device=torch_device
+            config=default_config, layer_type="full_attention"
         )
 
         # Check 1: according to the paper, if `attention_factor` is not specified, then it has a specific default --
@@ -965,7 +960,7 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                _, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                _, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(
                     attention_scale, math.sqrt(1 + math.log(factor) / math.log(config.max_position_embeddings))
                 )
@@ -984,7 +979,7 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                _, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device, seq_len=1)
+                _, attention_scale = rope_fn(config=config, layer_type=layer_type, seq_len=1)
                 self.assertEqual(attention_scale, 0.5)
 
             rope_params = {
@@ -1019,13 +1014,11 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device, seq_len=0)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, seq_len=0)
             torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device))
 
             # Check 3: seq_len > max_position_embeddings -> long factor is applied to the default frequencies
-            inv_freq, _ = rope_fn(
-                config=config, layer_type=layer_type, device=torch_device, seq_len=config.max_position_embeddings + 1
-            )
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, seq_len=config.max_position_embeddings + 1)
             torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device))
 
     def test_llama3_rope_numerically(self):
@@ -1043,7 +1036,7 @@ class RopeTest(unittest.TestCase):
                 1.0000e-04, 8.6596e-05, 7.4989e-05, 6.4938e-05, 5.6234e-05, 4.8697e-05,
                 4.2170e-05, 3.6517e-05, 3.1623e-05, 2.7384e-05, 2.3714e-05, 2.0535e-05,
                 1.7783e-05, 1.5399e-05, 1.3335e-05, 1.1548e-05
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -1055,7 +1048,7 @@ class RopeTest(unittest.TestCase):
         self.assertFalse(hasattr(config, "partial_rotary_factor"))
 
         rope_fn = LlamaRotaryEmbedding.compute_default_rope_parameters
-        default_inv_freq, _ = rope_fn(config=config, device=torch_device)
+        default_inv_freq, _ = rope_fn(config=config)
 
         # Check 1: `attention_factor` is always 1
         rope_fn = ROPE_INIT_FUNCTIONS["llama3"]
@@ -1068,7 +1061,7 @@ class RopeTest(unittest.TestCase):
                 "low_freq_factor": 1,
                 "high_freq_factor": 4,
             }
-            _, attention_scale = rope_fn(config=config, device=torch_device)
+            _, attention_scale = rope_fn(config=config)
             self.assertEqual(attention_scale, 1.0)
 
         # Check 2: based on `low_freq_factor` and `high_freq_factor`, the frequencies will be scaled between 1 and
@@ -1084,7 +1077,7 @@ class RopeTest(unittest.TestCase):
             "low_freq_factor": 1,
             "high_freq_factor": 4,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         is_bounded_by_factor = [
             (default_inv_freq[idx] / factor) <= llama3_inv_freq_value <= default_inv_freq[idx]
             for idx, llama3_inv_freq_value in enumerate(inv_freq)
@@ -1101,7 +1094,7 @@ class RopeTest(unittest.TestCase):
             "low_freq_factor": 1,
             "high_freq_factor": 1000,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         is_scaled = [yarn_inv_freq_value < default_inv_freq[idx] for idx, yarn_inv_freq_value in enumerate(inv_freq)]
         self.assertTrue(all(is_scaled))
 
@@ -1114,7 +1107,7 @@ class RopeTest(unittest.TestCase):
             "low_freq_factor": 1,
             "high_freq_factor": 4,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     @parameterized.expand([True, False])
@@ -1142,7 +1135,7 @@ class RopeTest(unittest.TestCase):
             4.2170e-05, 3.9242e-05, 3.6517e-05, 3.3982e-05, 3.1623e-05, 2.9427e-05,
             2.7384e-05, 2.5483e-05, 2.3714e-05, 2.2067e-05, 2.0535e-05, 1.9110e-05,
             1.7783e-05, 1.6548e-05, 1.5399e-05, 1.4330e-05, 1.3335e-05, 1.2409e-05,
-            1.1548e-05, 1.0746e-05], device=torch_device
+            1.1548e-05, 1.0746e-05]
         )
         # fmt: on
 
@@ -1163,7 +1156,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(default_config.rope_parameters[layer_type], expected_defaults[layer_type])
 
         rope_fn = Gemma3RotaryEmbedding.compute_default_rope_parameters
-        default_inv_freq, _ = rope_fn(config=default_config, layer_type="full_attention", device=torch_device)
+        default_inv_freq, _ = rope_fn(config=default_config, layer_type="full_attention")
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
 
         # Check 1: `attention_factor` is always 1
@@ -1183,7 +1176,7 @@ class RopeTest(unittest.TestCase):
                     is_nested=True,
                     same_rope_per_layer=same_rope_per_layer,
                 )
-                _, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                _, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(attention_scale, 1.0)
 
         # Check 2: based on `low_freq_factor` and `high_freq_factor`, the frequencies will be scaled between 1 and
@@ -1205,7 +1198,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             is_bounded_by_factor = [
                 (default_inv_freq[idx] / factor) <= llama3_inv_freq_value <= default_inv_freq[idx]
                 for idx, llama3_inv_freq_value in enumerate(inv_freq)
@@ -1228,7 +1221,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             is_scaled = [
                 yarn_inv_freq_value < default_inv_freq[idx] for idx, yarn_inv_freq_value in enumerate(inv_freq)
             ]
@@ -1249,7 +1242,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     def test_proportional_rope_numerically(self):
@@ -1267,7 +1260,7 @@ class RopeTest(unittest.TestCase):
                 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00,
                 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00,
                 0.0000e+00, 0.0000e+00, 0.0000e+00, 0.0000e+00
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -1290,7 +1283,7 @@ class RopeTest(unittest.TestCase):
                 "rope_theta": 10000.0,
                 "partial_rotary_factor": partial_rotary_factor,
             }
-            _, attention_scale = rope_fn(config=config, device=torch_device)
+            _, attention_scale = rope_fn(config=config)
             self.assertEqual(attention_scale, 1.0)
 
         # Check 2: output shape is always head_dim // 2, regardless of partial_rotary_factor
@@ -1300,7 +1293,7 @@ class RopeTest(unittest.TestCase):
                 "rope_theta": 10000.0,
                 "partial_rotary_factor": partial_rotary_factor,
             }
-            inv_freq, _ = rope_fn(config=config, device=torch_device)
+            inv_freq, _ = rope_fn(config=config)
             self.assertEqual(inv_freq.shape[0], head_dim // 2)
 
         # Check 3: zero-padding behavior — when partial_rotary_factor < 1.0, the last (head_dim // 2 - rope_angles)
@@ -1311,16 +1304,13 @@ class RopeTest(unittest.TestCase):
                 "rope_theta": 10000.0,
                 "partial_rotary_factor": partial_rotary_factor,
             }
-            inv_freq, _ = rope_fn(config=config, device=torch_device)
+            inv_freq, _ = rope_fn(config=config)
 
             # First rope_angles entries should be non-zero (rotated frequencies)
             self.assertTrue(torch.all(inv_freq[:expected_rope_angles] != 0))
             # Remaining entries should be exactly zero (NoPE angles)
             expected_nope_angles = head_dim // 2 - expected_rope_angles
-            torch.testing.assert_close(
-                inv_freq[expected_rope_angles:],
-                torch.zeros(expected_nope_angles, device=torch_device),
-            )
+            torch.testing.assert_close(inv_freq[expected_rope_angles:], torch.zeros(expected_nope_angles))
 
         # When partial_rotary_factor = 1.0, no entries should be zero
         config.rope_parameters = {
@@ -1328,7 +1318,7 @@ class RopeTest(unittest.TestCase):
             "rope_theta": 10000.0,
             "partial_rotary_factor": 1.0,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         self.assertTrue(torch.all(inv_freq != 0))
 
         # Check 4: factor scaling equivalences with default and linear RoPE
@@ -1339,9 +1329,9 @@ class RopeTest(unittest.TestCase):
             "partial_rotary_factor": 1.0,
             "factor": 1.0,
         }
-        inv_freq_prop, _ = rope_fn(config=config, device=torch_device)
+        inv_freq_prop, _ = rope_fn(config=config)
         config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0}
-        default_inv_freq, _ = default_rope_fn(config=config, device=torch_device)
+        default_inv_freq, _ = default_rope_fn(config=config)
         torch.testing.assert_close(inv_freq_prop, default_inv_freq)
 
         # 4b: With partial_rotary_factor=1.0 and factor=2.0, proportional RoPE == linear RoPE
@@ -1353,9 +1343,9 @@ class RopeTest(unittest.TestCase):
                 "partial_rotary_factor": 1.0,
                 "factor": factor,
             }
-            inv_freq_prop, _ = rope_fn(config=config, device=torch_device)
+            inv_freq_prop, _ = rope_fn(config=config)
             config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": factor}
-            inv_freq_linear, _ = linear_rope_fn(config=config, device=torch_device)
+            inv_freq_linear, _ = linear_rope_fn(config=config)
             torch.testing.assert_close(inv_freq_prop, inv_freq_linear)
 
         # 4c: With partial_rotary_factor=0.5 and factor=2.0, the non-zero portion should be the rotated subspace
@@ -1366,14 +1356,14 @@ class RopeTest(unittest.TestCase):
             "partial_rotary_factor": 0.5,
             "factor": 2.0,
         }
-        inv_freq_scaled, _ = rope_fn(config=config, device=torch_device)
+        inv_freq_scaled, _ = rope_fn(config=config)
         config.rope_parameters = {
             "rope_type": "proportional",
             "rope_theta": 10000.0,
             "partial_rotary_factor": 0.5,
             "factor": 1.0,
         }
-        inv_freq_unscaled, _ = rope_fn(config=config, device=torch_device)
+        inv_freq_unscaled, _ = rope_fn(config=config)
         torch.testing.assert_close(inv_freq_scaled, inv_freq_unscaled / 2.0)
 
         # Check 5: numerical snapshot to avoid regressions (partial_rotary_factor=0.25, factor=1.0)
@@ -1382,7 +1372,7 @@ class RopeTest(unittest.TestCase):
             "rope_theta": 10000.0,
             "partial_rotary_factor": 0.25,
         }
-        inv_freq, _ = rope_fn(config=config, device=torch_device)
+        inv_freq, _ = rope_fn(config=config)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
     @parameterized.expand([True, False])
@@ -1405,7 +1395,7 @@ class RopeTest(unittest.TestCase):
                 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
                 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
                 0.0000, 0.0000
-            ], device=torch_device
+            ]
         )
         # fmt: on
 
@@ -1426,7 +1416,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(default_config.rope_parameters[layer_type], expected_defaults[layer_type])
 
         rope_fn = ROPE_INIT_FUNCTIONS["proportional"]
-        default_inv_freq, _ = rope_fn(config=default_config, layer_type="full_attention", device=torch_device)
+        default_inv_freq, _ = rope_fn(config=default_config, layer_type="full_attention")
         layer_types = default_config.layer_types if same_rope_per_layer else ["full_attention"]
 
         # Check 1: `attention_factor` is always 1.0, regardless of parameters
@@ -1442,7 +1432,7 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                _, attention_scale = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                _, attention_scale = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(attention_scale, 1.0)
 
         # Check 2: output shape is always head_dim // 2, regardless of partial_rotary_factor
@@ -1458,7 +1448,7 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
                 self.assertEqual(inv_freq.shape[0], default_config.head_dim // 2)
 
         # Check 3: zero-padding behavior — when partial_rotary_factor < 1.0, the last (head_dim // 2 - rope_angles)
@@ -1475,16 +1465,13 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+                inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
 
                 # First rope_angles entries should be non-zero (rotated frequencies)
                 self.assertTrue(torch.all(inv_freq[:expected_rope_angles] != 0))
                 # Remaining entries should be exactly zero (NoPE angles)
                 expected_nope_angles = default_config.head_dim // 2 - expected_rope_angles
-                torch.testing.assert_close(
-                    inv_freq[expected_rope_angles:],
-                    torch.zeros(expected_nope_angles, device=torch_device),
-                )
+                torch.testing.assert_close(inv_freq[expected_rope_angles:], torch.zeros(expected_nope_angles))
 
         # When partial_rotary_factor = 1.0, no entries should be zero
         rope_params = {
@@ -1498,7 +1485,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             self.assertTrue(torch.all(inv_freq != 0))
 
         # Check 4: factor scaling equivalences with default and linear RoPE
@@ -1515,7 +1502,7 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq_prop, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq_prop, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq_prop, default_inv_freq)
 
         # 4b: With partial_rotary_factor=1.0 and factor=2.0, proportional RoPE == linear RoPE
@@ -1538,8 +1525,8 @@ class RopeTest(unittest.TestCase):
                 same_rope_per_layer=same_rope_per_layer,
             )
             for layer_type in layer_types:
-                inv_freq_prop, _ = rope_fn(config=config_prop, layer_type=layer_type, device=torch_device)
-                inv_freq_linear, _ = linear_rope_fn(config=config_linear, layer_type=layer_type, device=torch_device)
+                inv_freq_prop, _ = rope_fn(config=config_prop, layer_type=layer_type)
+                inv_freq_linear, _ = linear_rope_fn(config=config_linear, layer_type=layer_type)
                 torch.testing.assert_close(inv_freq_prop, inv_freq_linear)
 
         # 4c: With partial_rotary_factor=0.5 and factor=2.0, the non-zero portion should be the rotated subspace
@@ -1568,8 +1555,8 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq_scaled, _ = rope_fn(config=config_scaled, layer_type=layer_type, device=torch_device)
-            inv_freq_unscaled, _ = rope_fn(config=config_unscaled, layer_type=layer_type, device=torch_device)
+            inv_freq_scaled, _ = rope_fn(config=config_scaled, layer_type=layer_type)
+            inv_freq_unscaled, _ = rope_fn(config=config_unscaled, layer_type=layer_type)
             torch.testing.assert_close(inv_freq_scaled, inv_freq_unscaled / 2.0)
 
         # Check 5: numerical snapshot to avoid regressions (partial_rotary_factor=0.25, factor=1.0)
@@ -1584,5 +1571,5 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         for layer_type in layer_types:
-            inv_freq, _ = rope_fn(config=config, layer_type=layer_type, device=torch_device)
+            inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ, atol=1e-04, rtol=1e-04)
