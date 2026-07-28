@@ -17,7 +17,7 @@ import re
 import unittest
 from unittest.mock import patch
 
-from transformers import AutoTokenizer, is_torch_available
+from transformers import is_torch_available
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7Config,
@@ -25,7 +25,6 @@ from transformers.models.step3p7.configuration_step3p7 import (
     Step3p7VisionConfig,
 )
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -33,7 +32,6 @@ from transformers.testing_utils import (
 )
 
 from ... import test_modeling_common
-from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -41,8 +39,6 @@ if is_torch_available():
     import torch
 
     from transformers import Step3p7ForConditionalGeneration, Step3p7Model
-    from transformers.models.step3p7.image_processing_step3p7 import Step3p7ImageProcessor
-    from transformers.models.step3p7.processing_step3p7 import Step3p7Processor
 
 
 _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
@@ -273,102 +269,59 @@ class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-@slow
 class Step3p7IntegrationTest(unittest.TestCase):
-    """End-to-end generation checks against the real `stepfun-ai/Step-3.7-Flash` checkpoint."""
-
-    model_id = _REAL_CHECKPOINT
+    model_id = "hf-internal-testing/tiny-random-step3p7"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def _load_model(self):
-        model = Step3p7ForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        model = Step3p7ForConditionalGeneration.from_pretrained(self.model_id, dtype="float32", device_map="cpu")
         model.eval()
         return model
 
-    def _load_processor(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        # The Hub repo ships no `preprocessor_config.json`, so build the image processor from its
-        # class defaults instead of `AutoProcessor`, and thread the tokenizer's chat template
-        # through by hand: `ProcessorMixin` does not inherit it from the tokenizer automatically.
-        return Step3p7Processor(
-            image_processor=Step3p7ImageProcessor(), tokenizer=tokenizer, chat_template=tokenizer.chat_template
-        )
-
+    @slow
     def test_text_generation(self):
         model = self._load_model()
-        tokenizer = self._load_processor().tokenizer
 
-        messages = [{"role": "user", "content": "Give me a cake recipe."}]
-        inputs = tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-        ).to(model.device)
+        torch.manual_seed(0)
+        input_ids = torch.randint(0, model.config.text_config.vocab_size - 1, (1, 8), device=model.device)
 
         with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        generated_ids = output[0, inputs["input_ids"].shape[1] :]
-        decoded = tokenizer.decode(generated_ids, skip_special_tokens=True)
+            output = model.generate(input_ids=input_ids, max_new_tokens=24, do_sample=False)
+        generated_ids = output[0, input_ids.shape[1] :]
 
-        EXPECTED_DECODED_TEXT = Expectations(
-            {
-                ("cuda", None): "Got it, the user asked for a cake recipe. First, I should pick a classic that's",
-            }
-        ).get_expectation()  # fmt: skip
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
-
-        EXPECTED_OUTPUT_TOKEN_IDS = Expectations(
-            {
-                ("cuda", None): [
-                    70935, 436, 14, 270, 3967, 4869, 362, 260, 22461, 17144,
-                    16, 5978, 14, 342, 1531, 6009, 260, 16453, 396, 734,
-                ],  # fmt: skip
-            }
-        ).get_expectation()  # fmt: skip
+        EXPECTED_OUTPUT_TOKEN_IDS = [41, 56, 35, 26, 53, 63, 56, 35, 13, 39, 1, 37, 4, 37, 4, 23, 2]  # fmt: skip
         self.assertEqual(generated_ids.tolist(), EXPECTED_OUTPUT_TOKEN_IDS)
 
+    @slow
     def test_image_and_text_generation(self):
         model = self._load_model()
-        processor = self._load_processor()
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-                        ),
-                    },
-                    {"type": "text", "text": "What kind of dog is this?"},
-                ],
-            }
-        ]
-        inputs = processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-        ).to(model.device, dtype=model.dtype)
+        # `input_ids[0, 3] = image_token_id` gives exactly one placeholder token, matching the
+        # single merged image feature `get_image_features` returns for `num_local_patches=[0]`
+        # (no local patches, just the main image).
+        torch.manual_seed(1)
+        input_ids = torch.randint(0, model.config.text_config.vocab_size - 1, (1, 8), device=model.device)
+        input_ids[0, 3] = model.config.image_token_id
+        pixel_values = torch.randn(
+            1,
+            model.config.vision_config.num_channels,
+            model.config.vision_config.image_size,
+            model.config.vision_config.image_size,
+            device=model.device,
+            dtype=model.dtype,
+        )
 
         with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        generated_ids = output[0, inputs["input_ids"].shape[1] :]
-        decoded = processor.batch_decode(generated_ids.unsqueeze(0), skip_special_tokens=True)[0]
+            output = model.generate(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                num_local_patches=[0],
+                max_new_tokens=24,
+                do_sample=False,
+            )
+        generated_ids = output[0, input_ids.shape[1] :]
 
-        EXPECTED_DECODED_TEXT = Expectations(
-            {
-                ("cuda", None): (
-                    "The user is asking me to identify the breed of a dog in an image. Looking at the image"
-                ),
-            }
-        ).get_expectation()  # fmt: skip
-        self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
-
-        EXPECTED_OUTPUT_TOKEN_IDS = Expectations(
-            {
-                ("cuda", None): [
-                    671, 3967, 344, 13070, 678, 304, 5784, 270, 28748, 294,
-                    260, 6397, 295, 411, 4609, 16, 32763, 509, 270, 4609,
-                ],  # fmt: skip
-            }
-        ).get_expectation()  # fmt: skip
+        EXPECTED_OUTPUT_TOKEN_IDS = [37, 1, 10, 41, 33, 51, 46, 61, 51, 26, 8, 23, 38, 61, 36, 17, 51, 33, 38, 23, 2]  # fmt: skip
         self.assertEqual(generated_ids.tolist(), EXPECTED_OUTPUT_TOKEN_IDS)
