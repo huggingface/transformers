@@ -17,8 +17,9 @@ import torch
 
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -45,8 +46,10 @@ expected_codes = -(-len(waveform) // 600)  # ceil(samples / hop), 40 codes per s
 assert vocab_ids.numel() == num_placeholders == expected_codes
 first = int(vocab_ids[0])
 assert tokenizer.convert_ids_to_tokens(first) == f"<|audio token {first - config.audio_token_offset}|>"
-print(f"[OK] processor path: {vocab_ids.numel()} codes for {seconds} s "
-      f"(= ceil({len(waveform)}/600)), first id {first} -> {tokenizer.convert_ids_to_tokens(first)!r}")
+print(
+    f"[OK] processor path: {vocab_ids.numel()} codes for {seconds} s "
+    f"(= ceil({len(waveform)}/600)), first id {first} -> {tokenizer.convert_ids_to_tokens(first)!r}"
+)
 
 # --- 2) fully manual preprocessing -> audio codec ---------------------------------------------------
 peak = max(float(np.abs(waveform).max()), 1e-10)
@@ -62,9 +65,12 @@ print(f"[OK] manual path: {code_ids.numel()} codes, bit-identical to the process
 
 # without the -3 dBFS normalization the codes differ -> the normalization is load-bearing
 with torch.no_grad():
-    raw_ids = model.model.audio_tokenizer.encode(
-        torch.tensor(waveform, dtype=torch.float32)[None, None, :]
-    ).audio_codes.flatten() + config.audio_token_offset
+    raw_ids = (
+        model.model.audio_tokenizer.encode(
+            torch.tensor(waveform, dtype=torch.float32)[None, None, :]
+        ).audio_codes.flatten()
+        + config.audio_token_offset
+    )
 agreement = (raw_ids == vocab_ids).float().mean().item()
 print(f"[OK] skipping the -3 dBFS normalization changes the codes (agreement only {agreement:.1%})")
 
