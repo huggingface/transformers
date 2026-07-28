@@ -34,7 +34,6 @@ from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
@@ -437,7 +436,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
+@use_kernel_forward_from_hub("causal_conv1d_update")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -457,7 +456,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
+@use_kernel_forward_from_hub("causal_conv1d_fn")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
