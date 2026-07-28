@@ -55,6 +55,30 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
     n-gram repetitions are blocked only within this many trailing tokens instead of over the whole sequence.
     """
 
+    def _prefill(
+        self,
+        input_ids: torch.LongTensor,
+        generation_config: GenerationConfig,
+        model_kwargs: dict,
+        is_first_iteration: bool = True,
+    ):
+        outputs = super()._prefill(
+            input_ids,
+            generation_config,
+            model_kwargs,
+            is_first_iteration=is_first_iteration,
+        )
+        # The cache layers cannot tell prefill and decode apart on their own, so mark the prefill as complete once
+        # all prefill forward passes are done (a prefill can span several forward passes when chunked).
+        past_key_values = model_kwargs.get("past_key_values")
+        if past_key_values is None:
+            past_key_values = getattr(outputs, "past_key_values", None)
+        if past_key_values is not None:
+            for layer in past_key_values.layers:
+                if layer._layer_type == "reference_sliding_attention":
+                    layer.end_prefill()
+        return outputs
+
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,

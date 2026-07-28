@@ -160,10 +160,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
             out_reference = model.generate(**inputs_dict, max_new_tokens=15, do_sample=False)
 
-            # Prefill the cache.
-            # As the last decoded token from a .generate call isn't added to the cache we have to
-            # decode at least 2 tokens for the cache update call to mark the prefill as complete.
-            # Prefill is only marked as complete once a single decoded token is added to the cache (kv_length == 1).
+            # Prefill the cache
             out_prefill = model.generate(
                 **inputs_dict,
                 max_new_tokens=prefill_max_new_tokens,
@@ -184,15 +181,24 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                 past_key_values=out_prefill.past_key_values,
                 max_new_tokens=3,
                 do_sample=False,
+                return_dict_in_generate=True,
                 use_cache=True,
             )
-            self.assertEqual(out.tolist(), out_reference.tolist())
+            self.assertEqual(out.sequences.tolist(), out_reference.tolist())
+
+            prompt_length = inputs_dict["input_ids"].shape[1]
+            reference_layers = [
+                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+            ]
+            self.assertGreater(len(reference_layers), 0)
+            for layer in reference_layers:
+                self.assertEqual(layer.prefill_length, prompt_length)
 
     def test_generate_dynamic_cache_sliding_window_too_small(self):
-        self._check_generate_cache_sliding_window_too_small(cache_implementation="dynamic", prefill_max_new_tokens=2)
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="dynamic", prefill_max_new_tokens=1)
 
     def test_generate_static_cache_sliding_window_too_small(self):
-        self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=2)
+        self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=1)
 
     def test_generate_dynamic_cache_sliding_window_too_small_cache_full(self):
         """Continue from full cache"""

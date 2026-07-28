@@ -661,11 +661,13 @@ class UnlimitedOcrTextPreTrainedModel(DeepseekOcr2TextPreTrainedModel):
 
 
 class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
-    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens before
-    the first decode step and applies a sliding window to all decoded tokens.
+    """Reference sliding-window attention (R-SWA) cache layer that keeps all prefill tokens and applies a
+    sliding window to all decoded tokens.
 
     Once ``sliding_window`` decode tokens have accumulated, the oldest decode tokens are evicted and
     replaced by the most recent ones. The prefill tokens always remain in the cache.
+
+    The layer is in the prefill phase until ``end_prefill`` is called.
     """
 
     _layer_type = "reference_sliding_attention"
@@ -689,17 +691,10 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         full_value_states = torch.cat([self.values, value_states], dim=-2)
 
         # Prefill
-        # We assume kv_length > 1 during prefill and that the first decode step
-        # has kv_length == 1. This is required to differentiate between prefill
-        # and decode phases. Later decode steps can have any kv_length.
-        if self.prefill_length is None and kv_length > 1:
+        if self.prefill_length is None:
             self.keys = full_key_states
             self.values = full_value_states
             return self.keys, self.values
-
-        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
-        if self.prefill_length is None:
-            self.prefill_length = self.keys.shape[-2] if self.keys.dim() > 1 else 0
 
         # Cache growing
         if self.cumulative_length <= self.prefill_length + self.sliding_window - 1:
@@ -752,6 +747,15 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             return -1
         return self.prefill_length + self.sliding_window
 
+    def end_prefill(self) -> None:
+        """Mark the prefill phase as complete."""
+        if self.prefill_length is None:
+            self.prefill_length = self.get_seq_length()
+
+    def reset(self) -> None:
+        super().reset()
+        self.prefill_length = None
+
     def crop(self, max_length: int) -> None:
         """
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
@@ -776,6 +780,8 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     The backing buffer is split in two regions: slots ``[0, prefill_length)`` hold the prefill (reference) slots
     that are never eviced from the cache. Slots ``[prefill_length, prefill_length + sliding_window)`` hold the
     sliding window decode slots where the oldest entries are always replaced by the newest ones.
+
+    The layer is in the prefill phase until ``end_prefill`` is called.
 
     Args:
         max_cache_len (`int`):
@@ -814,10 +820,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         kv_length = key_states.shape[-2]
 
         # Prefill
-        # We assume kv_length > 1 during prefill and that the first decode step
-        # has kv_length == 1. This is required to differentiate between prefill
-        # and decode phases. Later decode steps can have any kv_length.
-        if self.prefill_length is None and kv_length > 1:
+        if self.prefill_length is None:
             # Chunked prefill: the buffer was sized for the first chunk only, so grow it to hold all prefill seen so far plus this chunk plus the reserved window.
             required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
             if self.keys.shape[-2] < required_length:
@@ -839,10 +842,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
-
-        # First decode step (or an empty prompt that skipped prefill above): mark prefill as complete
-        if self.prefill_length is None:
-            self.prefill_length = self.cumulative_length_int
 
         # Everything below mirrors `StaticSlidingWindowLayer.update` with the difference that the sliding window
         # is in the `sliding_window` slots right after the prefill instead of spanning the whole buffer.
@@ -938,8 +937,8 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.cumulative_length)
 
-        prefill_seen = key_states.shape[-2] if key_states.shape[-2] > 1 else 0
-        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_seen + self.sliding_window))
+        prefill_length = key_states.shape[-2] if self.prefill_length is None else self.prefill_length
+        self._allocate_key_value_buffers(min(self.max_cache_len, prefill_length + self.sliding_window))
 
         self.is_initialized = True
 
@@ -951,7 +950,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
         kv_offset = 0
         # Prefill
-        if self.prefill_length is None and query_length > 1:
+        if self.prefill_length is None:
             kv_length = min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window)
         # Decode: cache is already full
         elif is_full:
@@ -974,6 +973,11 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         if self.prefill_length is None:
             return self.max_cache_len
         return min(self.max_cache_len, self.prefill_length + self.sliding_window)
+
+    def end_prefill(self) -> None:
+        """Mark the prefill phase as complete."""
+        if self.prefill_length is None:
+            self.prefill_length = self.cumulative_length_int
 
     def reset(self) -> None:
         super().reset()
@@ -1011,6 +1015,7 @@ def create_reference_sliding_window_causal_mask(**kwargs):
         kv_offset = 0
     else:
         layer = next(layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention")
+        # A layer that is still prefilling has no reference states yet, all its states are prefill states
         prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
         _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
 
