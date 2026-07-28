@@ -18,8 +18,8 @@ Handler for the /v1/audio/transcriptions endpoint.
 import io
 from typing import TYPE_CHECKING
 
-from ...utils import logging, requires_backends
-from ...utils.import_utils import is_serve_available
+from ...utils import logging
+from ...utils.import_utils import is_serve_available, requires
 
 
 if is_serve_available():
@@ -94,7 +94,6 @@ class TranscriptionHandler:
         """
         from transformers.utils.import_utils import is_multipart_available
 
-        requires_backends(self, ["librosa"])
         if not is_multipart_available():
             raise ImportError(
                 "Missing python-multipart dependency for file uploads. Install with `pip install python-multipart`"
@@ -124,6 +123,7 @@ class TranscriptionHandler:
         return await self._non_streaming(gen_manager, audio_model, audio_processor, audio_inputs)
 
     @staticmethod
+    @requires(backends=("librosa",))
     def _prepare_audio_inputs(
         file_bytes: bytes, audio_processor: "ProcessorMixin", audio_model: "PreTrainedModel"
     ) -> dict:
