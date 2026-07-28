@@ -286,66 +286,56 @@ def convert_vision_state_dict(source: dict[str, torch.Tensor], config) -> dict[s
     return out
 
 
-# HF response_schema: the output-side counterpart to the chat template. transformers 5.x
-# reads this off the tokenizer (tokenizer.parse_response) to turn a generated assistant
-# turn back into a structured message (reasoning_content / content / tool_calls). Owned by
-# the model team; baked onto the tokenizer so partners get parse_response() for free.
-ONYX_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "role": {"const": "assistant"},
+# HF response_template: the output-side counterpart to the chat template. transformers
+# 5.x reads this off the tokenizer (``tokenizer.parse_response``) to turn a generated
+# assistant turn back into a structured message (reasoning_content / content /
+# tool_calls). Owned by the model team; baked onto the tokenizer so partners get
+# ``parse_response()`` for free.
+#
+# This is the declarative response-template format (the successor to the legacy
+# x-regex ``response_schema``): each field is a region delimited by ``open_pattern`` /
+# ``close``, parsed by a named content parser. Channel-scoping is structural rather than
+# regex-based -- while an explicit region (reasoning / content) is open the parser only
+# watches that region's close, so an ``<atem:invoke>`` echoed inside reasoning or the
+# final answer is body text, never a spurious tool call.
+ONYX_RESPONSE_TEMPLATE = {
+    "defaults": {"role": "assistant"},
+    # The chat template's generation prompt is a bare ``<|start|>assistant``; the model
+    # then picks a channel (``to=self`` reasoning, ``to=<tool>`` for a call, ``to=user``
+    # for the answer) and re-emits ``<|start|>assistant`` for each subsequent channel
+    # (harmony-style). ``start_anchor`` is applied only to the PREFIX (the chat prompt),
+    # never to the response, so the response's own re-emissions are preserved.
+    "start_anchor": "<|start|>assistant",
+    "fields": {
+        # Private reasoning on the ``to=self`` channel. The model emits at most one
+        # ``to=self`` block per turn (verified empirically), so a single string region
+        # (matching the standard ``reasoning_content`` contract) is sufficient; no join.
         "reasoning_content": {
-            "type": "string",
-            # A turn may contain several `to=self` blocks (reasoning interleaved
-            # with tool calls). Collapse the span from one block's `<|eom|>` up to
-            # the next `to=self<|message|>` so the single-value capture below yields
-            # ALL reasoning joined, not just the first block.
-            "x-regex-substitutions": [
-                [r"<\|eom\|>(?:(?!to=self<\|message\|>).)*?to=self<\|message\|>", "\n"],
-            ],
-            "x-regex": r"to=self<\|message\|>(.*?)<\|eom\|>",
+            "open_pattern": r"to=self<\|message\|>",
+            "close": "<|eom|>",
+            "content": "text",
         },
-        "content": {
-            "type": "string",
-            # Final answer. `to=user` is unambiguous (only the final answer uses
-            # it) and always the turn-final message, so this never picks up
-            # `to=self` reasoning or `to=<tool>` calls, or an intermediate message.
-            "x-regex": r"to=user<\|message\|>(.*?)(?=<\|eot\|>|<\|eom\|>|$)",
-        },
+        # Tool calls: one ``<atem:invoke>`` per call, function name in the tag attribute,
+        # each ``<atem:parameter>`` parsed as an xml-inline key/value (value as lax JSON
+        # so scalars and nested objects/arrays both work). ``repeats`` makes this a list,
+        # covering parallel tool calls.
         "tool_calls": {
-            "type": "array",
-            # Channel-scope the extraction: strip the `to=self` reasoning and
-            # `to=user` final-answer spans BEFORE the invoke iterator runs, so an
-            # example/echoed <atem:invoke> the model writes inside its CoT or final
-            # answer is not mis-parsed as a real call (the C++ parser is channel-aware).
-            "x-regex-substitutions": [
-                [r"to=self<\|message\|>.*?<\|eom\|>", ""],
-                [r"to=user<\|message\|>.*?(?=<\|eot\|>|<\|eom\|>|$)", ""],
-            ],
-            "x-regex-iterator": r"(<atem:invoke\b.*?</atem:invoke>)",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {"const": "function"},
-                    "function": {
-                        "type": "object",
-                        "properties": {
-                            "name": {
-                                "type": "string",
-                                "x-regex": r'<atem:invoke\b[^>]*?\bname="([^"]+)"',
-                            },
-                            "arguments": {
-                                "type": "object",
-                                "x-regex-key-value": r'<atem:parameter\b[^>]*?\bname="(?P<key>[^"]+)"[^>]*?>(?P<value>.*?)</atem:parameter>',
-                                "additionalProperties": {
-                                    "x-parser": "json",
-                                    "x-parser-args": {"allow_non_json": True},
-                                },
-                            },
-                        },
-                    },
-                },
+            "open_pattern": r'<atem:invoke\b[^>]*?\bname="(?P<name>[^"]+)">',
+            "close": "</atem:invoke>",
+            "repeats": True,
+            "content": "xml-inline",
+            "content_args": {
+                "tag_pattern": r'<atem:parameter\b[^>]*?\bname="(?P<key>[^"]+)"[^>]*?>(?P<value>.*?)</atem:parameter>',
+                "value_parser": {"name": "json", "args": {"allow_non_json": True}},
             },
+            "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
+        },
+        # Final answer on the ``to=user`` channel (turn-final). Closes on end-of-turn or
+        # end-of-message.
+        "content": {
+            "open_pattern": r"to=user<\|message\|>",
+            "close": ["<|eot|>", "<|eom|>"],
+            "content": "text",
         },
     },
 }
@@ -367,9 +357,9 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer.pad_token = "<|finetune_right_pad|>"
         self.converted_tokenizer.chat_template = ONYX_MM_CHAT_TEMPLATE
         # Bake the output-side parser so ``tokenizer.parse_response`` can turn generated
-        # XML_ATEM output back into structured tool calls. Persisted into
+        # XML_ATEM output back into a structured message. Persisted into
         # tokenizer_config.json on save (PreTrainedTokenizerBase.save_pretrained).
-        self.converted_tokenizer.response_schema = ONYX_RESPONSE_SCHEMA
+        self.converted_tokenizer.response_template = ONYX_RESPONSE_TEMPLATE
 
         bos_id = self.converted_tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
         self.converted_tokenizer._tokenizer.post_processor = processors.TemplateProcessing(
