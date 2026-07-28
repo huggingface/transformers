@@ -384,6 +384,25 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    def test_biogpt_sequence_classification_left_padding(self):
+        # Regression: under left padding the head must pool the last real token.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.pad_token_id = 0
+        model = BioGptForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        real = input_dict["input_ids"][:1].clamp(min=1)
+        pad = torch.zeros((1, 3), dtype=real.dtype, device=torch_device)
+        input_ids = torch.cat([pad, real], dim=1)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
+        with torch.no_grad():
+            pooled_logits = model(input_ids, attention_mask=attention_mask).logits
+            hidden_states = model.biogpt(input_ids, attention_mask=attention_mask).last_hidden_state
+            per_position_logits = model.score(hidden_states)
+        last_real_index = input_ids.shape[1] - 1
+        torch.testing.assert_close(pooled_logits[0], per_position_logits[0, last_real_index])
+
 
 @require_torch
 class BioGptModelIntegrationTest(unittest.TestCase):

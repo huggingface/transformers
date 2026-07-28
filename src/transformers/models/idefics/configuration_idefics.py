@@ -166,4 +166,4 @@ class IdeficsConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["IdeficsConfig"]
+__all__ = ["IdeficsConfig", "IdeficsPerceiverConfig", "IdeficsVisionConfig"]

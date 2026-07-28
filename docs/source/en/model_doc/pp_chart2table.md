@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2026-03-18.*
+*This model was contributed to Hugging Face Transformers on 2026-03-20.*
 
 # PP-Chart2Table
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -38,8 +35,9 @@ The example below demonstrates how to classify image with PP-Chart2Table using [
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safetensors")
 
@@ -57,21 +55,19 @@ conversation = [
 ]
 result = pipe(text=conversation)
 print(result[0]["generated_text"])
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
-import requests
-from PIL import Image
+```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
 model = AutoModelForImageTextToText.from_pretrained(
-    model_path, 
+    model_path,
     device_map="auto",
 )
 processor = AutoProcessor.from_pretrained(model_path)
@@ -91,8 +87,8 @@ conversation = [
 
 inputs = processor.apply_chat_template(
     conversation,
-    tokenize=True, 
-    add_generation_prompt=True, 
+    tokenize=True,
+    add_generation_prompt=True,
     truncation=True,
     return_dict=True,
     return_tensors="pt",
@@ -102,7 +98,6 @@ generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
 result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
-
 ```
 
 </hfoption>
@@ -115,8 +110,9 @@ Here is how you can do it with PP-Chart2Table using [`Pipeline`] or the [`AutoMo
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safetensors")
 
@@ -134,21 +130,19 @@ conversation = [
 ]
 result = pipe(text=[conversation, conversation])
 print(result[0][0]["generated_text"])
-
 ```
 
 </hfoption>
 
 <hfoption id="AutoModel">
 
-```py
-import requests
-from PIL import Image
+```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
 model = AutoModelForImageTextToText.from_pretrained(
-    model_path, 
+    model_path,
     device_map="auto",
 )
 processor = AutoProcessor.from_pretrained(model_path)
@@ -169,8 +163,8 @@ conversation = [
 batch_conversation = [conversation, conversation]
 inputs = processor.apply_chat_template(
     batch_conversation,
-    tokenize=True, 
-    add_generation_prompt=True, 
+    tokenize=True,
+    add_generation_prompt=True,
     truncation=True,
     return_dict=True,
     return_tensors="pt",
@@ -180,7 +174,6 @@ generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
 result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
-
 ```
 
 </hfoption>

@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-08-08 and added to Hugging Face Transformers on 2022-09-02.*
+*This model was published in HF papers on 2022-08-08 and contributed to Hugging Face Transformers on 2022-09-02.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
@@ -38,16 +37,15 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/pegasus-x-large"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-x-large",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -68,18 +66,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-x-large",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

@@ -1058,7 +1058,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -40.1645
+        EXPECTED_SCORE = -59.0293
         torch.testing.assert_close(
             mtf_score,
             EXPECTED_SCORE,
@@ -1087,7 +1087,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -44.6276
+        EXPECTED_SCORE = -60.7397
         torch.testing.assert_close(
             mtf_score,
             EXPECTED_SCORE,

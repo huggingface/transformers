@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2025-04-16.*
+*This model was published in HF papers on 2023-10-14 and contributed to Hugging Face Transformers on 2025-04-16.*
 
 # TimesFM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -37,12 +34,12 @@ To use the model:
 ```python
 import numpy as np
 import torch
+
 from transformers import TimesFmModelForPrediction
 
 
 model = TimesFmModelForPrediction.from_pretrained(
     "google/timesfm-2.0-500m-pytorch",
-    dtype=torch.bfloat16,
     attn_implementation="sdpa",
     device_map="auto"
 )
@@ -58,7 +55,7 @@ frequency_input = [0, 1, 2]
 
 # Convert inputs to sequence of tensors
 forecast_input_tensor = [
-    torch.tensor(ts, dtype=torch.bfloat16).to(model.device)
+    torch.tensor(ts).to(model.device)
     for ts in forecast_input
 ]
 frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(model.device)

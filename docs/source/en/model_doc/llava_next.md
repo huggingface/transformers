@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-01-30 and added to Hugging Face Transformers on 2024-03-20.*
+*This model was contributed to Hugging Face Transformers on 2024-03-20.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -41,14 +40,13 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
     model="llava-hf/llava-v1.6-mistral-7b-hf",
     device=0,
-    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -70,16 +68,14 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration
-from accelerate import Accelerator
 
-device = Accelerator().device
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", device_map="auto")
 
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -108,14 +104,15 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
 
 quant_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
     bnb_4bit_quant_type="nf4"
 )
 
@@ -163,13 +160,15 @@ processor.tokenizer.padding_side = "left"
 * The example below demonstrates inference with multiple input images.
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+import requests
 from PIL import Image
-import requests, torch
+
+from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
+
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16, device_map="auto"
+    "llava-hf/llava-v1.6-mistral-7b-hf", device_map="auto"
 )
 
 # Load multiple images

@@ -42,3 +42,8 @@ class InstructBlipProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {"num_query_tokens": 1}
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        # processor expects bare text without placeholders!
+        pass

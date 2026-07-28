@@ -9,13 +9,10 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2021-06-25 and added to Hugging Face Transformers on 2024-03-13.*
+*This model was published in HF papers on 2021-06-25 and contributed to Hugging Face Transformers on 2024-03-13.*
 
 # Pyramid Vision Transformer V2 (PVTv2)
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -52,11 +49,12 @@ This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea
 ```python
 import requests
 import torch
-
-from transformers import AutoModelForImageClassification, AutoImageProcessor
 from PIL import Image
 
-model = AutoModelForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0")
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+
+model = AutoModelForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -69,9 +67,10 @@ To use the PVTv2 as a backbone for more complex architectures like DeformableDET
 ```python
 import requests
 import torch
-
-from transformers import AutoConfig, AutoModelForObjectDetection, AutoImageProcessor
 from PIL import Image
+
+from transformers import AutoConfig, AutoImageProcessor, AutoModelForObjectDetection
+
 
 model = AutoModelForObjectDetection.from_config(
     config=AutoConfig.from_pretrained(

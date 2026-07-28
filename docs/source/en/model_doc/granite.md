@@ -13,10 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-08-23 and added to Hugging Face Transformers on 2024-08-27.*
+*This model was published in HF papers on 2024-08-23 and contributed to Hugging Face Transformers on 2024-08-27.*
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -37,13 +36,12 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="ibm-granite/granite-3.3-2b-base",
-    dtype=torch.bfloat16,
     device=0
 )
 pipe("Explain quantum computing in simple terms ", max_new_tokens=50)
@@ -53,13 +51,12 @@ pipe("Explain quantum computing in simple terms ", max_new_tokens=50)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-2b-base")
 model = AutoModelForCausalLM.from_pretrained(
     "ibm-granite/granite-3.3-2b-base",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -77,12 +74,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-8b-base")
-model = AutoModelForCausalLM.from_pretrained("ibm-granite/granite-3.3-8b-base", dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa", quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained("ibm-granite/granite-3.3-8b-base", device_map="auto", attn_implementation="sdpa", quantization_config=quantization_config)
 
 inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
@@ -93,7 +90,6 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-2b-base")
 model = AutoModelForCausalLM.from_pretrained(
     "ibm-granite/granite-3.3-2b-base",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa",
     quantization_config=quantization_config,

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-26.*
+*This model was published in HF papers on 2025-07-15 and contributed to Hugging Face Transformers on 2025-07-26.*
 
 # EXAONE 4
 
@@ -64,6 +64,7 @@ For general use, you can use the EXAONE 4.0 models with the following example:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_name = "LGAI-EXAONE/EXAONE-4.0-32B"
 
@@ -132,6 +133,7 @@ The EXAONE 4.0 models can be used as agents with their tool calling capabilities
 
 ```python
 import random
+
 
 def roll_dice(max_num: int):
     return random.randint(1, max_num)

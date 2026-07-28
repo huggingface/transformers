@@ -44,21 +44,34 @@ if is_torch_available():
 @require_torchvision
 class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5OmniProcessor
-    model_id = "Qwen/Qwen2.5-Omni-7B"
+    # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_omni"
+
+    video_unstructured_max_length = 690
+    video_text_kwargs_max_length = 690
+    video_text_kwargs_override_max_length = 690
 
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+            cls.tiny_model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         )
 
     @classmethod
     def _setup_video_processor(cls):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         return video_processor_class.from_pretrained(
-            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+            cls.tiny_model_id, size={"shortest_edge": 12 * 12, "longest_edge": 28 * 28}
         )
+
+    @classmethod
+    def _setup_feature_extractor(cls):
+        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
+        # chunk_length=30s instead of the default 300s reduces input_features from
+        # (batch, 128, 30000) to (batch, 128, 3000), cutting the audio call's peak
+        # memory from ~178 MB to ~20 MB per test.
+        return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
 
     def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""
@@ -204,7 +217,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "video",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
                 ),
             }
         )
@@ -310,7 +323,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
         )
         messages = [
             {

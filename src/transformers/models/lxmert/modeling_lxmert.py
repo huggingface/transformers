@@ -38,7 +38,6 @@ class GeLU(nn.Module):
         return gelu(x)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
@@ -46,6 +45,7 @@ class GeLU(nn.Module):
     encoder")
     """
 )
+@dataclass
 class LxmertModelOutput(ModelOutput):
     r"""
     language_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -85,12 +85,12 @@ class LxmertModelOutput(ModelOutput):
     cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LxmertForQuestionAnswering`].
     """
 )
+@dataclass
 class LxmertForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -127,12 +127,12 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
     cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LxmertForPreTraining`].
     """
 )
+@dataclass
 class LxmertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -236,20 +236,12 @@ class LxmertAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(context).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        )
-        value_layer = (
-            self.value(context)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        kv_shape = (*context.shape[:-1], -1, self.attention_head_size)
+        key_layer = self.key(context).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(context).view(kv_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))

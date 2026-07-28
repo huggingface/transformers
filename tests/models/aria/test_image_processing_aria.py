@@ -298,7 +298,37 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
             self.assertEqual(num_patches, 1)
 
+            # The test fixture uses split_resolutions=[[980, 980]], so best_resolution=(980,980).
+            # divide_to_patches with patch_size=200 iterates range(0,980,200) -> 5 steps each dim -> 25 patches.
             num_patches = image_processing.get_number_of_image_patches(
                 height=100, width=100, images_kwargs={"split_image": True, "max_image_size": 200}
             )
-            self.assertEqual(num_patches, 19)
+            self.assertEqual(num_patches, 25)
+
+    def test_get_num_patches_ceil_matches_actual_patch_count(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/46728.
+        # With max_image_size=980 the default split_resolutions include odd multiples of 490
+        # (e.g. 490, 1470) that are not divisible by 980.  The old floor-division formula
+        # returned wrong counts (as low as 0); ceil division matches what divide_to_patches
+        # actually produces.
+        for image_processing_class in self.image_processing_classes.values():
+            # Use the full default split_resolutions so odd-multiple slots are reachable.
+            image_processing = image_processing_class(**{**self.image_processor_dict, "split_resolutions": None})
+
+            # Portrait image -> best_resolution = [490, 980] -> ceil(490/980)*ceil(980/980) = 1*1 = 1
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=600, images_kwargs={"split_image": True, "max_image_size": 980}
+            )
+            self.assertEqual(num_patches, 1)
+
+            # Landscape image -> best_resolution = [980, 490] -> ceil(980/980)*ceil(490/980) = 1*1 = 1
+            num_patches = image_processing.get_number_of_image_patches(
+                height=600, width=300, images_kwargs={"split_image": True, "max_image_size": 980}
+            )
+            self.assertEqual(num_patches, 1)
+
+            # Wide image -> best_resolution = [490, 1470] -> ceil(490/980)*ceil(1470/980) = 1*2 = 2
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=1470, images_kwargs={"split_image": True, "max_image_size": 980}
+            )
+            self.assertEqual(num_patches, 2)

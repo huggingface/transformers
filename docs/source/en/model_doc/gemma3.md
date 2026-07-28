@@ -14,11 +14,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-25 and added to Hugging Face Transformers on 2025-03-12.*
+*This model was published in HF papers on 2025-03-25 and contributed to Hugging Face Transformers on 2025-03-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -39,15 +38,14 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3-4b-pt",
     device=0,
-    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -58,13 +56,12 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
+
 
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-4b-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -106,15 +103,14 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
-from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, Gemma3ForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-27b-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -151,8 +147,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("google/gemma-3-4b-it")
 visualizer("<img>What is shown in this image?")
@@ -215,7 +212,6 @@ visualizer("<img>What is shown in this image?")
     )
     model = AutoModelForCausalLM.from_pretrained(
         "google/gemma-3-1b-pt",
-        dtype=torch.bfloat16,
         device_map="auto",
         attn_implementation="sdpa"
     )

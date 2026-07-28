@@ -61,11 +61,12 @@ from ...utils.import_utils import requires
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
-
 if is_vision_available():
     import PIL.Image
 if is_torch_available():
     import torch
+
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
@@ -80,9 +81,6 @@ class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
-
-
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # inspired by https://github.com/facebookresearch/grounding_dino/blob/master/datasets/coco.py#L33

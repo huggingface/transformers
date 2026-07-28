@@ -128,7 +128,8 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    update_version_in_examples(version, patch=patch)
+    # REMOVED AFTER v5! Uncomment to start updating the version of the examples again
+    # update_version_in_examples(version, patch=patch)
 
 
 def remove_conversion_scripts():

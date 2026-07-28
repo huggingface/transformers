@@ -28,19 +28,31 @@ from ...utils.import_utils import is_serve_available
 
 if is_serve_available():
     from fastapi.responses import JSONResponse, StreamingResponse
-    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
+    from openai.types.chat import (
+        ChatCompletion,
+        ChatCompletionMessage,
+        ChatCompletionMessageToolCall,
+    )
     from openai.types.chat.chat_completion import Choice
-    from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
+    from openai.types.chat.chat_completion_chunk import (
+        ChatCompletionChunk,
+        ChoiceDelta,
+        ChoiceDeltaToolCall,
+    )
     from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
 
+
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
-    ToolCallParser,
+    Modality,
+    ReasoningText,
+    ToolCall,
     _StreamError,
-    detect_tool_format,
+    build_response_parser,
+    parse_assistant_message,
 )
 
 
@@ -51,6 +63,7 @@ if TYPE_CHECKING:
 class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
     generation_config: str
     seed: int
+    chat_template_kwargs: dict
 
 
 # Fields accepted by the OpenAI schema but not yet supported.
@@ -111,6 +124,18 @@ class ChatCompletionHandler(BaseHandler):
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
         processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
 
+        has_video = any(
+            c.get("type") == "video"
+            for msg in processor_inputs
+            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+        )
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
+        # Merge order (later wins): custom default -> server default → request-level kwargs.
+        chat_template_kwargs: dict = {}
+        if has_video:
+            chat_template_kwargs["num_frames"] = 32
+        chat_template_kwargs.update(self.chat_template_kwargs)
+        chat_template_kwargs.update(body.get("chat_template_kwargs", {}))
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -118,20 +143,16 @@ class ChatCompletionHandler(BaseHandler):
             return_tensors=None if use_cb else "pt",
             return_dict=True,
             tokenize=True,
+            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
+            **chat_template_kwargs,
         )
         if not use_cb:
-            inputs = inputs.to(model.device)
+            inputs = inputs.to(model.device)  # type: ignore[union-attr]
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
         if use_cb:
             gen_manager.init_cb(model, gen_config)
-
-        # Detect tool support for the loaded model
-        # TODO: after tool_call start token, use constrained generation to:
-        # 1. force generation to pick from the available tool names
-        # 2. force generation to produce valid JSON matching the tool's parameter schema
-        tool_format = detect_tool_format(model) if body.get("tools") else None
 
         streaming = body.get("stream")
         if streaming:
@@ -143,7 +164,6 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_format=tool_format,
             )
         else:
             return await self._non_streaming(
@@ -154,7 +174,6 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_format=tool_format,
             )
 
     # ----- streaming -----
@@ -168,24 +187,31 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_format: dict | None = None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
-        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        response_parser = build_response_parser(processor, model, inputs["input_ids"])
+        queue, streamer = gen_manager.generate_streaming(
+            model,
+            processor,
+            inputs,
+            gen_config,
+            request_id=request_id,
+            response_parser=response_parser,
+        )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
-        parser = ToolCallParser(tool_format) if tool_format else None
 
         async def sse_gen() -> AsyncGenerator[str, None]:
-            has_tool_calls = False
             try:
                 yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
+                tool_call_index = 0
+                has_tool_calls = False
                 done = False
                 while not done:
-                    text = await queue.get()
-                    batch = [text]
+                    item = await queue.get()
+                    batch = [item]
                     try:
                         while True:
                             batch.append(queue.get_nowait())
@@ -193,33 +219,35 @@ class ChatCompletionHandler(BaseHandler):
                         pass
 
                     sse_parts: list[str] = []
-                    for text in batch:
-                        if text is None:
+                    for item in batch:
+                        if item is None:
                             done = True
                             break
-                        if isinstance(text, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
+                        if isinstance(item, _StreamError):
+                            sse_parts.append(f'data: {{"error": "{item.msg}"}}\n\n')
                             yield "".join(sse_parts)
                             return
-
-                        # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
-                        chunk_kwargs = {"content": text}
-                        if parser is not None and (result := parser.feed(text)) is not None:
-                            if result is ToolCallParser.CONSUMED:
-                                continue
+                        if isinstance(item, ToolCall):
                             has_tool_calls = True
-                            chunk_kwargs = {
-                                "tool_calls": [
-                                    ChoiceDeltaToolCall(
-                                        index=0,
-                                        type="function",
-                                        id=f"{request_id}_tool_call",
-                                        function={"name": result["name"], "arguments": result["arguments"]},
-                                    )
-                                ]
-                            }
-
-                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs))
+                            sse_parts.append(
+                                self._build_chunk_sse(
+                                    request_id,
+                                    model=model_id,
+                                    tool_calls=[
+                                        ChoiceDeltaToolCall(
+                                            index=tool_call_index,
+                                            type="function",
+                                            id=f"{request_id}_tool_call_{tool_call_index}",
+                                            function={"name": item.name, "arguments": item.arguments},
+                                        )
+                                    ],
+                                )
+                            )
+                            tool_call_index += 1
+                        elif isinstance(item, ReasoningText):
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=item))
+                        else:
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=item))
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -261,7 +289,6 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_format: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = await gen_manager.generate_non_streaming(
@@ -276,19 +303,19 @@ class ChatCompletionHandler(BaseHandler):
             total_tokens=input_len + completion_tokens,
         )
 
-        # Parse tool calls from the generated text
+        content, reasoning_content, parsed_tool_calls = parse_assistant_message(
+            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+        )
         tool_calls = None
-        if tool_format is not None:
-            parsed = ToolCallParser.parse(content, tool_format)
-            if parsed is not None:
-                tool_calls = [
-                    ChatCompletionMessageToolCall(
-                        id=f"{request_id}_tool_call",
-                        type="function",
-                        function={"name": tc["name"], "arguments": tc["arguments"]},
-                    )
-                    for tc in parsed
-                ]
+        if parsed_tool_calls:
+            tool_calls = [
+                ChatCompletionMessageToolCall(
+                    id=f"{request_id}_tool_call_{i}",
+                    type="function",
+                    function={"name": tc.name, "arguments": tc.arguments},
+                )
+                for i, tc in enumerate(parsed_tool_calls)
+            ]
 
         if tool_calls is not None:
             finish_reason = "tool_calls"
@@ -305,6 +332,7 @@ class ChatCompletionHandler(BaseHandler):
                 finish_reason=finish_reason,
                 usage=usage,
                 tool_calls=tool_calls,
+                reasoning_content=reasoning_content,
             ),
             media_type="application/json",
         )
@@ -337,6 +365,7 @@ class ChatCompletionHandler(BaseHandler):
         finish_reason: str,
         usage: CompletionUsage | None = None,
         tool_calls: list[dict] | None = None,
+        reasoning_content: str | None = None,
     ) -> dict:
         """Build a non-streaming ChatCompletion response dict.
 
@@ -347,23 +376,22 @@ class ChatCompletionHandler(BaseHandler):
             finish_reason (`str`): Why generation stopped (``"stop"``, ``"length"``, ``"tool_calls"``).
             usage (`CompletionUsage`, *optional*): Token usage statistics.
             tool_calls (`list[dict]`, *optional*): Parsed tool calls, if any.
+            reasoning_content (`str`, *optional*): Chain-of-thought content extracted from the response.
 
         Returns:
             `dict`: Serialized ``ChatCompletion`` ready for JSON response.
         """
-        message = ChatCompletionMessage(content=content, role="assistant", tool_calls=tool_calls)
+        # reasoning_content is added as an extra field (base types set extra="allow")
+        # we use model_validate rather than __init__ to avoid ty raising errors for the extra field
+        message = ChatCompletionMessage.model_validate(
+            {"content": content, "role": "assistant", "tool_calls": tool_calls, "reasoning_content": reasoning_content}
+        )
         result = ChatCompletion(
             id=request_id,
             created=int(time.time()),
             object="chat.completion",
             model=model_id,
-            choices=[
-                Choice(
-                    index=0,
-                    message=message,
-                    finish_reason=finish_reason,
-                )
-            ],
+            choices=[Choice(index=0, message=message, finish_reason=finish_reason)],
             usage=usage,
         )
         return result.model_dump(exclude_none=True)
@@ -377,6 +405,7 @@ class ChatCompletionHandler(BaseHandler):
         finish_reason: str | None = None,
         tool_calls: list | None = None,
         usage: CompletionUsage | None = None,
+        reasoning_content: str | None = None,
     ) -> str:
         """Build a streaming ``ChatCompletionChunk`` and format it as an SSE ``data:`` line.
 
@@ -388,21 +417,21 @@ class ChatCompletionHandler(BaseHandler):
             finish_reason (`str`, *optional*): Set on the final chunk.
             tool_calls (`list`, *optional*): Tool call deltas.
             usage (`CompletionUsage`, *optional*): Token usage (sent with the final chunk).
+            reasoning_content (`str`, *optional*): Reasoning/thinking delta (OpenAI-compatible extension).
 
         Returns:
             `str`: A formatted SSE event string.
         """
+        # reasoning_content is added as an extra field (base types set extra="allow")
+        # we use model_validate rather than __init__ to avoid ty raising errors for the extra field
+        delta = ChoiceDelta.model_validate(
+            {"content": content, "role": role, "tool_calls": tool_calls, "reasoning_content": reasoning_content}
+        )
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
             model=model,
-            choices=[
-                ChoiceChunk(
-                    delta=ChoiceDelta(content=content, role=role, tool_calls=tool_calls),
-                    index=0,
-                    finish_reason=finish_reason,
-                )
-            ],
+            choices=[ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
             usage=usage,
             system_fingerprint="",
             object="chat.completion.chunk",

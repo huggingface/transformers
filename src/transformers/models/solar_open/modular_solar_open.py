@@ -52,6 +52,9 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 196608
     moe_intermediate_size: int = 1280
@@ -62,6 +65,7 @@ class SolarOpenConfig(Glm4MoeConfig):
     intermediate_size = AttributeError()
     first_k_dense_replace = AttributeError()
     use_qk_norm = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 1.0)

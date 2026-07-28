@@ -399,6 +399,11 @@ class BitNetDeserialize:
                 actual_out = weight.shape[0]
                 if actual_out * VALUES_PER_ITEM == expected_out:
                     needs_unpacking = True
+                    # Unpack into the module's compute dtype, not the packed uint8 dtype,
+                    # otherwise the ternary weights stay uint8 and F.linear fails with a
+                    # dtype mismatch (e.g. BFloat16 != unsigned char).
+                    if hasattr(module, "weight_scale"):
+                        target_dtype = module.weight_scale.dtype
         if needs_unpacking:
             weight_uint8 = weight.to(torch.uint8)
             weight = unpack_weights(weight_uint8, dtype=target_dtype)

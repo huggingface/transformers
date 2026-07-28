@@ -44,7 +44,8 @@ if is_vision_available():
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
     images_input_name = "flattened_patches"
-    model_id = "microsoft/kosmos-2.5"
+    # Tiny processor created with make_tiny_processor.py from "microsoft/kosmos-2.5"
+    tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
     def test_image_processor_defaults(self):
@@ -52,7 +53,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
-        image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
+        image_processor = Kosmos2_5ImageProcessor.from_pretrained(self.tmpdirname)
         with TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = Kosmos2_5ImageProcessor.from_pretrained(tmp_dir)
@@ -60,10 +61,9 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
     def test_can_load_various_tokenizers(self):
-        for checkpoint in ["microsoft/kosmos-2.5"]:
-            processor = AutoProcessor.from_pretrained(checkpoint)
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
+        self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_model_input_names(self):

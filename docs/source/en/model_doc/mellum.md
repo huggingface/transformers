@@ -1,0 +1,78 @@
+<!--Copyright 2026 JetBrains and The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+*This model was contributed to Hugging Face Transformers on 2026-05-28.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
+# Mellum
+
+Mellum is a code-focused Mixture-of-Experts language model developed by [JetBrains](https://www.jetbrains.com/). It is derived from the Qwen3-MoE architecture with per-layer-type RoPE and interleaved sliding window attention. The model has 12B total parameters with 2.5B active parameters per token, using 64 routed experts with 8 activated per token across 28 layers.
+
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+from transformers import pipeline
+
+
+pipe = pipeline(
+    task="text-generation",
+    model="JetBrains/Mellum2-12B-A2.5B-Base",
+)
+pipe("def fibonacci(n):")
+```
+
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+tokenizer = AutoTokenizer.from_pretrained("JetBrains/Mellum2-12B-A2.5B-Base")
+model = AutoModelForCausalLM.from_pretrained(
+    "JetBrains/Mellum2-12B-A2.5B-Base",
+    device_map="auto",
+)
+input_ids = tokenizer("def fibonacci(n):", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
+
+## MellumConfig
+
+[[autodoc]] MellumConfig
+
+## MellumModel
+
+[[autodoc]] MellumModel
+    - forward
+
+## MellumForCausalLM
+
+[[autodoc]] MellumForCausalLM
+    - forward

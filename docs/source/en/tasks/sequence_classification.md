@@ -24,7 +24,7 @@ Text classification is a common NLP task that assigns a label or class to text. 
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [IMDb](https://huggingface.co/datasets/imdb) dataset to determine whether a movie review is positive or negative.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [IMDb](https://huggingface.co/datasets/stanfordnlp/imdb) dataset to determine whether a movie review is positive or negative.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -54,7 +54,7 @@ Start by loading the IMDb dataset from the 🤗 Datasets library:
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 Then take a look at an example:

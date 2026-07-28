@@ -307,6 +307,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
         # Fixed sinusoidal position embedding added to token embeddings, then layernorm
         pos_emb = self.pos_emb(position_ids.squeeze(0))
+        pos_emb = pos_emb.to(inputs_embeds.device)
         inputs_embeds = self.embedding_layernorm(inputs_embeds + pos_emb)
 
         causal_mask = create_causal_mask(
@@ -499,7 +500,14 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            shift_labels = kwargs.pop("shift_labels", labels)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

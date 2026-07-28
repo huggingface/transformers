@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-02-14 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
   </div>
@@ -39,22 +38,22 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="openai-community/gpt2", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", device=0)
 pipeline("Hello, I'm a language model")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
@@ -76,9 +75,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -102,8 +101,8 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## Notes
 
 - Pad inputs on the right because GPT-2 uses absolute position embeddings.
-- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) parameter in [`GPT2Model.forward`].
-- Enable the [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx) and [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) parameters to apply the training stability improvements from [Mistral](./mistral).
+- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [`~GPT2Model.forward#past_key_values`] parameter in [`GPT2Model.forward`].
+- Enable the [`~GPT2Config#scale_attn_by_inverse_layer_idx`] and [`~GPT2Config#reorder_and_upcast_attn`] parameters to apply the training stability improvements from [Mistral](./mistral).
 
 ## GPT2Config
 

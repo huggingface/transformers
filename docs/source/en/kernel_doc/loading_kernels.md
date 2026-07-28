@@ -29,7 +29,7 @@ Install the kernels package. We recommend the latest version which provides the 
 pip install -U kernels
 ```
 
-Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load a matching kernel variant for your platform and environment. This replaces supported PyTorch operations with the kernel implementation.
+Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to load the most performant kernels available on the Hub for your device. This replaces supported PyTorch operations with the kernel implementation.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -40,6 +40,24 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="cuda"
 )
 ```
+
+The default kernels differ by device type. The table below lists the Hub repository that supplies each operation's default kernel. When no default kernel is registered, the operation falls back to standard PyTorch.
+
+| Operation | NVIDIA (CUDA) | AMD (ROCm) | Intel (XPU) |
+|---|---|---|---|
+| RMSNorm | `kernels-community/liger-kernels` | `kernels-community/liger-kernels` | `kernels-community/rmsnorm` |
+| MoE MLP | `kernels-community/megablocks` | `kernels-community/megablocks` | `kernels-community/megablocks` |
+| MLP (SwiGLU, GeGLU) | `kernels-community/liger-kernels` | — | — |
+| Linear | `kernels-community/liger-kernels` | — | — |
+| Activations (GELU variants, SiLU) | `kernels-community/activation` | — | — |
+| Rotary embeddings | `kernels-community/rotary` | `kernels-community/aiter-rope` | `kernels-community/rotary` |
+| Causal LM loss | `kernels-community/liger-kernels` | — | — |
+| Deformable attention | `kernels-community/deformable-detr` | — | — |
+
+> [!NOTE]
+> AMD GPUs report their device type as `cuda` in PyTorch. Transformers detects ROCm at runtime and routes supported operations to the AMD kernels above, including [AITER](https://github.com/ROCm/aiter) builds such as `kernels-community/aiter-rope`. You don't need to set the device type yourself.
+
+Browse available kernels in the [kernels-community](https://huggingface.co/kernels-community) organization.
 
 ## Attention kernels
 
@@ -90,6 +108,24 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### FlashAttention fallback
+
+Requesting `attn_implementation="flash_attention_2"`, `"flash_attention_3"`, or `"flash_attention_4"` falls back to the matching Hub kernel when the compiled `flash-attn` package isn't installed or your device isn't CUDA.
+
+> [!NOTE]
+> FlashAttention-4 support is in beta. APIs and behavior may change.
+
+```py
+from transformers import AutoModelForCausalLM
+
+# uses the compiled flash-attn package if present, otherwise the kernels-community/flash-attn2 Hub kernel
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    attn_implementation="flash_attention_2",
+    device_map="auto",
+)
+```
+
 ## Mode-awareness
 
 Kernels automatically adapt to [training](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.train) and [inference](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval) modes based on PyTorch's `model.training` state.
@@ -115,19 +151,20 @@ loss = model(input_ids, labels=labels).loss
 loss.backward()
 ```
 
-Explicitly enable training and inference modes with the `mode` argument in the [`~kernels.kernelize`] function. Training mode also supports an additional torch.compile mode.
+Explicitly enable training and inference modes with the `mode` argument in the [`~transformers.kernelize`] function. Training mode also supports an additional torch.compile mode.
 
 ```py
 from kernels import Mode
+from transformers import kernelize
 
 # inference optimized kernels
-model.kernelize(mode=Mode.INFERENCE)
+kernelize(model, mode=Mode.INFERENCE)
 
 # training optimized kernels
-model.kernelize(mode=Mode.TRAINING)
+kernelize(model, mode=Mode.TRAINING)
 
 # training and torch-compile friendly kernels
-model.kernelize(mode=Mode.TRAINING | Mode.TORCH_COMPILE)
+kernelize(model, mode=Mode.TRAINING | Mode.TORCH_COMPILE)
 ```
 
 ## KernelConfig
@@ -169,6 +206,31 @@ kernel_config = KernelConfig(
     }
 )
 ```
+
+## Module fusion
+
+Fuse adjacent modules into a single kernel by passing a tuple of `(class_name, path_pattern)` pairs as the key in [`KernelConfig`]. All patterns must share the same parent module. `*` matches any single path segment.
+
+```python
+from transformers import AutoModelForCausalLM, KernelConfig
+
+kernel_config = KernelConfig(
+    {
+        (
+            ("RMSNorm", "model.layers.*.post_attention_layernorm"),
+            ("MLP",     "model.layers.*.mlp"),
+        ): "owner/fused-rmsnorm-mlp:RMSNormMLP",
+    }
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    use_kernels=True,
+    kernel_config=kernel_config,
+    device_map="cuda",
+)
+```
+
+Fusion requires the kernel repo to provide a companion `KernelNameLayout` class alongside the `KernelName` class. See the [Writing kernels](./writing_kernels) guide for how to implement one.
 
 ## Local kernels
 

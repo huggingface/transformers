@@ -22,8 +22,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.generic import merge_with_config_defaults
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
@@ -89,22 +90,6 @@ class SmolVLMConfig(Idefics3Config):
     ```"""
 
     model_type = "smolvlm"
-
-
-class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    do_image_splitting (`bool`, *optional*, defaults to `True`):
-        Whether to split the image into sub-images concatenated with the original image. They are split into patches
-        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-    return_row_col_info (`bool`, *optional*, defaults to `False`):
-        Whether to return the row and column information of the images.
-    """
-
-    do_image_splitting: bool
-    max_image_size: dict[str, int]
-    return_row_col_info: bool
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
@@ -214,6 +199,7 @@ class SmolVLMModel(Idefics3Model):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="""
@@ -226,7 +212,6 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -240,12 +225,6 @@ class SmolVLMModel(Idefics3Model):
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
-        if self.training and self.text_model.gradient_checkpointing and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
-
         if input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:

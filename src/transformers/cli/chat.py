@@ -18,9 +18,9 @@ import platform
 import re
 import string
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 import requests
@@ -103,6 +103,13 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 """
 
 
+def get_service_root_url(base_url: str) -> str:
+    """Return the service root of `base_url`, where the serve management endpoints live."""
+    parsed = urlparse(base_url)
+    path = parsed.path.rstrip("/").removesuffix("/v1")
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+
+
 class RichInterface:
     def __init__(self, model_id: str, user_id: str, base_url: str):
         self._console = Console()
@@ -110,7 +117,9 @@ class RichInterface:
         self.user_id = user_id
         self.base_url = base_url
 
-    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
+    async def stream_output(
+        self, stream: Awaitable[AsyncIterator[ChatCompletionStreamOutput]]
+    ) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
@@ -207,7 +216,9 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        response = requests.post(f"{self.base_url.rstrip('/')}/load_model", json={"model": model}, stream=True)
+        response = requests.post(
+            urljoin(get_service_root_url(self.base_url) + "/", "load_model"), json={"model": model}, stream=True
+        )
         response.raise_for_status()
 
         class StatsColumn(ProgressColumn):
@@ -372,7 +383,7 @@ class Chat:
 
     @staticmethod
     def check_health(url):
-        health_url = urljoin(url + "/", "health")
+        health_url = urljoin(get_service_root_url(url) + "/", "health")
         try:
             output = httpx.get(health_url)
             if output.status_code != 200:

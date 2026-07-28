@@ -52,6 +52,7 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
         <b>اردو</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -236,7 +237,7 @@ limitations under the License.
 
 - محققین ہمیشہ دوبارہ تربیت کرنے کی بجائے تربیت شدہ ماڈلز شیئر کر سکتے ہیں۔
 - عملی ماہرین کمپیوٹ وقت اور پروڈکشن اخراجات کو کم کر سکتے ہیں۔
-- ہر موڈیلٹی کے لیے 400,000 سے زیادہ pretrained ماڈلز کے ساتھ درجنوں آرکیٹیکچرز۔
+- ہر موڈیلٹی کے لیے 400,000 سے زیادہ pretrained ماڈلز کے ساتھ سینکڑوں آرکیٹیکچرز۔
 
 &#8207; 3. ماڈل کے لائف ٹائم کے ہر حصے کے لیے صحیح
 فریم ورک کا انتخاب کریں:
@@ -318,7 +319,7 @@ Flax، PyTorch، یا TensorFlow کو conda کے ساتھ انسٹال کرنے 
 
 ## استشہاد
 
-ہم نے اب ایک [تحقیقی مقالہ](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) تیار کیا ہے جسے آپ 🤗 Transformers لائبریری کے لیے حوالہ دے سکتے ہیں:
+ہم نے اب ایک [تحقیقی مقالہ](https://aclanthology.org/2020.emnlp-demos.6/) تیار کیا ہے جسے آپ 🤗 Transformers لائبریری کے لیے حوالہ دے سکتے ہیں:
 
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers،
@@ -329,7 +330,7 @@ Flax، PyTorch، یا TensorFlow کو conda کے ساتھ انسٹال کرنے 
     year = "2020"،
     address = "Online"،
     publisher = "Association for Computational Linguistics"،
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6"،
+    url = "https://aclanthology.org/2020.emnlp-demos.6/"،
     pages = "38--45"
 }
 ```

@@ -37,7 +37,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True, has_video_processor=True))
 class VideoClassificationPipeline(Pipeline):
     """
     Video classification pipeline using any `AutoModelForVideoClassification`. This pipeline predicts the class of a
@@ -48,10 +48,15 @@ class VideoClassificationPipeline(Pipeline):
 
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=video-classification).
+
+    The pipeline supports models that use either an image processor (legacy video models such as VideoMAE, ViViT, and
+    TimeSformer) or a video processor (newer models such as VJEPA2). When both are present the video processor takes
+    precedence; when neither is found the pipeline will raise an error.
     """
 
     _load_processor = False
-    _load_image_processor = True
+    _load_image_processor = None
+    _load_video_processor = None
     _load_feature_extractor = False
     _load_tokenizer = False
 
@@ -59,6 +64,16 @@ class VideoClassificationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         requires_backends(self, "av")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
+        if self.video_processor is None and self.image_processor is None:
+            raise ValueError(
+                "The video-classification pipeline requires either a video processor or an image processor. "
+                "Neither could be found for the given model."
+            )
+        if self.video_processor is None and self.image_processor is not None:
+            logger.warning_once(
+                "Using `image_processor` for video classification is deprecated and will be removed in a future "
+                "version. Please add a `video_processor` to this model (open a PR if you don't own it)."
+            )
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None, function_to_apply=None):
         preprocess_params = {}
@@ -133,20 +148,22 @@ class VideoClassificationPipeline(Pipeline):
         if num_frames is None:
             num_frames = self.model.config.num_frames
 
-        if video.startswith("http://") or video.startswith("https://"):
-            video = BytesIO(httpx.get(video, follow_redirects=True).content)
+        # Decode the video manually because image processors can't decode or sample frames
+        if self.video_processor is None:
+            if video.startswith("http://") or video.startswith("https://"):
+                video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
-        container = av.open(video)
+            container = av.open(video)
+            start_idx = 0
+            end_idx = num_frames * frame_sampling_rate - 1
+            indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
 
-        start_idx = 0
-        end_idx = num_frames * frame_sampling_rate - 1
-        indices = np.linspace(start_idx, end_idx, num=num_frames, dtype=np.int64)
-
-        video = read_video_pyav(container, indices)
-        video = list(video)
-
-        model_inputs = self.image_processor(video, return_tensors="pt")
-        model_inputs = model_inputs.to(self.dtype)
+            video = read_video_pyav(container, indices)
+            video = list(video)
+            model_inputs = self.image_processor(video, return_tensors="pt").to(self.dtype)
+        else:
+            processing_kwargs = {"num_frames": num_frames, "do_sample_frames": True}
+            model_inputs = self.video_processor(video, **processing_kwargs, return_tensors="pt").to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):

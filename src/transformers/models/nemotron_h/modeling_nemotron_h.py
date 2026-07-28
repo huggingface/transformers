@@ -38,7 +38,8 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
-from ...masking_utils import create_causal_mask
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -108,6 +109,59 @@ def segment_sum(input_tensor):
     return tensor_segsum
 
 
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
 is_fast_path_available = False
 
 
@@ -119,9 +173,10 @@ class NemotronHMamba2Mixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
+    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__()
         self.config = config
+        self.num_heads = config.mamba_num_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.ssm_state_size
         self.conv_kernel_size = config.conv_kernel
@@ -130,16 +185,12 @@ class NemotronHMamba2Mixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = config.mamba_hidden_act
         self.act = ACT2FN[config.mamba_hidden_act]
-        self.use_mem_eff_path = True
 
         self.n_groups = config.n_groups
         self.head_dim = config.mamba_head_dim
-        self.num_heads = config.mamba_num_heads
         self.chunk_size = config.chunk_size
-
-        self.time_step_limit = config.time_step_limit
-        self.time_step_min = config.time_step_min
-        self.time_step_max = config.time_step_max
+        # No upper limit
+        self.time_step_limit = (config.time_step_min, float("inf"))
 
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.ssm_state_size
 
@@ -151,10 +202,8 @@ class NemotronHMamba2Mixer(nn.Module):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
-
         # projection of the input hidden states
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
-
         self.in_proj = nn.Linear(
             self.hidden_size,
             projection_size,
@@ -163,27 +212,25 @@ class NemotronHMamba2Mixer(nn.Module):
         # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
-        # instantiate once and copy inv_dt in init_weights of PretrainedModel
-        self.dt_bias = nn.Parameter(torch.ones(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.num_heads))
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.num_heads + 1)
-        self.A_log = nn.Parameter(torch.log(A))
-
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
         self.norm = Zamba2RMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
-        self.D = nn.Parameter(torch.ones(self.num_heads))
-
+        self.D = nn.Parameter(torch.empty(self.num_heads))
+        if initialize_mixer_weights and self.dt_bias.device.type != "meta":
+            self.init_nemotron_h_mamba2_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
-        global causal_conv1d_update, causal_conv1d_fn
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", causal_conv1d_update)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", causal_conv1d_fn)
 
-        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        global mamba_ssm, selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         mamba_ssm = lazy_load_kernel("mamba-ssm")
         selective_state_update = resolve_internal_import(
             mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
@@ -196,14 +243,10 @@ class NemotronHMamba2Mixer(nn.Module):
         )
 
         global is_fast_path_available
-        is_fast_path_available = all(
-            (
-                selective_state_update,
-                mamba_chunk_scan_combined,
-                mamba_split_conv1d_scan_combined,
-                causal_conv1d_fn,
-                causal_conv1d_update,
-            )
+        is_fast_path_available = (
+            all((selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
         )
 
         if not is_fast_path_available:
@@ -213,49 +256,126 @@ class NemotronHMamba2Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
 
+        self.layer_type = config.layer_types[layer_idx]
+        self.use_mem_eff_path = True
+
+    @torch.no_grad()
+    def init_nemotron_h_mamba2_weights(self):
+        A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
+        init.copy_(self.A_log, torch.log(A))
+        init.ones_(self.D)
+        init.ones_(self.dt_bias)
+
+    def _convolution(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ):
+        seq_len = hidden_states.shape[1]
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            hidden_states = causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            if cache_params is not None:
+                hidden_states = cache_params.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(
+                hidden_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+                seq_idx=kwargs.get("seq_idx"),
+            )
+
+            # Drop the additional previous states
+            if cache_params is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
-        # set up dimensions for reshapes later
+        # 1. Gated MLP's linear projection
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        projected_states = self.in_proj(hidden_states)
 
-        batch_size, seq_len, _ = hidden_states.shape
-        groups_time_state_size = self.n_groups * self.ssm_state_size
-        d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
-
-        # getting projected states from cache if it exists
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            in_projected_states = self.in_proj(hidden_states.squeeze(1))  # (B 2D)
-            d_mlp = (in_projected_states.shape[-1] - d_to_remove) // 2
-            split_projection_dim = [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads]
-            _, _, gate, hidden_states_B_C, dt = torch.split(in_projected_states, split_projection_dim, dim=-1)
-
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                cache_params.layers[self.layer_idx].conv_states,
+        A = -torch.exp(self.A_log.float())
+        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+        # Fused kernel for conv1d, SSM, and the final projection
+        if self.training and cache_params is None:
+            return mamba_split_conv1d_scan_combined(
+                projected_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
-                self.activation,
+                self.dt_bias,
+                A,
+                D=self.D,
+                chunk_size=self.chunk_size,
+                seq_idx=kwargs.get("seq_idx"),
+                activation=self.activation,
+                rmsnorm_weight=self.norm.weight,
+                rmsnorm_eps=self.norm.variance_epsilon,
+                outproj_weight=self.out_proj.weight,
+                outproj_bias=self.out_proj.bias,
+                headdim=self.head_dim,
+                ngroups=self.n_groups,
+                norm_before_gate=False,
+                return_final_states=False,
+                **dt_limit_kwargs,
             )
 
-            hidden_states, B, C = torch.split(
-                hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
-                dim=-1,
-            )
-            A = -torch.exp(self.A_log.float())  # (nheads,)
+        # Set up dimensions for reshapes later
+        batch_size, seq_len, _ = hidden_states.shape
+        groups_time_state_size = self.n_groups * self.ssm_state_size
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        )
+
+        # Apply the conv
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+        hidden_states, B, C = torch.split(
+            hidden_states_B_C,
+            [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+            dim=-1,
+        )
+
+        recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
+        # Single step calculations via cache
+        if use_precomputed_states and seq_len == 1:
+            # 3. SSM transformation
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dt = dt[:, :, None].expand(-1, -1, self.head_dim)
+            dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
-            B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
+            B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
+            C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                recurrent_state,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -266,206 +386,125 @@ class NemotronHMamba2Mixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(batch_size, 1, self.num_heads * self.head_dim)
             hidden_states = self.norm(hidden_states, gate)
-            out = self.out_proj(hidden_states)[:, None, ...]
-        # if no cache is found, calling the kernel
+
+            # 4. Final linear projection
+            out = self.out_proj(hidden_states)
+
+        # Fused calculations or step by step if no initialized cache is found
         else:
-            if attention_mask is not None and not torch.all(attention_mask == 1):
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                dtype = hidden_states.dtype
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-            # 1. Gated MLP's linear projection
-            projected_states = self.in_proj(hidden_states)
-            A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit is None else {"dt_limit": self.time_step_limit}
-            if attention_mask is not None:
-                input_not_masked = torch.all(attention_mask == 1)
-            else:
-                input_not_masked = True
+            # 3. SSM transformation
+            scan_output, ssm_state = mamba_chunk_scan_combined(
+                hidden_states.view(batch_size, seq_len, -1, self.head_dim),
+                dt,
+                A,
+                B.view(batch_size, seq_len, self.n_groups, -1),
+                C.view(batch_size, seq_len, self.n_groups, -1),
+                chunk_size=self.chunk_size,
+                D=self.D,
+                z=None,
+                seq_idx=kwargs.get("seq_idx"),
+                return_final_states=True,
+                dt_bias=self.dt_bias,
+                dt_softplus=True,
+                initial_states=recurrent_state,
+                **dt_limit_kwargs,
+            )
 
-            if self.use_mem_eff_path and self.training and cache_params is None and input_not_masked:
-                out, ssm_state = mamba_split_conv1d_scan_combined(
-                    projected_states,
-                    self.conv1d.weight.squeeze(1),
-                    self.conv1d.bias,
-                    self.dt_bias,
-                    A,
-                    D=self.D,
-                    chunk_size=self.chunk_size,
-                    seq_idx=None,
-                    activation=self.activation,
-                    rmsnorm_weight=self.norm.weight,
-                    rmsnorm_eps=self.norm.variance_epsilon,
-                    outproj_weight=self.out_proj.weight,
-                    outproj_bias=self.out_proj.bias,
-                    headdim=self.head_dim,
-                    ngroups=self.n_groups,
-                    norm_before_gate=False,
-                    return_final_states=True,
-                    **dt_limit_kwargs,
-                )
+            # Init cache
+            if ssm_state is not None and cache_params is not None:
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
-            else:
-                gate, hidden_states_B_C, time_step = torch.split(
-                    projected_states,
-                    [self.intermediate_size, self.conv_dim, self.num_heads],
-                    dim=-1,
-                )
+            scan_output = scan_output.view(batch_size, seq_len, -1)
+            # Multiply "gate" branch and apply extra normalization layer
+            scan_output = self.norm(scan_output, gate)
 
-                # 1D Convolution
-                if cache_params is not None:
-                    hidden_states_B_C_t = hidden_states_B_C.transpose(1, 2)
-                    conv_state = nn.functional.pad(
-                        hidden_states_B_C_t, (self.conv_kernel_size - hidden_states_B_C_t.shape[-1], 0)
-                    )
-                    conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
-                if causal_conv1d_fn is None or self.activation not in ["silu", "swish"]:
-                    hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2)).transpose(1, 2)[:, :seq_len]
-                    )  # (B, L, self.d_inner + 2 * ngroups * d_state)
-                else:
-                    hidden_states_B_C = causal_conv1d_fn(
-                        x=hidden_states_B_C.transpose(1, 2),
-                        weight=self.conv1d.weight.squeeze(1),
-                        bias=self.conv1d.bias,
-                        activation=self.activation,
-                    ).transpose(1, 2)[:, :seq_len]
-                hidden_states, B, C = torch.split(
-                    hidden_states_B_C,
-                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
-                    dim=-1,
-                )
-                if attention_mask is not None and not torch.all(attention_mask == 1):
-                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    dtype = hidden_states.dtype
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-                scan_output, ssm_state = mamba_chunk_scan_combined(
-                    hidden_states.view(batch_size, seq_len, -1, self.head_dim),
-                    time_step,
-                    A,
-                    B.view(batch_size, seq_len, self.n_groups, -1),
-                    C.view(batch_size, seq_len, self.n_groups, -1),
-                    chunk_size=self.chunk_size,
-                    D=self.D,
-                    z=None,
-                    seq_idx=None,
-                    return_final_states=True,
-                    dt_bias=self.dt_bias,
-                    dt_softplus=True,
-                    **dt_limit_kwargs,
-                )
-                if ssm_state is not None and cache_params is not None:
-                    cache_params.update_recurrent_state(ssm_state, self.layer_idx)
-                scan_output = scan_output.view(batch_size, seq_len, -1)
-                # Multiply "gate" branch and apply extra normalization layer
-                scan_output = self.norm(scan_output, gate)
-                out = self.out_proj(scan_output)
+            # 4. Final linear projection
+            out = self.out_proj(scan_output)
+
         return out
 
-    # fmt: off
-    def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None = None):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
-        # Gated MLP's linear projection
-        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
-            projected_states = self.in_proj(input_states)
-        else:
-            if attention_mask is not None:
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                input_states = (input_states * attention_mask[:, :, None]).to(dtype)
-            projected_states = self.in_proj(input_states)
-        d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size - 2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
-        _, _, gate, hidden_states, dt = projected_states.split(
-                [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
+    def torch_forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        batch_size, seq_len, _ = hidden_states.shape
+        dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        # 1. Gated MLP's linear projection
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        projected_states = self.in_proj(hidden_states)
+
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
-        hidden_states = hidden_states.transpose(1, 2)
 
-        use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # 2. Convolution sequence transformation
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+        hidden_states, B, C = torch.split(
+            hidden_states_B_C,
+            [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
+            dim=-1,
+        )
 
-        # Convolution sequence transformation
-        if use_precomputed_state:
-            conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
-            hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
-            if self.use_conv_bias:
-                hidden_states += self.conv1d.bias
-            hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
-        else:
-            if cache_params is not None:
-                conv_state = nn.functional.pad(
-                    hidden_states,
-                    (self.conv_kernel_size - hidden_states.shape[-1], 0)
-                )
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+        # 3. SSM transformation
+        A = -torch.exp(self.A_log.float())
+        if use_precomputed_states and seq_len == 1:
+            # We need to guarantee that anything regarding the cache is on the same device
+            cache_device = cache_params.layers[self.layer_idx].device
 
-            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len].transpose(1, 2))
-            if attention_mask is not None:
-                dtype = hidden_states.dtype
-                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-        hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
-        A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if use_precomputed_state:
-            # Note: there is no need to pad parameter matrices here, as there is just one new token
-            # for batched generation
-            dt = dt[:, None, ...] if dt.ndim == 2 else dt[:, 0, :][:, None, ...]
+            # Note: there is no need to pad parameter matrices here, as there is just one new token for batched generation
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
-            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
-            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
-            dt = torch.clamp(dt, self.time_step_min) #, self.time_step_max)
+            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))[..., None]
+            dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            # [bsz, num_heads, head_dim, state_size]
-            dA = torch.exp(dt[..., None] * A)
+            dA = (torch.exp(dt * A)).to(device=cache_device)
 
             # Discretize B
-            # [bsz, n_groups * state_size] -> [bsz, n_groups, 1, state_size] ->
-            # -> [bsz, n_groups, group to head repetition factor, state_size] -> [bsz, num_heads, state_size]
-            B = B.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            B = B.reshape(batch_size, self.n_groups, 1, -1)
             B = B.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, B.shape[-1]).contiguous()
-            B = B.reshape(batch_size, -1, B.shape[-1])
-            # [bsz, num_heads, head_dim, state_size]
-            dB = dt[..., None] * B[..., None, :]
+            B = B.reshape(batch_size, -1, 1, B.shape[-1])
+            dB = dt * B
 
             # Discretize x into dB
-            # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
-            dBx = dB * hidden_states[..., None]
+            dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
-            ssm_states = ssm_states * dA + dBx
-            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0] * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
-            # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
-            C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            C = C.reshape(batch_size, self.n_groups, 1, -1)
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
-            # [bsz, num_heads, head_dim]
 
-            ssm_states = ssm_states.to(C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
-            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
-            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
+            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
+            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)
+            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
             y = y.view(batch_size, self.num_heads, self.head_dim)
 
             # D skip connection
-            # [num_heads] -> [num_heads, head_dim]
             D = self.D[..., None].expand(self.D.shape[0], self.head_dim)
             y = (y + hidden_states * D).to(y.dtype)
 
-            # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
-            y = y.reshape(batch_size, -1)[:, None, ...]
+            y = y.reshape(batch_size, 1, -1)
         else:
             # begin ssd naive implementation without einsums
             dt = nn.functional.softplus(dt + self.dt_bias)
-            dt = torch.clamp(dt, self.time_step_min)
+            dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
-            B = B.reshape(batch_size, seq_len,  -1, self.ssm_state_size).float()
+            B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
@@ -478,10 +517,10 @@ class NemotronHMamba2Mixer(nn.Module):
             A = A.to(hidden_states.dtype) * dt
 
             # Rearrange into blocks/chunks
-            hidden_states, A, B, C = [reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)]
+            hidden_states, A, B, C = [
+                reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)
+            ]
 
-
-            # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
             A = A.permute(0, 3, 1, 2)
             A_cumsum = torch.cumsum(A, dim=-1)
 
@@ -489,44 +528,47 @@ class NemotronHMamba2Mixer(nn.Module):
             # This is the analog of a causal mask
             L = torch.exp(segment_sum(A))
 
-            # First, contraction of C and B to get G (attention-weights like)
-            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, : ,:]  # shape: (b, c, l, s, h, n)
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            # Contraction of C and B to get G (attention-weights like)
+            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]
+            G = G_intermediate.sum(dim=-1)
 
-
-            # Step 2: Compute M, equivalent to applying attention mask to weights
+            # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
             M = M_intermediate.sum(dim=-1)
 
-            # Step 3: Compute Y_diag (apply to values)
-            Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(3)
+            # Compute Y_diag (apply to values)
+            Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
 
+            # 2. Compute the state for each intra-chunk
             # (right term of low-rank factorization of off-diagonal blocks; B terms)
-
             decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
-            B_decay_contraction = B * decay_states.permute(0, 2, 3, 1)[..., None]
-            # permute back B * decay states
-            states = (B_decay_contraction.permute(0, 1, 3, 2, 4)[..., None]  * hidden_states.permute(0, 1, 3, 2, 4)[..., None, :]).sum(dim=3).permute(0, 1, 2, 4, 3)
-            previous_states = torch.zeros_like(states[:, :1])
+            B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
+            states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
+
+            # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
+            # (middle term of factorization of off-diag blocks; A terms)
+            previous_states = (
+                cache_params.layers[self.layer_idx]
+                .recurrent_states[0][:, None]
+                .to(dtype=states.dtype, device=states.device)
+                if use_precomputed_states
+                else torch.zeros_like(states[:, :1])
+            )
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
-
-            states_permuted = states.permute(0, 2, 1, 3, 4)
-            result = (decay_chunk[..., None, None] * states_permuted[:, :, None, ...]).sum(dim=2)
-            new_states = result.permute(0, 2, 1, 3, 4)
+            decay_chunk = decay_chunk.transpose(1, 3)
+            new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
             states, ssm_state = new_states[:, :-1], new_states[:, -1]
 
-            # Compute state -> output conversion per chunk
+            # 4. Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
-            # compute Yoff
-            C_times_states = (C[..., None, :] * states[:, :, None, ...])
+            C_times_states = C[..., None, :] * states[:, :, None, ...]
             state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
-            Y_off = (C_times_states.sum(-1) * state_decay_out_permuted[..., None])
-            # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
+            Y_off = C_times_states.sum(-1) * state_decay_out_permuted[..., None]
 
+            # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
             y = Y_diag + Y_off
-            # [bsz, -1, self.chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
             y = y.reshape(batch_size, -1, self.num_heads, self.head_dim)
 
             y = y + D_residual
@@ -534,18 +576,18 @@ class NemotronHMamba2Mixer(nn.Module):
             if pad_size > 0:
                 y = y[:, :seq_len, :, :]
             y = y.reshape(batch_size, seq_len, -1)
+
+            # Init cache
             if ssm_state is not None and cache_params is not None:
-                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
         scan_output = self.norm(y, gate)
 
-        # end ssd naive
-
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
-    # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
@@ -585,7 +627,7 @@ class NemotronHRMSNorm(nn.Module):
 
 
 class NemotronHMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None, **kwargs):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -679,12 +721,6 @@ class NemotronHMoE(nn.Module):
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
         self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
 
         # NemotronH-specific latent projection layers
         if config.moe_latent_size is not None:
@@ -694,36 +730,10 @@ class NemotronHMoE(nn.Module):
             self.fc1_latent_proj = nn.Identity()
             self.fc2_latent_proj = nn.Identity()
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # NemotronH-specific: latent projection
@@ -739,16 +749,42 @@ class NemotronHMoE(nn.Module):
 class NemotronHTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
+        group_scores = (
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
 
 
 def rotate_half(x):
@@ -877,9 +913,10 @@ class NemotronHAttention(nn.Module):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
+    "linear_attention": NemotronHMamba2Mixer,
+    "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
+    "mlp": NemotronHMLP,
 }
 
 
@@ -920,15 +957,15 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "mamba":
+        if self.block_type == "linear_attention":
             hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                user_cache=use_cache,
+                use_cache=use_cache,
                 **kwargs,
             )
         else:
@@ -942,6 +979,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -949,6 +987,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _is_stateful = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
@@ -963,22 +1002,27 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, NemotronHMamba2Mixer):
-            # Initialize A_log and D parameters
-            A = torch.arange(1, self.config.mamba_num_heads + 1)
-            init.copy_(module.A_log, torch.log(A))
-            init.ones_(module.D)
+            # Only re-initialise params that were NOT loaded from a checkpoint.
+            # `_is_hf_initialized` is set by `from_pretrained` on each loaded
+            # parameter; without this guard a post-load safety pass of
+            # `_init_weights` would overwrite checkpoint values of
+            # A_log / D / dt_bias with fresh random draws.
+            if not getattr(module.A_log, "_is_hf_initialized", False):
+                A = torch.arange(1, self.config.mamba_num_heads + 1)
+                init.copy_(module.A_log, torch.log(A))
+            if not getattr(module.D, "_is_hf_initialized", False):
+                init.ones_(module.D)
+            if not getattr(module.dt_bias, "_is_hf_initialized", False):
+                dt = torch.exp(
+                    torch.rand(self.config.mamba_num_heads)
+                    * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                    + math.log(self.config.time_step_min)
+                ).clamp(min=self.config.time_step_floor)
 
-            dt = torch.exp(
-                torch.rand(self.config.mamba_num_heads)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
-                + math.log(self.config.time_step_min)
-            ).clamp(min=self.config.time_step_floor)
-
-            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                init.copy_(module.dt_bias, inv_dt)
-            module.dt_bias._no_reinit = True
+                # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+                inv_dt = dt + torch.log(-torch.expm1(-dt))
+                with torch.no_grad():
+                    init.copy_(module.dt_bias, inv_dt)
         elif isinstance(module, NemotronHTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
@@ -989,7 +1033,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
+                if not getattr(module.bias, "_is_hf_initialized", False):
                     init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=self.config.initializer_range)
@@ -1003,10 +1047,12 @@ class NemotronHPreTrainedModel(PreTrainedModel):
             # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
             for name, p in module.named_parameters():
                 if name == "out_proj.weight":
+                    # Skip checkpoint-loaded weights so a post-load safety
+                    # pass of `_init_weights` doesn't silently overwrite them.
+                    if getattr(p, "_is_hf_initialized", False):
+                        continue
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
                     init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
                         p_new = p / math.sqrt(self.config.num_hidden_layers)
@@ -1058,28 +1104,27 @@ class NemotronHModel(NemotronHPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
-
-        # Map block types to their corresponding masks
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-            "moe": None,
-        }
+        # Under a compileable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
+        # otherwise we build them here.
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
-
             hidden_states = mixer_block(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping.get(mixer_block.block_type),
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -1092,19 +1137,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->NemotronH, JAMBA->NEMOTRON_H
@@ -1207,6 +1239,22 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         )
 
         return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
+        # table doesn't enumerate, so we return both masks the forward needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
 
 
 __all__ = ["NemotronHPreTrainedModel", "NemotronHModel", "NemotronHForCausalLM"]

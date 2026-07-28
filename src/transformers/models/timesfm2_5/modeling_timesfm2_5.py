@@ -42,8 +42,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_timesfm2_5 import TimesFm2_5Config
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFm2_5Output(BaseModelOutput):
     r"""
     context_mu (`torch.Tensor` of shape `(batch_size, num_patches)`):
@@ -59,8 +59,8 @@ class TimesFm2_5Output(BaseModelOutput):
     context_sigma: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFm2_5OutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
@@ -777,7 +777,7 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         if window_size is not None:
             new_inputs: list[torch.Tensor] = []
             for ts in inputs:
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                new_inputs.extend(self._timesfm2_5_moving_average(ts, window_size))
             inputs = new_inputs
 
         if truncate_negative is None:

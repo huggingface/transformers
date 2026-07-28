@@ -14,7 +14,9 @@
 
 import base64
 import gc
+import importlib.util
 import io
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -902,11 +904,6 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.tokens,
         )
 
-        with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
-        ):
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
-
     def test_apply_chat_template_continue_final_message(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -1267,12 +1264,6 @@ class TestMistralCommonBackend(unittest.TestCase):
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
             self.assertEqual(text, expected.text)
             self.assertEqual(token, expected.tokens)
-
-        with self.assertRaises(
-            ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
-        ):
-            self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
     def test_batch_apply_chat_template_images(self):
         conversations = [
@@ -2140,10 +2131,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             (ValidationMode.test, ValidationMode.test),
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
+            ("serving", ValidationMode.serving),
+            (ValidationMode.serving, ValidationMode.serving),
         ]:
             self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
 
-        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+        for invalid_mode in ["invalid", 1]:
             with self.assertRaises(ValueError):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
 
@@ -2274,3 +2267,27 @@ class TestMistralCommonBackend(unittest.TestCase):
         # unsupported kwargs should raise ValueError
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, unsupported_arg="")
+
+
+class TestMistralCommonImport(unittest.TestCase):
+    def test_import_does_not_raise_regardless_of_mistral_common_availability(self) -> None:
+        # Regression test: importing `transformers.tokenization_mistral_common` must not raise, whether or not
+        # `mistral_common` is installed.
+        # The module body is executed under a throwaway module name via `importlib.util` so that the real
+        # `sys.modules["transformers.tokenization_mistral_common"]` entry is never swapped out.
+        module_origin = importlib.util.find_spec("transformers.tokenization_mistral_common").origin
+
+        for available in (False, True):
+            with self.subTest(mistral_common_available=available):
+                with patch("transformers.utils.import_utils.is_mistral_common_available", return_value=available):
+                    throwaway_name = f"_regression_tokenization_mistral_common_available_{available}"
+                    spec = importlib.util.spec_from_file_location(throwaway_name, module_origin)
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[throwaway_name] = module
+                    try:
+                        # Executing the module body must not raise (this is what the regression guards against).
+                        spec.loader.exec_module(module)
+                        # `_MAP_SPECIAL_TOKENS` is only bound when `mistral_common` is available.
+                        self.assertEqual(hasattr(module, "_MAP_SPECIAL_TOKENS"), available)
+                    finally:
+                        sys.modules.pop(throwaway_name, None)

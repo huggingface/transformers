@@ -560,97 +560,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
 
-    def test_model_rope_scaling_frequencies(self):
-        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
-        # Gemma3n has different RoPE configs per layer type
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
-        # named location of the RoPE layer class.
-        base_model = self.model_tester.base_model_class(config)
-        possible_rope_attributes = [
-            "pos_emb",
-            "rotary_emb",  # most common case
-            "global_rotary_emb",
-            "local_rotary_emb",
-        ]
-        for name, module in base_model.named_modules():
-            if any(potential_name in name for potential_name in possible_rope_attributes):
-                rope_class = type(module)
-                break
-
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        rope_params = {"rope_type": "default", "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        rope_params = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        rope_params = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue(
-            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
-        )
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        rope_params = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
 
 class Gemma3nVision2TextModelTester:
     text_config = {"activation_sparsity_pattern": None}
@@ -789,6 +698,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     test_missing_keys = False
     _is_stateful = True
+    has_attentions = False
     model_split_percents = [0.5, 0.6]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
@@ -821,16 +731,8 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Cannot set `output_attentions` for timm models.")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    @unittest.skip("timm model has no gradient")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("Cannot set `output_attentions` on timm models.")
-    def test_get_image_features_attentions(self):
         pass
 
     @unittest.skip("timm model has no gradient")
@@ -1000,7 +902,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean under a clear blue sky. The cow is facing the viewer'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1084,7 +986,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean under a clear blue sky. The cow is facing the viewer', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1111,7 +1013,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean under a clear blue sky. The cow is facing the viewer'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1153,7 +1055,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some of the key elements:\n\n* **A'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1198,7 +1100,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = Expectations({
             ("cuda", None): [" and the people are so friendly. I'm so glad I came here. I'm so", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("rocm", (9, 4)): [" and the food is delicious. I'm so glad I came here. I'm so glad", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
@@ -1229,7 +1131,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("rocm", (9, 4)): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("rocm", (9, 4)): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

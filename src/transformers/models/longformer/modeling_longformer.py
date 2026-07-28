@@ -21,6 +21,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -31,12 +32,12 @@ from .configuration_longformer import LongformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 class LongformerBaseModelOutput(ModelOutput):
     r"""
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -69,12 +70,12 @@ class LongformerBaseModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class LongformerBaseModelOutputWithPooling(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -112,12 +113,12 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for masked language models outputs.
     """
 )
+@dataclass
 class LongformerMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -155,12 +156,12 @@ class LongformerMaskedLMOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering Longformer models.
     """
 )
+@dataclass
 class LongformerQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -197,12 +198,12 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sentence classification models.
     """
 )
+@dataclass
 class LongformerSequenceClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -240,12 +241,12 @@ class LongformerSequenceClassifierOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of multiple choice Longformer models.
     """
 )
+@dataclass
 class LongformerMultipleChoiceModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -285,12 +286,12 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class LongformerTokenClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1498,15 +1499,21 @@ class LongformerModel(LongformerPreTrainedModel):
             pad_token_id=self.config.pad_token_id,
         )
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)[
-            :, 0, 0, :
-        ]
-
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=torch.clamp(attention_mask, min=0, max=1),  # we have a mask of 0, 1, 2 (see bug below)
+            # Force mask creation
+            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+        )
+        # Cuts off back to 2D
+        extended_attention_mask = extended_attention_mask[:, 0, 0, :]
+        # Bug in the old mask API converted global masks (==2) to max dtype
+        extended_attention_mask[attention_mask == 2] = torch.finfo(embedding_output.dtype).max
 
         encoder_outputs = self.encoder(
             embedding_output,

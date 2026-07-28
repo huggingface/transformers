@@ -88,6 +88,7 @@ user: ユーザ
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
     </p>
 </h4>
 
@@ -346,7 +347,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
 
 ## 引用
 
-🤗 Transformersライブラリについて引用できる[論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)ができました:
+🤗 Transformersライブラリについて引用できる[論文](https://aclanthology.org/2020.emnlp-demos.6/)ができました:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
@@ -356,7 +357,7 @@ Transformersの10万スターを記念して、Transformersで構築された100
     year = "2020",
     address = "Online",
     publisher = "Association for Computational Linguistics",
-    url = "https://www.aclweb.org/anthology/2020.emnlp-demos.6",
+    url = "https://aclanthology.org/2020.emnlp-demos.6/",
     pages = "38--45"
 }
 ```

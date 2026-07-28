@@ -96,6 +96,10 @@ class SwinModelTester:
         self.encoder_stride = encoder_stride
         self.out_features = out_features
         self.out_indices = out_indices
+        # num_patches and seq_length used by SDPA equivalence tests (bool_masked_pos handling)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches
+        self.num_masks = num_patches // 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -248,6 +252,23 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["image_size", "patch_size", "num_channels"],
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        import copy
+
+        config = copy.deepcopy(config)
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0
+        # Swin uses embed_dim and num_heads (list). Ensure head_dim >= requested_dim by scaling embed_dim.
+        if hasattr(config, "embed_dim") and hasattr(config, "num_heads"):
+            num_heads = config.num_heads
+            min_heads = min(num_heads) if isinstance(num_heads, (list, tuple)) else num_heads
+            head_dim = config.embed_dim // min_heads
+            if head_dim < requested_dim:
+                scale = max(requested_dim // head_dim, 1)
+                config.embed_dim *= scale
+        return config
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -258,6 +279,14 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip(
+        reason="Swin always passes a non-null combined attention mask (relative position bias + optional "
+        "cyclic-shift mask) to the attention interface. Flash attention does not support non-null "
+        "additive attn_mask, so this kernel cannot be used with Swin."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     def test_backbone(self):
@@ -304,6 +333,7 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
+            # Attentions are captured per stage (one per SwinStage), not per transformer block.
             expected_num_attentions = len(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
 
@@ -371,10 +401,12 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
+        if model_class.__name__ != "SwinBackbone":
+            # Sequence format (B, N, C): last two dims are [num_patches, embed_dim]
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [num_patches, self.model_tester.embed_dim],
+            )
 
         if model_class.__name__ != "SwinBackbone":
             reshaped_hidden_states = outputs.reshaped_hidden_states

@@ -8,13 +8,11 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-
-*This model was released on 2025-09-09 and added to Hugging Face Transformers on 2026-02-01.*
+*This model was published in HF papers on 2025-03-24 and contributed to Hugging Face Transformers on 2026-02-02.*
 
 # EoMT-DINOv3
 
 <div class="flex flex-wrap space-x-1">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
   <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
@@ -52,25 +50,26 @@ Below is a minimal example showing how to run panoptic segmentation with a DINOv
 image processor can be reused for semantic or instance segmentation simply by swapping the checkpoint.
 
 ```python
->>> import requests
->>> import torch
->>> from PIL import Image
+import requests
+import torch
+from PIL import Image
 
->>> from transformers import AutoImageProcessor, AutoModelForUniversalSegmentation
+from transformers import AutoImageProcessor, AutoModelForUniversalSegmentation
 
->>> model_id = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
->>> processor = AutoImageProcessor.from_pretrained(model_id)
->>> model = AutoModelForUniversalSegmentation.from_pretrained(model_id).to("cuda" if torch.cuda.is_available() else "cpu")
 
->>> image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+model_id = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
+processor = AutoImageProcessor.from_pretrained(model_id)
+model = AutoModelForUniversalSegmentation.from_pretrained(model_id).to("cuda" if torch.cuda.is_available() else "cpu", device_map="auto")
 
->>> inputs = processor(images=image, return_tensors="pt").to(model.device)
+image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
->>> with torch.inference_mode():
-...     outputs = model(**inputs)
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
->>> segmentation = processor.post_process_panoptic_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
->>> list(segmentation.keys())
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+segmentation = processor.post_process_panoptic_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
+list(segmentation.keys())
 ['segmentation', 'segments_info']
 ```
 

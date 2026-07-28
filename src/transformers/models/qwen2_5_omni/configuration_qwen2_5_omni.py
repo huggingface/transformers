@@ -99,7 +99,12 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -645,4 +650,14 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config(*args, **kwargs)
 
 
-__all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]
+__all__ = [
+    "Qwen2_5OmniConfig",
+    "Qwen2_5OmniThinkerConfig",
+    "Qwen2_5OmniTalkerConfig",
+    "Qwen2_5OmniToken2WavConfig",
+    "Qwen2_5OmniAudioEncoderConfig",
+    "Qwen2_5OmniBigVGANConfig",
+    "Qwen2_5OmniDiTConfig",
+    "Qwen2_5OmniTextConfig",
+    "Qwen2_5OmniVisionEncoderConfig",
+]

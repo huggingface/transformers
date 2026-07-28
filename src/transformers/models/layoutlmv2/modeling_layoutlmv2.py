@@ -734,7 +734,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
 
-        visual_attention_mask = torch.ones(visual_shape, device=device)
+        visual_attention_mask = torch.ones(visual_shape, dtype=attention_mask.dtype, device=device)
         final_attention_mask = torch.cat([attention_mask, visual_attention_mask], dim=1)
 
         if token_type_ids is None:

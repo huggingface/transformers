@@ -15,7 +15,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-01 and added to Hugging Face Transformers on 2025-12-01.*
+*This model was contributed to Hugging Face Transformers on 2025-12-01.*
 
 # Ministral3
 
@@ -39,8 +39,9 @@ Key features:
 
 ## Usage examples
 
-```py
+```python
 import torch
+
 from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
 
 
@@ -66,7 +67,7 @@ messages = [
     },
 ]
 
-tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
+tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(model.device)
 
 tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
 tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")

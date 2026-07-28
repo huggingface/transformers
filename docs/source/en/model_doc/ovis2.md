@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2025-08-18.*
+*This model was published in HF papers on 2024-05-31 and contributed to Hugging Face Transformers on 2025-08-18.*
 
 # Ovis2
 
@@ -33,21 +33,16 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 
 ```python
 
-from PIL import Image
 import requests
 import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
-from accelerate import Accelerator
+from PIL import Image
 
-device = Accelerator().device
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "thisisiron/Ovis2-2B-hf",
-    dtype=torch.bfloat16,
-).eval().to(device)
+).eval().to(model.device, device_map="auto")
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 
 messages = [

@@ -15,11 +15,10 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-16.*
+*This model was contributed to Hugging Face Transformers on 2025-09-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -37,14 +36,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/TBA",
-    dtype=torch.bfloat16,
     device=0,
 )
 
@@ -55,9 +53,9 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/TBA"
@@ -65,7 +63,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/TBA",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -82,11 +79,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
 
-```py
-
+```python
 #pip install torchao
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 torchao_config = TorchAoConfig(
     "int4_weight_only",
@@ -100,7 +96,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/TBA",
     quantization_config=torchao_config,
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -108,7 +103,6 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 
 output = model.generate(**input_ids, max_length=50, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
 
 ## Notes
@@ -118,7 +112,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```py
     from transformers import AutoModelForCausalLM
 
-    model = AutoModelForCausalLM.from_pretrained("allenai/TBA", revision="stage1-step140000-tokens294B")
+    model = AutoModelForCausalLM.from_pretrained("allenai/TBA", revision="stage1-step140000-tokens294B", device_map="auto")
     ```
 
 ## Olmo3Config
@@ -128,6 +122,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Olmo3ForCausalLM
 
 [[autodoc]] Olmo3ForCausalLM
+
+## Olmo3ForSequenceClassification
+
+[[autodoc]] Olmo3ForSequenceClassification
+    - forward
 
 ## Olmo3Model
 

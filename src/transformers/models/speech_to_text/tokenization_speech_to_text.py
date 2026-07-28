@@ -163,8 +163,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return vocab
 
     @property
-    def tgt_lang(self) -> str:
-        return self._tgt_lang
+    def tgt_lang(self) -> str | None:
+        return getattr(self, "_tgt_lang", None)
 
     @tgt_lang.setter
     def tgt_lang(self, new_tgt_lang) -> None:
@@ -188,11 +188,12 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 decoded = self.sp_model.decode(current_sub_tokens)
                 out_string += (decoded.upper() if self.do_upper_case else decoded) + token + " "
                 current_sub_tokens = []

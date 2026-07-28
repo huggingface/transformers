@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-12-11 and added to Hugging Face Transformers on 2023-12-11.*
+*This model was published in HF papers on 2024-01-08 and contributed to Hugging Face Transformers on 2023-12-11.*
 
 # Mixtral
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -63,38 +62,40 @@ The Mistral team has released 2 checkpoints:
 The base model can be used as follows:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
->>> prompt = "My favourite condiment is"
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+prompt = "My favourite condiment is"
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "My favourite condiment is to ..."
 ```
 
 The instruction tuned model can be used as follows:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
 
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
 
->>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "Mayonnaise can be made as follows: (...)"
 ```
 
@@ -115,18 +116,18 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 To load and run a model using Flash Attention-2, refer to the snippet below:
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
->>> prompt = "My favourite condiment is"
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", attn_implementation="flash_attention_2", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+prompt = "My favourite condiment is"
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```
 
@@ -147,36 +148,36 @@ The Flash Attention-2 model uses also a more memory efficient cache slicing mech
 
 ## Shrinking down Mixtral using quantization
 
-As the Mixtral model has 45 billion parameters, that would require about 90GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization). If the model is quantized to 4 bits (or half a byte per parameter), a single A100 with 40GB of RAM is enough to fit the entire model, as in that case only about 27 GB of RAM is required.
+As the Mixtral model has 45 billion parameters, that would require about 90GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization/overview). If the model is quantized to 4 bits (or half a byte per parameter), a single A100 with 40GB of RAM is enough to fit the entire model, as in that case only about 27 GB of RAM is required.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization) for alternative quantization methods):
+Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization/overview) for alternative quantization methods):
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
->>> # specify how to quantize the model
->>> quantization_config = BitsAndBytesConfig(
-...         load_in_4bit=True,
-...         bnb_4bit_quant_type="nf4",
-...         bnb_4bit_compute_dtype="torch.float16",
-... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1", quantization_config=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
+# specify how to quantize the model
+quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype="torch.float16",
+)
 
->>> prompt = "My favourite condiment is"
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1", quantization_config=True, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
 
->>> messages = [
-...     {"role": "user", "content": "What is your favourite condiment?"},
-...     {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
-...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
-... ]
+prompt = "My favourite condiment is"
 
->>> model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+messages = [
+    {"role": "user", "content": "What is your favourite condiment?"},
+    {"role": "assistant", "content": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"},
+    {"role": "user", "content": "Do you have mayonnaise recipes?"}
+]
 
->>> generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(model_inputs, max_new_tokens=100, do_sample=True)
+tokenizer.batch_decode(generated_ids)[0]
 "The expected output"
 ```
 

@@ -25,21 +25,20 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
-from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
+from ..swin.modeling_swin import SwinDropPath
 
 
 if is_torch_available():
@@ -163,6 +162,8 @@ class Florence2ProcessorKwargs(LlavaProcessorKwargs):
 
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
+    valid_processor_kwargs = Florence2ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -252,41 +253,28 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[Florence2ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        if images is None and text is None:
-            raise ValueError("You have to specify at least one of `images` or `text`.")
-
-        output_kwargs = self._merge_kwargs(
-            Florence2ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-
-        if text is None:
+        if text is None and images is not None:
             logger.warning_once("You are using Florence-2 without a text prefix.")
             text = [""] * (1 if not isinstance(images, list) else len(images))
-        elif isinstance(text, str):
-            text = [text]
+
+        if text is not None:
+            text = self._construct_prompts(text)
+
+        if images is not None and text is not None:
+            text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
+
+        return images, text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
 
         if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
             raise ValueError("`text` must be a string or list of strings.")
@@ -294,54 +282,8 @@ class Florence2Processor(ProcessorMixin):
         if isinstance(images, list) and len(images) != len(text):
             raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
-        prompt_strings = self._construct_prompts(text)
-
-        # Add image tokens and special tokens if images are provided
-        if image_inputs.get("pixel_values") is not None:
-            # Replace the image token with the expanded image token sequence
-            expanded_image_prompts = []
-            for sample in prompt_strings:
-                sample = (
-                    self.image_token * self.num_image_tokens
-                    + self.tokenizer.bos_token
-                    + sample
-                    + self.tokenizer.eos_token
-                )
-                expanded_image_prompts.append(sample)
-            prompt_strings = expanded_image_prompts
-
-        # Construct and tokenize prompts
-        output_kwargs["text_kwargs"].pop("add_special_tokens", None)
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(
-            prompt_strings, **output_kwargs["text_kwargs"], add_special_tokens=False, return_tensors=None
-        )
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**image_inputs, **text_inputs}, tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to BartTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.num_image_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -879,10 +821,6 @@ class Florence2PostProcessor:
         return parsed_dict
 
 
-class Florence2VisionDropPath(BeitDropPath):
-    pass
-
-
 class Florence2VisionLearnedAbsolutePositionEmbedding2D(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -991,6 +929,10 @@ class Florence2VisionConvEmbed(nn.Module):
         return hidden_states
 
 
+class Florence2DropPath(SwinDropPath):
+    pass
+
+
 class Florence2VisionChannelAttention(nn.Module):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
@@ -1051,7 +993,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             dim_in,
@@ -1062,7 +1004,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -1187,7 +1129,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.window_attn = Florence2VisionWindowAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             config.embed_dim[stage_idx],
@@ -1198,7 +1140,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -1361,13 +1303,13 @@ class Florence2MultiModalProjector(nn.Module):
         return image_features
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Florence-2 base model's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
@@ -1378,13 +1320,13 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Florence-2 model's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1611,7 +1553,11 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=labels,
+                **kwargs,
             )
 
         return Florence2Seq2SeqLMOutput(

@@ -8,7 +8,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was released on 2025-05-21 and added to Hugging Face Transformers on 2025-05-21.*
+*This model was contributed to Hugging Face Transformers on 2025-05-21.*
 
 # FalconH1
 
@@ -48,11 +48,12 @@ Tips:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
+
+model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
 
 message = ["Mamba is a snake with following properties  "]
-inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
+inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False).to(model.device)
 response = model.generate(**inputs, max_new_tokens=64)
 print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```

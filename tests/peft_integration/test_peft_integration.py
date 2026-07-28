@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import importlib.metadata
 import json
 import os
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
-from packaging import version
 from torch import nn
 
 from transformers import (
@@ -41,6 +40,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_peft,
+    require_peft_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -61,8 +61,6 @@ class PeftTesterMixin:
     transformers_test_model_classes = (AutoModelForCausalLM, OPTForCausalLM)
 
 
-# TODO: run it with CI after PEFT release.
-@slow
 class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     """
     A testing suite that makes sure that the PeftModel class is correctly integrated into the transformers library.
@@ -212,6 +210,138 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model.save_pretrained(tmpdirname)
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
+
+    @require_peft_greater_or_equal("0.20.0")
+    def test_peft_save_reload_preserves_adapter_weights(self):
+        """
+        Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
+        weights must match the pre-save values. Covers both the encoder and decoder paths.
+        """
+        from peft import LoraConfig
+
+        cases = [
+            (AutoModel, "hf-internal-testing/tiny-random-BertModel"),
+            (AutoModelForCausalLM, "hf-internal-testing/tiny-random-OPTForCausalLM"),
+        ]
+        sentinel_a, sentinel_b = 0.0234, 0.0567
+
+        for auto_class, model_id in cases:
+            with self.subTest(model=model_id):
+                model = auto_class.from_pretrained(model_id).to(torch_device)
+                model.add_adapter(LoraConfig(init_lora_weights=False, r=8))
+
+                with torch.no_grad():
+                    for name, p in model.named_parameters():
+                        if "lora_A" in name:
+                            p.fill_(sentinel_a)
+                        elif "lora_B" in name:
+                            p.fill_(sentinel_b)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    reloaded = auto_class.from_pretrained(tmpdirname).to(torch_device)
+
+                lora_params = {
+                    name: p for name, p in reloaded.named_parameters() if "lora_A" in name or "lora_B" in name
+                }
+                self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
+                for name, p in lora_params.items():
+                    expected = sentinel_a if "lora_A" in name else sentinel_b
+                    self.assertTrue(
+                        torch.allclose(p, torch.full_like(p, expected)),
+                        f"adapter weight {name} was not restored from the checkpoint "
+                        f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
+                    )
+
+    def test_peft_load_adapter_applies_user_key_mapping(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/pull/46766: a user ``key_mapping``
+        passed to ``from_pretrained`` must reach the PEFT adapter weights, not just the base model. The fixture
+        mirrors ``vidore/colpali`` (old ``language_model.model.layers`` layout).
+        """
+        from transformers import PaliGemmaModel
+
+        model_id = "hf-internal-testing/tiny-random-paligemma-lora-key-mapping"
+        sentinel_a, sentinel_b = 0.0234, 0.0567
+
+        # Use a tmp_cache to avoid the potentially read-only default CI cache dir
+        with tempfile.TemporaryDirectory() as tmp_cache:
+            model = PaliGemmaModel.from_pretrained(
+                model_id,
+                key_mapping={r"language_model\.model\.": "language_model."},
+                cache_dir=tmp_cache,
+            ).to(torch_device)
+
+        lora_params = {n: p for n, p in model.named_parameters() if "lora_A" in n or "lora_B" in n}
+        self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
+        for name, p in lora_params.items():
+            expected = sentinel_a if "lora_A" in name else sentinel_b
+            self.assertTrue(
+                torch.allclose(p, torch.full_like(p, expected)),
+                f"adapter weight {name} was not restored via key_mapping "
+                f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
+            )
+
+    def test_peft_load_adapter_without_load_config_recomputes_conversions(self):
+        """
+        ``load_adapter`` is public API and is commonly called without a ``load_config`` (so without a
+        precomputed ``weight_mapping``). The conversions must then be recomputed from the model, otherwise the
+        PEFT key renamings are dropped and the adapter weights silently fail to load.
+        """
+        from peft import LoraConfig
+
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        sentinel_a, sentinel_b = 0.0234, 0.0567
+
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        model.add_adapter(LoraConfig(init_lora_weights=False, r=8, target_modules=["q_proj", "v_proj"]))
+        with torch.no_grad():
+            for name, p in model.named_parameters():
+                if "lora_A" in name:
+                    p.fill_(sentinel_a)
+                elif "lora_B" in name:
+                    p.fill_(sentinel_b)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            reloaded = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+            reloaded.load_adapter(tmpdirname)
+
+        lora_params = {n: p for n, p in reloaded.named_parameters() if "lora_A" in n or "lora_B" in n}
+        self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
+        for name, p in lora_params.items():
+            expected = sentinel_a if "lora_A" in name else sentinel_b
+            self.assertTrue(
+                torch.allclose(p, torch.full_like(p, expected)),
+                f"adapter weight {name} was not restored by `load_adapter` "
+                f"(expected uniform {expected}, got first values {p.flatten()[:4].tolist()})",
+            )
+
+    def test_peft_load_adapter_non_moe_conversion_mapped_model(self):
+        """
+        Regression test for a `KeyError` in `_convert_peft_config_moe` when the base model's `model_type`
+        appears in `_MODEL_TO_CONVERSION_PATTERN` (used for legacy checkpoint key renaming) but not in
+        `_MOE_TARGET_MODULE_MAPPING` (which only has MoE architectures). Affected types include
+        `qwen2_5_vl`, `paligemma`, `gemma3`, `internvl`, `aya_vision`, `got_ocr2`, and `rt_detr_v2`.
+        """
+        from peft import LoraConfig
+
+        model_id = "trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration"
+        model = AutoModel.from_pretrained(model_id).to(torch_device)
+        model.add_adapter(
+            LoraConfig(
+                r=4,
+                lora_alpha=4,
+                target_modules=["q_proj", "v_proj"],
+                task_type="FEATURE_EXTRACTION",
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            reloaded = AutoModel.from_pretrained(tmpdirname).to(torch_device)
+
+        self.assertTrue(self._check_lora_correctly_converted(reloaded))
 
     def test_peft_add_adapter_modules_to_save(self):
         """
@@ -627,6 +757,58 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # after loading, no meta device should be remaining
                 self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
 
+    def test_peft_load_adapter_warmup_uses_adapter_expected_keys(self):
+        """
+        Check that adapter loading only warms up memory for adapter parameters by capturing the device map passed to
+        `caching_allocator_warmup`.
+
+        Note: this test depends on `_load_pretrained_model` calling `caching_allocator_warmup`; if that internal
+        contract changes, update the test to keep checking the keys used for warmup sizing.
+        """
+        from peft import LoraConfig
+
+        import transformers.modeling_utils as modeling_utils
+
+        adapter_name = "warmup_test_adapter"
+        adapter_key_markers = (adapter_name, "lora")
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig()
+                template_model = transformers_class.from_pretrained(model_id)
+                template_model.add_adapter(LoraConfig(), adapter_name=adapter_name)
+                dummy_state_dict = {
+                    name: torch.zeros_like(param)
+                    for name, param in template_model.named_parameters()
+                    if any(marker in name for marker in adapter_key_markers)
+                }
+                del template_model
+                self.assertTrue(dummy_state_dict)
+
+                captured_device_maps = []
+
+                def capture_warmup(model, expanded_device_map, hf_quantizer):
+                    captured_device_maps.append(dict(expanded_device_map))
+
+                with patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_warmup):
+                    with CaptureLogger(logging.get_logger("transformers.integrations.peft")):
+                        model.load_adapter(
+                            adapter_state_dict=dummy_state_dict,
+                            adapter_name=adapter_name,
+                            peft_config=peft_config,
+                        )
+
+                self.assertTrue(captured_device_maps)
+                warmed_keys = set().union(*(device_map.keys() for device_map in captured_device_maps))
+                self.assertTrue(warmed_keys)
+
+                unexpected_base_keys = [
+                    key for key in warmed_keys if not any(marker in key for marker in adapter_key_markers)
+                ]
+                self.assertEqual(unexpected_base_keys, [])
+
     def test_peft_from_pretrained_hub_kwargs(self):
         """
         Tests different combinations of PEFT model + from_pretrained + hub kwargs
@@ -634,7 +816,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
 
         # This should not work
-        with self.assertRaises(OSError):
+        # Transformers cannot identify the model and raises a ValueError
+        with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
@@ -932,11 +1115,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
+    @require_peft_greater_or_equal("0.20.0")
     def test_mixtral_lora_conversion(self):
-        if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
-            self.skipTest("For this test to pass, PEFT 0.19 is required.")
-
-        inputs = torch.arange(10).view(1, -1).to(0)
+        inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
         adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
 

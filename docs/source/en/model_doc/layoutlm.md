@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-31 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-12-31 and contributed to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # LayoutLM
 
@@ -35,13 +30,15 @@ The example below demonstrates question answering with the [`AutoModel`] class.
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 from datasets import load_dataset
+
 from transformers import AutoTokenizer, LayoutLMForQuestionAnswering
 
+
 tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", dtype=torch.float16)
+model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", device_map="auto")
 
 dataset = load_dataset("nielsr/funsd", split="train")
 example = dataset[0]
@@ -98,6 +95,7 @@ def normalize_bbox(bbox, width, height):
 
 ```python
 from PIL import Image
+
 
 # Document can be a png, jpg, etc. PDFs must be converted to images.
 image = Image.open(name_of_your_document).convert("RGB")

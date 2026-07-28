@@ -5,6 +5,7 @@ from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
 from ... import initialization as init
 from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel, ViTPreTrainedModel
@@ -64,7 +65,7 @@ class IJepaEmbeddings(ViTEmbeddings):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -77,6 +78,11 @@ class IJepaEmbeddings(ViTEmbeddings):
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
             embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
@@ -87,15 +93,13 @@ class IJepaEmbeddings(ViTEmbeddings):
 @auto_docstring
 class IJepaPreTrainedModel(ViTPreTrainedModel):
     @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
+    def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, IJepaEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:

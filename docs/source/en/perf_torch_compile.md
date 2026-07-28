@@ -69,3 +69,7 @@ Select **Subset** in the table below to switch between different GPUs, as well a
   width="100%"
   height="560px"
 ></iframe>
+
+## Next steps
+
+- See the [torch.compile for training](./torch_compile) guide to learn how to use torch.compile for training.

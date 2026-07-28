@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-02-29 and added to Hugging Face Transformers on 2024-02-28.*
+*This model was published in HF papers on 2024-02-29 and contributed to Hugging Face Transformers on 2024-02-28.*
 
 # Starcoder2
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -43,17 +42,18 @@ The StarCoder2 models can be found in the [HuggingFace hub](https://huggingface.
 These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hub:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
 
->>> prompt = "def print_hello_world():"
+model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+prompt = "def print_hello_world():"
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
->>> tokenizer.batch_decode(generated_ids)[0]
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
+tokenizer.batch_decode(generated_ids)[0]
 'def print_hello_world():\n    print("Hello World!")\n\ndef print'
 ```
 

@@ -158,7 +158,6 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     test_all_params_have_gradient = False
     has_attentions = True
     _is_composite = True
@@ -211,6 +210,70 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("Prefix tuning doesn't work with GC and the model uses prefix tuning to fuse VLM outputs")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_kernels_mps_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_from_config(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_from_config(self):
         pass
 
     def test_full_run_smoke(self):
@@ -337,6 +400,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.loss.shape, (1, 50, 32))
         self.assertAlmostEqual(outputs.loss.mean().item(), 2.5087, places=3)
 
+        inputs.pop("actions")  # test inference, not training anymore!
         with torch.no_grad():
             sampled = model.sample_actions(**inputs, num_steps=5)
         self.assertEqual(sampled.shape, (1, 50, 32))

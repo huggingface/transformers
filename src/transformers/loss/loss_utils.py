@@ -19,10 +19,14 @@ from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
+from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
+from .loss_rf_detr import RfDetrForSegmentationLoss
+from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_tdt import ParakeetForTDTLoss
 
 
 def fixed_cross_entropy(
@@ -142,7 +146,31 @@ def ForTokenClassification(logits: torch.Tensor, labels, config, **kwargs):
     return fixed_cross_entropy(logits, labels, **kwargs)
 
 
+def ForSemanticSegmentationLoss(
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    ignore_index: int = 255,
+    num_items_in_batch: torch.Tensor | None = None,
+    auxiliary_logits: torch.Tensor | None = None,
+    auxiliary_loss_weight: float = 0.4,
+    **kwargs,
+) -> torch.Tensor:
+    upsampled_logits = nn.functional.interpolate(logits, size=labels.shape[-2:], mode="bilinear", align_corners=False)
+    loss = fixed_cross_entropy(
+        upsampled_logits, labels, num_items_in_batch=num_items_in_batch, ignore_index=ignore_index
+    )
+    if auxiliary_logits is not None:
+        upsampled_auxiliary_logits = nn.functional.interpolate(
+            auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        loss = loss + auxiliary_loss_weight * fixed_cross_entropy(
+            upsampled_auxiliary_logits, labels, num_items_in_batch=num_items_in_batch, ignore_index=ignore_index
+        )
+    return loss
+
+
 LOSS_MAPPING = {
+    "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCausalLM": ForCausalLMLoss,
     "ForMaskedLM": ForMaskedLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
@@ -163,6 +191,11 @@ LOSS_MAPPING = {
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
+    "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "ParakeetForRNNT": ParakeetForRNNTLoss,
+    "ParakeetForTDT": ParakeetForTDTLoss,
+    "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
+    "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
 }

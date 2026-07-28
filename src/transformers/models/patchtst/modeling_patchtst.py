@@ -116,18 +116,17 @@ class PatchTSTAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -145,7 +144,7 @@ class PatchTSTAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, None
@@ -562,6 +561,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
         """
         Initialize weights
         """
+        super()._init_weights(module)
         if isinstance(module, PatchTSTPositionalEncoding):
             # get the number of patches
             num_patches = (
@@ -581,17 +581,6 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
                         init.copy_(module.position_enc, position_enc)
             else:
                 init.copy_(module.position_enc, position_enc)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PatchTSTEncoder)):
@@ -753,12 +742,12 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_state, hidden_states=encoder_states, attentions=all_attentions)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states.
     """
 )
+@dataclass
 class PatchTSTModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
@@ -786,12 +775,12 @@ class PatchTSTModelOutput(ModelOutput):
     patch_input: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSTForPretraining`].
     """
 )
+@dataclass
 class PatchTSTForPretrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -806,12 +795,12 @@ class PatchTSTForPretrainingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSTForRegression`].
     """
 )
+@dataclass
 class PatchTSTForRegressionOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -826,12 +815,12 @@ class PatchTSTForRegressionOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSTForPrediction`].
     """
 )
+@dataclass
 class PatchTSTForPredictionOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -858,12 +847,12 @@ class PatchTSTForPredictionOutput(ModelOutput):
     scale: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`PatchTSTForClassification`].
     """
 )
+@dataclass
 class PatchTSTForClassificationOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -879,13 +868,13 @@ class PatchTSTForClassificationOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
     """
 )
+@dataclass
 class SamplePatchTSTOutput(ModelOutput):
     r"""
     sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, num_targets)`):

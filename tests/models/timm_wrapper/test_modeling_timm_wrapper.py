@@ -76,6 +76,11 @@ class TimmWrapperModelTester:
     def get_config(self):
         return TimmWrapperConfig(architecture=self.architecture, model_args=self.model_args)
 
+    def create_and_check_model_fp16_forward(self, config, pixel_values):
+        model = TimmWrapperModel(config=config).to(torch_device).half().eval()
+        output = model(pixel_values)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
@@ -135,6 +140,10 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             expected_shapes = [[2, 2], [1, 1]]
             resulted_shapes = [list(h.shape[2:]) for h in outputs.hidden_states]
             self.assertListEqual(expected_shapes, resulted_shapes)
+
+    def test_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
     def test_inputs_embeds(self):

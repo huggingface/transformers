@@ -39,6 +39,7 @@ from tests_fetcher import (  # noqa: E402
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
+    get_conftest_tests,
     get_diff,
     get_module_dependencies,
     get_repo_utils_tests,
@@ -47,6 +48,7 @@ from tests_fetcher import (  # noqa: E402
     init_test_examples_dependencies,
     parse_commit_message,
     print_tree_deps_of,
+    should_run_conftest_tests,
     should_run_repo_utils_tests,
 )
 
@@ -258,19 +260,50 @@ class TestFetcherTester(unittest.TestCase):
 
     def test_get_repo_utils_tests_on_full_repo(self):
         repo_utils_tests = get_repo_utils_tests()
-        assert "tests/repo_utils/test_mlinter.py" in repo_utils_tests
         assert "tests/repo_utils/test_tests_fetcher.py" in repo_utils_tests
 
     def test_should_run_repo_utils_tests(self):
-        assert should_run_repo_utils_tests(["utils/mlinter/mlinter.py"])
+        assert should_run_repo_utils_tests(["utils/check_modeling_structure.py"])
         assert not should_run_repo_utils_tests(["src/transformers/modeling_utils.py"])
+
+    def test_get_conftest_tests_on_full_repo(self):
+        conftest_tests = get_conftest_tests()
+        assert "tests/conftest_tests/test_cache_fallback.py" in conftest_tests
+
+    def test_should_run_conftest_tests(self):
+        # Triggered by the repo-root conftest.py as well as any nested conftest.py.
+        assert should_run_conftest_tests(["conftest.py"])
+        assert should_run_conftest_tests(["tests/models/bert/conftest.py"])
+        # But not by a change to conftest tooling that is not a conftest.py file.
+        assert not should_run_conftest_tests(["utils/check_modeling_structure.py"])
+        assert not should_run_conftest_tests(["src/transformers/modeling_utils.py"])
+
+    def test_create_test_list_from_filter_routes_conftest_tests(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(
+                [
+                    "tests/conftest_tests/test_cache_fallback.py",
+                    "tests/trainer/test_trainer.py",
+                ],
+                out_path=tmp_folder,
+            )
+
+            with open(Path(tmp_folder) / "tests_repo_utils_test_list.txt", encoding="utf-8") as f:
+                repo_utils_tests = f.read().splitlines()
+
+            # Conftest tests ride along in the repo_utils job and must not leak into non_model.
+            assert repo_utils_tests == ["tests/conftest_tests/test_cache_fallback.py"]
+            assert not (Path(tmp_folder) / "tests_conftest_test_list.txt").exists()
+
+            with open(Path(tmp_folder) / "tests_non_model_test_list.txt", encoding="utf-8") as f:
+                non_model_tests = f.read().splitlines()
+            assert "tests/conftest_tests/test_cache_fallback.py" not in non_model_tests
 
     def test_create_test_list_from_filter_routes_repo_utils_tests(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             create_test_list_from_filter(
                 [
                     "tests/models/bert/test_modeling_bert.py",
-                    "tests/repo_utils/test_mlinter.py",
                     "tests/repo_utils/test_tests_fetcher.py",
                 ],
                 out_path=tmp_folder,
@@ -280,15 +313,42 @@ class TestFetcherTester(unittest.TestCase):
                 repo_utils_tests = f.read().splitlines()
 
             assert repo_utils_tests == [
-                "tests/repo_utils/test_mlinter.py",
                 "tests/repo_utils/test_tests_fetcher.py",
             ]
+
+    def test_create_test_list_from_filter_does_not_create_hub_job(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(["tests/models/bert/test_modeling_bert.py"], out_path=tmp_folder)
+
+            assert (Path(tmp_folder) / "tests_torch_test_list.txt").exists()
+            assert not (Path(tmp_folder) / "tests_hub_test_list.txt").exists()
+
+    def test_create_test_list_from_filter_routes_peft_integration_tests(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(
+                [
+                    "tests/peft_integration/test_peft_integration.py",
+                    "tests/trainer/test_trainer.py",
+                ],
+                out_path=tmp_folder,
+            )
+
+            with open(Path(tmp_folder) / "tests_peft_integration_test_list.txt", encoding="utf-8") as f:
+                peft_tests = f.read().splitlines()
+            with open(Path(tmp_folder) / "tests_non_model_test_list.txt", encoding="utf-8") as f:
+                non_model_tests = f.read().splitlines()
+
+            assert peft_tests == ["tests/peft_integration/test_peft_integration.py"]
+            # PEFT tests used to be included in non_model_tests
+            assert "tests/peft_integration/test_peft_integration.py" not in non_model_tests
 
     def test_infer_tests_to_run_adds_repo_utils_for_utils_changes(self):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))
             stack.enter_context(
-                patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/mlinter/mlinter.py"])
+                patch.object(
+                    tests_fetcher, "get_modified_python_files", return_value=["utils/check_modeling_structure.py"]
+                )
             )
             stack.enter_context(patch.object(tests_fetcher, "create_reverse_dependency_map", return_value={}))
             stack.enter_context(
@@ -299,7 +359,7 @@ class TestFetcherTester(unittest.TestCase):
             infer_tests_to_run("unused.txt", diff_with_last_commit=True)
 
         test_files_to_run = mock_create_test_list.call_args.args[0]
-        assert "tests/repo_utils/test_mlinter.py" in test_files_to_run
+        assert "tests/repo_utils/test_tests_fetcher.py" in test_files_to_run
 
     def test_diff_is_docstring_only(self):
         with tempfile.TemporaryDirectory() as tmp_folder:

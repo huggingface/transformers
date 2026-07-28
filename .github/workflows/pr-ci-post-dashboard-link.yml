@@ -1,0 +1,32 @@
+name: Post CI Dashboard Link
+
+on:
+  workflow_run:
+    workflows: ["PR CI"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  post-link:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download PR CI recap script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRIPT_REF: ${{ github.workflow_sha }}
+        run: |
+          gh api \
+            -H "Accept: application/vnd.github.raw" \
+            "/repos/${GITHUB_REPOSITORY}/contents/utils/update_pr_ci_dashboard_recap.py?ref=${SCRIPT_REF}" \
+            > update_pr_ci_dashboard_recap.py
+
+      - name: Update PR CI recap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 update_pr_ci_dashboard_recap.py

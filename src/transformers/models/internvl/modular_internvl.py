@@ -127,12 +127,12 @@ class InternVLVisionAttention(JanusVisionAttention):
         return output, attn_weights
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`InternVLVisionModel`].
     """
 )
+@dataclass
 class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):

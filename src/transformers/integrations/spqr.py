@@ -49,7 +49,7 @@ def replace_with_spqr_linear(model, modules_to_not_convert: list[str] | None = N
             if isinstance(module, nn.Linear):
                 shapes = quantization_config.shapes
 
-                new_module = QuantizedLinear.create_placehodler(
+                new_module = QuantizedLinear.create_placeholder(
                     rows=module.out_features,
                     cols=module.in_features,
                     bits=quantization_config.bits,

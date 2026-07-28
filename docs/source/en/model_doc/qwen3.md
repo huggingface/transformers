@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-29 and added to Hugging Face Transformers on 2025-03-31.*
+*This model was published in HF papers on 2025-05-14 and contributed to Hugging Face Transformers on 2025-03-31.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,14 +31,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen3-0.6B",
-    dtype=torch.bfloat16,
 )
 pipe("The key to effective reasoning is")
 ```
@@ -46,14 +45,13 @@ pipe("The key to effective reasoning is")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The key to effective reasoning is", return_tensors="pt").to(model.device)

@@ -29,7 +29,6 @@ from torch import Tensor
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -49,13 +48,22 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
     """
 )
+@dataclass
 class MoonshineStreamingEncoderModelOutput(BaseModelOutput):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
     attention_mask: torch.Tensor | None = None
 
 
@@ -211,9 +219,9 @@ class MoonshineStreamingEncoderAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -569,7 +577,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class MoonshineStreamingAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1068,6 +1075,10 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
 
+        # `shift_labels` is consumed here (the decoder inputs are already right-shifted), so pop it before the
+        # inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
@@ -1090,7 +1101,17 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            # `decoder_input_ids` are right-shifted from `labels`, so the logits are already aligned with the
+            # targets: pass them as `shift_labels` (with `labels=None`) so `ForCausalLMLoss` does not shift a
+            # second time, and route through `self.loss_function` so the grad-accumulation
+            # `num_items_in_batch` normalization is honored.
+            loss = self.loss_function(
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

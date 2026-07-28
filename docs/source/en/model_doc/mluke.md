@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-15 and added to Hugging Face Transformers on 2021-12-07.*
+*This model was published in HF papers on 2021-10-15 and contributed to Hugging Face Transformers on 2021-12-07.*
 
 # mLUKE
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -51,13 +48,15 @@ One can directly plug in the weights of mLUKE into a LUKE model, like so:
 ```python
 from transformers import LukeModel
 
-model = LukeModel.from_pretrained("studio-ousia/mluke-base")
+
+model = LukeModel.from_pretrained("studio-ousia/mluke-base", device_map="auto")
 ```
 
 Note that mLUKE has its own tokenizer, [`MLukeTokenizer`]. You can initialize it as follows:
 
 ```python
 from transformers import MLukeTokenizer
+
 
 tokenizer = MLukeTokenizer.from_pretrained("studio-ousia/mluke-base")
 ```

@@ -135,7 +135,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     def get_video_processor_dict(
         cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Overriden to additionally load the font for drawing on frames."""
+        """Overridden to additionally load the font for drawing on frames."""
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -273,7 +273,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         return video_processor_dict, kwargs
 
     def to_dict(self) -> dict[str, Any]:
-        """Overriden to strip the prefix of the full path for the font, e.g. `tmp/folder/font.tff` -> `font.tff`"""
+        """Overridden to strip the prefix of the full path for the font, e.g. `tmp/folder/font.tff` -> `font.tff`"""
         output = super().to_dict()
 
         if os.path.isfile(output.get("font")):

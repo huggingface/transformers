@@ -5,7 +5,7 @@ USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git libgl1 g++ tesseract-ocr git-lfs curl
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
-RUN uv pip install --no-cache-dir 'torch<=2.10.0' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir 'torch<=2.11.0' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps timm accelerate
 RUN uv pip install -U --no-cache-dir pytesseract python-Levenshtein opencv-python nltk
 # RUN uv pip install --no-cache-dir natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels
@@ -13,6 +13,11 @@ RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transform
 # RUN git clone https://github.com/facebookresearch/detectron2.git
 # RUN python3 -m pip install --no-cache-dir -e detectron2
 RUN uv pip install 'git+https://github.com/facebookresearch/detectron2.git@92ae9f0b92aba5867824b4f12aa06a22a60a45d3' --no-build-isolation
+
+# Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded` (#40201)
+RUN uv pip install --no-cache-dir git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+RUN uv pip install --no-cache-dir pytest-random-order
+RUN uv pip install --no-cache-dir 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
 
 # fetch test data and hub objects within CircleCI docker images to reduce even more connections
 # we don't need a full clone of `transformers` to run `fetch_hub_objects_for_ci.py`

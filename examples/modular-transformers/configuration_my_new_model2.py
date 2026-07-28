@@ -13,7 +13,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="meta-my_new_model2/MyNewModel2-2-7b-hf")
-@strict(accept_kwargs=True)
+@strict
 class MyNewModel2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma

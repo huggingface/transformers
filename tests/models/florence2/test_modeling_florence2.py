@@ -26,7 +26,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -306,6 +308,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATED_TEXT = "The image shows a stop sign sitting on the side of a street in Chinatown, New York City. The street is lined with buildings, trees, and statues, and there are people walking on the footpath. The sky is visible in the background."  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_base_model_batching_inference_eager(self):
         model_name = "florence-community/Florence-2-base"
         processor = AutoProcessor.from_pretrained(model_name)
@@ -441,6 +444,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_PARSED_ANSWER = {'<OD>': {'bboxes': [[34, 160, 597, 371], [272, 241, 303, 247], [454, 276, 553, 370], [96, 280, 198, 371]], 'labels': ['car', 'door handle', 'wheel', 'wheel']}}  # fmt: skip
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
+    @require_deterministic_for_xpu
     def test_large_model_inference_eager(self):
         model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
@@ -457,14 +461,25 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]],
+                ("xpu", 5): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 19, 766, 6904, 4, 2]],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0]
 
-        EXPECTED_GENERATED_TEXT = "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky."  # fmt: skip
+        EXPECTED_GENERATED_TEXT = Expectations(
+            {
+                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
+                ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_large_model_batching_inference_eager(self):
         model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
@@ -485,38 +500,72 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(device=torch_device)
         predictions = model.generate(**inputs, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [
-            [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50631, 50940, 50269, 50269, 50575, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
-            [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        ]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [
+                    [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50631, 50940, 50269, 50269, 50575, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
+                    [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+                ("xpu", 5): [
+                    [2, 0, 0, 0, 50269, 50269, 51268, 50944, 50269, 50269, 50579, 50940, 51032, 50269, 51268, 50932, 50793, 50813, 51190, 51031, 50432, 50401, 50632, 50691, 51071, 50943, 51159, 51027, 50835, 50946, 50915, 51029, 2],
+                    [2, 0, 5901, 50321, 50603, 51201, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_362><loc_671><loc_0><loc_0><loc_306><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
-            "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_362><loc_671><loc_0><loc_0><loc_306><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
+                    "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("xpu", 5): [
+                    "</s><s><s><s><loc_0><loc_0><loc_999><loc_675><loc_0><loc_0><loc_310><loc_671><loc_763><loc_0><loc_999><loc_663><loc_524><loc_544><loc_921><loc_762><loc_163><loc_132><loc_363><loc_422><loc_802><loc_674><loc_890><loc_758><loc_566><loc_677><loc_646><loc_760></s>",
+                    "</s><s>car<loc_52><loc_334><loc_932><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer_0 = processor.post_process_generation(
             generated_texts[0], task="<REGION_PROPOSAL>", image_size=(images[0].width, images[0].height)
         )
-        EXPECTED_PARSED_ANSWER_0 = {
-            "<REGION_PROPOSAL>": {
-                "bboxes": [
-                    [0, 0, 1299, 591],
-                    [0, 0, 471, 588],
-                    [0, 0, 398, 588],
-                    [992, 0, 1299, 581],
-                    [681, 476, 1197, 667],
-                    [212, 116, 472, 370],
-                    [1043, 590, 1157, 664],
-                    [736, 593, 840, 666],
-                ],
-                "labels": ["", "", "", "", "", "", "", ""],
+        EXPECTED_PARSED_ANSWER_0 = Expectations(
+            {
+                (None, None): {
+                    "<REGION_PROPOSAL>": {
+                        "bboxes": [
+                            [0, 0, 1299, 591],
+                            [0, 0, 471, 588],
+                            [0, 0, 398, 588],
+                            [992, 0, 1299, 581],
+                            [681, 476, 1197, 667],
+                            [212, 116, 472, 370],
+                            [1043, 590, 1157, 664],
+                            [736, 593, 840, 666],
+                        ],
+                        "labels": ["", "", "", "", "", "", "", ""],
+                    }
+                },
+                ("xpu", 5): {
+                    "<REGION_PROPOSAL>": {
+                        "bboxes": [
+                            [0, 0, 1299, 591],
+                            [0, 0, 403, 588],
+                            [992, 0, 1299, 581],
+                            [681, 476, 1197, 667],
+                            [212, 116, 472, 370],
+                            [1043, 590, 1157, 664],
+                            [736, 593, 840, 666],
+                        ],
+                        "labels": ["", "", "", "", "", "", ""],
+                    }
+                },
             }
-        }
+        ).get_expectation()
         self.assertEqual(parsed_answer_0, EXPECTED_PARSED_ANSWER_0)
 
         parsed_answer_1 = processor.post_process_generation(
@@ -525,6 +574,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_PARSED_ANSWER_1 = {'<OPEN_VOCABULARY_DETECTION>': {'bboxes': [[33, 160, 596, 371]], 'bboxes_labels': ['car'], 'polygons': [], 'polygons_labels': []}}  # fmt: skip
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
+    @require_deterministic_for_xpu
     def test_large_model_inference_sdpa(self):
         model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)

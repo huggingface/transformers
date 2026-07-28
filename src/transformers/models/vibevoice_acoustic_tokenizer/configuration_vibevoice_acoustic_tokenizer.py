@@ -17,13 +17,13 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
 @strict
-class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
+class VibeVoiceAcousticTokenizerConfig(PreTrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
         Number of input channels.

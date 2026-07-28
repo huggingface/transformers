@@ -30,16 +30,12 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -114,8 +110,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
     high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -214,17 +210,11 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv2d):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, DeepseekVLHybridLayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
             init.zeros_(module.high_res_vision_alpha)
 
@@ -332,7 +322,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             else:
                 image_attention_mask = input_ids == self.config.image_token_id
 
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -731,49 +721,7 @@ class DeepseekVLHybridProcessorKwargs(DeepseekVLProcessorKwargs):
 
 
 class DeepseekVLHybridProcessor(DeepseekVLProcessor):
-    def __call__(
-        self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        images: ImageInput | None = None,
-        **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-                `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            DeepseekVLHybridProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
-
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        prompt_strings = []
-        one_img_tokens = self.image_token * self.num_image_tokens
-        for prompt in text:
-            prompt = prompt.replace(self.image_token, one_img_tokens)
-            prompt_strings.append(prompt)
-
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
-        # process images if pixel_values are provided
-        if images is not None:
-            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            data["pixel_values"] = inputs["pixel_values"]
-            data["high_res_pixel_values"] = inputs["high_res_pixel_values"]
-
-        return BatchFeature(data=data)
+    pass
 
 
 __all__ = [

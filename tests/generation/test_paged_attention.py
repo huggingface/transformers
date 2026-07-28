@@ -4,7 +4,8 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.testing_utils import Expectations, slow
+from transformers.generation.configuration_utils import ContinuousBatchingConfig
+from transformers.testing_utils import Expectations, require_deterministic_for_xpu, slow, torch_device
 
 
 _TEST_PROMPTS = [
@@ -30,7 +31,25 @@ _EXPECTED_OUTPUTS = Expectations(
             "orange.\n\n## Step 1: Identify the key characteristics of the fruit\nThe fruit is described as being orange in color and round in shape.\n\n##",
             "This riddle is a classic example of a lateral thinking puzzle, which requires the test-taker to think creatively and consider multiple possibilities. The answer",
             "get in touch with us. We will respond to your message as soon as possible.\n\n[Your Name]\n[Your Email]\n[Your Phone Number]",
-            "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train",
+            # The last prompt sits on a numerical boundary: eager/flex produce "does", sdpa/fa2 produce "will".
+            # We use a tuple to accept either variant.
+            (
+                "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train",
+                "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers will the train",
+            ),
+        ],
+        ("xpu", 5): [
+            "a woman standing on the sidewalk, looking at him. He is immediately drawn to her and feels a strong attraction. He walks up to her and strikes",
+            "orange.\n\n## Step 1: Identify the key characteristics of the fruit\nThe fruit is described as being orange in color and round in shape.\n\n##",
+            "This riddle is a classic example of a lateral thinking puzzle, which requires the test-taker to think creatively and consider multiple possibilities. The answer",
+            (
+                "get in touch with us. We will respond to your message as soon as possible.\n\n[Your Name]\n[Your Email]\n[Your Phone Number]",
+                "get started with our services.\nWe will be in touch with you shortly to discuss your project and provide a quote.\n\n**Project Details**\n\n* Project Name",
+            ),
+            (
+                "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train",
+                "track. The train is a long, narrow, cylindrical object with a diameter of 3.5 meters and a length of 100 meters. The",
+            ),
         ],
     }
 )
@@ -41,14 +60,15 @@ class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-3.2-3b-Instruct", dtype="bfloat16", device_map="auto"
+            "meta-llama/Llama-3.2-3b-Instruct", dtype="bfloat16", device_map=torch_device
         ).eval()
 
         cls.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3b-Instruct", padding_side="left")
 
         if cls.tokenizer.pad_token is None:
             cls.tokenizer.pad_token = cls.tokenizer.eos_token
-            cls.model.config.pad_token_id = cls.model.config.eos_token_id
+            eos_id = cls.model.config.eos_token_id
+            cls.model.config.pad_token_id = eos_id[0] if isinstance(eos_id, list) else eos_id
 
         cls.model.use_cache = False
 
@@ -60,18 +80,21 @@ class TestBatchGeneration(unittest.TestCase):
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
+    @require_deterministic_for_xpu
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         self.model.config.attn_implementation = attn_impl
 
+        cb_config = ContinuousBatchingConfig(
+            num_blocks=num_blocks,
+            block_size=block_size,
+            max_batch_tokens=max_batch_tokens,
+        )
         generation_config = GenerationConfig(
             max_new_tokens=30,
             top_k=0,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             use_cache=False,
-            num_blocks=num_blocks,
-            block_size=block_size,
-            max_batch_tokens=max_batch_tokens,
         )
 
         tokenized = self.tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
@@ -80,17 +103,18 @@ class TestBatchGeneration(unittest.TestCase):
         batch_outputs = self.model.generate_batch(
             inputs=batch_inputs,
             generation_config=generation_config,
+            continuous_batching_config=cb_config,
         )
 
         expected_outputs = _EXPECTED_OUTPUTS.get_expectation()
 
         for i, (output, expected_output) in enumerate(zip(batch_outputs.values(), expected_outputs)):
             generated = self.tokenizer.decode(output.generated_tokens, skip_special_tokens=False).strip()
-            expected = expected_output.strip()
-            self.assertEqual(
+            expected_output = (expected_output.strip(),) if isinstance(expected_output, str) else expected_output
+            self.assertIn(
                 generated,
-                expected,
-                msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected: {expected}\nGot: {generated}",
+                [e.strip() for e in expected_output],
+                msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected one of: {expected_output}\nGot: {generated}",
             )
 
     @parameterized.expand(
@@ -105,6 +129,11 @@ class TestBatchGeneration(unittest.TestCase):
         """Test batch generation with do_sampling=True to verify sampling works correctly."""
         self.model.config.attn_implementation = attn_impl
 
+        cb_config = ContinuousBatchingConfig(
+            num_blocks=num_blocks,
+            block_size=block_size,
+            max_batch_tokens=max_batch_tokens,
+        )
         generation_config = GenerationConfig(
             max_new_tokens=30,
             do_sample=True,
@@ -114,9 +143,6 @@ class TestBatchGeneration(unittest.TestCase):
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             use_cache=False,
-            num_blocks=num_blocks,
-            block_size=block_size,
-            max_batch_tokens=max_batch_tokens,
         )
 
         tokenized = self.tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)  # Use fewer prompts for faster test
@@ -126,6 +152,7 @@ class TestBatchGeneration(unittest.TestCase):
         batch_outputs = self.model.generate_batch(
             inputs=batch_inputs,
             generation_config=generation_config,
+            continuous_batching_config=cb_config,
         )
         end = time.time()
         print(

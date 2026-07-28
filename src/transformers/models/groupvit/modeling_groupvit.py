@@ -43,10 +43,10 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->groupvit
-def groupvit_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
+    image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
 
@@ -260,8 +260,8 @@ class GroupViTTokenAssign(nn.Module):
         return new_image_tokens, attention
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class GroupViTModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -680,7 +680,7 @@ class GroupViTAttention(nn.Module):
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GroupViT
 class GroupViTEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GroupViTConfig):
+    def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GroupViTAttention(config)
@@ -693,7 +693,7 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -727,19 +727,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
 
-        init_range = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=init_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, GroupViTTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
@@ -1326,7 +1314,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = groupvit_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return GroupViTModelOutput(
             loss=loss,

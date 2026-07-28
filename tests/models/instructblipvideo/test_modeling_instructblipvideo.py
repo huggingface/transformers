@@ -16,6 +16,7 @@
 import inspect
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -28,11 +29,14 @@ from transformers import (
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
     InstructBlipVideoVisionConfig,
+    PreTrainedModel,
 )
 from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
+    require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -58,6 +62,12 @@ if is_torch_available():
         InstructBlipVideoModel,
         InstructBlipVideoVisionModel,
     )
+
+
+def _prepare_qformer_config_headdim(config, requested_dim):
+    config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+    config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
+    return config
 
 
 class InstructBlipVideoVisionModelTester:
@@ -496,18 +506,16 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             self, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        return _prepare_qformer_config_headdim(config, requested_dim)
+
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip(
-        reason="InstructBlipVideoQFormerModel does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-    )
-    def test_eager_matches_sdpa_generate(self):
-        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -537,6 +545,146 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    @unittest.skip(
+        reason="QFormer is forced to fp32 via _keep_in_fp32_modules, incompatible with SDPA flash-only kernel"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="QFormer's _keep_in_fp32_modules causes mixed precision incompatible with torch.compile dynamic shapes"
+    )
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    def flash_attn_inference_equivalence(self, attn_implementation, padding_side, atol=4e-2, rtol=4e-2):
+        # The shared helper neither builds `qformer_input_ids` (required by InstructBLIP's Q-Former) nor can read
+        # the base `InstructBlipVideoModel`'s nested sub-outputs, so we inject the former and restrict to the
+        # generative class.
+        _, full_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        qformer_input_ids = full_inputs["qformer_input_ids"]
+        base_prepare_for_class = self._prepare_for_class
+
+        def _prepare_for_class(inputs, model_class, return_labels=False):
+            inputs = base_prepare_for_class(inputs, model_class, return_labels=return_labels)
+            inputs.setdefault("qformer_input_ids", qformer_input_ids[: inputs[model_class.main_input_name].shape[0]])
+            return inputs
+
+        with (
+            patch.object(self, "_prepare_for_class", _prepare_for_class),
+            patch.object(self, "all_model_classes", self.all_generative_model_classes),
+        ):
+            super().flash_attn_inference_equivalence(
+                attn_implementation=attn_implementation, padding_side=padding_side, atol=atol, rtol=rtol
+            )
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        # Overridden to additionally pass `qformer_input_ids`/`qformer_attention_mask`, which InstructBLIPVideo's Q-Former requires.
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                pixel_values = inputs_dict[model.main_input_name]
+                input_ids = inputs_dict["input_ids"]
+                qformer_input_ids = inputs_dict["qformer_input_ids"]
+                qformer_attention_mask = inputs_dict.get("qformer_attention_mask")
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+                batch_size = dummy_attention_mask.shape[0]
+
+                is_padding_right = dummy_attention_mask[:, -1].sum().item() != batch_size
+                if is_padding_right:
+                    dummy_attention_mask = torch.ones_like(input_ids)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+                )
+
+                for _, param in model.named_parameters():
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(
+                    pixel_values,
+                    input_ids=input_ids,
+                    qformer_input_ids=qformer_input_ids,
+                    qformer_attention_mask=qformer_attention_mask,
+                )
+                _ = model(
+                    pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=dummy_attention_mask,
+                    qformer_input_ids=qformer_input_ids,
+                    qformer_attention_mask=qformer_attention_mask,
+                )
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_from_config(self):
+        # Overridden to additionally pass `qformer_input_ids`/`qformer_attention_mask`, which InstructBLIPVideo's Q-Former requires.
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support flash_attention_2")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash_attention_2")
+
+            fa_model = model_class._from_config(
+                config, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+            fa_model = fa_model.train()
+
+            pixel_values = inputs_dict[fa_model.main_input_name]
+            if pixel_values.dtype in [torch.float32, torch.float16]:
+                pixel_values = pixel_values.to(torch.bfloat16)
+
+            input_ids = inputs_dict["input_ids"]
+            qformer_input_ids = inputs_dict["qformer_input_ids"]
+            qformer_attention_mask = inputs_dict.get("qformer_attention_mask")
+            dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(input_ids))
+
+            _ = fa_model(
+                pixel_values,
+                input_ids=input_ids,
+                attention_mask=dummy_attention_mask,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+            )
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                fa_model.save_pretrained(tmpdirname)
+                model_from_pretrained = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
 
     def test_forward_signature(self):
         for model_class in self.all_model_classes:
@@ -607,7 +755,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
-                self.assertTrue(model.qformer.config._attn_implementation == "eager")
+                self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)

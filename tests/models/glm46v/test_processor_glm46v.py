@@ -34,7 +34,8 @@ if is_torch_available():
 @require_torch
 class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm46VProcessor
-    model_id = "THUDM/GLM-4.1V-9B-Thinking"
+    # Tiny processor created with make_tiny_processor.py from "THUDM/GLM-4.1V-9B-Thinking"
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -170,7 +171,12 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "video"},
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
+                            ),
+                        },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
                 },
@@ -179,21 +185,6 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
-
-        # Add video URL for return dict and load with `num_frames` arg
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": url_to_local_path(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
-            ),
-        }
 
         # Load with `video_fps` arg
         video_fps = 10

@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-20.*
+*This model was contributed to Hugging Face Transformers on 2025-08-20.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -42,14 +41,15 @@ The example below demonstrates how to calculate similarity scores between multip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import torch
+
 from transformers import pipeline
+
 
 clip = pipeline(
    task="zero-shot-image-classification",
    model="facebook/metaclip-2-worldwide-huge-quickgelu",
-   dtype=torch.bfloat16,
    device=0
 )
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
@@ -59,20 +59,21 @@ clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", dtype=torch.bfloat16, attn_implementation="sdpa")
+from transformers import AutoModel, AutoProcessor
+
+
+model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", attn_implementation="sdpa", device_map="auto")
 processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
-inputs = processor(text=labels, images=image, return_tensors="pt", padding=True)
+inputs = processor(text=labels, images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image

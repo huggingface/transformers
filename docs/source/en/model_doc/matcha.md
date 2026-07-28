@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-12-19 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was published in HF papers on 2022-12-19 and contributed to Hugging Face Transformers on 2023-06-20.*
 
 # MatCha
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -50,11 +47,13 @@ The models finetuned on `chart2text-pew` and `chart2text-statista` are more suit
 You can use these models as follows (example on a ChatQA dataset):
 
 ```python
-from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 import requests
 from PIL import Image
 
-model = Pix2StructForConditionalGeneration.from_pretrained("google/matcha-chartqa").to(0)
+from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+
+
+model = Pix2StructForConditionalGeneration.from_pretrained("google/matcha-chartqa").to(0, device_map="auto")
 processor = AutoProcessor.from_pretrained("google/matcha-chartqa")
 url = "https://raw.githubusercontent.com/vis-nlp/ChartQA/main/ChartQA%20Dataset/val/png/20294671002019.png"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -70,6 +69,7 @@ To fine-tune MatCha, refer to the pix2struct [fine-tuning notebook](https://gith
 
 ```python
 from transformers.optimization import Adafactor, get_cosine_schedule_with_warmup
+
 
 optimizer = Adafactor(self.parameters(), scale_parameter=False, relative_step=False, lr=0.01, weight_decay=1e-05)
 scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=1000, num_training_steps=40000)

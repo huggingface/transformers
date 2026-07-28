@@ -28,7 +28,7 @@ import shutil
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from transformers import (
     DefaultFlowCallback,
@@ -42,8 +42,8 @@ from transformers import (
     TrainingArguments,
     is_torch_available,
 )
-from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback
-from transformers.testing_utils import require_torch
+from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback, TrackioCallback
+from transformers.testing_utils import require_ipython, require_torch
 from transformers.trainer_callback import CallbackHandler, ExportableState, TrainerControl
 
 
@@ -808,6 +808,72 @@ class SwanLabCallbackTest(unittest.TestCase):
         self.assertEqual(init_kwargs["resume"], "must")
 
 
+class TrackioCallbackTest(unittest.TestCase):
+    """Tests for TrackioCallback functionality."""
+
+    def _create_callback(self, fake_trackio):
+        """Create a TrackioCallback with a mocked trackio module."""
+        with patch(
+            "transformers.integrations.integration_utils.TrackioCallback.__init__",
+            lambda self: None,
+        ):
+            callback = TrackioCallback()
+            callback._trackio = fake_trackio
+            callback._initialized = False
+            callback._space_id = None
+            callback._static_space_id = None
+        return callback
+
+    @staticmethod
+    def _create_args():
+        class Args(SimpleNamespace):
+            def to_dict(self):
+                return {}
+
+        return Args(
+            project="test-project",
+            run_name="test-run",
+            trackio_space_id=None,
+            trackio_bucket_id=None,
+            trackio_static_space_id=False,
+            hub_private_repo=False,
+        )
+
+    @staticmethod
+    def _create_state(is_world_process_zero=True, global_step=0):
+        return SimpleNamespace(is_world_process_zero=is_world_process_zero, global_step=global_step)
+
+    @staticmethod
+    def _create_model():
+        return SimpleNamespace(config=None, peft_config=None)
+
+    def test_on_log_after_train_end_reinitializes_trackio(self):
+        fake_trackio = Mock()
+        fake_trackio.config = Mock()
+        fake_trackio.context_vars.current_space_id.get.return_value = None
+        callback = self._create_callback(fake_trackio)
+        args = self._create_args()
+        state = self._create_state(global_step=5)
+        control = Mock()
+        model = self._create_model()
+
+        callback.setup(args, state, model)
+        callback.on_log(args, state, control, model=model, logs={"train_loss": 0.5})
+        callback.on_train_end(args, state, control, model=model)
+        # Simulate evaluation after training
+        callback.on_log(args, state, control, model=model, logs={"eval_loss": 0.5})
+        # Trackio is reinitialized for the evaluation log, hence the call count should be 2
+        self.assertEqual(fake_trackio.init.call_count, 2)
+        fake_trackio.finish.assert_called_once()
+        self.assertEqual(
+            fake_trackio.log.call_args_list,
+            [
+                call({"train/global_step": 5}),
+                call({"eval/loss": 0.5, "train/global_step": 5}),
+            ],
+        )
+
+
 class KubeflowCallbackTest(unittest.TestCase):
     """Tests for KubeflowCallback functionality."""
 
@@ -1269,3 +1335,75 @@ class ExportableStateTest(unittest.TestCase):
 
         self.assertEqual(instance.name, "test")
         self.assertEqual(instance.counter, 5)
+
+
+@require_torch
+@require_ipython
+class NotebookProgressCallbackTest(unittest.TestCase):
+    """Tests for NotebookProgressCallback behavior in notebook environments."""
+
+    def setUp(self):
+        self.output_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.output_dir)
+
+    def _create_trainer(self):
+        train_dataset = RegressionDataset(length=16)
+        eval_dataset = RegressionDataset(length=16)
+        config = RegressionModelConfig(a=0, b=0)
+        model = RegressionPreTrainedModel(config)
+
+        args = TrainingArguments(
+            self.output_dir,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            num_train_epochs=1,
+            logging_strategy="no",
+            report_to=[],
+            eval_strategy="epoch",
+            disable_tqdm=True,
+        )
+
+        from transformers.utils.notebook import NotebookProgressCallback
+
+        trainer = Trainer(
+            model=model,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            callbacks=[NotebookProgressCallback()],  # force it
+        )
+        return trainer
+
+    def test_evaluate_before_training(self):
+        """Calling evaluate() before training does not crash and returns metrics."""
+        trainer = self._create_trainer()
+        metrics = trainer.evaluate()
+        self.assertIn("eval_loss", metrics)
+        # Check that the notebook callback exists in callback handler
+        from transformers.utils.notebook import NotebookProgressCallback
+
+        cb = next(
+            (c for c in trainer.callback_handler.callbacks if isinstance(c, NotebookProgressCallback)),
+            None,
+        )
+        self.assertIsNotNone(cb)
+
+    def test_evaluate_after_training(self):
+        """Calling evaluate() after training does not crash and returns metrics."""
+        trainer = self._create_trainer()
+        trainer.train()
+        metrics = trainer.evaluate()
+        self.assertIn("eval_loss", metrics)
+
+    def test_multiple_evaluate_calls(self):
+        """Calling evaluate() multiple times in a row works in notebook environment."""
+        trainer = self._create_trainer()
+        metrics1 = trainer.evaluate()
+        trainer.train()
+        metrics2 = trainer.evaluate()
+        metrics3 = trainer.evaluate()
+        self.assertIn("eval_loss", metrics1)
+        self.assertIn("eval_loss", metrics2)
+        self.assertIn("eval_loss", metrics3)

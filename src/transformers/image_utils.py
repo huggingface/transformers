@@ -41,6 +41,7 @@ from .utils.constants import (  # noqa: F401
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
+from .utils.import_utils import requires
 
 
 if is_vision_available():
@@ -49,22 +50,24 @@ if is_vision_available():
 
     PILImageResampling = PIL.Image.Resampling
 
-    if is_torchvision_available():
-        from torchvision.transforms import InterpolationMode
+if is_torchvision_available():
+    from torchvision.io import ImageReadMode, decode_image
+    from torchvision.transforms import InterpolationMode
+    from torchvision.transforms.functional import pil_to_tensor
 
-        pil_torch_interpolation_mapping = {
-            PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
-            PILImageResampling.BOX: InterpolationMode.BOX,
-            PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
-            PILImageResampling.HAMMING: InterpolationMode.HAMMING,
-            PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
-            PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
-        }
-        # Create inverse mapping: InterpolationMode -> PILImageResampling
-        torch_pil_interpolation_mapping = {v: k for k, v in pil_torch_interpolation_mapping.items()}
-    else:
-        pil_torch_interpolation_mapping = {}
-        torch_pil_interpolation_mapping = {}
+    pil_torch_interpolation_mapping = {
+        PILImageResampling.NEAREST: InterpolationMode.NEAREST_EXACT,
+        PILImageResampling.BOX: InterpolationMode.BOX,
+        PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+        PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+        PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+        PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+    }
+    # Create inverse mapping: InterpolationMode -> PILImageResampling
+    torch_pil_interpolation_mapping = {v: k for k, v in pil_torch_interpolation_mapping.items()}
+else:
+    pil_torch_interpolation_mapping = {}
+    torch_pil_interpolation_mapping = {}
 
 
 if is_torch_available():
@@ -165,7 +168,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
     Args:
         images (`ImageInput`):
-            Image of images to turn into a list of images.
+            Image or batch of images to turn into a list of images.
         expected_ndims (`int`, *optional*, defaults to 3):
             Expected number of dimensions for a single input image. If the input image has a different number of
             dimensions, an error is raised.
@@ -343,12 +346,14 @@ def get_channel_dimension_axis(image: np.ndarray, input_data_format: ChannelDime
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
+def get_image_size(
+    image: Union[np.ndarray, "PIL.Image.Image"], channel_dim: ChannelDimension | None = None
+) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
     Args:
-        image (`np.ndarray`):
+        image (`np.ndarray | PIL.Image.Image`):
             The image to get the dimensions of.
         channel_dim (`ChannelDimension`, *optional*):
             Which dimension the channel dimension is in. If `None`, will infer the channel dimension from the image.
@@ -356,6 +361,9 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = Non
     Returns:
         A tuple of the image's height and width.
     """
+    if isinstance(image, PIL.Image.Image):
+        return image.size
+
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)
 
@@ -459,7 +467,10 @@ def valid_coco_panoptic_annotations(annotations: Iterable[dict[str, list | tuple
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
-def load_image(image: Union[str, "PIL.Image.Image"], timeout: float | None = None) -> "PIL.Image.Image":
+def load_image(
+    image: Union[str, "PIL.Image.Image"],
+    timeout: float | None = None,
+) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
 
@@ -499,6 +510,52 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: float | None = Non
     image = PIL.ImageOps.exif_transpose(image)
     image = image.convert("RGB")
     return image
+
+
+@requires(backends=("torchvision",))
+def load_image_as_tensor(
+    image: Union[str, "PIL.Image.Image"],
+    timeout: float | None = None,
+) -> "torch.Tensor":
+    """
+    Loads `image` directly to a `torch.Tensor` using torchvision.
+
+    Args:
+        image (`str` or `PIL.Image.Image`):
+            The image to convert to the PIL Image format.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
+
+    Returns:
+        `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
+    """
+    import torch
+
+    if isinstance(image, str):
+        if image.startswith("http://") or image.startswith("https://"):
+            raw = httpx.get(image, timeout=timeout, follow_redirects=True).content
+            buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
+            return decode_image(buf, mode=ImageReadMode.RGB)
+        elif os.path.isfile(image):
+            return decode_image(image, mode=ImageReadMode.RGB)
+        else:
+            if image.startswith("data:image/"):
+                image = image.split(",")[1]
+            try:
+                raw = base64.decodebytes(image.encode())
+            except Exception as e:
+                raise ValueError(
+                    f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
+                )
+            buf = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
+            return decode_image(buf, mode=ImageReadMode.RGB)
+    elif isinstance(image, PIL.Image.Image):
+        image = PIL.ImageOps.exif_transpose(image)
+        return pil_to_tensor(image.convert("RGB"))
+    else:
+        raise TypeError(
+            "Incorrect format used for image. Should be a URL, a local path, a base64 string, or a PIL image."
+        )
 
 
 def load_images(

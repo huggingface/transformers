@@ -173,6 +173,10 @@ class Sam3Processor(ProcessorMixin):
                 expected_format="[image level, box level]",
             )
 
+            # Auto-generate labels so padded None entries are masked out in the geometry encoder (#45059).
+            if processed_boxes is not None and processed_boxes_labels is None:
+                processed_boxes_labels = self._generate_default_box_labels(processed_boxes)
+
             # Get padding requirements for all inputs
             if processed_boxes is not None:
                 boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
@@ -229,6 +233,10 @@ class Sam3Processor(ProcessorMixin):
             coords = coords.reshape(-1, 4)
 
         return coords
+
+    def _generate_default_box_labels(self, processed_boxes):
+        """Generate default box labels: `point_pad_value` for None (padded) entries, 1 for real boxes."""
+        return [None if image_boxes is None else [1] * len(image_boxes) for image_boxes in processed_boxes]
 
     def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
         """
@@ -527,7 +535,9 @@ class Sam3Processor(ProcessorMixin):
                 else:
                     tensor[img_idx] = normalized_coords
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes=None, threshold=0.5):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes=None, threshold=0.5, return_segmentation_scores=False
+    ):
         """
         Converts the output of [`Sam3Model`] into semantic segmentation maps.
 
@@ -539,13 +549,20 @@ class Sam3Processor(ProcessorMixin):
                 predictions will not be resized.
             threshold (`float`, *optional*, defaults to 0.5):
                 Threshold for binarizing the semantic segmentation masks.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to return segmentation scores alongside the segmentation map.
 
         Returns:
             semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry is a binary mask (0 or 1).
         """
-        return self.image_processor.post_process_semantic_segmentation(outputs, target_sizes, threshold)
+        return self.image_processor.post_process_semantic_segmentation(
+            outputs,
+            target_sizes=target_sizes,
+            threshold=threshold,
+            return_segmentation_scores=return_segmentation_scores,
+        )
 
     def post_process_object_detection(self, outputs, threshold=0.3, target_sizes=None):
         """

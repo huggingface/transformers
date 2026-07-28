@@ -228,11 +228,12 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
                 self.config.hidden_size
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
-                else self.config.hidden_size
+                else self.config.vision_config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
@@ -259,9 +260,6 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class Phi4MultimodalVisionEmbeddings(nn.Module):
@@ -1598,6 +1596,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
