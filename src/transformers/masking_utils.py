@@ -34,7 +34,6 @@ else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
     BlockMask = torch.Tensor
 
-_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 
@@ -379,7 +378,6 @@ def sdpa_mask(
     local_size: int | None = None,
     allow_is_causal_skip: bool = True,
     allow_is_bidirectional_skip: bool = False,
-    allow_torch_fix: bool = True,
     use_vmap: bool = False,
     device: torch.device | str = "cpu",
     **kwargs,
@@ -413,9 +411,6 @@ def sdpa_mask(
         allow_is_bidirectional_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
             i.e. full attention without any padding. Default to `False`.
-        allow_torch_fix (`bool`, optional):
-            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
-            versions. We need an arg to skip it when using eager. By default `True`.
         use_vmap (`bool`, optional):
             Whether to use `vmap` during the mask construction or not. Allows powerful custom patterns that may not be
             index-based (for the cost of speed performance). By default `False`.
@@ -532,11 +527,6 @@ def sdpa_mask(
             "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
 
-    # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
-    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
-        attention_mask = attention_mask | torch.all(~attention_mask, dim=-1, keepdim=True)
-
     return attention_mask
 
 
@@ -587,7 +577,6 @@ def eager_mask(
     """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     _ = kwargs.pop("allow_is_causal_skip", None)
-    _ = kwargs.pop("allow_torch_fix", None)
     mask = sdpa_mask(
         batch_size=batch_size,
         q_length=q_length,
@@ -598,7 +587,6 @@ def eager_mask(
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
-        allow_torch_fix=False,
         use_vmap=use_vmap,
         device=device,
         **kwargs,
