@@ -135,21 +135,14 @@ def torch_kda_gate(
     g: torch.Tensor,
     A_log: torch.Tensor,
     dt_bias: torch.Tensor,
-    lower_bound: float | None = None,
 ) -> torch.Tensor:
-    """Pure-PyTorch reference for `fla.ops.kda.gate.fused_kda_gate`.
-
-    With `lower_bound` the gate is the sigmoid-bounded ``lower_bound * sigmoid(exp(A_log) * (g + dt_bias))``
-    (maps into `(lower_bound, 0)`), otherwise the unbounded ``-exp(A_log) * softplus(g + dt_bias)``.
-    """
+    """Pure-PyTorch reference for `fla.ops.kda.gate.fused_kda_gate`."""
     num_heads = A_log.numel()
     head_dim = dt_bias.numel() // num_heads
     g = g.to(torch.float32)
     g = g + dt_bias.to(torch.float32).reshape(num_heads, head_dim)
     A = A_log.to(torch.float32).reshape(num_heads, 1).exp()
-    if lower_bound is None:
-        return -A * F.softplus(g)
-    return lower_bound * torch.sigmoid(A * g)
+    return -A * F.softplus(g)
 
 
 def torch_recurrent_kda(
@@ -216,7 +209,6 @@ class SolarOpen2LinearAttention(nn.Module):
         self.num_kv_heads = config.linear_attn_config.get("num_kv_heads", None) or self.num_heads
         self.n_rep = self.num_heads // self.num_kv_heads
         self.use_full_proj = config.kda_use_full_proj
-        self.gate_lower_bound = config.kda_gate_lower_bound
         self.allow_neg_eigval = config.kda_allow_neg_eigval
 
         projection_size = self.head_dim * self.num_heads
@@ -327,7 +319,7 @@ class SolarOpen2LinearAttention(nn.Module):
             beta = beta * 2.0
 
         if chunk_kda is not None:
-            g = fused_kda_gate(g_raw, self.A_log, dt_bias=self.dt_bias, lower_bound=self.gate_lower_bound)
+            g = fused_kda_gate(g_raw, self.A_log, dt_bias=self.dt_bias)
             kda_kernel = fused_recurrent_kda if (use_precomputed_states and seq_len == 1) else chunk_kda
             core_attn_out, recurrent_state = kda_kernel(
                 q=q,
@@ -340,7 +332,7 @@ class SolarOpen2LinearAttention(nn.Module):
                 use_qk_l2norm_in_kernel=True,
             )
         else:
-            g = torch_kda_gate(g_raw, self.A_log, self.dt_bias, self.gate_lower_bound)
+            g = torch_kda_gate(g_raw, self.A_log, self.dt_bias)
             core_attn_out, recurrent_state = torch_recurrent_kda(
                 q,
                 k,

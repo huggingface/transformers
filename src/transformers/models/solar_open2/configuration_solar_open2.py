@@ -65,8 +65,6 @@ class SolarOpen2Config(PreTrainedConfig):
     kda_use_full_proj (`bool`, *optional*, defaults to `False`):
         When `True`, the KDA gate/output-gate use single full-rank projections (`f_proj`, `g_proj`) instead of the
         factored low-rank `f_a_proj`/`f_b_proj` and `g_a_proj`/`g_b_proj`.
-    kda_gate_lower_bound (`float`, *optional*, defaults to -5.0):
-        Lower bound on the KDA log-decay gate.
     kda_allow_neg_eigval (`bool`, *optional*, defaults to `True`):
         When `True`, the KDA `beta` gate is scaled by 2 (allowing negative eigenvalues of the state transition).
     """
@@ -130,8 +128,6 @@ class SolarOpen2Config(PreTrainedConfig):
     intermediate_size: int = 10240
     first_k_dense_replace: int = 0
     layer_types: list[str] | None = None
-
-    # SolarOpen2-specific
     use_rope: bool = False
     use_qk_norm: bool = False
     use_gqa_gate: bool = True
@@ -140,7 +136,6 @@ class SolarOpen2Config(PreTrainedConfig):
     gqa_layers: tuple[int, ...] | list[int] | None = None
     linear_attn_config: dict | None = None
     kda_use_full_proj: bool = False
-    kda_gate_lower_bound: float = -5.0
     kda_allow_neg_eigval: bool = True
 
     def __post_init__(self, **kwargs):
