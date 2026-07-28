@@ -38,7 +38,7 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
@@ -87,14 +87,6 @@ __all__ = [
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(SiglipVisionConfig):
-    r"""
-    mlp_ratio (`float`, *optional*, defaults to `8960/1536`):
-        Ratio of MLP hidden size to `hidden_size`; `intermediate_size` is set to
-        `int(hidden_size * mlp_ratio)`.
-    layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value for per-channel residual-scale parameters.
-    """
-
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
     # Backward-compat key aliases from legacy config.json (e.g. width → hidden_size)
@@ -137,20 +129,10 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         Per-layer MLP type: `"sparse"` (MoE) or `"dense"`. If not provided, derived from the legacy
         `moe_layers_enum` hub-config kwarg (comma-separated string or list of MoE layer indices),
         defaulting to all layers from index 3 onward being MoE.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type: `"full_attention"` or `"sliding_attention"`. Defaults to all
-        `"full_attention"`.
-    max_seq_len (`int`, *optional*, defaults to 128000):
-        Legacy hub-config kwarg mirroring `max_position_embeddings`; not read by the modeling code.
-    moe_intermediate_size (`int`, *optional*, defaults to 1280):
-        Intermediate size of each routed expert.
     n_routed_experts (`int`, *optional*, defaults to 288):
         Total number of routed experts. Accessible as `num_local_experts` via `attribute_map`.
     share_expert_dim (`int`, *optional*, defaults to 1280):
         Intermediate size of the always-active shared expert.
-    norm_expert_weight (`bool`, *optional*, defaults to `True`):
-        Legacy hub-config kwarg; not read by the modeling code (`Step3p7TopKRouter` always normalizes
-        top-k expert weights to sum to 1).
     num_sliding_attention_heads (`int`, *optional*):
         Attention head count for `"sliding_attention"` layers, if different from `num_attention_heads`.
         Defaults to the legacy `attention_other_setting` hub-config kwarg's `num_attention_heads` entry.
@@ -160,33 +142,13 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     query_pre_attn_scalar (`int` or `float`, *optional*):
         `Step3p7Attention.__init__` hook point: defaults to `head_dim`, giving standard
         `head_dim ** -0.5` scaling; overridable per released checkpoint variant.
-    attn_logit_softcapping (`float`, *optional*):
-        Unused by Step3p7's own attention (no logit-softcapping term in `eager_attention_forward`), so
-        always `None`.
-    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
-        (`Step3p7TopKRouter` always applies a sigmoid).
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
         `Step3p7SparseMoeBlock`).
-    need_fp32_gate (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     swiglu_limits (`list[float | None]`, *optional*):
         Per-layer gate/up clamping bound; `None` means no clamping.
     swiglu_limits_shared (`list[float | int | None]`, *optional*):
         Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
-    use_rope_layers (`list[bool]`, *optional*):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    yarn_only_types (`list[str]`, *optional*):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-        `Step3p7Attention.__init__` hook point: when `True`, disables causal masking for
-        `Step3p7Attention.is_causal` and, via inherited `Gemma3TextModel` masking, allows attending
-        past the current position.
     """
 
     model_type = "step3p5"
@@ -200,6 +162,7 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     }
     default_theta = 10000.0
     gating = True
+    use_bidirectional_attention = False
     # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
     # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
     # generated files have no cross-model imports, so that name wouldn't resolve there.
@@ -214,8 +177,7 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
-    # Unused fields inherited from `MiniMaxM3VLTextConfig`'s sparse-indexer/MoE architecture (Step3p7
-    # has neither a lightning indexer nor a SwiGLU-OAI activation); removed rather than documented.
+    # Unused fields inherited from `MiniMaxM3VLTextConfig`; removed rather than documented.
     dense_intermediate_size = AttributeError()
     shared_intermediate_size = AttributeError()
     rotary_dim = AttributeError()
@@ -226,20 +188,22 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     index_block_size = AttributeError()
     index_topk_blocks = AttributeError()
     index_local_blocks = AttributeError()
+    output_router_logits = AttributeError()
+    routed_scaling_factor = AttributeError()
+    router_aux_loss_coef = AttributeError()
+    router_jitter_noise = AttributeError()
 
     hidden_size: int = 4096
     intermediate_size: int = 11264
     num_key_value_heads: int = 8
     num_hidden_layers: int = 45
     max_position_embeddings: int = 128000
-    max_seq_len: int = 128000
     vocab_size: int = 128815
     rms_norm_eps: float = 1e-5
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288
     num_experts_per_tok: int = 8
     share_expert_dim: int = 1280
-    norm_expert_weight: bool = True
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
     num_attention_heads_per_layer: list[int] | None = None
@@ -248,18 +212,10 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
     eos_token_id: int | list[int] | None = None
     attention_bias: bool = False
     query_pre_attn_scalar: int | float | None = None
-    attn_logit_softcapping: float | None = None
-    use_head_wise_attn_gate: bool = False
-    use_moe_router_bias: bool = False
-    moe_router_activation: str = "softmax"
     moe_router_scaling_factor: float = 1.0
-    need_fp32_gate: bool = False
     mlp_bias: bool = False
     swiglu_limits: list[float | int | None] | None = None
     swiglu_limits_shared: list[float | int | None] | None = None
-    use_rope_layers: list[bool] | None = None
-    yarn_only_types: list[str] | None = None
-    use_bidirectional_attention: bool | None = False
 
     def __post_init__(self, **kwargs):
         # Legacy hub configs pad every per-layer list below with `num_nextn_predict_layers` trailing
@@ -276,7 +232,6 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
                 "mlp_layer_types",
                 "swiglu_limits",
                 "swiglu_limits_shared",
-                "use_rope_layers",
             ):
                 value = getattr(self, field)
                 if isinstance(value, list) and len(value) == padded:
@@ -359,17 +314,6 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7Config(PreTrainedConfig):
-    r"""
-    vision_config (`dict` or [`Step3p7VisionConfig`], *optional*):
-        Vision encoder configuration. Defaults to `Step3p7VisionConfig()`.
-    text_config (`dict` or [`Step3p7TextConfig`], *optional*):
-        Text decoder configuration. Defaults to `Step3p7TextConfig()`.
-    projector_bias (`bool`, *optional*, defaults to `False`):
-        Whether the vision-to-text projection uses a bias term.
-    image_token_id (`int`, *optional*, defaults to 151679):
-        Token ID used as the image placeholder in the text sequence.
-    """
-
     model_type = "step3p7"
     sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
 
@@ -401,21 +345,12 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 504):
         Target size (height = width) for each local patch crop.
-    num_image_features (`int`, *optional*):
-        Number of placeholder tokens the processor expands the global-view image into. Derived in
-        `__init__` as `(size["height"] // vision_patch_size // downsampler_stride) ** 2`; only pass
-        this to override the derived value directly.
-    num_patch_features (`int`, *optional*):
-        Number of placeholder tokens the processor expands each local patch crop into; the
-        `patch_size` analogue of `num_image_features`.
     max_image_size (`int`, *optional*, defaults to 3024):
         Images larger than this (on their longest side) are scaled down uniformly before patch
         planning.
     """
 
     patch_size: int
-    num_image_features: int | None
-    num_patch_features: int | None
     max_image_size: int
 
 
@@ -444,20 +379,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     max_image_size: int = 3024
     # ViT patch size (`Step3p7VisionEmbeddings.patch_size`) and the vision tower's total downsampling
-    # stride (two stride-2 convolutions, `downsampler1`/`downsampler2`), used to derive
-    # `num_image_features`/`num_patch_features` from `size`/`patch_size` below instead of hardcoding them.
+    # stride (two stride-2 convolutions, `downsampler1`/`downsampler2`); `Step3p7Processor.__init__`
+    # derives `num_image_features`/`num_patch_features` from these plus `size`/`patch_size`.
     vision_patch_size: int = 14
     downsampler_stride: int = 4
-    num_image_features: int | None = None
-    num_patch_features: int | None = None
-
-    def __init__(self, **kwargs: Unpack[Step3p7ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-        stride = self.vision_patch_size * self.downsampler_stride
-        if self.num_image_features is None:
-            self.num_image_features = (self.size["height"] // stride) ** 2
-        if self.num_patch_features is None:
-            self.num_patch_features = (self.patch_size // stride) ** 2
 
     @staticmethod
     def _is_extreme_aspect(width: int, height: int) -> bool:
@@ -528,16 +453,14 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         num_patches_y = max(1, crop_height // window_size)
         return (width, height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y, needs_square_pad
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
-        """Return ``(num_patches, num_newline_tokens)`` for an image of the given size."""
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """Return the number of local patches for an image of the given size."""
         images_kwargs = images_kwargs or {}
         size = images_kwargs.get("size", self.size)
         image_size = size["height"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_size)
-        num_patches = num_patches_x * num_patches_y
-        num_newlines = num_patches_y - 1 if num_patches > 0 else 0
-        return num_patches, num_newlines
+        return num_patches_x * num_patches_y
 
     def _get_image_patches(
         self,
@@ -622,6 +545,11 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             "pixel_values": global_stack,
             "num_local_patches": num_local_patches,
         }
+        # Built before the local-patch fields below are assigned: `result[key] = ...` (unlike `data[key] = ...`
+        # pre-construction) bypasses `BatchFeature`'s tensor conversion, which matters for
+        # `patch_newline_masks` — it must stay a plain list of `bool`s, not a tensor.
+        result = BatchFeature(data=data, tensor_type=return_tensors)
+
         max_patches = max(num_local_patches, default=0)
         if max_patches:
             # Group by shape while keeping each image's patches nested (`is_nested=True`, the same
@@ -640,12 +568,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             nested_pixel_values_local = reorder_images(grouped_patches, grouped_index, is_nested=True)
             # Flatten back to (total_patches, C, H, W): `Step3p7Model.get_image_features` slices this
             # flat tensor per image using `num_local_patches`.
-            data["pixel_values_local"] = torch.stack(
+            result["pixel_values_local"] = torch.stack(
                 [patch for per_image_patches in nested_pixel_values_local for patch in per_image_patches]
             )
-
-        result = BatchFeature(data=data, tensor_type=return_tensors)
-        if max_patches:
             # Pad every image's mask to `max_patches` so the output is a uniform (batch, max_patches)
             result["patch_newline_masks"] = [
                 mask + [False] * (max_patches - len(mask)) for mask in patch_newline_masks
@@ -754,6 +679,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = True
@@ -805,7 +731,6 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     """
 
     config: Step3p7VisionConfig
-    _no_split_modules = ["Step3p7VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Step3p7VisionEncoderLayer,
         "attentions": Step3p7VisionAttention,
@@ -823,7 +748,6 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         )
         self.post_init()
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
@@ -908,7 +832,6 @@ class Step3p7Attention(LagunaAttention):
     def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_heads: int):
         super().__init__(config, layer_idx, num_heads)
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.is_causal = not config.use_bidirectional_attention
 
     def forward(
         self,
@@ -974,7 +897,6 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
 
 
 class Step3p7TextModel(Gemma3TextModel):
-    _no_split_modules = ["Step3p7DecoderLayer"]
     config: Step3p7TextConfig
     _can_record_outputs = {
         "hidden_states": Step3p7DecoderLayer,
@@ -1071,8 +993,9 @@ class Step3p7Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer=None, chat_template=None, **kwargs) -> None:
         self.image_token = "<im_patch>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token) if tokenizer is not None else None
-        self.num_image_feature_size = image_processor.num_image_features
-        self.num_patch_feature_size = image_processor.num_patch_features
+        stride = image_processor.vision_patch_size * image_processor.downsampler_stride
+        self.num_image_feature_size = (image_processor.size["height"] // stride) ** 2
+        self.num_patch_feature_size = (image_processor.patch_size // stride) ** 2
         self.image_feature_placeholder = self.image_token * self.num_image_feature_size
         self.patch_feature_placeholder = self.image_token * self.num_patch_feature_size
         super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template, **kwargs)
@@ -1081,7 +1004,7 @@ class Step3p7Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["patch_newline_masks"]
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Return the expanded token string for image *image_idx* (patches + global view)."""
         num_patches = image_inputs["num_local_patches"][image_idx]
         patch_newline_masks = image_inputs.get("patch_newline_masks")

@@ -32,12 +32,20 @@ logger = logging.get_logger(__name__)
 @strict
 class Step3p7VisionConfig(PreTrainedConfig):
     r"""
-    mlp_ratio (`float`, *optional*, defaults to `8960/1536`):
-        Ratio of MLP hidden size to `hidden_size`; `intermediate_size` is set to
-        `int(hidden_size * mlp_ratio)`.
-    layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value for per-channel residual-scale parameters.
-    """
+    Example:
+
+    ```python
+    >>> from transformers import Step3p7VisionConfig, Step3p7VisionModel
+
+    >>> # Initializing a Step3p7VisionConfig with google/step3p7-base-patch16-224 style configuration
+    >>> configuration = Step3p7VisionConfig()
+
+    >>> # Initializing a Step3p7VisionModel (with random weights) from the google/step3p7-base-patch16-224 style configuration
+    >>> model = Step3p7VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
@@ -84,20 +92,10 @@ class Step3p7TextConfig(PreTrainedConfig):
         Per-layer MLP type: `"sparse"` (MoE) or `"dense"`. If not provided, derived from the legacy
         `moe_layers_enum` hub-config kwarg (comma-separated string or list of MoE layer indices),
         defaulting to all layers from index 3 onward being MoE.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type: `"full_attention"` or `"sliding_attention"`. Defaults to all
-        `"full_attention"`.
-    max_seq_len (`int`, *optional*, defaults to 128000):
-        Legacy hub-config kwarg mirroring `max_position_embeddings`; not read by the modeling code.
-    moe_intermediate_size (`int`, *optional*, defaults to 1280):
-        Intermediate size of each routed expert.
     n_routed_experts (`int`, *optional*, defaults to 288):
         Total number of routed experts. Accessible as `num_local_experts` via `attribute_map`.
     share_expert_dim (`int`, *optional*, defaults to 1280):
         Intermediate size of the always-active shared expert.
-    norm_expert_weight (`bool`, *optional*, defaults to `True`):
-        Legacy hub-config kwarg; not read by the modeling code (`Step3p7TopKRouter` always normalizes
-        top-k expert weights to sum to 1).
     num_sliding_attention_heads (`int`, *optional*):
         Attention head count for `"sliding_attention"` layers, if different from `num_attention_heads`.
         Defaults to the legacy `attention_other_setting` hub-config kwarg's `num_attention_heads` entry.
@@ -107,33 +105,13 @@ class Step3p7TextConfig(PreTrainedConfig):
     query_pre_attn_scalar (`int` or `float`, *optional*):
         `Step3p7Attention.__init__` hook point: defaults to `head_dim`, giving standard
         `head_dim ** -0.5` scaling; overridable per released checkpoint variant.
-    attn_logit_softcapping (`float`, *optional*):
-        Unused by Step3p7's own attention (no logit-softcapping term in `eager_attention_forward`), so
-        always `None`.
-    use_head_wise_attn_gate (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    use_moe_router_bias (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    moe_router_activation (`str`, *optional*, defaults to `"softmax"`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code
-        (`Step3p7TopKRouter` always applies a sigmoid).
     moe_router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
         `Step3p7SparseMoeBlock`).
-    need_fp32_gate (`bool`, *optional*, defaults to `False`):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
     swiglu_limits (`list[float | None]`, *optional*):
         Per-layer gate/up clamping bound; `None` means no clamping.
     swiglu_limits_shared (`list[float | int | None]`, *optional*):
         Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
-    use_rope_layers (`list[bool]`, *optional*):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    yarn_only_types (`list[str]`, *optional*):
-        Legacy hub-config kwarg from the original checkpoint; not currently read by the modeling code.
-    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-        `Step3p7Attention.__init__` hook point: when `True`, disables causal masking for
-        `Step3p7Attention.is_causal` and, via inherited `Gemma3TextModel` masking, allows attending
-        past the current position.
     """
 
     model_type = "step3p5"
@@ -191,37 +169,28 @@ class Step3p7TextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 8
     num_local_experts: int = 128
-    output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.001
-    router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     base_config_key = "text_config"
-    routed_scaling_factor: float = 2.0
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
     gating = True
-    max_seq_len: int = 128000
+    # Not a real config field (no type annotation, so `@strict` doesn't treat it as one: not
+    # user-settable, not serialized). Exists only because it's read unconditionally by the
+    # mask-construction code `Step3p7TextModel.forward` inherits from `Gemma3TextModel`; Step3p7 has
+    # no bidirectional-attention variant, so this is always `False`.
+    use_bidirectional_attention = False
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288
     share_expert_dim: int = 1280
-    norm_expert_weight: bool = True
     sliding_window: int | None = None
     num_sliding_attention_heads: int | None = None
     num_attention_heads_per_layer: list[int] | None = None
     attention_bias: bool = False
     query_pre_attn_scalar: int | float | None = None
-    attn_logit_softcapping: float | None = None
-    use_head_wise_attn_gate: bool = False
-    use_moe_router_bias: bool = False
-    moe_router_activation: str = "softmax"
     moe_router_scaling_factor: float = 1.0
-    need_fp32_gate: bool = False
     mlp_bias: bool = False
     swiglu_limits: list[float | int | None] | None = None
     swiglu_limits_shared: list[float | int | None] | None = None
-    use_rope_layers: list[bool] | None = None
-    yarn_only_types: list[str] | None = None
-    use_bidirectional_attention: bool | None = False
 
     def __post_init__(self, **kwargs):
         # Legacy hub configs pad every per-layer list below with `num_nextn_predict_layers` trailing
@@ -238,7 +207,6 @@ class Step3p7TextConfig(PreTrainedConfig):
                 "mlp_layer_types",
                 "swiglu_limits",
                 "swiglu_limits_shared",
-                "use_rope_layers",
             ):
                 value = getattr(self, field)
                 if isinstance(value, list) and len(value) == padded:
@@ -351,17 +319,6 @@ class Step3p7TextConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7Config(PreTrainedConfig):
-    r"""
-    vision_config (`dict` or [`Step3p7VisionConfig`], *optional*):
-        Vision encoder configuration. Defaults to `Step3p7VisionConfig()`.
-    text_config (`dict` or [`Step3p7TextConfig`], *optional*):
-        Text decoder configuration. Defaults to `Step3p7TextConfig()`.
-    projector_bias (`bool`, *optional*, defaults to `False`):
-        Whether the vision-to-text projection uses a bias term.
-    image_token_id (`int`, *optional*, defaults to 151679):
-        Token ID used as the image placeholder in the text sequence.
-    """
-
     model_type = "step3p7"
     sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
 

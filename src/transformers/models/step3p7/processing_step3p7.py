@@ -36,8 +36,9 @@ class Step3p7Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer=None, chat_template=None, **kwargs) -> None:
         self.image_token = "<im_patch>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token) if tokenizer is not None else None
-        self.num_image_feature_size = image_processor.num_image_features
-        self.num_patch_feature_size = image_processor.num_patch_features
+        stride = image_processor.vision_patch_size * image_processor.downsampler_stride
+        self.num_image_feature_size = (image_processor.size["height"] // stride) ** 2
+        self.num_patch_feature_size = (image_processor.patch_size // stride) ** 2
         self.image_feature_placeholder = self.image_token * self.num_image_feature_size
         self.patch_feature_placeholder = self.image_token * self.num_patch_feature_size
         super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template, **kwargs)
@@ -46,7 +47,7 @@ class Step3p7Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["patch_newline_masks"]
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Return the expanded token string for image *image_idx* (patches + global view)."""
         num_patches = image_inputs["num_local_patches"][image_idx]
         patch_newline_masks = image_inputs.get("patch_newline_masks")

@@ -50,8 +50,6 @@ class Step3p7ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_resize=True,
             size={"height": 64, "width": 64},
             patch_size=200,
-            num_image_features=1,
-            num_patch_features=1,
             do_rescale=True,
             rescale_factor=1 / 255,
             do_normalize=True,
