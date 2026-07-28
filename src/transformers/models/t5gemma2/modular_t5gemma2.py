@@ -244,8 +244,8 @@ class T5Gemma2MLP(Gemma3MLP):
 
 
 class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: T5Gemma2TextConfig, device=None):
-        super().__init__(config, device)
+    def __init__(self, config: T5Gemma2TextConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(config: T5Gemma2TextConfig, layer_type: str) -> tuple[torch.Tensor, float]:

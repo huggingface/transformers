@@ -2347,8 +2347,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Qwen2_5OmniDiTConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(config: Qwen2_5OmniDiTConfig) -> tuple[torch.Tensor, float]:

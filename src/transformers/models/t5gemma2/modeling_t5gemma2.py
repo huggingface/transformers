@@ -93,7 +93,7 @@ class T5Gemma2MLP(nn.Module):
 class T5Gemma2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: T5Gemma2TextConfig, device=None):
+    def __init__(self, config: T5Gemma2TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
