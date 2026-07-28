@@ -992,6 +992,7 @@ class Trainer:
             "multiprocessing_context": "fork" if should_fork else None,
         }
 
+        sampler: torch.utils.data.Sampler | None = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             sampler = sampler_fn(dataset) if sampler_fn is not None else None
             if isinstance(sampler, BatchRebalanceSampler):
