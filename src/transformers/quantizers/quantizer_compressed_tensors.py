@@ -62,7 +62,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        from compressed_tensors.quantization import apply_quantization_config, QuantizationStatus
+        from compressed_tensors.quantization import QuantizationStatus, apply_quantization_config
         from compressed_tensors.utils import patch_attr
 
         ct_quantization_config = self.compressor.quantization_config
