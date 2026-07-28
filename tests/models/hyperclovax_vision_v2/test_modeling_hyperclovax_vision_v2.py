@@ -226,11 +226,15 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
+    # Temporary: validate against the hub PR (native config/processor) until it lands on `main`.
+    # Drop `revision` once the hub PR is merged.
+    # https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B/discussions/14
+    revision = "refs/pr/14"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map="auto"
+            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map="auto"
         )
         cleanup(torch_device, gc_collect=True)
 
