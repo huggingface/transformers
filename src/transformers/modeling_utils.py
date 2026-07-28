@@ -2461,8 +2461,11 @@ class PreTrainedModel(
             for name, b in module.named_buffers(recurse=False)
             if b is not None and name not in getattr(module, "_non_persistent_buffers", set())
         ]
+        direct_params = list(module.parameters(recurse=False))
+        has_direct_items = bool(direct_params or persistent_buffers)
         if (
-            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            has_direct_items
+            and all(getattr(param, "_is_hf_initialized", False) for param in direct_params)
             and all(getattr(buffer, "_is_hf_initialized", False) for buffer in persistent_buffers)
             and not any(param.device.type == "meta" for param in module.parameters(recurse=True))
         ):
