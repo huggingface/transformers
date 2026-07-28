@@ -41,13 +41,13 @@ from ..auto import AutoModel
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
+@dataclass
 class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
