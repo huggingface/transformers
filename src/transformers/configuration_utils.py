@@ -246,7 +246,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
-    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -1232,6 +1236,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
+            "base_model_fsdp_plan",
             "distributed_config",
         ]:
             d.pop(key_to_remove, None)
