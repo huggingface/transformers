@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-21.*
+*This model was contributed to Hugging Face Transformers on 2026-07-28.*
 
 
 # Apertus 1.5
@@ -88,9 +88,9 @@ import torch
 from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
 
 model = Apertus1p5ForConditionalGeneration.from_pretrained(
-    "swiss-ai/Apertus-1.5-8B", dtype=torch.bfloat16, device_map="auto"
+    "swiss-ai/Apertus-v1.5-8B", dtype=torch.bfloat16, device_map="auto"
 )
-processor = AutoProcessor.from_pretrained("swiss-ai/Apertus-1.5-8B")
+processor = AutoProcessor.from_pretrained("swiss-ai/Apertus-v1.5-8B")
 
 messages = [
     {
@@ -143,6 +143,17 @@ print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_
   `do_rescale` convention, float images already scaled to `[0, 1]` would be rescaled again. The image
   processor converts to RGB, resizes to multiples of 16 within the `[256², 1400²]` pixel-area budget, and
   normalizes to `[-1, 1]`, so the model always receives sizes it can tokenize.
+- **The image token budget is controlled by `min_pixels` / `max_pixels`**: one token per 16×16 patch of
+  the resized image means `max_pixels` caps the tokens an image can contribute (the default `1400²`
+  allows up to ~7,700). Lower it to trade visual detail for shorter sequences and cheaper prefill, e.g.
+  `max_pixels=512 * 512` for at most 1,024 tokens per image — either persistently on the image processor
+  (`processor.image_processor.max_pixels = 512 * 512`) or per call:
+
+  ```python
+  processor(text=..., images=..., images_kwargs={"max_pixels": 512 * 512})
+  # or through the chat template:
+  processor.apply_chat_template(messages, processor_kwargs={"images_kwargs": {"max_pixels": 512 * 512}}, ...)
+  ```
 - **Audio** arrays are assumed to be 24 kHz mono; file or URL inputs are resampled automatically. The
   absolute scale does not matter, since every clip is peak-normalized to -3 dBFS before encoding. Stereo or
   empty clips raise an error, as does declaring a `sampling_rate` other than 24000.
