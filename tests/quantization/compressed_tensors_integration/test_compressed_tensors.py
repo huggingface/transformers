@@ -7,6 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsC
 from transformers.testing_utils import (
     backend_empty_cache,
     require_compressed_tensors,
+    require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
     torch_device,
@@ -61,6 +62,8 @@ class CompressedTensorsTest(unittest.TestCase):
     def test_tinyllama_int8(self):
         self._test_quantized_model(self.tinyllama_int8, 30.0, expect_quantized=False)
 
+    @require_torch_accelerator
+    @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8(self):
         self._test_quantized_model(self.tinyllama_fp8, 20.0)
 
@@ -117,6 +120,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertLessEqual(perplexity, expected_perplexity)
 
     @require_torch_accelerator
+    @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8_uses_fp8_kernel(self):
         """Verify FP8 model uses CompressedTensorsFP8Linear on GPU/XPU."""
         from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
@@ -156,6 +160,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     @require_torch_accelerator
+    @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8_save_reload(self):
         """An FP8 model should still work after saving and reloading."""
         model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map="auto")
@@ -184,6 +189,7 @@ class CompressedTensorsTest(unittest.TestCase):
             self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     @require_torch_accelerator
+    @require_cuda_capability_at_least(8, 9)
     def test_tinyllama_fp8_per_tensor_save_reload(self):
         """Per-tensor (static) FP8: the single weight scale is expanded to (1, out_features)
         at load time and collapsed back to a single element on save."""
