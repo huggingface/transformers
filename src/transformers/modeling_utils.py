@@ -2456,8 +2456,7 @@ class PreTrainedModel(
         # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
         # otherwise
         if (
-            is_custom_code
-            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+            all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
             and all(
                 getattr(buffer, "_is_hf_initialized", False)
                 for buffer in module.buffers(recurse=False)
