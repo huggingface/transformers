@@ -1231,10 +1231,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     @property
     def is_quantization_compressed(self):
-        from compressed_tensors.quantization import QuantizationStatus
-
         qc = self.quantization_config
-        return self.is_quantized and (qc is not None and qc.quantization_status == QuantizationStatus.COMPRESSED)
+        return (
+            self.is_quantized
+            and qc is not None
+            and qc.quant_method == QuantizationMethod.COMPRESSED_TENSORS
+            and qc.format != "dense"
+        )
 
 
 @dataclass
