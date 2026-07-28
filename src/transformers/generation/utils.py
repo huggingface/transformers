@@ -936,12 +936,11 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
-    @staticmethod
     def _expand_inputs_for_generation(
+        self,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
-        model: Optional["PreTrainedModel"] = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
@@ -963,16 +962,16 @@ class GenerationMixin(ContinuousMixin):
             if outputs is None:
                 return
             if input_ids is None or input_ids.numel() == 0:
-                special_image_mask = model_kwargs["inputs_embeds"] == model.get_input_embeddings()(
+                special_image_mask = model_kwargs["inputs_embeds"] == self.get_input_embeddings()(
                     torch.tensor(
-                        getattr(model.config, token_id_key),
+                        getattr(self.config, token_id_key),
                         dtype=torch.long,
                         device=model_kwargs["inputs_embeds"].device,
                     )
                 )
                 num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
             else:
-                num_image_tokens_in_text = (input_ids == getattr(model.config, token_id_key)).sum(-1)
+                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
             num_image_tokens_in_text = torch.tensor(num_image_tokens_in_text).cumsum(-1)
             num_image_tokens_in_vision = [len(out) for out in outputs.pooler_output]
             num_image_tokens_in_vision = torch.tensor(num_image_tokens_in_vision).cumsum(-1)
@@ -2681,7 +2680,6 @@ class GenerationMixin(ContinuousMixin):
             input_ids=input_ids,
             expand_size=max(generation_config.num_beams, generation_config.num_return_sequences),
             is_encoder_decoder=self.config.is_encoder_decoder,
-            model=self,
             **model_kwargs,
         )
 
