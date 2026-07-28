@@ -302,6 +302,7 @@ class TemperatureLogitsWarper(LogitsProcessor):
         scores_processed = scores / self.temperature
         return scores_processed
 
+
 def _apply_penalty(score: torch.FloatTensor, penalty: float, normalize: bool) -> torch.FloatTensor:
     if normalize:
         # score is log-probs, always negative
@@ -309,6 +310,7 @@ def _apply_penalty(score: torch.FloatTensor, penalty: float, normalize: bool) ->
     else:
         # score is raw logits, positive values have to be divided to move them the right direction
         return torch.where(score < 0, score * penalty, score / penalty)
+
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
