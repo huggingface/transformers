@@ -863,17 +863,23 @@ def _flash_attention_pure_varlen_alt(
     batch_size, max_length_q = query_states.shape[:2]
     max_length_k = key_states.shape[1]
 
-    cu_seq_lens_q = torch.arange(
-        batch_size + 1,
-        device=query_states.device,
-        dtype=torch.int32,
-    ) * max_length_q
+    cu_seq_lens_q = (
+        torch.arange(
+            batch_size + 1,
+            device=query_states.device,
+            dtype=torch.int32,
+        )
+        * max_length_q
+    )
 
-    cu_seq_lens_k = torch.arange(
-        batch_size + 1,
-        device=key_states.device,
-        dtype=torch.int32,
-    ) * max_length_k
+    cu_seq_lens_k = (
+        torch.arange(
+            batch_size + 1,
+            device=key_states.device,
+            dtype=torch.int32,
+        )
+        * max_length_k
+    )
 
     q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
     k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
