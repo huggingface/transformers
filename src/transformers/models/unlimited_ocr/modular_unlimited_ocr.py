@@ -93,9 +93,10 @@ class UnlimitedOcrImageProcessorKwargs(DeepseekOcr2ImageProcessorKwargs):
     tile_size (`int`, *optional*, defaults to `640`):
         The size of each local tile. Must match the model's query embedding size.
     maximum_pad_value (`int`, *optional*, defaults to `640`):
-        If `crop_to_patches` is `False` and `size.height/width` is larger than this value,
-        the image will be resized directly to `size.height/width` without padding. Otherwise,
-        images are resized and padded to `size.height/width` while preserving the aspect ratio.
+        If `crop_to_patches` is `False` and `max(size.height, size.width)` is smaller than or equal to this
+        value, the image is resized directly to a square of `max(size.height, size.width)` without preserving
+        the aspect ratio. Otherwise, the image is resized while preserving the aspect ratio and then padded to
+        a square with `background_color`.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
         The background color for padding.
     """
@@ -396,9 +397,9 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
         MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     layer_types (`list[str]`, *optional*):
         Attention type for each decoder layer. Defaults to `"reference_sliding_attention"` on every layer.
-    use_sliding_window (`int`, defaults to `True`):
+    use_sliding_window (`bool`, *optional*, defaults to `True`):
         Whether to use reference sliding window attention.
-    sliding_window (`int`, *optional*, defaults to 128):
+    sliding_window (`int`, *optional*, defaults to `128`):
         Sliding window size for reference sliding window attention. If set, every token attends to the last
         `sliding_window` and all image and prompt tokens.
 

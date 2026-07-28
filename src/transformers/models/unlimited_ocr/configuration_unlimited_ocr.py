@@ -166,9 +166,9 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
         MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     layer_types (`list[str]`, *optional*):
         Attention type for each decoder layer. Defaults to `"reference_sliding_attention"` on every layer.
-    use_sliding_window (`int`, defaults to `True`):
+    use_sliding_window (`bool`, *optional*, defaults to `True`):
         Whether to use reference sliding window attention.
-    sliding_window (`int`, *optional*, defaults to 128):
+    sliding_window (`int`, *optional*, defaults to `128`):
         Sliding window size for reference sliding window attention. If set, every token attends to the last
         `sliding_window` and all image and prompt tokens.
 
