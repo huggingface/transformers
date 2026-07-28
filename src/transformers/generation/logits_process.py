@@ -320,6 +320,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
         prompt_ignore_length (`int`, *optional*):
             The original input ids sequence length, which if provided, will not be used in the penalty calculation.
+        normalize (`bool`, *optional*, defaults to `False`):
+            Apply the penalty to normalized log-probabilities instead of raw logits. See [this paper](https://arxiv.org/abs/2607.09791) for more details.
 
     Examples:
 
@@ -355,7 +357,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     supports_continuous_batching = False
 
-    def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
+    def __init__(self, penalty: float, prompt_ignore_length: int | None = None, normalize: bool = False):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
@@ -366,6 +368,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
+        self.normalize = normalize
         self.logits_indices = None
         self.cu_seq_lens_q = None
 
@@ -428,6 +431,9 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
             and 1.0 penalizes prompt tokens.
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should be repeated within the decoder ids.
+        normalize (`bool`, *optional*, defaults to `False`):
+            Apply the penalty to the normalized log-probilities instead of the raw logits.
+            See [`RepetitionPenaltyLogitsProcessor`] and [this paper](https://arxiv.org/abs/2607.09791) for more details.
 
     Examples:
 
@@ -452,12 +458,13 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     supports_continuous_batching: bool = False
 
-    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor, normalize: bool = False):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
         self.penalty = 1 / penalty
         self.encoder_input_ids = encoder_input_ids
+        self.normalize = normalize
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
