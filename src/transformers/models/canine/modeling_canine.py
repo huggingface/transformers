@@ -435,6 +435,27 @@ class CanineAttention(nn.Module):
         if not self.local:
             self_outputs = self.self(hidden_states, hidden_states, attention_mask, output_attentions)
             attention_output = self_outputs[0]
+        elif (
+            self.attend_from_chunk_width == self.attend_from_chunk_stride
+            and self.attend_to_chunk_width == self.attend_to_chunk_stride
+            and self.attend_from_chunk_stride == self.attend_to_chunk_stride
+            and not self.always_attend_to_first_position
+            and not self.first_position_attends_to_all
+            and not output_attentions
+        ):
+            # Non-overlapping, no-special-casing local attention: express the chunking as a
+            # sequence-length-independent mask instead of Python `for`/`range` loops over the
+            # sequence length. The loop version below re-traces per example input length under
+            # `torch.export`/dynamo (baking the export-time sequence length into the graph), so
+            # any other sequence length at inference time raises a shape mismatch. See #47491.
+            #
+            # The from/to strides must also match each other (not just their own width), since the
+            # single `chunk_size` below partitions both the query and key/value axes identically. The
+            # loop path allows `from_stride != to_stride` as long as the resulting chunk *counts*
+            # happen to match (its `len(from_chunks) != len(to_chunks)` check), but that pairs up
+            # differently-sized chunks positionally rather than by shared chunk index — a single
+            # shared mask can't express that, so such configs fall through to the loop path.
+            attention_output = self._local_attention_without_python_loops(hidden_states, attention_mask)
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
             from_tensor = to_tensor = hidden_states
@@ -495,9 +516,30 @@ class CanineAttention(nn.Module):
         outputs = (attention_output,)
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
-        else:
+        elif output_attentions:
             outputs = outputs + tuple(attention_probs_chunks)  # add attentions if we output them
         return outputs
+
+    def _local_attention_without_python_loops(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """Non-overlapping local attention (``attend_from_chunk_width == attend_from_chunk_stride`` and
+        likewise for `to`), computed without specializing on the sequence length. Two positions attend to
+        each other iff they fall in the same fixed-size chunk — expressed as a `(seq, seq)` boolean mask
+        built from `torch.arange`, so the traced graph has no Python-level dependence on the sequence length
+        (unlike the chunk-loop path above, which unrolls a Python `for` loop over `range(seq_length)`).
+        """
+        sequence_length = hidden_states.shape[1]
+        chunk_size = self.attend_from_chunk_stride
+        positions = torch.arange(sequence_length, device=hidden_states.device)
+        local_attention = (positions // chunk_size).unsqueeze(0) == (positions // chunk_size).unsqueeze(1)
+        local_attention_mask = attention_mask.masked_fill(~local_attention.unsqueeze(0), float("-inf"))
+        return self.self(
+            hidden_states,
+            hidden_states,
+            local_attention_mask,
+            output_attentions=False,
+        )[0]
 
 
 class CanineIntermediate(nn.Module):
@@ -791,17 +833,16 @@ class CanineModel(CaninePreTrainedModel):
     def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
         """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
 
-        # first, make char_attention_mask 3D by adding a channel dim
+        # `MaxPool1d(kernel_size=stride=downsampling_rate)` computes the exact same non-overlapping
+        # max as the reshape + `amax` below (both default to dropping a trailing incomplete window,
+        # i.e. floor division of the sequence length), but going through the `nn.MaxPool1d` op
+        # specializes the traced sequence length to a compile-time constant under
+        # `torch.export`/dynamo, breaking dynamic-shape export (see #47491). Reshaping avoids that.
         batch_size, char_seq_len = char_attention_mask.shape
-        poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
-
-        # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
-        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(
-            poolable_char_mask.float()
-        )
-
-        # drop the channel dim added for MaxPool1d to get tensor of shape (batch_size, mol_seq_len)
-        return pooled_molecule_mask.squeeze(dim=1)
+        molecule_seq_len = char_seq_len // downsampling_rate
+        complete_char_seq_len = molecule_seq_len * downsampling_rate
+        poolable_char_mask = char_attention_mask[:, :complete_char_seq_len].float()
+        return poolable_char_mask.reshape(batch_size, molecule_seq_len, downsampling_rate).amax(dim=-1)
 
     def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
