@@ -1242,6 +1242,8 @@ class PreTrainedModel(
     _supports_flex_attn: bool = False
     # Model's compatible flash kernels (e.g., "kernels-community/flash-mla") defaulting to the first in the list
     _compatible_flash_implementations: list[str] | None = None
+    # Model's incompatible flash kernels (e.g., "flash_attention_torch") which will be rejected upon request
+    _incompatible_flash_implementations: list[str] | None = None
 
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
@@ -1861,7 +1863,6 @@ class PreTrainedModel(
                 attn_implementation = default_flash_implementation
 
         is_paged, base_implementation = split_attention_implementation(attn_implementation)
-
         applicable_attn_implementation = attn_implementation
 
         requested_original_flash_attn = False
@@ -1895,6 +1896,16 @@ class PreTrainedModel(
 
             if is_paged:
                 applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
+
+        # E.g. fa torch cannot handle softcapping which is easier to set via this flag then setting all others to compatible
+        if (
+            incompatible_flash_implementations := getattr(self, "_incompatible_flash_implementations", None)
+        ) is not None:
+            if base_implementation in incompatible_flash_implementations:
+                raise ValueError(
+                    f"The requested flash attention implementation {applicable_attn_implementation} is not supported! "
+                    f"See {incompatible_flash_implementations} for a list of incompatible implementations."
+                )
 
         if is_kernel(applicable_attn_implementation):
             try:

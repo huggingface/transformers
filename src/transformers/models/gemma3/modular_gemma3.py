@@ -448,6 +448,7 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         "SiglipEncoderLayer",
         "SiglipMultiheadAttentionPoolingHead",
     ]
+    _incompatible_flash_implementations = AttributeError()  # no softcap
 
     @torch.no_grad()
     def _init_weights(self, module):

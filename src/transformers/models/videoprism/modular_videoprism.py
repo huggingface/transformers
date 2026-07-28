@@ -515,6 +515,7 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
     # sdpa is disabled because it does not support attention capping
     # used in eager and logits are too far off
     _supports_sdpa = False
+    _incompatible_flash_implementations = ["flash_attention_torch"]  # softcapping
     _input_embed_layer = AttributeError()
 
     @torch.no_grad()
