@@ -26,12 +26,7 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.content_parsers import parse_content
-from transformers.utils.chat_parsing.tool_arg_coercion import (
-    build_tool_type_index,
-    coerce_arguments,
-    coerce_tool_calls,
-    raw_text_params,
-)
+from transformers.utils.chat_parsing.response_parser import _coerce, _coerce_argument, _schema_types
 
 
 cohere_template = {
@@ -1360,15 +1355,20 @@ def _first_tool_args(message):
     return message["tool_calls"][0]["function"]["arguments"]
 
 
+def _parser_with_tools(tools):
+    """A ResponseParser configured with `tools`, for exercising coercion directly."""
+    return ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
+
+
 class ToolArgCoercionTest(unittest.TestCase):
-    def test_coerce_arguments_casts_declared_types(self):
-        param_types = {
-            "count": ("integer",),
-            "ratio": ("number",),
-            "enabled": ("boolean",),
-            "tags": ("array",),
-            "note": ("string",),
-        }
+    def test_coerce_tool_calls_casts_declared_types(self):
+        tools = _set_alarm_tools(
+            count={"type": "integer"},
+            ratio={"type": "number"},
+            enabled={"type": "boolean"},
+            tags={"type": "array"},
+            note={"type": "string"},
+        )
         arguments = {
             "count": "3",
             "ratio": "1.5",
@@ -1378,8 +1378,10 @@ class ToolArgCoercionTest(unittest.TestCase):
             "already_typed": 7,
             "extra": "unscheduled",
         }
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": arguments}}
+        self.assertIs(_parser_with_tools(tools)._coerce_tool_calls(call), call)
         self.assertEqual(
-            coerce_arguments(arguments, param_types),
+            call["function"]["arguments"],
             {
                 "count": 3,
                 "ratio": 1.5,
@@ -1391,81 +1393,47 @@ class ToolArgCoercionTest(unittest.TestCase):
             },
         )
 
-    def test_coerce_arguments_falls_back_to_raw_on_failure(self):
-        self.assertEqual(
-            coerce_arguments({"count": "not-a-number"}, {"count": ("integer",)}),
-            {"count": "not-a-number"},
-        )
+    def test_coerce_falls_back_to_raw_on_failure(self):
+        self.assertEqual(_coerce("not-a-number", ("integer",)), "not-a-number")
 
-    def test_coerce_arguments_handles_any_of_and_null(self):
-        param_types = {"n": ("integer", "null")}
-        self.assertEqual(coerce_arguments({"n": "5"}, param_types), {"n": 5})
-        self.assertEqual(coerce_arguments({"n": "null"}, param_types), {"n": None})
+    def test_coerce_handles_any_of_and_null(self):
+        self.assertEqual(_coerce("5", ("integer", "null")), 5)
+        self.assertIsNone(_coerce("null", ("integer", "null")))
 
-    def test_coerce_arguments_booleans_match_bool_parser(self):
-        param_types = {"flag": ("boolean",)}
+    def test_coerce_booleans_match_bool_parser(self):
         # Accept the same literals as the `bool` content parser, case-insensitively.
         for raw, expected in [("true", True), ("True", True), ("1", True), ("false", False), ("0", False)]:
-            self.assertEqual(coerce_arguments({"flag": raw}, param_types), {"flag": expected})
+            self.assertEqual(_coerce(raw, ("boolean",)), expected)
         # Non-boolean text stays a string rather than silently becoming False.
-        self.assertEqual(coerce_arguments({"flag": "maybe"}, param_types), {"flag": "maybe"})
+        self.assertEqual(_coerce("maybe", ("boolean",)), "maybe")
 
-    def test_coerce_arguments_object_array_require_matching_json(self):
+    def test_coerce_object_array_require_matching_json(self):
         # A JSON object body is only accepted for an `object` param, a JSON array only for `array`.
-        self.assertEqual(coerce_arguments({"x": "[1, 2]"}, {"x": ("object",)}), {"x": "[1, 2]"})
-        self.assertEqual(coerce_arguments({"x": '{"a": 1}'}, {"x": ("array",)}), {"x": '{"a": 1}'})
-        self.assertEqual(coerce_arguments({"x": '{"a": 1}'}, {"x": ("object",)}), {"x": {"a": 1}})
+        self.assertEqual(_coerce("[1, 2]", ("object",)), "[1, 2]")
+        self.assertEqual(_coerce('{"a": 1}', ("array",)), '{"a": 1}')
+        self.assertEqual(_coerce('{"a": 1}', ("object",)), {"a": 1})
         # NaN / inf are not valid JSON numbers, so a `number` param keeps the raw text.
-        self.assertEqual(coerce_arguments({"x": "NaN"}, {"x": ("number",)}), {"x": "NaN"})
+        self.assertEqual(_coerce("NaN", ("number",)), "NaN")
 
     def test_coerce_tool_calls_handles_single_and_list(self):
-        tool_types = build_tool_type_index(_SET_ALARM_TOOLS)
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
         call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "7"}}}
-        self.assertIs(coerce_tool_calls(call, tool_types), call)
+        self.assertIs(parser._coerce_tool_calls(call), call)
         self.assertEqual(call["function"]["arguments"], {"hour": 7})
         # A list of calls (as produced by `transform_each`) is coerced element-wise.
         calls = [{"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": "9"}}}]
-        self.assertEqual(coerce_tool_calls(calls, tool_types)[0]["function"]["arguments"], {"hour": 9})
+        self.assertEqual(parser._coerce_tool_calls(calls)[0]["function"]["arguments"], {"hour": 9})
         # Non-tool-call values pass through untouched.
-        self.assertEqual(coerce_tool_calls("hello", tool_types), "hello")
+        self.assertEqual(parser._coerce_tool_calls("hello"), "hello")
 
-    def test_build_tool_type_index_resolves_types_once(self):
-        index = build_tool_type_index(_SET_ALARM_TOOLS)
-        self.assertEqual(
-            index["set_alarm"],
-            {"hour": ("integer",), "enabled": ("boolean",), "label": ("string",)},
-        )
-        untyped = _set_alarm_tools(label={"type": "string"}, code={"description": "opaque"})
-        self.assertEqual(build_tool_type_index(untyped)["set_alarm"], {"label": ("string",)})
-
-    def test_build_tool_type_index_handles_schema_forms(self):
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "f",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "a": {"type": ["integer", "null"]},
-                            "b": {"oneOf": [{"type": "boolean"}, {"type": "string"}]},
-                            "c": {"allOf": [{"type": "number"}]},
-                            "d": {"$ref": "#/$defs/Item"},
-                            "e": {"description": "no type"},
-                        },
-                    },
-                },
-            }
-        ]
-        self.assertEqual(
-            build_tool_type_index(tools)["f"],
-            {
-                "a": ("integer", "null"),
-                "b": ("boolean", "string"),
-                "c": ("number",),
-                "d": ("object",),
-            },
-        )
+    def test_schema_types_handles_schema_forms(self):
+        self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
+        self.assertEqual(_schema_types({"type": ["integer", "null"]}), ("integer", "null"))
+        self.assertEqual(_schema_types({"oneOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"allOf": [{"type": "number"}]}), ("number",))
+        self.assertEqual(_schema_types({"$ref": "#/$defs/Item"}), ("object",))
+        # Undescribed parameters resolve to no candidate types, making coercion a no-op.
+        self.assertEqual(_schema_types({"description": "no type"}), ())
 
     def test_parse_response_tools_coerces_xml_inline_string_args(self):
         # Without a value_parser, xml-inline argument bodies stay strings; tools= casts them.
@@ -1571,17 +1539,28 @@ class ToolArgCoercionTest(unittest.TestCase):
         with_tools = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="", tools=string_only)
         self.assertEqual(_first_tool_args(without), {"label": 1.5, "code": 7})
         self.assertEqual(_first_tool_args(with_tools), {"label": "1.50", "code": "7"})
-        # Direct content-parser path used by process_field's injected runtime arg.
+        # The content parsers themselves capture raw text; `value_parser` (and any
+        # schema-driven exemption from it) is applied afterwards, in `process_field`.
         self.assertEqual(
             parse_content(
                 "label: 1.50\ncode: 7",
                 "kv-lines",
-                {
-                    "value_parser": {"name": "json", "args": {"allow_non_json": True}},
-                    "skip_value_parser_for": frozenset({"label"}),
-                },
+                {"value_parser": {"name": "json", "args": {"allow_non_json": True}}},
             ),
-            {"label": "1.50", "code": 7},
+            {"label": "1.50", "code": "7"},
+        )
+
+    def test_literal_tool_name_in_transform_skips_value_parser(self):
+        # The calling tool is read statically from the field's transform; a hardcoded
+        # name works the same as a `{name}` capture placeholder.
+        template = copy.deepcopy(qwen3_template)
+        field = template["fields"]["tool_calls"]
+        field["open_pattern"] = r"<tool_call>\s*<function=set_alarm>"
+        field["transform"] = {"type": "function", "function": {"name": "set_alarm", "arguments": "{content}"}}
+        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)),
+            {"label": "1.50"},
         )
 
     def test_non_tool_call_field_keeps_value_parser(self):
@@ -1650,32 +1629,33 @@ class ToolArgCoercionTest(unittest.TestCase):
             {"label": "wake up"},
         )
 
-    def test_coerce_arguments_casts_inside_lists(self):
-        param_types = {"hour": ("integer",)}
-        self.assertEqual(coerce_arguments({"hour": ["7", "9"]}, param_types), {"hour": [7, 9]})
+    def test_coerce_argument_casts_inside_lists(self):
+        self.assertEqual(_coerce_argument(["7", "9"], ("integer",)), [7, 9])
         # Elements that don't cast, and non-string elements, are left as they are.
-        self.assertEqual(coerce_arguments({"hour": ["7", "x", 9]}, param_types), {"hour": [7, "x", 9]})
+        self.assertEqual(_coerce_argument(["7", "x", 9], ("integer",)), [7, "x", 9])
 
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name
-        # must be ignored rather than raising on the type-index lookup.
+        # must be ignored rather than raising on the schema lookup.
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
         call = {"type": "function", "function": {"name": ["set_alarm"], "arguments": {"hour": "7"}}}
-        self.assertEqual(coerce_tool_calls(call, build_tool_type_index(_SET_ALARM_TOOLS)), call)
+        self.assertEqual(parser._coerce_tool_calls(call), call)
         self.assertEqual(call["function"]["arguments"], {"hour": "7"})
 
-    def test_raw_text_params_exempts_all_but_pure_containers(self):
-        index = build_tool_type_index(
-            _set_alarm_tools(
-                hour={"type": "integer"},
-                label={"type": "string"},
-                tags={"type": "array"},
-                extra={"type": "object"},
-                # One scalar in a union is enough: the text has to survive for the
-                # `string` branch, since a value_parser would settle it as a number.
-                either={"anyOf": [{"type": "string"}, {"type": "object"}]},
-            )
+    def test_schema_typed_keys_exempt_all_but_pure_containers(self):
+        tools = _set_alarm_tools(
+            hour={"type": "integer"},
+            label={"type": "string"},
+            tags={"type": "array"},
+            extra={"type": "object"},
+            # One scalar in a union is enough: the text has to survive for the
+            # `string` branch, since a value_parser would settle it as a number.
+            either={"anyOf": [{"type": "string"}, {"type": "object"}]},
         )
-        self.assertEqual(raw_text_params(index["set_alarm"]), frozenset({"hour", "label", "either"}))
+        parser = ResponseParser(qwen3_template, prefix="", tools=tools)
+        parser._captures = {"name": "set_alarm"}
+        field = parser._spec.fields["tool_calls"]
+        self.assertEqual(parser._schema_typed_keys(field), frozenset({"hour", "label", "either"}))
 
     def test_union_with_container_still_keeps_scalar_text(self):
         model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"

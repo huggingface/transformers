@@ -422,19 +422,20 @@ message = parse_response(model_out, template, prefix="", tools=tools)
 # {"hour": 7, "enabled": True, "label": "wake up"}
 ```
 
-Each region is parsed as usual first. If the result turns out to be a call to one of the `tools`, its
-string arguments are cast (`"7"` → `7`, `"true"` → `True`, `"007"` → `7`); anything else is left
-alone. Already-typed values, arguments the schema does not describe, and casts that fail are all
-untouched, so `tools=` only ever adds type information, and it is a no-op for templates that already
-recover types.
+Each region is parsed as usual, and any value that parsed into a call to one of the `tools` gets its
+string arguments cast as the region closes (`"7"` → `7`, `"true"` → `True`, `"007"` → `7`); anything
+else is left alone. Already-typed values, arguments the schema does not describe, and casts that fail
+are all untouched, so `tools=` only ever adds type information, and it is a no-op for templates that
+already recover types.
 
-There is one wrinkle. A `value_parser` runs before the schema is consulted, and a lax one guesses
-wrong for `string` parameters: `json` with `allow_non_json` reads `1.50` as the number `1.5`, losing
-the trailing zero for good. Since a cast can only rework strings, there is no repairing that
-afterwards. So when a field defines a `value_parser`, the parameters of the calling tool that declare
-at least one scalar type are re-parsed with it skipped, leaving the exact text for the cast to use.
-Only parameters typed purely as `object` or `array` keep the `value_parser`, which reads a JSON body
-at least as well as a cast does, with dialect knobs and typing for the elements.
+There is one wrinkle. A lax `value_parser` guesses wrong for `string` parameters: `json` with
+`allow_non_json` reads `1.50` as the number `1.5`, losing the trailing zero for good. Since a cast
+can only rework strings, there is no repairing that afterwards. So the schema is consulted *before*
+the `value_parser` runs: when a field's transform declares a tool call (its `function.arguments` is
+the parsed `"{content}"`), parameters of the calling tool that declare at least one scalar type skip
+the `value_parser` and keep their exact text for the cast to use. Only parameters typed purely as
+`object` or `array` keep the `value_parser`, which reads a JSON body at least as well as a cast does,
+with dialect knobs and typing for the elements.
 
 ### Transform
 
