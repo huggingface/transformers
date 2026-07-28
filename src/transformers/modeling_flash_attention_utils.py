@@ -898,7 +898,8 @@ def _flash_attention_pure_varlen_alt(
     )
     if isinstance(out, tuple):
         out = out[0]
-    return out
+
+    return out.view(query_states.size(0), -1, out.size(-2), out.size(-1))
 
 
 def fa_peft_integration_check(
