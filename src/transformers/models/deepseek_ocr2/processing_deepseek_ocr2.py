@@ -64,15 +64,21 @@ class DeepseekOcr2Processor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
+    def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
+        if images is not None:
+            images = make_flat_list_of_images(images)
+        return images, text, videos, audio
+
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 
-        if isinstance(text, str):
-            text = [text]
         total_placeholders = sum(prompt.count(self.image_token) for prompt in text)
-        num_images = len(make_flat_list_of_images(images)) if images is not None else 0
+        num_images = len(images) if images is not None else 0
         if total_placeholders != num_images:
             raise ValueError(
                 f"Found {total_placeholders} placeholders across the batch, but have {num_images} flattened images."
