@@ -1804,7 +1804,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
 )
 class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_unexpected = {"lm_head"}
+    _keys_to_ignore_on_load_unexpected = {"lm_head"}  # unused and untied weight in original checkpoint
 
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)

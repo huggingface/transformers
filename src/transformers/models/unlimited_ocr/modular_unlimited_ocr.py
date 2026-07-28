@@ -1098,7 +1098,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 
 
 class UnlimitedOcrModel(DeepseekOcr2Model):
-    _keys_to_ignore_on_load_unexpected = {"lm_head"}
+    _keys_to_ignore_on_load_unexpected = {"lm_head"}  # unused and untied weight in original checkpoint
 
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
