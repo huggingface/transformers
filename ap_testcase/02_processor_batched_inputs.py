@@ -12,9 +12,10 @@ import numpy as np
 
 from transformers import AutoProcessor
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite.
 # This script only needs the processor stack, so the weight shards are not downloaded.
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -51,8 +52,10 @@ sample0 = tokenizer.decode(out["input_ids"][0], skip_special_tokens=False)
 assert "<|img_start|>" not in sample0 and "<|audio_start|>" in sample0, "sample 0 has audio but no image"
 counts = [tokenizer.decode(ids).count("<|audio|>") for ids in out["input_ids"]]
 assert counts == [40, 0, 20 + 80], f"per-sample audio placeholders follow clip lengths, got {counts}"
-print(f"[OK] nested batch: pixel_values {tuple(out['pixel_values'].shape)} (padded to batch max), "
-      f"per-sample audio placeholder counts {counts}")
+print(
+    f"[OK] nested batch: pixel_values {tuple(out['pixel_values'].shape)} (padded to batch max), "
+    f"per-sample audio placeholder counts {counts}"
+)
 
 # --- (b) flat lists: consumed left-to-right across the batch ---------------------------------------
 out_flat = processor(
