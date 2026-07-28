@@ -142,15 +142,6 @@ class OnyxCenteredRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-class OnyxNormalizedEmbedding(nn.Embedding):
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None, eps: float = 1e-5):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.norm = OnyxRMSNorm(eps=eps, with_scale=False)
-
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.norm(super().forward(input_ids))
-
-
 class OnyxMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -888,10 +879,11 @@ class OnyxTextModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        # Replace Gemma2's sqrt(hidden_size)-scaled embedding — Onyx normalizes token embeddings instead.
-        self.embed_tokens = OnyxNormalizedEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, eps=config.rms_norm_eps
-        )
+        # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
+        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
+        # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
+        # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [OnyxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )

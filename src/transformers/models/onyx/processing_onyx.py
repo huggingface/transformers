@@ -11,22 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring, logging
 from .onyx_chat_template import build_chat_template
 
 
 logger = logging.get_logger(__name__)
-
-# The Onyx chat template is owned by the model team (Meta): it renders the ATEM
-# tool-calling format, the private ``to=self`` reasoning channel, reasoning-strength
-# and valid-recipients metadata, and multimodal (image / video) content. It is the
-# authoritative source of truth (kept byte-identical to the internal
-# ``genai/msl/guac/hf`` template) and its generation prompt is intentionally the bare
-# ``<|start|>assistant`` so the model chooses its own channel (``to=self`` reasoning,
-# ``to=<tool>`` for a tool call, or ``to=user`` for a direct answer). Do NOT hardcode
-# the generation prompt to ``to=user`` -- that structurally prevents tool calls.
-ONYX_MM_CHAT_TEMPLATE = build_chat_template(multimodal=True)
 
 
 @auto_docstring
@@ -39,28 +29,47 @@ class OnyxProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = "<|image|>"
-        self.patch_token = "<|patch|>"
+        self.image_token = "<|patch|>"
         self.image_start_token = "<|image_start|>"
         self.image_end_token = "<|image_end|>"
         self.video_token = "<|video|>"
         self.video_sep_token = "<|vid_frame_separator|>"
         self.video_start_token = "<|vid_start|>"
         self.video_end_token = "<|vid_end|>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
         super().__init__(
             image_processor=image_processor,
             video_processor=video_processor,
             tokenizer=tokenizer,
-            chat_template=chat_template or ONYX_MM_CHAT_TEMPLATE,
+            chat_template=chat_template or build_chat_template(),
             **kwargs,
         )
 
-    # maybe chat template should add start-end tokens?
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Used by vLLM to size the image placeholders without running the image processor. ``image_sizes``
+        are ``(height, width)`` pixel pairs; the returned ``num_image_tokens`` is the count of scattered
+        ``<|patch|>`` tokens per image and ``num_image_patches`` the number of pixel-value patch rows.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            merge_size = self.image_processor.merge_size
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(height, width, kwargs)
+                for height, width in image_sizes
+            ]
+            num_image_tokens = [patches // merge_size**2 for patches in num_image_patches]
+            vision_data.update(num_image_tokens=num_image_tokens, num_image_patches=num_image_patches)
+        return MultiModalData(**vision_data)
+
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
-        return self.image_start_token + self.patch_token * num_image_tokens + self.image_end_token
+        return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         merge_length = self.video_processor.downsample_factor**2
