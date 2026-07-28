@@ -494,7 +494,6 @@ class UnlimitedOcrPreTrainedModel(DeepseekOcr2PreTrainedModel):
         "UnlimitedOcrTextDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrModel):
@@ -1182,8 +1181,6 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             **local_outputs,
         )
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
