@@ -344,7 +344,9 @@ class LogitsProcessorTest(unittest.TestCase):
         shifted_scores = scores + 100.0
 
         # softmax is invariant to a constant shift of the logits, the normalized penalty should work the same way
-        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(penalty=1.3, encoder_input_ids=input_ids, normalize=True)
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(
+            penalty=1.3, encoder_input_ids=input_ids, normalize=True
+        )
         probs = torch.softmax(rep_penalty_proc(input_ids, scores), dim=-1)
         shifted_probs = torch.softmax(rep_penalty_proc(input_ids, shifted_scores), dim=-1)
         self.assertTrue(torch.allclose(probs, shifted_probs, rtol=1e-4, atol=1e-6))
