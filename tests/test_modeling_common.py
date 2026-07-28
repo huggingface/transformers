@@ -122,6 +122,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.generic import is_flash_attention_requested
 from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
 from .exporters.test_export import ExportTesterMixin
@@ -3439,6 +3440,9 @@ class ModelTesterMixin(ExportTesterMixin):
             valid_fa_implementations = model._compatible_flash_implementations
             if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
                 continue
+            invalid_fa_implementations = model._incompatible_flash_implementations
+            if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                continue
 
             # If we end up here, at least one model class was not skipped
             _has_run_at_least_one_model = True
@@ -4180,6 +4184,15 @@ class ModelTesterMixin(ExportTesterMixin):
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
             ):
                 self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
 
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(

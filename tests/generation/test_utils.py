@@ -1893,20 +1893,28 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
-            # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA).
-            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
-                for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
-                    if input_name in inputs_dict:
-                        inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
-
             # make sure that all models have enough positions for generation
             if hasattr(config, "max_position_embeddings"):
                 config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
 
             set_config_for_less_flaky_test(config)
             model = model_class(config)
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
+
+                # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+                # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
+                # resulting in a mask with holes (not supported properly by FA).
+                for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
+                    if input_name in inputs_dict:
+                        inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
 
             # If not all sub-models support flex, skip the test. We could potentially set not supported backbones
             # to "eager" attention, leaving it for future updates on multimodality tests
@@ -2141,6 +2149,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     if isinstance(submodel, PreTrainedModel)
                 ):
                     self.skipTest(f"At least some parts of {model_class.__name__} don't support {attn_implementation}")
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
