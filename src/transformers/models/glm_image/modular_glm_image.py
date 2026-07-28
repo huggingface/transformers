@@ -497,7 +497,10 @@ class GlmImageModel(Glm4vModel):
 
         # Per-sample caches for batch processing
         self._cached_decode_position_ids = None  # shape: [batch_size, 3, max_decode_len]
-        self._prefill_len = None  # prefill sequence length (same for all samples in batch)
+        # Full absolute 3D position sequence (prefill positions ++ target-image decode positions),
+        # `(3, batch, prefill_len + max_decode_len)`; built at prefill and sliced by absolute length
+        # during generation. Kept out of the traced `forward` (host-side generation bookkeeping only).
+        self._position_table = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -653,9 +656,6 @@ class GlmImageModel(Glm4vModel):
                 )
                 all_decode_position_ids.append(sample_decode_pos_ids)
 
-        # Store prefill length (same for all samples since input_ids is padded to same length)
-        self._prefill_len = seq_len
-
         # Pad decode position ids to same length and stack
         if all_decode_position_ids:
             max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
@@ -768,53 +768,19 @@ class GlmImageModel(Glm4vModel):
         attention_mask: torch.Tensor | None,
         past_key_values: torch.Tensor | None,
     ) -> torch.Tensor | None:
-        # Only reached for a direct `forward` with `position_ids=None`. During generation the 3D positions
-        # are built host-side in `GlmImageForConditionalGeneration.prepare_inputs_for_generation` (which
-        # can branch on the cache length as a plain Python int) and passed in, so this never runs in the
-        # traced generate/export path — keeping `forward` free of any data-dependent cache-length guard.
+        # Only reached from a direct `forward(position_ids=None)`. Generation builds the 3D positions
+        # host-side in `prepare_inputs_for_generation`, so this stays out of the traced/export path.
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
-        if not can_compute_mrope:
-            # No images to place: let the language model infer 1D positions.
-            return None
-        position_ids, self.rope_deltas = self.get_rope_index(
-            input_ids,
-            image_grid_thw=image_grid_thw,
-            attention_mask=attention_mask,
-            images_per_sample=images_per_sample,
-        )
-        return position_ids
-
-    def get_generation_position_ids(
-        self,
-        input_ids: torch.Tensor | None,
-        inputs_embeds: torch.Tensor | None,
-        image_grid_thw: torch.Tensor | None,
-        images_per_sample: torch.Tensor | None,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-    ) -> torch.Tensor | None:
-        """Build the 3D mrope ``position_ids`` for one generation step, host-side.
-
-        Called from ``prepare_inputs_for_generation``, where ``get_seq_length()`` is a plain Python
-        ``int`` — so prefill vs. decode is a normal comparison, not a data-dependent guard on the (static)
-        cache. Recomputing per step (rather than the parent's seed-once + linear-grow hooks) is what lets
-        it compose with beam expansion and continuation-from-past for these 2D image positions.
-        """
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if isinstance(past_length, torch.Tensor):
-            past_length = int(past_length)
-
-        # Prefill: compute the positions and cache the per-step decode table (same as a direct forward).
-        if past_length == 0:
-            return self.compute_3d_position_ids(
-                input_ids, image_grid_thw, images_per_sample, inputs_embeds, attention_mask, past_key_values
+        # No images to place: let the language model infer 1D positions.
+        position_ids = None
+        if can_compute_mrope:
+            position_ids, self.rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                attention_mask=attention_mask,
+                images_per_sample=images_per_sample,
             )
-        # Decode: slice this step's positions out of the cached decode table (or fall back to 1D positions).
-        if self._cached_decode_position_ids is None:
-            return None
-        seq_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        step = past_length - self._prefill_len
-        return self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+        return position_ids
 
     def forward(
         self,
@@ -1071,20 +1037,54 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
 
-        # Build the 3D mrope `position_ids` here (host-side) rather than inside the traced `forward`: this
-        # lets prefill vs. decode be decided by a plain Python cache-length check instead of a data-dependent
-        # guard on a static cache. Recomputing per step (vs. the parent's seed-once + linear-grow hooks) is
-        # what makes it compose with beam expansion and continuation-from-past for these 2D image positions.
-        model_inputs["position_ids"] = self.model.get_generation_position_ids(
-            input_ids=model_inputs.get("input_ids"),
-            inputs_embeds=model_inputs.get("inputs_embeds"),
-            image_grid_thw=image_grid_thw,
-            images_per_sample=images_per_sample,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-        )
-
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        """Seed the 3D mrope ``position_ids`` once at the start of generation (host-side).
+
+        At prefill, ``get_rope_index`` yields the prompt positions and the 2D target-image decode
+        positions; these are concatenated into ``_position_table``, the full absolute position sequence.
+        The seed (and every later step via ``_update_model_kwargs_for_generation``) is just a slice of
+        that table by absolute length, which also makes continuing from a non-empty cache a plain slice.
+        Falls back to the base 1D positions when there is no image to place.
+        """
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+        cache = model_kwargs.get("past_key_values")
+        past_length = int(cache.get_seq_length()) if cache is not None else 0
+        # Continuation from a non-empty cache: the table built when the prompt was first processed
+        # already holds these absolute positions, so slice the prompt-length prefix.
+        if past_length > 0 and self.model._position_table is not None:
+            return self.model._position_table[:, :, : inputs_tensor.shape[1]]
+
+        image_grid_thw = model_kwargs.get("image_grid_thw")
+        if inputs_tensor is None or image_grid_thw is None:
+            self.model._position_table = None
+            return super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        position_ids, self.model.rope_deltas = self.model.get_rope_index(
+            inputs_tensor,
+            image_grid_thw=image_grid_thw,
+            images_per_sample=model_kwargs.get("images_per_sample"),
+            attention_mask=model_kwargs.get("attention_mask"),
+        )
+        decode = self.model._cached_decode_position_ids  # (batch, 3, max_decode)
+        self.model._position_table = (
+            torch.cat([position_ids, decode.permute(1, 0, 2)], dim=-1) if decode is not None else position_ids
+        )
+        return position_ids
+
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
+        # These 2D image positions follow a spatial grid, not the parent's linear ``+1`` growth, so append
+        # the next slice of the absolute position table instead (keyed on the accumulated length).
+        position_ids = model_kwargs.get("position_ids")
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder, num_new_tokens=num_new_tokens
+        )
+        if self.model._position_table is not None and position_ids is not None:
+            start = position_ids.shape[-1]
+            new_positions = self.model._position_table[:, :, start : start + num_new_tokens]
+            model_kwargs["position_ids"] = torch.cat([position_ids, new_positions], dim=-1)
+        return model_kwargs
 
     def _get_image_nums(
         self,
@@ -1192,6 +1192,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                     dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
+                    # `position_ids` is the 3D mrope tensor `(3, batch, seq)`; its batch axis is dim 1,
+                    # so it's expanded separately below rather than on dim 0 like the other tensors.
+                    and key != "position_ids"
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
@@ -1202,6 +1205,16 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        # Expand the seeded 3D `position_ids` on its batch axis (dim 1), and the absolute position table
+        # (a model attribute, so not in `model_kwargs`) likewise, matching how `input_ids` was expanded.
+        position_ids = model_kwargs.get("position_ids")
+        if position_ids is not None:
+            model_kwargs["position_ids"] = position_ids.repeat_interleave(
+                expand_size, dim=max(position_ids.dim() - 2, 0)
+            )
+        if self.model._position_table is not None:
+            self.model._position_table = self.model._position_table.repeat_interleave(expand_size, dim=1)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:

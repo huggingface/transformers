@@ -877,8 +877,8 @@ def create_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    allow_is_causal_skip: bool = True,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -910,14 +910,14 @@ def create_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
-            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
-            another mask. Defaults to `True`.
         layer_idx (`int`, *optional*):
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1115,8 +1115,8 @@ def create_sliding_window_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
-    allow_is_causal_skip: bool = True,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1149,14 +1149,14 @@ def create_sliding_window_causal_mask(
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
-            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
-            another mask. Defaults to `True`.
         layer_idx (`int`, *optional*):
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1350,8 +1350,8 @@ def create_chunked_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    allow_is_causal_skip: bool = True,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -1380,14 +1380,14 @@ def create_chunked_causal_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
-        allow_is_causal_skip (`bool`, optional):
-            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
-            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
-            another mask. Defaults to `True`.
         layer_idx (`int`, *optional*):
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     if layer_idx is None:
         # If we have an hybrid cache structure, here we want to create the mask for the sliding layers

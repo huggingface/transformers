@@ -77,6 +77,12 @@ if is_torch_available():
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
 
+    # Runtime-assert ops dropped before lowering (see `_drop_runtime_asserts`).
+    _RUNTIME_ASSERT_TARGETS = (
+        torch.ops.aten._assert_tensor_metadata.default,
+        torch.ops.aten._assert_scalar.default,
+    )
+
 
 if is_executorch_available():
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
@@ -1237,14 +1243,14 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
     asserts encode survive on ``exported_program.range_constraints`` (further capped by
     ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
     """
-    assert_targets = (
-        torch.ops.aten._assert_tensor_metadata.default,
-        torch.ops.aten._assert_scalar.default,
-    )
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
             continue
-        asserts = [node for node in module.graph.nodes if node.op == "call_function" and node.target in assert_targets]
+        asserts = [
+            node
+            for node in module.graph.nodes
+            if node.op == "call_function" and node.target in _RUNTIME_ASSERT_TARGETS
+        ]
         # Erase the asserts and only the symint feeders they leave dead, walking back from each assert's
         # inputs. We avoid a global `eliminate_dead_code` on purpose: it also visits unrelated dead nodes
         # and on some graphs (e.g. `minimax_m3_vl` under static shapes) trips an fx `SystemError`/`KeyError`
