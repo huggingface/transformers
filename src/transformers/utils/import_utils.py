@@ -83,6 +83,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists, None
 
 
+def maybe_import_error(message: str, *, raise_error: bool) -> bool:
+    """Report an unmet dependency precondition: raise `ImportError(message)` when `raise_error`, else
+    return `False`. Lets an `is_*_available` / `is_*_loadable` check read as a flat
+    `if unmet: return maybe_import_error(msg, ...)` — a bool for callers probing availability, the specific
+    error for callers that want to fail loudly (`raise_error=True`)."""
+    if raise_error:
+        raise ImportError(message)
+    return False
+
+
 def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Callable | ModuleType | None:
     """
     Check if a given `module` has an internal import path as defined by the `chained_path`.
@@ -1419,11 +1429,6 @@ def is_cython_available() -> bool:
 @lru_cache
 def is_jinja_available() -> bool:
     return _is_package_available("jinja2")[0]
-
-
-@lru_cache
-def is_jmespath_available() -> bool:
-    return _is_package_available("jmespath")[0]
 
 
 @lru_cache

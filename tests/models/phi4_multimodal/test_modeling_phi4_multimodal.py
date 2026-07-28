@@ -72,8 +72,9 @@ class Phi4MultimodalModelTester:
         vocab_size=49,
         hidden_size=32,
         intermediate_size=64,
-        num_attention_heads=8,
-        num_key_value_heads=4,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=4096,
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
@@ -113,6 +114,7 @@ class Phi4MultimodalModelTester:
         self.audio_token_id = audio_token_id
         self.audio_config = copy.deepcopy(audio_config)
         self.vision_config = copy.deepcopy(vision_config)
+        self.max_position_embeddings = max_position_embeddings
 
         self.is_training = is_training
         self.batch_size = batch_size
@@ -125,6 +127,7 @@ class Phi4MultimodalModelTester:
 
     def get_config(self):
         return Phi4MultimodalConfig(
+            max_position_embeddings=self.max_position_embeddings,
             num_hidden_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
