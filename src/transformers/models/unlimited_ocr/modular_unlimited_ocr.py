@@ -1310,7 +1310,15 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         >>> processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
         >>> image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
-        >>> inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [{"type": "image", "url": image}, {"type": "text", "text": "document parsing."}],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ... ).to(model.device)
 
         >>> output = model.generate(
         ...     **inputs,
@@ -1332,13 +1340,21 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
 
         >>> page1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
         >>> page2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
-        >>> num_pages = 2
 
-        >>> inputs = processor(
-        ...     images=[page1, page2],
-        ...     text="<image>" * num_pages + "Multi page parsing.",
-        ...     crop_to_patches=False,
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [{"type": "image", "url": page} for page in [page1, page2]]
+        ...         + [{"type": "text", "text": "Multi page parsing."}],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     add_generation_prompt=True,
+        ...     tokenize=True,
+        ...     return_dict=True,
         ...     return_tensors="pt",
+        ...     processor_kwargs={"crop_to_patches": False},
         ... ).to(model.device)
 
         >>> output = model.generate(

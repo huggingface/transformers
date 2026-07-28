@@ -221,6 +221,16 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    def get_messages(self, images, text):
+        if not isinstance(images, list):
+            images = [images]
+        return [
+            {
+                "role": "user",
+                "content": [{"type": "image", "image": image} for image in images] + [{"type": "text", "text": text}],
+            }
+        ]
+
     @slow
     @require_torch_accelerator
     def test_small_model_integration_test_document_parsing(self):
@@ -232,7 +242,10 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+        messages = self.get_messages(image, "document parsing.")
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
             generate_ids = model.generate(
                 **inputs,
@@ -259,7 +272,10 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
             )
         )
-        inputs = self.processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+        messages = self.get_messages(image, "document parsing.")
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
             generate_ids = model.generate(
                 **inputs,
@@ -301,9 +317,12 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
             )
         )
-        inputs = self.processor(
-            images=[image1, image2],
-            text=["<image>document parsing.", "<image>document parsing."],
+        messages = [self.get_messages(image, "document parsing.") for image in [image1, image2]]
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
             return_tensors="pt",
         ).to(model.device, dtype=torch.bfloat16)
 
@@ -347,11 +366,14 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
             )
         )
-        inputs = self.processor(
-            images=[image1, image2],
-            text="<image><image>Multi page parsing.",
-            crop_to_patches=False,
+        messages = self.get_messages([image1, image2], "Multi page parsing.")
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
             return_tensors="pt",
+            processor_kwargs={"crop_to_patches": False},
         ).to(model.device)
 
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):

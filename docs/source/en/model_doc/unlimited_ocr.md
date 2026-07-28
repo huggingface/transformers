@@ -33,7 +33,7 @@ The abstract from the paper is the following:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/unlimited_ocr_architecture.png" width="600">
 
-Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. To enable base mode set `crop_to_patches=False` in the processor.
+Unlimited-OCR supports two inference configurations: the default "gundam" mode uses 640x640 tiles with dynamic cropping for high-resolution documents, and "base" mode uses a single 1024x1024 global view for standard-resolution inputs. To enable base mode set `crop_to_patches=False` in the processor, or pass it via `processor_kwargs` when using [`~ProcessorMixin.apply_chat_template`].
 
 The vision tower follows the two-stage approach from [DeepSeek-OCR-2](./deepseek_ocr2): a SAM ViT-B encoder feeds into a CLIP ViT encoder. Unlike DeepSeek-OCR-2, the CLIP features are additionally concatenated with the SAM features to yield the final image tokens. Unlimited-OCR also omits the learnable patch queries from DeepSeek-OCR-2.
 
@@ -42,8 +42,6 @@ The text model is identical to DeepSeek-OCR-2 with the additional Reference Slid
 This model was contributed by [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/baidu/Unlimited-OCR).
 
-> [!TIP]
-> For multi-page documents, pass all page images together with one `<image>` token per page in the text prompt. The model processes all pages jointly within a single context window.
 
 <hfoptions id="usage">
 <hfoption id="Single-page OCR">
@@ -55,7 +53,15 @@ model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", devic
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
-inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+messages = [
+    {
+        "role": "user",
+        "content": [{"type": "image", "url": image}, {"type": "text", "text": "document parsing."}],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
 
 output = model.generate(
     **inputs,
@@ -71,8 +77,7 @@ processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=T
 
 ### Batch processing
 
-For batch processing, pass multiple images and prompts at once. Set `padding=True` for the processor
-if images have different sizes.
+For batch processing, pass a list of messages. Set `padding=True` for the processor if images have different sizes.
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -82,11 +87,22 @@ processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
 image2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
-inputs = processor(
-    images=[image1, image2],
-    text=["<image>document parsing.", "<image>document parsing."],
-    padding=True,
+messages = [
+    [
+        {
+            "role": "user",
+            "content": [{"type": "image", "url": image}, {"type": "text", "text": "document parsing."}],
+        }
+    ]
+    for image in [image1, image2]
+]
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
     return_tensors="pt",
+    processor_kwargs={"padding": True},
 ).to(model.device)
 
 output = model.generate(
@@ -113,7 +129,15 @@ model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", devic
 processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
-inputs = processor(images=image, text="<image>document parsing.", return_tensors="pt").to(model.device)
+messages = [
+    {
+        "role": "user",
+        "content": [{"type": "image", "url": image}, {"type": "text", "text": "document parsing."}],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
 
 output = model.generate(
     **inputs,
@@ -152,10 +176,9 @@ plt.show()
 
 <hfoption id="Multi-page OCR">
 
-Multi-page documents can be parsed jointly in a single forward pass by passing all page images together. Include one `<image>` token per page in the text prompt so the model processes all pages as a continuous document.
+Multi-page documents can be parsed jointly in a single forward pass by passing all page images together. Add one image block per page to the message so the model processes all pages as a continuous document.
 
 ```python
-from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model = AutoModelForImageTextToText.from_pretrained("baidu/Unlimited-OCR", device_map="auto")
@@ -163,13 +186,21 @@ processor = AutoProcessor.from_pretrained("baidu/Unlimited-OCR")
 
 page1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg"
 page2 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
-num_pages = 2
 
-inputs = processor(
-    images=[page1, page2],
-    text="<image>" * num_pages + "Multi page parsing.",
-    crop_to_patches=False,
+messages = [
+    {
+        "role": "user",
+        "content": [{"type": "image", "url": page} for page in [page1, page2]]
+        + [{"type": "text", "text": "Multi page parsing."}],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
     return_tensors="pt",
+    processor_kwargs={"crop_to_patches": False},
 ).to(model.device)
 
 output = model.generate(

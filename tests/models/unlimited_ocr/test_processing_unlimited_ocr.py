@@ -1,3 +1,16 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import unittest
 
 import torch
@@ -24,13 +37,23 @@ class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     image_text_kwargs_override_max_length = 310
     image_unstructured_max_length = 300
 
+    def get_messages(self, image):
+        return [
+            {
+                "role": "user",
+                "content": [{"type": "image", "image": image}, {"type": "text", "text": "document parsing."}],
+            }
+        ]
+
     def test_replace_image_tokens(self):
         processor = self.get_processor()
 
-        images = torch.randint(0, 256, (1, 3, 200, 300), dtype=torch.uint8)
-        prompt = "<image>document parsing."
+        image = torch.randint(0, 256, (3, 200, 300), dtype=torch.uint8)
+        messages = self.get_messages(image)
 
-        inputs = processor(images=images, text=prompt, return_tensors="pt")
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        )
         num_image_tokens = (inputs["input_ids"] == processor.image_token_id).sum().item()
 
         # image resized to 1024, followed by patch size 16 and 4x downsampling = 16 x 16 patches
@@ -41,10 +64,12 @@ class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_replace_image_tokens_with_local(self):
         processor = self.get_processor()
 
-        images = torch.randint(0, 256, (1, 3, 500, 700), dtype=torch.uint8)
-        prompt = "<image>document parsing."
+        image = torch.randint(0, 256, (3, 500, 700), dtype=torch.uint8)
+        messages = self.get_messages(image)
 
-        inputs = processor(images=images, text=prompt, return_tensors="pt")
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        )
         num_image_tokens = (inputs["input_ids"] == processor.image_token_id).sum().item()
 
         # global is same as in test above
@@ -57,10 +82,17 @@ class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_replace_image_tokens_no_crop(self):
         processor = self.get_processor()
 
-        images = torch.randint(0, 256, (1, 3, 500, 700), dtype=torch.uint8)
-        prompt = "<image>document parsing."
+        image = torch.randint(0, 256, (3, 500, 700), dtype=torch.uint8)
+        messages = self.get_messages(image)
 
-        inputs = processor(images=images, text=prompt, return_tensors="pt", crop_to_patches=False)
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"crop_to_patches": False},
+        )
         num_image_tokens = (inputs["input_ids"] == processor.image_token_id).sum().item()
 
         # same as in test_replace_image_tokens
