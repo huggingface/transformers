@@ -44,7 +44,7 @@ class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     tile_size (`int`, *optional*, defaults to `640`):
         The size of each local tile. Must match the model's query embedding size.
-    pad_if_larger_than (`int`, *optional*, defaults to `640`):
+    maximum_pad_value (`int`, *optional*, defaults to `640`):
         If `crop_to_patches` is `False` and `size.height/width` is larger than this value,
         the image will be resized directly to `size.height/width` without padding. Otherwise,
         images are resized and padded to `size.height/width` while preserving the aspect ratio.
@@ -59,7 +59,7 @@ class UnlimitedOcrImageProcessorKwargs(ImagesKwargs, total=False):
     tile_size: int
     background_color: list[int]
 
-    pad_if_larger_than: int
+    maximum_pad_value: int
 
 
 @lru_cache(maxsize=10)
@@ -153,7 +153,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
     tile_size = 640
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches", "patches_grid"]
-    pad_if_larger_than = 640
+    maximum_pad_value = 640
 
     def __init__(self, **kwargs: Unpack[UnlimitedOcrImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -220,7 +220,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         min_patches: int,
         max_patches: int,
         tile_size: int,
-        pad_if_larger_than: int,
+        maximum_pad_value: int,
         resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
@@ -275,7 +275,7 @@ class UnlimitedOcrImageProcessor(TorchvisionBackend):
         processed_global_grouped = {}
         for shape, stacked in grouped_images.items():
             # Different from DeepseekOcr2 which crops and pads all images
-            if not crop_to_patches and global_target_size <= pad_if_larger_than:
+            if not crop_to_patches and global_target_size <= maximum_pad_value:
                 stacked = self.resize(
                     stacked, SizeDict(height=global_target_size, width=global_target_size), resample=resample
                 )
