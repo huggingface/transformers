@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
     r"""
@@ -86,7 +86,7 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
         return 2 ** (len(self.channel_multiplier) - 1)
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5TextConfig(PreTrainedConfig):
     r"""
@@ -184,7 +184,7 @@ class Apertus1p5TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5Config(PreTrainedConfig):
     r"""
