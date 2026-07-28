@@ -25,9 +25,9 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
+    PermuteForRope,
     PrefixChange,
     Transpose,
-    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     WeightTransform,
@@ -471,7 +471,10 @@ def _build_checkpoint_conversion_mapping():
                     r"attn.k_proj",
                     r"attn.v_proj",
                 ],
-                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
             ),
         ],
         "deepseek_v4": [
