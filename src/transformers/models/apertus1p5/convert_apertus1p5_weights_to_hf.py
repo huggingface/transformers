@@ -176,12 +176,16 @@ def build_config(
     # token ids and offsets: the Apertus1p5Config defaults are the verified values of the Apertus 1.5 tokenizer.
     # tie_word_embeddings must live on the composite's top-level config: it gates the lm_head <-> embed_tokens
     # tie, and tied backbones ship no `lm_head.weight` tensor.
-    return Apertus1p5Config(
+    config = Apertus1p5Config(
         text_config=text_config,
         vision_tokenizer_config=vision_tokenizer_config,
         audio_tokenizer_config=audio_tokenizer_config,
         tie_word_embeddings=bool(text_config.get("tie_word_embeddings", False)),
     )
+    # `model.save_pretrained` would stamp this from the model class; the converter streams shards without
+    # instantiating the model, so it must set the entrypoint itself for `AutoModel` resolution
+    config.architectures = [Apertus1p5ForConditionalGeneration.__name__]
+    return config
 
 
 def resolve_checkpoint_dir(path_or_repo_id: str) -> str:
@@ -250,6 +254,12 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     if loading_problems:
         raise RuntimeError(f"The composite checkpoint did not load cleanly: {loading_problems}")
     print("[PASS] load: no missing/unexpected/mismatched keys")
+
+    # --- architectures: the AutoModel entrypoint the converter stamps into the config -----------------------
+    architectures_ok = config.architectures == ["Apertus1p5ForConditionalGeneration"]
+    if not architectures_ok:
+        failed_checks.append("architectures")
+    print(f"[{'PASS' if architectures_ok else 'FAIL'}] config architectures: {config.architectures}")
 
     dtypes = {
         "language_model": next(model.model.language_model.parameters()).dtype,
