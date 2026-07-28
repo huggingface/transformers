@@ -22,7 +22,7 @@ import itertools
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -113,11 +113,7 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen3_5MoeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Qwen3_5MoeTextConfig) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -133,11 +129,8 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()

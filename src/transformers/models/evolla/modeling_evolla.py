@@ -169,7 +169,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__()
 
         self.config = config
@@ -180,20 +180,12 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         setattr(self, "attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: SaProtConfig | None = None,
-        device: "torch.device | None" = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: SaProtConfig) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
 
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
@@ -203,11 +195,8 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()

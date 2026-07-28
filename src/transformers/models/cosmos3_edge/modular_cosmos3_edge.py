@@ -226,19 +226,13 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Cosmos3EdgeTextConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Cosmos3EdgeTextConfig) -> tuple[torch.Tensor, float]:
         """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
         base = config.rope_parameters["rope_theta"]
         dim = config.head_dim
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
-        indices = torch.arange(inv_freq.shape[0], device=device)
+        indices = torch.arange(inv_freq.shape[0])
         mrope_section = config.rope_parameters["mrope_section"]
         height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
         width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)

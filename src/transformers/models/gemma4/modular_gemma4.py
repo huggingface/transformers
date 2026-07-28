@@ -783,20 +783,12 @@ def apply_multidimensional_rope(
 
 class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Gemma4VisionConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Gemma4VisionConfig) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -811,10 +803,7 @@ class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (
-            base
-            ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / spatial_dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()

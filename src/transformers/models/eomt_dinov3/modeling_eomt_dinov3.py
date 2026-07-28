@@ -21,7 +21,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
@@ -439,20 +438,12 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: EomtDinov3Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> torch.Tensor:
+    def compute_default_rope_parameters(config: EomtDinov3Config) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -461,9 +452,8 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         head_dim = config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32, device=device)
+        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
         return inv_freq, attention_factor
 
 

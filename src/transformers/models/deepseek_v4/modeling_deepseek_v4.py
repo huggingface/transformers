@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -112,21 +111,12 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: DeepseekV4Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: DeepseekV4Config, layer_type: str) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -143,9 +133,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()

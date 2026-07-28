@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -382,7 +381,7 @@ class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    def __init__(self, config, device=None):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -390,24 +389,16 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: PPDocLayoutV2Config) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -417,11 +408,8 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         half_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / half_dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
         return inv_freq, attention_factor
 
     def box_relative_encoding(

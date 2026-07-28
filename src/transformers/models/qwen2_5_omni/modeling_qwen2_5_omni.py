@@ -23,7 +23,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -2468,11 +2468,7 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Qwen2_5OmniDiTConfig) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

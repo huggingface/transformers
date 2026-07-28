@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -2351,16 +2351,8 @@ class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
         super().__init__(config, device=device)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(
-            config,
-            device=device,
-            seq_len=seq_len,
-        )
+    def compute_default_rope_parameters(config: Qwen2_5OmniDiTConfig) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config)
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
