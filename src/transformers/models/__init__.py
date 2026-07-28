@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
+    from .axk1 import *
+    from .axk2 import *
     from .aya_vision import *
     from .bamba import *
     from .bark import *

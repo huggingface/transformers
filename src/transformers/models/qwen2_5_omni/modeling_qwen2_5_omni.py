@@ -35,7 +35,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1885,7 +1885,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2271,7 +2270,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2936,7 +2934,7 @@ class DiTMLP(nn.Module):
         return hidden_states
 
 
-# Modified from Llama with a different rotate function, will fixed in next release
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -2955,19 +2953,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-
-    def rotate_half_codec(x):
-        # x = rearrange(x, "... (d r) -> ... d r", r=2)
-        x = x.reshape(*x.shape[:-1], -1, 2)
-        x1, x2 = x.unbind(dim=-1)
-        x = torch.stack((-x2, x1), dim=-1)
-        return x.reshape(*x.shape[:-2], -1)
-
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half_codec(q) * sin)
-    k_embed = (k * cos) + (rotate_half_codec(k) * sin)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
+
+def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
+    """Reorder the head dim from interleaved RoPE layout `(x0, x1, x2, x3, ...)` to the standard half-split layout
+    `(x0, x2, ..., x1, x3, ...)` so the kernelized `apply_rotary_pos_emb` can be used.
+    """
+    return torch.cat((x[..., 0::2], x[..., 1::2]), dim=-1)
 
 
 class DiTAttention(nn.Module):
@@ -3009,8 +3006,11 @@ class DiTAttention(nn.Module):
 
         # apply rotary position embedding
         # Due to training process, only first head is applied with RoPE, will be fixed at next release
+        # The checkpoint uses interleaved RoPE, so deinterleave q/k before the half-split rotation.
         cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(
+            deinterleave_head_dim(query[:, :1]), deinterleave_head_dim(key[:, :1]), cos, sin
+        )
 
         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(
