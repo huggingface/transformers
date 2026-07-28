@@ -22,10 +22,19 @@ import warnings
 from pathlib import Path
 
 import httpx
+from huggingface_hub.dataclasses import strict
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PreTrainedConfig
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
+from transformers.testing_utils import (
+    TOKEN,
+    CaptureLogger,
+    LoggingLevel,
+    TemporaryHubRepo,
+    is_staging_test,
+    require_torch,
+)
+from transformers.utils import logging
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -260,6 +269,23 @@ class ConfigTestUtils(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             PreTrainedConfig.from_pretrained("bert-base-uncased")
+
+    def test_to_diff_dict_does_not_warn_about_class_defaults(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/47612."""
+
+        @strict
+        class DefaultsOutOfVocabConfig(PreTrainedConfig):
+            vocab_size: int = 17
+            bos_token_id: int | None = 4242
+
+        # The special tokens of the config are valid, only the class defaults are not: the diff should be
+        # computed without warning about token ids that the config doesn't hold
+        config = DefaultsOutOfVocabConfig(vocab_size=9999)
+        logger = logging.get_logger("transformers.configuration_utils")
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                config.to_diff_dict()
+        self.assertNotIn("bos_token_id", cl.out)
 
     def test_get_text_config(self):
         """Tests the `get_text_config` method."""
