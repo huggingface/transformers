@@ -124,9 +124,12 @@ class LogTokenStatusTest(unittest.TestCase):
         self.assertIn("refresh the token", str(ctx.exception).lower())
 
     def test_401_without_token_raises_with_unexpected_message(self):
-        self._patch_request([_response(401, body="")])
-        with self.assertRaises(RuntimeError) as ctx:
-            gh._log_token_status(token=None)
+        # Must unset CI so the no-token-in-CI guard doesn't fire before the /rate_limit call.
+        env = {k: v for k, v in os.environ.items() if k != "CI"}
+        with patch.dict(os.environ, env, clear=True):
+            self._patch_request([_response(401, body="")])
+            with self.assertRaises(RuntimeError) as ctx:
+                gh._log_token_status(token=None)
         self.assertIn("unexpected", str(ctx.exception).lower())
 
     def test_remaining_zero_raises(self):
