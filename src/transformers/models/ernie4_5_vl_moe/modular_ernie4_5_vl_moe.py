@@ -47,12 +47,9 @@ from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
-    can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     maybe_autocast,
     merge_with_config_defaults,
     no_inherit_decorator,
@@ -963,9 +960,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -979,13 +973,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         ).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        video_outputs.pooler_output = list(video_embeds)
+        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
         return video_outputs
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -995,13 +985,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        image_outputs.pooler_output = list(image_embeds)
+        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1138,9 +1124,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
 
         return model_inputs
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -1253,8 +1253,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         ).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        video_outputs.pooler_output = list(video_embeds)
+        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
         return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1275,8 +1274,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        image_outputs.pooler_output = list(image_embeds)
+        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
 
     def get_placeholder_mask(

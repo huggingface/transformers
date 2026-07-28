@@ -1067,9 +1067,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         )
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        vision_output.pooler_output = list(image_embeds)
-
+        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_output
 
     def get_placeholder_mask(

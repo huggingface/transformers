@@ -166,9 +166,7 @@ class FastVlmModel(LlavaModel):
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = list(image_features)
-
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
         return image_outputs
 
     @can_return_tuple

@@ -33,9 +33,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     maybe_autocast,
     merge_with_config_defaults,
 )
@@ -694,9 +693,6 @@ class Qwen3VLModel(Qwen2VLModel):
 
         return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -715,14 +711,9 @@ class Qwen3VLModel(Qwen2VLModel):
         )
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        vision_output.pooler_output = list(image_embeds)
-
+        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_output
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -738,8 +729,6 @@ class Qwen3VLModel(Qwen2VLModel):
         # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -864,7 +853,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_video_features(**super_kwargs)
 
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -565,9 +565,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_embeds = self.projector(last_hidden_state)
 
         split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        image_embeds = torch.split(image_embeds, split_sizes.tolist())
-        vision_outputs.pooler_output = list(image_embeds)
-
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
         return vision_outputs
 
     def get_placeholder_mask(

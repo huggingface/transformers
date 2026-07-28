@@ -154,9 +154,7 @@ class Mistral3Model(LlavaModel):
         split_sizes = (
             (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1).tolist()
         )
-        image_features = torch.split(image_features.squeeze(0), split_sizes)
-        image_outputs.pooler_output = list(image_features)
-
+        image_outputs.pooler_output = torch.split(image_features.squeeze(0), split_sizes)
         return image_outputs
 
     @merge_with_config_defaults
