@@ -32,15 +32,8 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        Cache,
-        OlmoHybridForCausalLM,
-        OlmoHybridModel,
-    )
-    from transformers.models.olmo_hybrid.modeling_olmo_hybrid import (
-        OlmoHybridDynamicCache,
-        OlmoHybridRotaryEmbedding,
-    )
+    from transformers import DynamicCache, OlmoHybridForCausalLM, OlmoHybridModel
+    from transformers.models.olmo_hybrid.modeling_olmo_hybrid import OlmoHybridRotaryEmbedding
 
 
 class OlmoHybridModelTester(CausalLMModelTester):
@@ -87,7 +80,7 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
         prompt = ids_tensor((1, prefill_len), config.vocab_size).to(torch_device)
         next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
 
-        cache_single = OlmoHybridDynamicCache(config=config)
+        cache_single = DynamicCache(config=config)
         with torch.no_grad():
             model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
             single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
@@ -95,43 +88,13 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
         distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
         multi_input = torch.cat([next_token, distractors], dim=1)
-        cache_multi = OlmoHybridDynamicCache(config=config)
+        cache_multi = DynamicCache(config=config)
         with torch.no_grad():
             model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
             multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
-
-    # === Cache helper methods (same pattern as Qwen3Next) ===
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
-        self.assertIsInstance(past_key_values, OlmoHybridDynamicCache)
-
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
-
-        attention_layer_indices = past_key_values.transformer_layers
-        self.assertListEqual(
-            [past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-        self.assertListEqual(
-            [past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-
-    def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
-        """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            if cache1.key_cache[idx] is not None:
-                torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-                torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
 
     # === Override test_attention_outputs (same pattern as Qwen3Next) ===
     def test_attention_outputs(self):
