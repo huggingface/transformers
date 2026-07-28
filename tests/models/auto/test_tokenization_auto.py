@@ -332,7 +332,7 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_mistral_format_false_tekken_only_dir(self):
         """Regression: mistral_format=False on a tekken-only dir must not crash and must return TokenizersBackend.
 
-        Before the fix,         ``mistral_format`` was not popped from kwargs and leaked into
+        Before the fix, ``mistral_format`` was not popped from kwargs and leaked into
         ``MistralCommonBackend.from_pretrained``, raising ``ValueError: Some kwargs in
         [...] are not supported``.  After the fix it is popped at the AutoTokenizer level and
         the backend is switched to ``TokenizersBackend`` which can load tekken.json via
