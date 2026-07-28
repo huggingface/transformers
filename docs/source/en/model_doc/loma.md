@@ -23,7 +23,7 @@ limitations under the License.
 
 ## Overview
 
-LoMa was proposed in [LoMa: Local Feature Matching Revisited](https://arxiv.org/abs/2604.04931) by David Nordström,
+LoMa was proposed in [LoMa: Local Feature Matching Revisited](https://huggingface.co/papers/2604.04931) by David Nordström,
 Johan Edstedt, Georg Bökman, Jonathan Astermark, Anders Heyden, Viktor Larsson, Mårten Wadenbäck, Michael Felsberg,
 and Fredrik Kahl. It is a local feature matcher that refines local descriptors with alternating self- and
 cross-attention before selecting mutual matches with a dual-softmax score matrix.
