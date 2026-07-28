@@ -63,7 +63,6 @@ if is_kernels_available():
     from kernels import (
         CUDAProperties,
         Device,
-        FuncRepository,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -183,12 +182,12 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerSwiGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerTiledSwiGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -197,12 +196,12 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerGEGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerTiledGEGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -211,7 +210,7 @@ if is_kernels_available():
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerLinear",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -221,24 +220,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -259,12 +258,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -359,11 +358,11 @@ if is_kernels_available():
             "rotary_pos_emb": {
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=1
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
                 "cuda": LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=1
+                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                 ),
                 "rocm": {
                     Mode.INFERENCE: LayerRepository(
@@ -374,7 +373,7 @@ if is_kernels_available():
             "ForCausalLMLoss": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLossLayer", version=2
+                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLossLayer", version=3
                     ),
                 },
             },
