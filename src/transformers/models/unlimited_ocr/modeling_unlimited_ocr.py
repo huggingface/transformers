@@ -891,7 +891,6 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
     config: UnlimitedOcrVisionConfig
     main_input_name = "patch_embeds"
     input_modalities = ("image",)
-    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrEncoderLayer,
         "attentions": UnlimitedOcrAttention,
