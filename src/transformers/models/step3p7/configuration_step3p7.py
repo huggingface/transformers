@@ -174,10 +174,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
     gating = True
-    # Not a real config field (no type annotation, so `@strict` doesn't treat it as one: not
-    # user-settable, not serialized). Exists only because it's read unconditionally by the
-    # mask-construction code `Step3p7TextModel.forward` inherits from `Gemma3TextModel`; Step3p7 has
-    # no bidirectional-attention variant, so this is always `False`.
     use_bidirectional_attention = False
     moe_intermediate_size: int = 1280
     n_routed_experts: int = 288

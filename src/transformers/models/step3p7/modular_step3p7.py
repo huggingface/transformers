@@ -726,7 +726,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
 
     The rotary embedding (``self.rotary_emb``) and layer stack (``self.layers``) are
-    held directly on this module, following the Gemma4 convention of not wrapping
+    held directtly on this module, following the Gemma4 convention of not wrapping
     them in a separate ``Encoder`` submodule.
     """
 
