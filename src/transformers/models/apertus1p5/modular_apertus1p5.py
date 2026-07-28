@@ -93,7 +93,7 @@ def _check_pruned_head_labels(labels: torch.Tensor, out_features: int, vocab_siz
         )
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
     r"""
@@ -154,7 +154,7 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
         return 2 ** (len(self.channel_multiplier) - 1)
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5TextConfig(ApertusConfig):
     r"""
@@ -206,7 +206,7 @@ class Apertus1p5TextConfig(ApertusConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="swiss-ai/Apertus-1.5-8B")
+@auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5Config(PreTrainedConfig):
     r"""
