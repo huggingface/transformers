@@ -18,8 +18,9 @@ import torch
 
 from transformers import Apertus1p5TextConfig, Apertus1p5TextForCausalLM, Apertus1p5TextModel, AutoTokenizer
 
+
 # local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "apertus-ai/Apertus-v1.5-8B-integration@refs/pr/2")
+CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
 if not os.path.isdir(CHECKPOINT):
     from huggingface_hub import snapshot_download
 
@@ -29,15 +30,15 @@ if not os.path.isdir(CHECKPOINT):
 # --- 1) config extraction from the composite ---------------------------------------------------------
 config = Apertus1p5TextConfig.from_pretrained(CHECKPOINT)
 assert type(config).__name__ == "Apertus1p5TextConfig"
-print(f"[OK] config extracted from the composite: vocab_size {config.vocab_size}, "
-      f"output_vocab_size {config.output_vocab_size}, hidden_size {config.hidden_size}")
+print(
+    f"[OK] config extracted from the composite: vocab_size {config.vocab_size}, "
+    f"output_vocab_size {config.output_vocab_size}, hidden_size {config.hidden_size}"
+)
 
 print("loading text backbone from the composite (bf16, CPU) ...")
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")  # the load report lists the composite's tokenizer weights as unexpected
-    model, info = Apertus1p5TextForCausalLM.from_pretrained(
-        CHECKPOINT, dtype=torch.bfloat16, output_loading_info=True
-    )
+    model, info = Apertus1p5TextForCausalLM.from_pretrained(CHECKPOINT, dtype=torch.bfloat16, output_loading_info=True)
 model = model.eval()
 tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT)
 
@@ -50,14 +51,16 @@ print(f"[OK] clean load: 0 missing, {len(info['unexpected_keys'])} unexpected (a
 config = model.config
 head_rows = model.lm_head.out_features
 assert head_rows == (config.output_vocab_size or config.vocab_size)
-print(f"[OK] pruned head: {head_rows} rows (vocab_size {config.vocab_size}, "
-      f"output_vocab_size {config.output_vocab_size}); the model cannot emit multimodal ids")
+print(
+    f"[OK] pruned head: {head_rows} rows (vocab_size {config.vocab_size}, "
+    f"output_vocab_size {config.output_vocab_size}); the model cannot emit multimodal ids"
+)
 
 # --- raw-text continuation (base-model style) --------------------------------------------------------
 inputs = tokenizer("The capital of Switzerland is", return_tensors="pt")
 with torch.no_grad():
     out = model.generate(**inputs, max_new_tokens=8, do_sample=False)
-completion = tokenizer.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+completion = tokenizer.decode(out[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 assert "Bern" in completion, completion
 print(f"[OK] raw-text continuation: {completion!r}")
 
@@ -69,7 +72,7 @@ inputs = tokenizer.apply_chat_template(
 for label, generate_kwargs in (("greedy", {"do_sample": False}), ("beam-2", {"num_beams": 2, "do_sample": False})):
     with torch.no_grad():
         out = model.generate(**inputs, max_new_tokens=16, **generate_kwargs)
-    new_ids = out[0, inputs["input_ids"].shape[1]:]
+    new_ids = out[0, inputs["input_ids"].shape[1] :]
     completion = tokenizer.decode(new_ids, skip_special_tokens=True)
     assert int(new_ids.max()) < head_rows, "generated ids must stay below the pruned cutoff"
     print(f"[OK] chat {label} (all ids < {head_rows}): {completion!r}")
