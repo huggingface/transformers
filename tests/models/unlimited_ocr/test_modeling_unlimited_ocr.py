@@ -266,7 +266,9 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
                 do_sample=False,
                 max_new_tokens=20,
             )
-        decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
+        decoded, detections = self.processor.decode(
+            generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False, return_detections=True
+        )
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
@@ -274,6 +276,14 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded, EXPECTED_DECODED_TEXT)
+
+        EXPECTED_DETECTIONS = Expectations(
+            {
+                ("cuda", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
+                ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(detections, EXPECTED_DETECTIONS)
 
     @slow
     @require_torch_accelerator

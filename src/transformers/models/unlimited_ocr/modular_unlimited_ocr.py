@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+import re
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -223,6 +224,67 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         if int(image_inputs["num_local_patches"][image_idx]) > 0:
             num_tokens += (num_rows * num_queries_local) * (num_columns * num_queries_local + 1)
         return self.image_token * num_tokens
+
+    def batch_decode(self, *args, return_detections: bool = False, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer to
+        the docstring of this method for more information.
+
+        Args:
+            return_detections (`bool`, *optional*, defaults to `False`):
+                Whether or not to also return the layout detections parsed from the decoded text.
+
+        Returns:
+            `str` or `tuple[str, list[dict]]`: The decoded text. If `return_detections` is `True`, a tuple of the
+            decoded text and a list of detections, where every detection is a dictionary with the keys `region_type`,
+            `box` and `text`. Boxes are in [x1, y1, x2, y2] format with coordinates normalized to [0, 999].
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
+        decoded = self.tokenizer.batch_decode(*args, **kwargs)
+        if return_detections:
+            detections = self._parse_detections(decoded)
+            return decoded, detections
+        return decoded
+
+    def decode(self, *args, return_detections: bool = False, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
+        the docstring of this method for more information.
+
+        Args:
+            return_detections (`bool`, *optional*, defaults to `False`):
+                Whether or not to also return the layout detections parsed from the decoded text.
+
+        Returns:
+            `str` or `tuple[str, list[dict]]`: The decoded text. If `return_detections` is `True`, a tuple of the
+            decoded text and a list of detections, where every detection is a dictionary with the keys `region_type`,
+            `box` and `text`. Boxes are in [x1, y1, x2, y2] format with coordinates normalized to [0, 999].
+        """
+        if not hasattr(self, "tokenizer"):
+            raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
+        decoded = self.tokenizer.decode(*args, **kwargs)
+        if return_detections:
+            detections = self._parse_detections(decoded)
+            return decoded, detections
+        return decoded
+
+    def _parse_detections(self, decoded: str) -> list[dict]:
+        matches = re.findall(
+            r"<\|det\|>(\S+) \[(\d+), (\d+), (\d+), (\d+)\]<\|/det\|>(.*?)(?=<\|det\|>|<PAGE>|\Z)",
+            decoded,
+            flags=re.DOTALL,
+        )
+        detections = []
+        for region_type, x1, y1, x2, y2, text in matches:
+            detections.append(
+                {
+                    "region_type": region_type,
+                    "box": [x1, y1, x2, y2],
+                    "text": text,
+                }
+            )
+        return detections
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
