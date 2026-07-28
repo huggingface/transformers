@@ -202,9 +202,12 @@ class UnlimitedOcrProcessorKwargs(DeepseekOcr2ProcessorKwargs):
 
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
-        size = max(self.image_processor.size["height"], self.image_processor.size["width"])
-        tile_size = self.image_processor.tile_size
+    valid_processor_kwargs = UnlimitedOcrProcessorKwargs
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
+        image_size = kwargs.get("size") or self.image_processor.size
+        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)

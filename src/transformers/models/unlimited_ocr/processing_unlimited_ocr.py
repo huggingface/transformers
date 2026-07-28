@@ -36,6 +36,8 @@ class UnlimitedOcrProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class UnlimitedOcrProcessor(ProcessorMixin):
+    valid_processor_kwargs = UnlimitedOcrProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -58,21 +60,23 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        super().validate_inputs(images=images, text=text, **kwargs)
-        if text is not None and images is not None:
-            if isinstance(text, str):
-                text = [text]
-            n_tokens = sum(sample.count(self.image_token) for sample in text)
-            n_images = len(make_flat_list_of_images(images))
-            if n_tokens != n_images:
-                raise ValueError(
-                    f"Number of {self.image_token} tokens in text ({n_tokens}) does not match "
-                    f"number of images ({n_images})."
-                )
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if text is None:
+            raise ValueError("You have to specify text.")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
-        size = max(self.image_processor.size["height"], self.image_processor.size["width"])
-        tile_size = self.image_processor.tile_size
+        if isinstance(text, str):
+            text = [text]
+        total_placeholders = sum(prompt.count(self.image_token) for prompt in text)
+        num_images = len(make_flat_list_of_images(images)) if images is not None else 0
+        if total_placeholders != num_images:
+            raise ValueError(
+                f"Found {total_placeholders} placeholders across the batch, but have {num_images} flattened images."
+            )
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
+        image_size = kwargs.get("size") or self.image_processor.size
+        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        size = max(image_size["height"], image_size["width"])
 
         num_queries_global = math.ceil(size // self.patch_size / self.downsample_ratio)
         num_queries_local = math.ceil(tile_size // self.patch_size / self.downsample_ratio)
