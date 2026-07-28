@@ -166,13 +166,13 @@ class Apertus1p5Processor(ProcessorMixin):
                     f"{num_media} {modality} inputs were passed."
                 )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # the grid comes from the image processor's output, so per-call `spatial_factor` overrides stay consistent
         grid_height, grid_width = (int(side) for side in image_inputs["image_grids"][image_idx])
         rows = self.eol_token.join([self.image_token * grid_width] * grid_height)
         return f"{self.boi_token}{grid_height}*{grid_width}{self.image_wrapper_token}{rows}{self.eoi_token}"
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_codes = int(audio_inputs["num_audio_codes"][audio_idx])
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
 
