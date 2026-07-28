@@ -72,7 +72,7 @@ class OnyxProcessor(ProcessorMixin):
         return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
-        merge_length = self.video_processor.downsample_factor**2
+        merge_length = self.video_processor.merge_size**2
         grid_thw = video_inputs["video_grid_thw"][video_idx]
         n_frames = int(grid_thw[0])
         tokens_per_group = int(grid_thw[1:].prod() // merge_length)
