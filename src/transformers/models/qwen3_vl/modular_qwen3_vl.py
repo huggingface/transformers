@@ -274,9 +274,8 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Qwen3VLTextConfig, device=None):
-        super().__init__(config, device=device)
-
+    def __init__(self, config: Qwen3VLTextConfig):
+        super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     def apply_interleaved_mrope(self, freqs, mrope_section):

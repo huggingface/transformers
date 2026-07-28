@@ -58,11 +58,10 @@ class PixtralRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
+    def __init__(self, config: PixtralVisionConfig):
         super().__init__()
 
         self.config = config
-
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
@@ -70,7 +69,7 @@ class PixtralRotaryEmbedding(nn.Module):
                 f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
             )
 
-        inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, attention_scaling = rope_init_fn(self.config)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 

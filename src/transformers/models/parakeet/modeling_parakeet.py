@@ -67,26 +67,17 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: ParakeetEncoderConfig, device=None):
+    def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
+        inv_freq = self.compute_default_relative_positional_parameters(config)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: ParakeetEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig) -> torch.Tensor:
         base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
     @torch.no_grad()

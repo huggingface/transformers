@@ -1662,8 +1662,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
-        super().__init__(config, device)
+    def __init__(self, config: Qwen2_5OmniThinkerConfig):
+        super().__init__(config)
 
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.

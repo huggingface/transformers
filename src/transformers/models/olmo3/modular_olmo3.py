@@ -185,8 +185,8 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
 
 
 class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: Olmo3Config, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Olmo3Config):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(config: Olmo3Config, layer_type: str) -> tuple[torch.Tensor, float]:

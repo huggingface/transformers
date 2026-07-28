@@ -150,7 +150,7 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    def __init__(self, config: EomtDinov3Config, device=None):
+    def __init__(self, config: EomtDinov3Config):
         nn.Module.__init__(self)
         self.config = config
 
@@ -158,7 +158,7 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)

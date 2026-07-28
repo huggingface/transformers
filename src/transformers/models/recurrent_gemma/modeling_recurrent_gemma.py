@@ -66,9 +66,8 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     # Ignore copy
-    def __init__(self, config: RecurrentGemmaConfig, device=None):
+    def __init__(self, config: RecurrentGemmaConfig):
         super().__init__()
-
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -77,14 +76,14 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             raise ValueError(
                 f"RecurrentGemmaRotaryEmbedding does not support RoPE types other than `default` but got {self.rope_type}"
             )
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     # Ignore copy
-    def compute_default_rope_parameters(config: RecurrentGemmaConfig) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: RecurrentGemmaConfig) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

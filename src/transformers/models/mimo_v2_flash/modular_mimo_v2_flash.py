@@ -138,8 +138,8 @@ class MiMoV2FlashRMSNorm(MixtralRMSNorm):
 
 
 class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: MiMoV2FlashConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__(config)
 
     @staticmethod
     def compute_default_rope_parameters(config: MiMoV2FlashConfig, layer_type: str) -> tuple[torch.Tensor, float]:

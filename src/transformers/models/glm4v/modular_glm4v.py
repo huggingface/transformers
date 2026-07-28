@@ -361,7 +361,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
-    def __init__(self, config: Glm4vTextConfig, device=None):
+    def __init__(self, config: Glm4vTextConfig):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 

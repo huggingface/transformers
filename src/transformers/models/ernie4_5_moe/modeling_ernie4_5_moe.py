@@ -82,7 +82,7 @@ class Ernie4_5_MoeMLP(nn.Module):
 class Ernie4_5_MoeRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
+    def __init__(self, config: Ernie4_5_MoeConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
