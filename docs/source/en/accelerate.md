@@ -43,13 +43,13 @@ num_machines: 1
 num_processes: 4
 ```
 
-Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script, and Accelerate reads the config file to set up training. The [fsdp_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.fsdp_config) and [deepspeed](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.deepspeed) args are unnecessary because the Accelerate config file covers the same settings.
+Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script, and Accelerate reads the config file to set up training. The [`~TrainingArguments#fsdp_config`] and [`~TrainingArguments#deepspeed`] args are unnecessary because the Accelerate config file covers the same settings.
 
 ```cli
 accelerate launch train.py
 ```
 
-The [accelerator_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.accelerator_config) accepts settings that don't have dedicated top-level arguments. For example, set `non_blocking=True` together with [`~TrainingArguments.dataloader_pin_memory`] to overlap data transfer with compute for higher GPU throughput.
+The [`~TrainingArguments#accelerator_config`] accepts settings that don't have dedicated top-level arguments. For example, set `non_blocking=True` together with [`~TrainingArguments.dataloader_pin_memory`] to overlap data transfer with compute for higher GPU throughput.
 
 ```py
 from transformers import TrainingArguments

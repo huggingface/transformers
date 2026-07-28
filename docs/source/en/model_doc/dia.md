@@ -47,10 +47,10 @@ from transformers import AutoProcessor, DiaForConditionalGeneration
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
+inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # save audio to a file
@@ -75,10 +75,10 @@ audio = ds[-1]["audio"]["array"]
 text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint, device_map="auto")
+
 inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(model.device)
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
-
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # retrieve actually generated audio and save to a file
@@ -102,7 +102,9 @@ audio = ds[-1]["audio"]["array"]
 # text is a transcript of the audio
 text = ["[S1] I know. It's going to save me a lot of money, I hope."]
 
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_checkpoint)
+
 inputs = processor(
     text=text,
     audio=audio,
@@ -112,7 +114,6 @@ inputs = processor(
     return_tensors="pt"
 ).to(model.device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 out = model(**inputs)
 out.loss.backward()
 ```

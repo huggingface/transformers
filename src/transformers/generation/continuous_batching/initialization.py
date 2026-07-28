@@ -33,7 +33,6 @@ FALLBACK_DEFAULTS = {
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
-    "max_cached_graphs": 32,
 }
 
 
@@ -49,9 +48,7 @@ def resolve_continuous_batching_config(
     # Look at whether the user explicitly asked for the decode fast path before we assign a default value
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
-    cuda_graph_requested = any(
-        [cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size, cb_config.max_cached_graphs]
-    )
+    cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
     resolve_using_hints(cb_config, workload_hints)
@@ -112,8 +109,6 @@ def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
         cb_config.q_padding_interval_size = FALLBACK_DEFAULTS["q_padding_interval_size"]
     if cb_config.kv_padding_interval_size == 0:
         cb_config.kv_padding_interval_size = FALLBACK_DEFAULTS["kv_padding_interval_size"]
-    if cb_config.max_cached_graphs == 0:
-        cb_config.max_cached_graphs = FALLBACK_DEFAULTS["max_cached_graphs"]
 
 
 def ensure_decode_fast_path_is_available(

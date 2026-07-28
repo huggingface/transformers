@@ -22,16 +22,21 @@ from collections.abc import Callable
 from typing import Optional, TypedDict
 
 import torch
+import torch.nn.functional as F
 from torch import nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...integrations.hub_kernels import lazy_load_kernel
-from ...masking_utils import create_causal_mask
+from ...integrations import (
+    lazy_load_kernel,
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernelized_func,
+)
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -119,7 +124,9 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class GraniteMoeHybridAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
+    opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
+    instead of a ``(cos, sin)`` tuple."""
 
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
@@ -149,7 +156,7 @@ class GraniteMoeHybridAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # None or rope embeddings
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -169,7 +176,6 @@ class GraniteMoeHybridAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -180,7 +186,6 @@ class GraniteMoeHybridAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -252,7 +257,47 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-# Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
 class GraniteMoeHybridMambaLayer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -262,13 +307,12 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
     The are a few differences between this and Mamba2Mixer:
     - The variable use_precomputed_states is slightly different due to the hybrid cache structure
-    - There's a few non-obvious bugs fixed with batching in the slow path that exist in main
     - Some extra variables that our layer doesn't need have been removed
-    - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__()
+        self.use_bias = config.mamba_proj_bias
         self.num_heads = config.mamba_n_heads
         self.hidden_size = config.hidden_size
         self.ssm_state_size = config.mamba_d_state
@@ -278,17 +322,12 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         self.use_conv_bias = config.mamba_conv_bias
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
-        self.use_bias = config.mamba_proj_bias
-
         self.layer_norm_epsilon = config.rms_norm_eps
-
         self.n_groups = config.mamba_n_groups
         self.head_dim = config.mamba_d_head
         self.chunk_size = config.mamba_chunk_size
 
         self.time_step_limit = config.time_step_limit
-        self.time_step_min = config.time_step_min
-        self.time_step_max = config.time_step_max
 
         self.conv_dim = self.intermediate_size + 2 * self.n_groups * self.ssm_state_size
         self.conv1d = nn.Conv1d(
@@ -299,8 +338,6 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
-
-        # projection of the input hidden states
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
         self.in_proj = nn.Linear(
             self.hidden_size,
@@ -310,24 +347,23 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
-        # instantiate once and copy inv_dt in init_weights of PretrainedModel
-        self.dt_bias = nn.Parameter(torch.ones(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.num_heads))
 
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-        A = torch.arange(1, self.num_heads + 1)
-        self.A_log = nn.Parameter(torch.log(A))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
         self.norm = GraniteMoeHybridRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
-        self.D = nn.Parameter(torch.ones(self.num_heads))
-
+        self.D = nn.Parameter(torch.empty(self.num_heads))
+        if initialize_mixer_weights and self.dt_bias.device.type != "meta":
+            self.init_granitemoehybrid_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
 
-        global causal_conv1d_update, causal_conv1d_fn
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", causal_conv1d_update)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", causal_conv1d_fn)
 
-        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        global mamba_ssm, selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         mamba_ssm = lazy_load_kernel("mamba-ssm")
         selective_state_update = resolve_internal_import(
             mamba_ssm, chained_path="ops.triton.selective_state_update.selective_state_update"
@@ -340,14 +376,10 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         )
 
         global is_fast_path_available
-        is_fast_path_available = all(
-            (
-                selective_state_update,
-                mamba_chunk_scan_combined,
-                mamba_split_conv1d_scan_combined,
-                causal_conv1d_fn,
-                causal_conv1d_update,
-            )
+        is_fast_path_available = (
+            all((selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined))
+            and hasattr(causal_conv1d, "causal_conv1d_update")
+            and hasattr(causal_conv1d, "causal_conv1d_fn")
         )
 
         if not is_fast_path_available:
@@ -356,60 +388,126 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
+
+        self.layer_type = config.layer_types[layer_idx]
+
+    @torch.no_grad()
+    def init_granitemoehybrid_weights(self):
+        A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
+        init.copy_(self.A_log, torch.log(A))
+        init.ones_(self.D)
+        init.ones_(self.dt_bias)
+
+    def _convolution(
+        self,
+        hidden_states: torch.Tensor,
+        cache_params: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ):
+        seq_len = hidden_states.shape[1]
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            hidden_states = causal_conv1d_update(
+                hidden_states,
+                conv_state,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.activation,
+            )
         else:
-            logger.warning_once("The fast path for GraniteMoeHybrid will be used when running the model on a GPU")
+            if cache_params is not None:
+                hidden_states = cache_params.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(
+                hidden_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+                seq_idx=kwargs.get("seq_idx"),
+            )
+
+            # Drop the additional previous states
+            if cache_params is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
 
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
+        **kwargs,
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
 
+        A = -torch.exp(self.A_log.float())
+        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+        # Fused kernel for conv1d, SSM, and the final projection
+        if self.training and cache_params is None:
+            return mamba_split_conv1d_scan_combined(
+                projected_states,
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                self.dt_bias,
+                A,
+                D=self.D,
+                chunk_size=self.chunk_size,
+                seq_idx=kwargs.get("seq_idx"),
+                activation=self.activation,
+                rmsnorm_weight=self.norm.weight,
+                rmsnorm_eps=self.norm.variance_epsilon,
+                outproj_weight=self.out_proj.weight,
+                outproj_bias=self.out_proj.bias,
+                headdim=self.head_dim,
+                ngroups=self.n_groups,
+                norm_before_gate=False,
+                return_final_states=False,
+                **dt_limit_kwargs,
+            )
+
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
         groups_time_state_size = self.n_groups * self.ssm_state_size
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        # getting projected states from cache if it exists
-        if use_precomputed_states:
-            gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
-                [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-            )
+        # Apply the conv
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+        hidden_states, B, C = torch.split(
+            hidden_states_B_C,
+            [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+            dim=-1,
+        )
 
-            # 2. Convolution sequence transformation
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                cache_params.layers[self.layer_idx].conv_states,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                self.activation,
-            )
-
-            hidden_states, B, C = torch.split(
-                hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
-                dim=-1,
-            )
-
+        recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
+        # Single step calculations via cache
+        if use_precomputed_states and seq_len == 1:
             # 3. SSM transformation
-            A = -torch.exp(self.A_log.float())  # (nheads,)
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dt = dt[:, :, None].expand(-1, -1, self.head_dim)
+            dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
-            B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
+            B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
+            C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].recurrent_states,
+                recurrent_state,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -420,211 +518,119 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(batch_size, 1, self.num_heads * self.head_dim)
             hidden_states = self.norm(hidden_states, gate)
 
             # 4. Final linear projection
-            out = self.out_proj(hidden_states)[:, None, ...]
+            out = self.out_proj(hidden_states)
+
         # Fused calculations or step by step if no initialized cache is found
         else:
-            A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            # 3. SSM transformation
+            scan_output, ssm_state = mamba_chunk_scan_combined(
+                hidden_states.view(batch_size, seq_len, -1, self.head_dim),
+                dt,
+                A,
+                B.view(batch_size, seq_len, self.n_groups, -1),
+                C.view(batch_size, seq_len, self.n_groups, -1),
+                chunk_size=self.chunk_size,
+                D=self.D,
+                z=None,
+                seq_idx=kwargs.get("seq_idx"),
+                return_final_states=True,
+                dt_bias=self.dt_bias,
+                dt_softplus=True,
+                initial_states=recurrent_state,
+                **dt_limit_kwargs,
+            )
 
-            # 2-4. Fused kernel for conv1d, SSM, and the final projection
-            if self.training and cache_params is None:
-                out = mamba_split_conv1d_scan_combined(
-                    projected_states,
-                    self.conv1d.weight.squeeze(1),
-                    self.conv1d.bias,
-                    self.dt_bias,
-                    A,
-                    D=self.D,
-                    chunk_size=self.chunk_size,
-                    seq_idx=seq_idx,
-                    activation=self.activation,
-                    rmsnorm_weight=self.norm.weight,
-                    rmsnorm_eps=self.norm.variance_epsilon,
-                    outproj_weight=self.out_proj.weight,
-                    outproj_bias=self.out_proj.bias,
-                    headdim=self.head_dim,
-                    ngroups=self.n_groups,
-                    norm_before_gate=False,
-                    return_final_states=False,
-                    **dt_limit_kwargs,
-                )
+            # Init cache
+            if ssm_state is not None and cache_params is not None:
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
-            else:
-                gate, hidden_states_B_C, dt = projected_states.split(
-                    [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-                )
+            scan_output = scan_output.view(batch_size, seq_len, -1)
+            # Multiply "gate" branch and apply extra normalization layer
+            scan_output = self.norm(scan_output, gate)
 
-                # 2. Convolution sequence transformation
-                # Init cache
-                if cache_params is not None:
-                    # storing the states
-                    # If we just take xBC[:, :, -self.d_conv :], it will error if seqlen < self.d_conv
-                    # Instead F.pad will pad with zeros if seqlen < self.d_conv, and truncate otherwise.
-                    hidden_states_B_C_transposed = hidden_states_B_C.transpose(1, 2)
-                    conv_states = nn.functional.pad(
-                        hidden_states_B_C_transposed,
-                        (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0),
-                    )
-                    conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
+            # 4. Final linear projection
+            out = self.out_proj(scan_output)
 
-                if self.activation not in ["silu", "swish"]:
-                    hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2)
-                    )
-                else:
-                    hidden_states_B_C = causal_conv1d_fn(
-                        x=hidden_states_B_C.transpose(1, 2),
-                        weight=self.conv1d.weight.squeeze(1),
-                        bias=self.conv1d.bias,
-                        activation=self.activation,
-                        seq_idx=seq_idx,
-                    ).transpose(1, 2)
-
-                hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
-                hidden_states, B, C = torch.split(
-                    hidden_states_B_C,
-                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
-                    dim=-1,
-                )
-
-                # 3. SSM transformation
-                scan_output, ssm_state = mamba_chunk_scan_combined(
-                    hidden_states.view(batch_size, seq_len, -1, self.head_dim),
-                    dt,
-                    A,
-                    B.view(batch_size, seq_len, self.n_groups, -1),
-                    C.view(batch_size, seq_len, self.n_groups, -1),
-                    chunk_size=self.chunk_size,
-                    D=self.D,
-                    z=None,
-                    seq_idx=seq_idx,
-                    return_final_states=True,
-                    dt_bias=self.dt_bias,
-                    dt_softplus=True,
-                    **dt_limit_kwargs,
-                )
-
-                # Init cache
-                if ssm_state is not None and cache_params is not None:
-                    ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
-
-                scan_output = scan_output.view(batch_size, seq_len, -1)
-                # Multiply "gate" branch and apply extra normalization layer
-                scan_output = self.norm(scan_output, gate)
-
-                # 4. Final linear projection
-                out = self.out_proj(scan_output)
         return out
 
-    # fmt: off
     def torch_forward(
         self,
-        input_states,
+        hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
-        batch_size, seq_len, _ = input_states.shape
-        dtype = input_states.dtype
+        batch_size, seq_len, _ = hidden_states.shape
+        dtype = hidden_states.dtype
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 1. Gated MLP's linear projection
-        input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        projected_states = self.in_proj(input_states)
-        gate, hidden_states_B_C, dt = projected_states.split(
-                [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-        )
-        hidden_states_B_C = hidden_states_B_C.transpose(1,2)
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        projected_states = self.in_proj(hidden_states)
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        gate, hidden_states_B_C, dt = projected_states.split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        )
 
         # 2. Convolution sequence transformation
-        if use_precomputed_states:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C, self.layer_idx)
-
-            hidden_states_B_C = torch.sum(
-                conv_states * self.conv1d.weight.squeeze(1), dim=-1
-            )
-            if self.use_conv_bias:
-                hidden_states_B_C = hidden_states_B_C + self.conv1d.bias
-            hidden_states_B_C = self.act(hidden_states_B_C)
-        else:
-            # Init cache
-            if cache_params is not None:
-                conv_states = nn.functional.pad(
-                    hidden_states_B_C, (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0)
-                )
-                conv_states = cache_params.update_conv_state(conv_states, self.layer_idx)
-
-            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :seq_len].transpose(1, 2))
-
+        hidden_states_B_C = self._convolution(hidden_states_B_C, cache_params, attention_mask, **kwargs)
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
             hidden_states_B_C,
             [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
-            dim=-1
+            dim=-1,
         )
 
         # 3. SSM transformation
-        A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if use_precomputed_states:
+        A = -torch.exp(self.A_log.float())
+        if use_precomputed_states and seq_len == 1:
             # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params.layers[self.layer_idx].recurrent_states.device
+            cache_device = cache_params.layers[self.layer_idx].device
 
-            # Note: there is no need to pad parameter matrices here, as there is just one new token
-            # for batched generation
-            dt = dt[:, 0, :][:, None, ...]
+            # Note: there is no need to pad parameter matrices here, as there is just one new token for batched generation
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
-            # [num_heads] -> [num_heads, head_dim]
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
-            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
+            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))[..., None]
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            # [bsz, num_heads, head_dim, state_size]
-            dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
+            dA = (torch.exp(dt * A)).to(device=cache_device)
 
             # Discretize B
-            # [bsz, n_groups * state_size] -> [bsz, n_groups, 1, state_size] ->
-            # -> [bsz, n_groups, group to head repetition factor, state_size] -> [bsz, num_heads, state_size]
-            B = B.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            B = B.reshape(batch_size, self.n_groups, 1, -1)
             B = B.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, B.shape[-1]).contiguous()
-            B = B.reshape(batch_size, -1, B.shape[-1])
-            # [bsz, num_heads, head_dim, state_size]
-            dB = dt[..., None] * B[..., None, :]
+            B = B.reshape(batch_size, -1, 1, B.shape[-1])
+            dB = dt * B
 
             # Discretize x into dB
-            # [bsz, intermediate_size] -> [bsz, num_heads, head_dim]
             hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].recurrent_states * dA + dBx
-            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states[0] * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
-            # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
-            C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            C = C.reshape(batch_size, self.n_groups, 1, -1)
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
-            # [bsz, num_heads, head_dim]
 
-            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
-            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
-            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
+            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
+            ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)
+            C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
             y = y.view(batch_size, self.num_heads, self.head_dim)
 
             # D skip connection
-            # [num_heads] -> [num_heads, head_dim]
             D = self.D[..., None].expand(self.D.shape[0], self.head_dim)
             y = (y + hidden_states * D).to(y.dtype)
 
-            # [bsz, num_heads, head_dim] -> [bsz, 1, intermediate_size]
-            y = y.reshape(batch_size, -1)[:, None, ...]
+            y = y.reshape(batch_size, 1, -1)
         else:
             # begin ssd naive implementation without einsums
             dt = nn.functional.softplus(dt + self.dt_bias)
@@ -643,9 +649,10 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             A = A.to(hidden_states.dtype) * dt
 
             # Rearrange into blocks/chunks
-            hidden_states, A, B, C = [reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)]
+            hidden_states, A, B, C = [
+                reshape_into_chunks(t, pad_size, self.chunk_size) for t in (hidden_states, A, B, C)
+            ]
 
-            # [bsz, -1, chunk_size, num_heads] -> [bsz, num_heads, -1, chunk_size]
             A = A.permute(0, 3, 1, 2)
             A_cumsum = torch.cumsum(A, dim=-1)
 
@@ -654,8 +661,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             L = torch.exp(segment_sum(A))
 
             # Contraction of C and B to get G (attention-weights like)
-            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]  # shape: (b, c, l, s, h, n)
-            G = G_intermediate.sum(dim=-1)  # shape: (b, c, l, s, h)
+            G_intermediate = C[:, :, :, None, :, :] * B[:, :, None, :, :, :]
+            G = G_intermediate.sum(dim=-1)
 
             # Compute M, equivalent to applying attention mask to weights
             M_intermediate = G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]
@@ -672,7 +679,13 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            previous_states = torch.zeros_like(states[:, :1])
+            previous_states = (
+                cache_params.layers[self.layer_idx]
+                .recurrent_states[0][:, None]
+                .to(dtype=states.dtype, device=states.device)
+                if use_precomputed_states
+                else torch.zeros_like(states[:, :1])
+            )
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
             decay_chunk = decay_chunk.transpose(1, 3)
@@ -682,13 +695,12 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             # 4. Compute state -> output conversion per chunk
             # (left term of low-rank factorization of off-diagonal blocks; C terms)
             state_decay_out = torch.exp(A_cumsum)
-            C_times_states = (C[..., None, :] * states[:, :, None, ...])
+            C_times_states = C[..., None, :] * states[:, :, None, ...]
             state_decay_out_permuted = state_decay_out.permute(0, 2, 3, 1)
-            Y_off = (C_times_states.sum(-1) * state_decay_out_permuted[..., None])
+            Y_off = C_times_states.sum(-1) * state_decay_out_permuted[..., None]
 
             # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
             y = Y_diag + Y_off
-            # [bsz, -1, self.chunk_size, num_heads, head_dim] -> [bsz, (padded) seq_len, num_heads, head_dim]
             y = y.reshape(batch_size, -1, self.num_heads, self.head_dim)
 
             y = y + D_residual
@@ -699,37 +711,29 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
         scan_output = self.norm(y, gate)
 
-        # end ssd naive
-
         # 4. Final linear projection
-        contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
+        contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
-    # fmt: on
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, seq_idx)
-        if seq_idx is not None:
+            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask, **kwargs)
+        if kwargs.get("seq_idx") is not None:
             raise NotImplementedError(
                 "`seq_idx` support requires fast path support. Please install `mamba_ssm` and `causal_conv1d`"
             )
-        dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-            # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-            hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-        return self.torch_forward(hidden_states, cache_params, attention_mask)
+        return self.torch_forward(hidden_states, cache_params, attention_mask, **kwargs)
 
 
 class GraniteMoeHybridRMSNormGated(torch.nn.Module):
@@ -841,145 +845,83 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class GraniteMoeHybridParallelExperts(nn.Module):
-    def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
-        """
-        Initialize the GraniteMoeHybridParallelExperts module.
-        The experts weights are stored in [num_experts, output_size, input_size] format. Such that it's compatible with
-        many MoE libraries, such as [Megablock](https://github.com/databricks/megablocks) and
-        [ScatterMoE](https://github.com/shawntan/scattermoe), as well as the
-        [MoE kernel](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/fused_moe/fused_moe.py)
-        used in vllm.
+class GraniteMoeHybridTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
-        Args:
-            num_experts (int):
-                Number of experts.
-            input_size (int):
-                Size of the input.
-            output_size (int):
-                Size of the output.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.empty(num_experts, output_size, input_size))
-        self.num_experts = num_experts
-        self.input_size = input_size
-        self.output_size = output_size
-
-    def forward(self, inputs, expert_size):
-        """
-        Forward pass of the GraniteMoeHybridParallelExperts module.
-
-        Args:
-            inputs (Tensor):
-                Input tensor.
-            expert_size:
-                Expert size information.
-
-        Returns:
-            Tensor: Output tensor.
-        """
-        input_list = inputs.split(expert_size, dim=0)
-        output_list = []
-        for i in range(self.num_experts):
-            output_list.append(F.linear(input_list[i], self.weight[i]))
-        results = torch.cat(output_list, dim=0)
-        return results
-
-
-class GraniteMoeHybridTopKGating(nn.Module):
-    def __init__(self, input_size: int, num_experts: int, top_k: int):
-        """
-        Initialize the top-k gating mechanism.
-
-        Args:
-            input_size (`int`):
-                Size of the input.
-            num_experts (`int`):
-                Number of experts.
-            top_k (`int`):
-                Number of top experts to select.
-        """
-        super().__init__()
-
-        self.num_experts = num_experts
-        self.input_size = input_size
-        self.top_k = top_k
-
-        self.layer = nn.Linear(input_size, num_experts, bias=False)
-
-    def forward(self, hidden_states):
-        # compute the top_k routing decision
-        logits = self.layer(hidden_states).float()  # [batch_size x seq_len, num_experts]
-        top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)  # [num_tokens, top_k]
-        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)  # [num_tokens, top_k]
-
-        # compute number of input given to each expert
-        zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
-        )  # [num_tokens, num_experts]
-        gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
-        expert_size = gates.long().sum(0)  # [num_experts,]
-        # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: Backend compiler failed with a fake tensor exception at`)
-        # (and `DataDependentOutputException`)
-        expert_size = expert_size.tolist()
-
-        # sort and group input tokens according to expert assignment
-        top_k_experts = top_k_indices.flatten()  # [num_tokens * top_k]
-        _, index_sorted_experts = top_k_experts.sort(0)  # [num_tokens * top_k]
-        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc")  # [num_tokens * top_k]
-
-        # gather the gate values for grouped input tokens
-        top_k_gates = top_k_gates.flatten()  # [num_tokens * top_k]
-        batch_gates = top_k_gates[index_sorted_experts]  # [num_tokens * top_k]
-
-        return index_sorted_experts, batch_index, batch_gates, expert_size, logits
-
-
-class GraniteMoeHybridMoE(nn.Module):
-    """
-    A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
-
-    Args:
-        config:
-            Configuration object with model hyperparameters.
+    Returns ``(top_k_index, top_k_weights, router_logits)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
     """
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__()
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
+        return top_k_index, top_k_weights, router_logits
+
+
+@use_experts_implementation
+class GraniteMoeHybridExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config: GraniteMoeHybridConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class GraniteMoeHybridMoE(nn.Module):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
+
+    def __init__(self, config: GraniteMoeHybridConfig):
+        super().__init__()
         self.input_size = config.hidden_size
-        self.hidden_size = config.intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = GraniteMoeHybridParallelExperts(
-            config.num_local_experts, self.input_size, self.hidden_size * 2
-        )
-        self.output_linear = GraniteMoeHybridParallelExperts(
-            config.num_local_experts, self.hidden_size, self.input_size
-        )
+        self.router = GraniteMoeHybridTopKRouter(config)
+        self.experts = GraniteMoeHybridExperts(config)
 
-        self.router = GraniteMoeHybridTopKGating(
-            input_size=self.input_size,
-            num_experts=config.num_local_experts,
-            top_k=config.num_experts_per_tok,
-        )
-
-    def forward(self, layer_input):
+    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
         bsz, length, emb_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, _ = self.router(layer_input)
-
-        expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        expert_outputs = self.output_linear(hidden_states, expert_size)
-
-        expert_outputs = expert_outputs * batch_gates[:, None]
-
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        layer_output = zeros.index_add(0, batch_index, expert_outputs)
-        layer_output = layer_output.view(bsz, length, self.input_size)
-        return layer_output
+        hidden_states = layer_input.reshape(-1, emb_size)
+        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        return layer_output.view(bsz, length, self.input_size)
 
 
 class GraniteFlashAttentionKwargs(TypedDict, total=False):
@@ -1042,11 +984,11 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
 
-        if config.layers_block_type[layer_idx] == "mamba":
+        if config.layers_block_type[layer_idx] == "linear_attention":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
-        self.layer_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layers_block_type[layer_idx]
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
@@ -1105,7 +1047,7 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": GraniteMoeHybridDecoderLayer,
@@ -1116,7 +1058,10 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteMoeHybridParallelExperts):
+        if isinstance(module, GraniteMoeHybridExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteMoeHybridTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, GraniteMoeHybridMambaLayer):
             init.ones_(module.dt_bias)
@@ -1174,17 +1119,19 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask_mapping = {}
-        for layer_type in set(self.config.layers_block_type):
-            if "mamba" in layer_type:
-                causal_mask_mapping[layer_type] = self._update_mamba_mask(attention_mask, past_key_values)
-            else:
-                causal_mask_mapping[layer_type] = create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1207,19 +1154,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
 
 
 def load_balancing_loss_func(
@@ -1309,6 +1243,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

@@ -112,7 +112,6 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
 
     model_tester_class = Granite4VisionModelTester
     skip_test_image_features_output_shape = True
-    test_torch_exportable = False
     # Custom layer-by-layer forward doesn't support output_attentions
     # (GraniteDecoderLayer discards attention weights internally)
     test_attention_outputs = False

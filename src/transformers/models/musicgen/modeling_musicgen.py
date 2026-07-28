@@ -395,20 +395,8 @@ class MusicgenPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_factor
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, MusicgenSinusoidalPositionalEmbedding):
+        super()._init_weights(module)
+        if isinstance(module, MusicgenSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(module.num_positions, module.embedding_dim)
             init.copy_(module.weights, emb_weights)
 
@@ -1018,12 +1006,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
-        if (
-            input_ids_length.shape[1] != input_ids_length
-            and model_input_name == "inputs_embeds"
-            and not self.config.is_encoder_decoder
-        ):
-            max_cache_length += input_ids_length.shape[1]
         self._prepare_cache_for_generation(
             generation_config,
             model_kwargs,

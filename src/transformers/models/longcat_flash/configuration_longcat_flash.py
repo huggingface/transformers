@@ -52,6 +52,11 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "num_experts_per_tok": "moe_topk",
+        "intermediate_size": "ffn_hidden_size",
+    }
     default_theta = 10000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.*.q_b_proj": "colwise",

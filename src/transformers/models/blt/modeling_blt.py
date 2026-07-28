@@ -443,15 +443,9 @@ class BltPreTrainedModel(PreTrainedModel):
         - Scale is ~ 1 / sqrt(model_dim) (or 1 / sqrt(hidden_dim) for FFN outputs).
         - Norm layers are set to weight = 1, bias = 0.
         """
-        class_name = module.__class__.__name__
+        super()._init_weights(module)
 
-        # Norms: RMSNorm / LayerNorm
-        if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
-            if getattr(module, "weight", None) is not None:
-                init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-            return
+        class_name = module.__class__.__name__
 
         # Embeddings (encoder / patcher / hash embeddings)
         if isinstance(module, nn.Embedding):
@@ -580,16 +574,6 @@ class BltPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
             return
-
-        if isinstance(module, BltRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class BltLocalEncoder(BltPreTrainedModel):
@@ -848,32 +832,35 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int | N
         return patch_lengths
 
     batch_size = patch_lengths.size(0)
-    processed = []
+    positive = patch_lengths > 0
+    full_chunks = torch.where(positive, patch_lengths // max_patch_length, 0)
+    remainder = torch.where(positive, patch_lengths % max_patch_length, 0)
+    segment_counts = full_chunks + (remainder > 0).to(full_chunks.dtype)
 
-    for seq in patch_lengths:
-        splits = []
-        for length in seq[seq > 0]:
-            length = length.item()
-            full_chunks, remainder = divmod(length, max_patch_length)
-            splits.extend([max_patch_length] * full_chunks)
-            if remainder:
-                splits.append(remainder)
-        processed.append(splits)
+    max_segments_per_patch = int(segment_counts.max().item())
+    if max_segments_per_patch == 0:
+        return torch.zeros((batch_size, 0), dtype=patch_lengths.dtype, device=patch_lengths.device)
 
-    # Find max length to pad to
-    max_len = max(len(splits) for splits in processed)
-    padded = torch.zeros((batch_size, max_len), dtype=patch_lengths.dtype, device=patch_lengths.device)
+    segment_index = torch.arange(max_segments_per_patch, dtype=patch_lengths.dtype, device=patch_lengths.device)
+    full_mask = segment_index < full_chunks.unsqueeze(-1)
+    remainder_mask = (segment_index == full_chunks.unsqueeze(-1)) & (remainder.unsqueeze(-1) > 0)
+    segments = torch.where(
+        full_mask,
+        torch.full_like(segment_index, max_patch_length),
+        torch.zeros_like(segment_index),
+    )
+    segments = torch.where(remainder_mask, remainder.unsqueeze(-1), segments)
 
-    for i, splits in enumerate(processed):
-        if splits:
-            padded[i, : len(splits)] = torch.tensor(splits, dtype=patch_lengths.dtype, device=patch_lengths.device)
+    flat_segments = segments.reshape(batch_size, -1)
+    nonzero = flat_segments > 0
+    packed_mask = torch.arange(flat_segments.shape[1], device=patch_lengths.device) < segment_counts.sum(
+        dim=1
+    ).unsqueeze(-1)
+    packed_segments = torch.zeros_like(flat_segments)
+    packed_segments.masked_scatter_(packed_mask, flat_segments[nonzero])
 
-    # Trim zero columns
-    if (padded != 0).any(dim=0).sum() < padded.shape[1]:
-        last_nonzero = (padded != 0).any(dim=0).nonzero().max().item() + 1
-        padded = padded[:, :last_nonzero]
-
-    return padded
+    max_len = int(segment_counts.sum(dim=1).max().item())
+    return packed_segments[:, :max_len]
 
 
 class BltPatcher(BltPreTrainedModel):

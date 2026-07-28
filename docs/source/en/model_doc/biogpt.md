@@ -113,7 +113,7 @@ print(output)
 ## Notes
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
-- BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
+- BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [`~BioGptModel.forward#past_key_values`] parameter in [`BioGPTModel.forward`].
 
 ## BioGptConfig
 

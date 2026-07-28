@@ -318,13 +318,11 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
@@ -763,8 +761,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
-        "hidden_states": [LwDetrDecoderLayer],
+        "attentions": LwDetrAttention,
+        "cross_attentions": LwDetrMultiscaleDeformableAttention,
+        "hidden_states": LwDetrDecoderLayer,
     }
 
     @torch.no_grad()

@@ -731,9 +731,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
-        if inp_min >= 0 and truncate_negative:
-            mean_outputs = torch.maximum(mean_outputs, 0.0)
-            full_outputs = torch.maximum(full_outputs, 0.0)
+        if truncate_negative:
+            # Clamp outputs to >= 0 only when the (single-scalar) input minimum is non-negative.
+            clamp = inp_min >= 0
+            mean_outputs = torch.where(clamp, mean_outputs.clamp_min(0.0), mean_outputs)
+            full_outputs = torch.where(clamp, full_outputs.clamp_min(0.0), full_outputs)
 
         loss = None
         if future_values is not None:

@@ -22,7 +22,7 @@ Quantization techniques that aren't supported in Transformers can be added with 
 
 <Tip>
 
-Learn how to quantize models in the [Quantization](../quantization) guide.
+Learn how to quantize models in the [Quantization](../quantization/overview) guide.
 
 </Tip>
 

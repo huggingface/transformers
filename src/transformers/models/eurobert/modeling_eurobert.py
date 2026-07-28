@@ -411,6 +411,8 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.model = EuroBertModel(config)

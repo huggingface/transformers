@@ -3,7 +3,6 @@ import unittest
 import pytest
 
 from transformers.testing_utils import (
-    require_sentencepiece,
     require_tokenizers,
     require_vision,
 )
@@ -16,22 +15,13 @@ if is_vision_available():
     from transformers import TrOCRProcessor
 
 
-@require_sentencepiece
 @require_tokenizers
 @require_vision
 class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "labels"
     processor_class = TrOCRProcessor
-
-    @classmethod
-    def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class()
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class.from_pretrained("FacebookAI/xlm-roberta-base")
+    # Tiny processor created with make_tiny_processor.py from "microsoft/trocr-base-handwritten"
+    tiny_model_id = "hf-internal-testing/tiny-processor-trocr"
 
     def test_processor_text(self):
         processor = self.get_processor()

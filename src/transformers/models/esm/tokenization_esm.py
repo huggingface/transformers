@@ -125,7 +125,8 @@ class EsmTokenizer(PreTrainedTokenizer):
                     "ids is already formatted with special tokens for the model."
                 )
 
-            return [1 if token in self.all_special_ids else 0 for token in token_ids_0]
+            all_special_ids = set(self.all_special_ids)
+            return [1 if token in all_special_ids else 0 for token in token_ids_0]
         mask = [1] + ([0] * len(token_ids_0)) + [1]
         if token_ids_1 is not None:
             mask += [0] * len(token_ids_1) + [1]

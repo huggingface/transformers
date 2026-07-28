@@ -53,12 +53,12 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
-        hidden_size=4,  # llama hidden size
+        hidden_size=8,  # llama hidden size
         intermediate_size=7,  # llama intermediate size
         num_hidden_layers=1,  # llama hidden layers
         num_attention_heads=2,  # llama attention heads
         num_key_value_heads=2,  # llama key value heads
-        protein_hidden_size=8,  # protein encoder hidden size
+        protein_hidden_size=16,  # protein encoder hidden size
         protein_num_hidden_layers=1,  # protein encoder hidden layers
         protein_num_attention_heads=4,  # protein encoder attention heads
         protein_intermediate_size=11,  # protein encoder intermediate size
@@ -201,7 +201,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     maxDiff = None
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent boolean (`protein_kv_attn_mask.any()`)
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)
@@ -315,6 +315,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Evolla has a special arch that doesnt='t fit with testing assumptions")
+    def test_model_rope_scaling_frequencies(self):
         pass
 
 

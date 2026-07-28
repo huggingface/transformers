@@ -277,6 +277,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
+        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, MgpstrEmbeddings):
             init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
@@ -285,9 +286,6 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring

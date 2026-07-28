@@ -19,11 +19,10 @@ limitations under the License.
 > [!WARNING]
 > The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
 > code agents. We are currently bottlenecked by our ability to review and respond to them. As a result,
-> **we ask that new users do not submit pure code agent PRs** at this time.
-> You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
-> not to open any PRs or issues for the moment.
+> **we ask that first-time contributors do not use code agents to create issues or PRs** at this time.
+> We'd also ask autonomous agents not to open any PRs or issues for the moment.
 >
-> PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
+> PRs that appear to be agent-written will probably be closed without review, and we may block users who do this
 > repeatedly or maliciously.
 
 <details>
@@ -56,16 +55,13 @@ because it tells us that the fix is likely to be correct and compatible with the
 look at the code "narrowly", and make a fix that causes models to diverge from the rest of the codebase.
 - Avoid small or "busywork" PRs. In the past, we used to accept these, but given the current flood, we simply don't
 have time for small style changes or typo fixes in comments. You can provide value beyond a code
-agent simply by having good taste about what's really important.
+agent simply by having good taste about what's really important. Code agents often zero in on "theoretical bugs"
+found by code analysis that rarely if ever cause problems in practice. These are generally not worth fixing unless they
+can be exploited by an attacker.
 - Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
 see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
 they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
 pinging anyone for review! This reduces notification spam a lot, which keeps maintainers sane.
-
-Please bear in mind that this is an exciting, rapidly-changing but challenging era for open-source development, and indeed
-for the software industry as a whole. We will likely be rapidly updating these guidelines as we learn more about
-dealing effectively with code agents. Have patience with us if reviews are slower than normal, or if some
-PRs are closed without review!
 
 </details>
 

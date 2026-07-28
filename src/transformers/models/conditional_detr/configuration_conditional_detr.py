@@ -25,7 +25,7 @@ from ..auto import AutoConfig
 @strict
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
-    num_queries (`int`, *optional*, defaults to 100):
+    num_queries (`int`, *optional*, defaults to 300):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
     auxiliary_loss (`bool`, *optional*, defaults to `False`):

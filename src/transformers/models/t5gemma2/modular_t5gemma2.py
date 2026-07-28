@@ -480,14 +480,8 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
         "SiglipEncoderLayer",
         "SiglipMultiheadAttentionPoolingHead",
     ]
-    _can_record_outputs = {
-        "hidden_states": [T5Gemma2EncoderLayer, T5Gemma2DecoderLayer],
-        "attentions": [
-            OutputRecorder(T5Gemma2SelfAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=1, layer_name="self_attn"),
-            OutputRecorder(T5Gemma2MergedAttention, index=2, layer_name="cross_attn"),
-        ],
-    }
+    # Recording is declared on the text encoder/decoder classes; None avoids inheriting the gemma3 dict
+    _can_record_outputs = None
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -891,7 +885,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
+    def get_encoder(self, modality: str | None = None):
         return self.encoder
 
     def get_decoder(self):
@@ -998,8 +992,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
+    def get_encoder(self, modality: str | None = None):
+        return self.model.get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.model.get_decoder()

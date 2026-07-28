@@ -82,10 +82,14 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
+
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 154880
     hidden_size: int = 6144
@@ -123,7 +127,6 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 32
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     layer_types: list[str] | None = None
@@ -155,6 +158,9 @@ class GlmMoeDsaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
             self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+        # BC: re-route `num_experts` to `n_routed_experts`
+        if (num_experts := kwargs.get("num_experts")) is not None:
+            self.n_routed_experts = num_experts
         # Default to MoE from the second layer and on
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)

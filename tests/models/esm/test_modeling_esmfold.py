@@ -170,7 +170,7 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # unhashable SymInt inside ESMFold fold module
 
     def setUp(self):
         self.model_tester = EsmFoldModelTester(self)
