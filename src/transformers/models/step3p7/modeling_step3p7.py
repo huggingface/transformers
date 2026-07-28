@@ -349,6 +349,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = True
@@ -400,7 +401,6 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
     """
 
     config: Step3p7VisionConfig
-    _no_split_modules = ["Step3p7VisionEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Step3p7VisionEncoderLayer,
         "attentions": Step3p7VisionAttention,
@@ -418,7 +418,6 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         )
         self.post_init()
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
@@ -703,7 +702,7 @@ class Step3p7Attention(nn.Module):
         self.num_key_value_groups = self.num_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = not config.use_bidirectional_attention
+        self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(
@@ -835,7 +834,6 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 class Step3p7TextModel(Step3p7PreTrainedModel):
     config: Step3p7TextConfig
     input_modalities = ("text",)
-    _no_split_modules = ["Step3p7DecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Step3p7DecoderLayer,
         "attentions": Step3p7Attention,

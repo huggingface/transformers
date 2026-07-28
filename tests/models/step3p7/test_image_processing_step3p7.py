@@ -121,8 +121,8 @@ class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self._processor()
         image = torch.randint(0, 256, (3, 48, 48), dtype=torch.uint8)
 
-        num_patches, num_newlines = image_processor.get_number_of_image_patches(height=48, width=48)
-        self.assertEqual((num_patches, num_newlines), (0, 0))
+        num_patches = image_processor.get_number_of_image_patches(height=48, width=48)
+        self.assertEqual(num_patches, 0)
 
         result = image_processor([image], return_tensors="pt")
         self.assertEqual(list(result["pixel_values"].shape), [1, 3, 64, 64])
@@ -136,8 +136,8 @@ class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self._processor()
         image = torch.randint(0, 256, (3, 64, 200), dtype=torch.uint8)  # (C, H, W)
 
-        num_patches, num_newlines = image_processor.get_number_of_image_patches(height=64, width=200)
-        self.assertEqual((num_patches, num_newlines), (14, 1))
+        num_patches = image_processor.get_number_of_image_patches(height=64, width=200)
+        self.assertEqual(num_patches, 14)
 
         result = image_processor([image], return_tensors="pt")
         self.assertEqual(list(result["pixel_values"].shape), [1, 3, 64, 64])
@@ -166,8 +166,8 @@ class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self._processor()
         image = torch.randint(0, 256, (3, 20, 200), dtype=torch.uint8)  # (C, H, W)
 
-        num_patches, num_newlines = image_processor.get_number_of_image_patches(height=20, width=200)
-        self.assertEqual((num_patches, num_newlines), (49, 6))
+        num_patches = image_processor.get_number_of_image_patches(height=20, width=200)
+        self.assertEqual(num_patches, 49)
 
         result = image_processor([image], return_tensors="pt")
         # The global view is still squared to `size` regardless of the padding path.

@@ -22,14 +22,13 @@ limitations under the License.
 
 ## Overview
 
-Step-3.7-Flash is a vision-language model from StepFun.
+Step-3.7-Flash was proposed in [Step 3.7 Flash](https://static.stepfun.com/blog/step-3.7-flash/) by StepFun. It is a 198B-parameter sparse Mixture-of-Experts vision-language model, pairing a 196B-parameter MoE language backbone with a 1.8B-parameter vision encoder for native image understanding.
 
 ## Usage example
 
 ```python
 import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
-from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
@@ -37,18 +36,18 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained("stepfun-ai/Step-3.7-Flash")
 
-image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"},
             {"type": "text", "text": "Describe this image briefly."},
         ],
     }
 ]
-text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-inputs = processor(images=[image], text=text, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=32, do_sample=False)
 print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])

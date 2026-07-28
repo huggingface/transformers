@@ -835,17 +835,9 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Concatenate(dim=1)],
             ),
         ],
-        # Scoped to `Step3p7VisionModel` (config.model_type == "step3p5_vision") by
-        # `get_model_conversion_mapping`, which anchors every rule here to keys under the
-        # `vision_model.` prefix. These used to live unscoped in the "step3p7" entry above,
-        # where bare substring patterns like `\.attn\.` -> `.self_attn.` and
-        # `\.transformer\.resblocks\.` -> `.layers.` also matched (and corrupted, on reverse/
-        # save) the text decoder's `language_model.layers.*.self_attn.*` keys.
+        # Scoped separately from "step3p7" above: bare substring patterns like `\.attn\.` -> `.self_attn.`
+        # would otherwise also match the text decoder's `language_model.layers.*.self_attn.*` keys.
         "step3p5_vision": [
-            # `^`-anchored: these attach directly to the (now-stripped-by-scoping) `vision_model.`
-            # prefix boundary, so the leading `.` that a bare substring pattern would expect — and
-            # that a target pattern would normally supply as a connector — is already part of the
-            # stripped prefix itself; a leading `.` on either side here would produce a double dot.
             WeightRenaming(source_patterns=r"^conv1\.weight$", target_patterns="embeddings.patch_embedding.weight"),
             WeightRenaming(
                 source_patterns=r"^positional_embedding$",
@@ -855,8 +847,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^ln_pre\.", target_patterns="pre_layernorm."),
             WeightRenaming(source_patterns=r"^vit_downsampler1\.", target_patterns="downsampler1."),
             WeightRenaming(source_patterns=r"^vit_downsampler2\.", target_patterns="downsampler2."),
-            # Not anchored: these are nested under `.transformer.resblocks.N.`, so a preceding `.`
-            # from that segment is still present in the (post-scoping) key being matched against.
             WeightRenaming(source_patterns=r"\.ls_1\.gamma$", target_patterns=".lambda_1"),
             WeightRenaming(source_patterns=r"\.ls_2\.gamma$", target_patterns=".lambda_2"),
             WeightRenaming(source_patterns=r"\.mlp\.c_fc\.", target_patterns=".mlp.fc1."),
@@ -864,8 +854,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
             WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
             WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
-            # Unfuse qkv and apply rope permutation. Kept scoped here: unscoped in "step3p7" above,
-            # this would also match the text decoder's separate `language_model...q_proj.weight` keys.
+            # Unfuse qkv and apply rope permutation.
             WeightConverter(
                 source_patterns=r"self_attn.in_proj_weight",
                 target_patterns=[

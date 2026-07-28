@@ -36,21 +36,12 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 504):
         Target size (height = width) for each local patch crop.
-    num_image_features (`int`, *optional*):
-        Number of placeholder tokens the processor expands the global-view image into. Derived in
-        `__init__` as `(size["height"] // vision_patch_size // downsampler_stride) ** 2`; only pass
-        this to override the derived value directly.
-    num_patch_features (`int`, *optional*):
-        Number of placeholder tokens the processor expands each local patch crop into; the
-        `patch_size` analogue of `num_image_features`.
     max_image_size (`int`, *optional*, defaults to 3024):
         Images larger than this (on their longest side) are scaled down uniformly before patch
         planning.
     """
 
     patch_size: int
-    num_image_features: int | None
-    num_patch_features: int | None
     max_image_size: int
 
 
@@ -79,20 +70,10 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     max_image_size: int = 3024
     # ViT patch size (`Step3p7VisionEmbeddings.patch_size`) and the vision tower's total downsampling
-    # stride (two stride-2 convolutions, `downsampler1`/`downsampler2`), used to derive
-    # `num_image_features`/`num_patch_features` from `size`/`patch_size` below instead of hardcoding them.
+    # stride (two stride-2 convolutions, `downsampler1`/`downsampler2`); `Step3p7Processor.__init__`
+    # derives `num_image_features`/`num_patch_features` from these plus `size`/`patch_size`.
     vision_patch_size: int = 14
     downsampler_stride: int = 4
-    num_image_features: int | None = None
-    num_patch_features: int | None = None
-
-    def __init__(self, **kwargs: Unpack[Step3p7ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-        stride = self.vision_patch_size * self.downsampler_stride
-        if self.num_image_features is None:
-            self.num_image_features = (self.size["height"] // stride) ** 2
-        if self.num_patch_features is None:
-            self.num_patch_features = (self.patch_size // stride) ** 2
 
     @staticmethod
     def _is_extreme_aspect(width: int, height: int) -> bool:
@@ -163,16 +144,14 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         num_patches_y = max(1, crop_height // window_size)
         return (width, height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y, needs_square_pad
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> tuple[int, int]:
-        """Return ``(num_patches, num_newline_tokens)`` for an image of the given size."""
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """Return the number of local patches for an image of the given size."""
         images_kwargs = images_kwargs or {}
         size = images_kwargs.get("size", self.size)
         image_size = size["height"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_size)
-        num_patches = num_patches_x * num_patches_y
-        num_newlines = num_patches_y - 1 if num_patches > 0 else 0
-        return num_patches, num_newlines
+        return num_patches_x * num_patches_y
 
     def _get_image_patches(
         self,
@@ -257,6 +236,11 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             "pixel_values": global_stack,
             "num_local_patches": num_local_patches,
         }
+        # Built before the local-patch fields below are assigned: `result[key] = ...` (unlike `data[key] = ...`
+        # pre-construction) bypasses `BatchFeature`'s tensor conversion, which matters for
+        # `patch_newline_masks` — it must stay a plain list of `bool`s, not a tensor.
+        result = BatchFeature(data=data, tensor_type=return_tensors)
+
         max_patches = max(num_local_patches, default=0)
         if max_patches:
             # Group by shape while keeping each image's patches nested (`is_nested=True`, the same
@@ -275,12 +259,9 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             nested_pixel_values_local = reorder_images(grouped_patches, grouped_index, is_nested=True)
             # Flatten back to (total_patches, C, H, W): `Step3p7Model.get_image_features` slices this
             # flat tensor per image using `num_local_patches`.
-            data["pixel_values_local"] = torch.stack(
+            result["pixel_values_local"] = torch.stack(
                 [patch for per_image_patches in nested_pixel_values_local for patch in per_image_patches]
             )
-
-        result = BatchFeature(data=data, tensor_type=return_tensors)
-        if max_patches:
             # Pad every image's mask to `max_patches` so the output is a uniform (batch, max_patches)
             result["patch_newline_masks"] = [
                 mask + [False] * (max_patches - len(mask)) for mask in patch_newline_masks
