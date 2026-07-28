@@ -24,13 +24,15 @@ from ..integrations.tensor_parallel import (
     gather_state_dict_for_save,
     initialize_tensor_parallelism,
 )
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging
+from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .utils import (
     _distributed_barrier,
+    _ensure_torch_distributed,
     _get_torch_distributed_rank,
+    _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
@@ -43,13 +45,6 @@ logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     import torch.nn as nn
-
-if is_torch_available():
-    import torch
-
-    _torch_distributed_available = torch.distributed.is_available()
-else:
-    _torch_distributed_available = False
 
 
 class DistributedMixin:
@@ -160,12 +155,20 @@ class DistributedMixin:
         device_mesh=None,
         device_map=None,
     ) -> tuple[DistributedConfig | None, object, object]:
-        """Parse ``distributed_config``, init TP/FSDP mesh, and validate."""
         if distributed_config is None:
             return None, device_map, device_mesh
 
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
+
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+            _ensure_torch_distributed()
+            world_size = _get_torch_distributed_world_size()
+            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
+                raise RuntimeError(
+                    f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
+                    f"is not equal to world_size ({world_size})"
+                )
 
         if distributed_config.tp_size > 1:
             if distributed_config.tp_plan is None:
@@ -179,7 +182,6 @@ class DistributedMixin:
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
 
-        distributed_config.validate()
         return distributed_config, device_map, device_mesh
 
     @classmethod
@@ -190,7 +192,7 @@ class DistributedMixin:
         device_mesh,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if _torch_distributed_available and device_mesh is not None:
+        if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
 

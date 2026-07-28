@@ -396,6 +396,8 @@ class AfmoeForCausalLM(LlamaForCausalLM, AfmoePreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config):
         AfmoePreTrainedModel.__init__(self, config)
         self.model = AfmoeModel(config)
