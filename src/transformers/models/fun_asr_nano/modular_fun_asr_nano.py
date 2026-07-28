@@ -390,7 +390,7 @@ class FunAsrNanoAdaptor(nn.Module):
 class FunAsrNanoModel(AudioFlamingo3Model):
     def __init__(self, config):
         super().__init__(config)
-        self.audio_adapter = FunAsrNanoAdapter(config)
+        self.audio_adaptor = FunAsrNanoAdaptor(config)
 
     @can_return_tuple
     @auto_docstring(
@@ -426,7 +426,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         encoder_out = encoder_outputs.last_hidden_state
 
         audio_embeds = self.multi_modal_projector(encoder_out)
-        audio_embeds = self.audio_adapter(audio_embeds, input_features_mask)
+        audio_embeds = self.audio_adaptor(audio_embeds, input_features_mask)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(

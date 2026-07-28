@@ -83,7 +83,7 @@ ROOT_STATE_DICT_MAPPING = (
     (r"^audio_encoder\.tp_encoders\.", "model.audio_tower.timestamp_prediction_layers."),
     (r"^audio_encoder\.after_norm\.", "model.audio_tower.layer_norm."),
     (r"^audio_encoder\.tp_norm\.", "model.audio_tower.timestamp_prediction_layer_norm."),
-    (r"^audio_adaptor\.blocks\.", "model.audio_adapter.blocks."),
+    (r"^audio_adaptor\.blocks\.", "model.audio_adaptor.blocks."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path

@@ -680,7 +680,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
-        self.audio_adapter = FunAsrNanoAdapter(config)
+        self.audio_adaptor = FunAsrNanoAdaptor(config)
         self.post_init()
 
     @can_return_tuple
@@ -717,7 +717,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         encoder_out = encoder_outputs.last_hidden_state
 
         audio_embeds = self.multi_modal_projector(encoder_out)
-        audio_embeds = self.audio_adapter(audio_embeds, input_features_mask)
+        audio_embeds = self.audio_adaptor(audio_embeds, input_features_mask)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(
