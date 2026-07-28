@@ -75,7 +75,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
                     f"number of images ({n_images})."
                 )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> TextInput:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
         size = self.image_processor.size["height"]
         tile_size = self.image_processor.tile_size
 

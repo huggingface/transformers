@@ -103,6 +103,8 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Qwen2_5OmniProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
+
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
@@ -316,7 +318,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+        if isinstance(generated_outputs, (tuple, list)):
+            generated_outputs = generated_outputs[0]
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs

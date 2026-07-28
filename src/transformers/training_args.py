@@ -24,6 +24,7 @@ from functools import cached_property
 from typing import Any, Literal
 
 from .debug_utils import DebugOption
+from .distributed.utils import _is_torch_distributed_initialized
 from .trainer_utils import (
     FSDPOption,
     HubStrategy,
@@ -1439,19 +1440,6 @@ class TrainingArguments:
         },
     )
 
-    # --- Deprecated / Internal ---
-    warmup_ratio: float | None = field(
-        default=None,
-        metadata={
-            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
-        },
-    )
-    logging_dir: str | None = field(
-        default=None,
-        metadata={
-            "help": "Deprecated and will be removed in v5.2. Set env var `TENSORBOARD_LOGGING_DIR` instead. TensorBoard log directory."
-        },
-    )
     local_rank: int = field(
         default=-1,
         metadata={
@@ -1483,15 +1471,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        if self.warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5.2. Use `warmup_steps` instead.")
-            self.warmup_steps = self.warmup_ratio
-
-        if self.logging_dir is not None:
-            logger.warning(
-                "`logging_dir` is deprecated and will be removed in v5.2. Please set `TENSORBOARD_LOGGING_DIR` instead."
-            )
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
@@ -1565,6 +1544,8 @@ class TrainingArguments:
         if self.torch_compile and self.torch_compile_backend is None:
             if not self.use_cpu and is_torch_hpu_available():
                 self.torch_compile_backend = "hpu_backend"
+            elif not self.use_cpu and is_torch_neuron_available():
+                self.torch_compile_backend = "neuron"
             else:
                 self.torch_compile_backend = "inductor"
 
@@ -1835,7 +1816,7 @@ class TrainingArguments:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
-        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
+        if _is_torch_distributed_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -2577,7 +2558,6 @@ class TrainingArguments:
         num_epochs: float = 3.0,
         max_steps: int = -1,
         warmup_steps: float = 0,
-        warmup_ratio: float | None = None,
     ):
         """
         A method that regroups all arguments linked to the learning rate scheduler and its hyperparameters.
@@ -2609,10 +2589,6 @@ class TrainingArguments:
         0.05
         ```
         """
-        if warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5.2 . Use `warmup_steps` instead.")
-            warmup_steps = warmup_ratio
-
         self.lr_scheduler_type = SchedulerType(name)
         self.num_train_epochs = num_epochs
         self.max_steps = max_steps
