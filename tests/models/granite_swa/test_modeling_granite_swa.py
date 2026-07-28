@@ -66,12 +66,14 @@ class GraniteSWAIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_MEANS = Expectations(
             {
-                ("cuda", 8): torch.tensor([[-0.2178, -0.6719, -0.1885, 0.6484, -2.4375]]),
+                ("cuda", 8): torch.tensor([[-0.2207, -0.6680, -0.2119, 0.6523, -2.4531]]),
+                ("cuda", 9): torch.tensor([[-0.2178, -0.6719, -0.1885, 0.6484, -2.4375]]),
             }
         )
         EXPECTED_SLICES = Expectations(
             {
-                ("cuda", 8): torch.tensor([2.3125, 5.6562, 1.3047, 2.2969, 3.1562, 0.3711, 4.2812, 1.4688, 3.4531, 3.4531, 2.7188, 5.8125, 3.7812, 4.9062, 2.3906]),
+                ("cuda", 8): torch.tensor([2.2969, 5.6250, 1.2656, 2.2812, 3.1250, 0.3457, 4.2500, 1.4531, 3.4219, 3.4219, 2.6719, 5.7812, 3.7500, 4.9062, 2.3750]),
+                ("cuda", 9): torch.tensor([2.3125, 5.6562, 1.3047, 2.2969, 3.1562, 0.3711, 4.2812, 1.4688, 3.4531, 3.4531, 2.7188, 5.8125, 3.7812, 4.9062, 2.3906]),
             }
         )
         # fmt: on
@@ -92,8 +94,16 @@ class GraniteSWAIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        EXPECTED_TEXT = (
-            "The capital of France is Paris.\nThe capital of France is located in the north of the "
-            "country.\nThe capital of France is"
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 8): (
+                    "The capital of France is Paris.\nThe capital of France is the largest city in "
+                    "France.\nThe capital of France is the most"
+                ),
+                ("cuda", 9): (
+                    "The capital of France is Paris.\nThe capital of France is located in the north of the "
+                    "country.\nThe capital of France is"
+                ),
+            }
         )
-        self.assertEqual(generated_text, EXPECTED_TEXT)
+        self.assertEqual(generated_text, EXPECTED_TEXTS.get_expectation())
