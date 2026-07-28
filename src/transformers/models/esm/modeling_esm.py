@@ -110,13 +110,13 @@ class EsmRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: EsmConfig, device=None):
+    def __init__(self, config: EsmConfig):
         super().__init__()
 
         self.config = config
         self.rope_type = {}
 
-        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config, device)
+        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
         self.register_buffer("inv_freq", curr_inv_freq)
         setattr(self, "attention_scaling", curr_attention_scaling)
 
