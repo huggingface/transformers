@@ -834,6 +834,7 @@ class UnlimitedOcrVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        # always interpolate
         embeddings = embeddings + self.interpolate_pos_encoding(
             embeddings, grid_height * self.patch_size, grid_width * self.patch_size
         )
@@ -947,14 +948,14 @@ class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
         >>> patch_tokens = outputs.last_hidden_state
         ```"""
 
-        sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
-        sam_hidden_states = sam_encoder_outputs.last_hidden_state
+        sam_outputs = self.sam_encoder(pixel_values, **kwargs)
+        residual = sam_outputs.last_hidden_state
 
-        vision_encoder_outputs = self.vision_encoder(sam_hidden_states, **kwargs)
+        vision_encoder_outputs = self.vision_encoder(residual, **kwargs)
         hidden_states = vision_encoder_outputs.last_hidden_state
 
-        sam_hidden_states = sam_hidden_states.flatten(2).transpose(1, 2)
-        hidden_states = torch.cat([hidden_states[:, 1:], sam_hidden_states], dim=-1)
+        residual = residual.flatten(2).transpose(1, 2)
+        hidden_states = torch.cat([hidden_states[:, 1:], residual], dim=-1)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1869,8 +1870,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         view_separator = self.view_separator[None, :]
 
         all_features = []
+        num_queries_global = int(global_features.shape[1] ** 0.5)
         for idx in range(batch_size):
-            num_queries_global = int(global_features.shape[1] ** 0.5)
             global_grid = global_features[idx].reshape(num_queries_global, num_queries_global, hidden_size)
             global_grid = torch.cat([global_grid, newline.expand(num_queries_global, 1, hidden_size)], dim=1)
             global_flat = global_grid.reshape(-1, hidden_size)
@@ -1879,15 +1880,12 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
             if local_features is not None and local_features.shape[0] > 0:
                 num_columns, num_rows = int(patches_grid[idx][0]), int(patches_grid[idx][1])
                 num_queries_local = int(local_features.shape[1] ** 0.5)
+                local_grid_shape = (num_rows * num_queries_local, -1, hidden_size)
                 local_grid = local_features.reshape(
                     num_rows, num_columns, num_queries_local, num_queries_local, hidden_size
                 )
-                local_grid = local_grid.permute(0, 2, 1, 3, 4).reshape(
-                    num_rows * num_queries_local, num_columns * num_queries_local, hidden_size
-                )
-                local_grid = torch.cat(
-                    [local_grid, newline.expand(num_rows * num_queries_local, 1, hidden_size)], dim=1
-                )
+                local_grid = local_grid.transpose(1, 2).reshape(local_grid_shape)
+                local_grid = torch.cat([local_grid, newline.expand(local_grid_shape)], dim=1)
                 local_flat = local_grid.reshape(-1, hidden_size)
                 all_features.append(torch.cat([local_flat, global_flat, view_separator], dim=0))
             else:
