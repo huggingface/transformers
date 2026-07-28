@@ -937,7 +937,7 @@ class GenerationMixin(ContinuousMixin):
         return decoder_input_ids, model_kwargs
 
     def _expand_inputs_for_generation(
-        self,
+        self: "GenerativePreTrainedModel",,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
