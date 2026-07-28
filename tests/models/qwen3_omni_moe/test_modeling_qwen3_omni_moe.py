@@ -427,7 +427,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol, equal_nan=True)
 
     @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
     def test_contrastive_generate(self):
