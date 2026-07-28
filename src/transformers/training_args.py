@@ -24,6 +24,7 @@ from functools import cached_property
 from typing import Any, Literal
 
 from .debug_utils import DebugOption
+from .distributed.utils import _is_torch_distributed_initialized
 from .trainer_utils import (
     FSDPOption,
     HubStrategy,
@@ -1815,7 +1816,7 @@ class TrainingArguments:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
-        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
+        if _is_torch_distributed_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
