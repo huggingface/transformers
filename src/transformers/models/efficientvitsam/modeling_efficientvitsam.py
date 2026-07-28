@@ -24,9 +24,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
@@ -34,7 +31,7 @@ from ...activations import ACT2FN, get_activation
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torch_available
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_efficientvitsam import (
@@ -43,6 +40,12 @@ from .configuration_efficientvitsam import (
     EfficientViTSamPromptEncoderConfig,
     EfficientViTSamVisionConfig,
 )
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 @auto_docstring(

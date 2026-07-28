@@ -15,12 +15,11 @@
 Modular EfficientViT-SAM configuration and modeling components.
 """
 
+from __future__ import annotations
+
 import contextlib
 from typing import Any, Union
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -28,7 +27,7 @@ from ...activations import get_activation
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig
@@ -43,6 +42,12 @@ from ..sam.modeling_sam import (
     SamVisionEncoderOutput,
 )
 from ..sam.processing_sam import SamProcessor
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
