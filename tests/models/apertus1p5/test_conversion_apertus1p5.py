@@ -64,6 +64,23 @@ class Apertus1p5ConversionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "float32"):
             conversion._check_fp32_tokenizer_source("audio tokenizer", {"w": torch.ones(2, dtype=torch.bfloat16)})
 
+    def test_build_config_stamps_architectures(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            for source in ("apertus", "vision", "audio"):
+                (tmp / source).mkdir()
+            (tmp / "apertus" / "config.json").write_text(
+                json.dumps({"model_type": "apertus", "architectures": ["ApertusForCausalLM"]})
+            )
+            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
+
+            config = conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
+
+        self.assertEqual(config.architectures, ["Apertus1p5ForConditionalGeneration"])
+        # the backbone's own entrypoint must not leak into the text sub-config
+        self.assertIsNone(getattr(config.text_config, "architectures", None))
+
     def test_convert_removes_stale_canonical_weight_files(self):
         config = Mock(tie_word_embeddings=False)
         converted_weights = {"lm_head.weight": torch.ones(2, 2)}
