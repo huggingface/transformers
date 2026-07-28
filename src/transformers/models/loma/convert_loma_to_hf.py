@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert the matcher weights from an official LoMa checkpoint.
+"""Convert an official LoMa checkpoint.
 
-This script converts the LoMa matcher into a Transformers model configured with a native SuperPoint detector. The
-reference checkpoints contain DaD and DeDoDe weights as well; those weights are intentionally not converted because
-those models are not part of the initial Transformers integration.
+This script converts the LoMa matching and descriptor weights into a Transformers model configured with a native
+SuperPoint detector. The reference checkpoints also contain DaD detector weights; those are intentionally not
+converted because DaD is not part of the initial Transformers integration.
 
 Example:
 
@@ -93,8 +93,8 @@ def _rename_descriptor_key(key: str) -> str | None:
     The reference checkpoint stores descriptor network weights under the ``_descriptor.`` prefix.
     The HF model stores them under ``descriptor_network.``.  The encoder weights have an extra
     ``vgg.`` prefix in the reference (``_descriptor.encoder.vgg.layers.*``) that maps to
-    ``descriptor_network.encoder.layers.*`` in HF.  DINOv2 encoder keys and detector keys are
-    skipped as they are not part of the HF model.
+    ``descriptor_network.encoder.layers.*`` in HF. DINOv2 encoder keys are handled separately
+    by :func:`_rename_dinov2_keys`.
     """
     if key.startswith("_descriptor.encoder.frozen_dinov2."):
         return None
