@@ -386,8 +386,6 @@ def _reshaped_vision_attention_forward(
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
-    # Combined `qkv` + no in-attention rotary + `.proj`
-    "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
@@ -670,8 +668,6 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
 # To register a new stateful attribute: append its name to `_STATEFUL_CACHE_ATTRS`.
 
 _STATEFUL_CACHE_ATTRS = (
-    "_cached_decode_position_ids",  # glm_image (m-rope decode position ids)
-    "_prefill_len",  # glm_image (m-rope prefill length)
     "cached_rotary_positional_embedding",  # wav2vec2_bert, seamless_m4t, clvp
     "cached_sequence_length",  # wav2vec2_bert, seamless_m4t, clvp
 )

@@ -76,6 +76,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "OpenAIPrivacyFilterForTokenClassification": (
             "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
         ),
+        "GlmImageModel": (
+            "Autoregressive image generation with data-dependent 2D-grid position bookkeeping in "
+            "`forward`; export support isn't worth the model-specific machinery (it's used as part of a "
+            "diffusers pipeline). TODO: revisit if there's demand for exporting it directly."
+        ),
+        "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
     },
     # Every backend, generate path only.
     "generate": {
