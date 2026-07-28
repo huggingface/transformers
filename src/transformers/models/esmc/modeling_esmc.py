@@ -526,8 +526,10 @@ class EsmcForSequenceClassification(EsmcPreTrainedModel):
     def __init__(self, config: EsmcConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
         self.esmc = EsmcModel(config)
         self.classifier = EsmcClassificationHead(config)
+
         self.post_init()
 
     @can_return_tuple

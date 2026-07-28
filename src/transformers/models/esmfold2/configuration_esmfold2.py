@@ -97,7 +97,7 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
     token_transition_intermediate_size (`int`, *optional*):
         SwiGLU width of the token transitions. Derived as
         `transition_multiplier * token_hidden_size` if unset.
-    atom_encoder ([`EsmFold2AtomEncoderConfig`], *optional*):
+    atom_encoder (`EsmFold2AtomEncoderConfig`, *optional*):
         Configuration for the denoiser's atom encoder/decoder stack.
     """
 
@@ -127,7 +127,7 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
 @strict
 class EsmFold2StructureHeadConfig(PreTrainedConfig):
     r"""
-    diffusion_module ([`EsmFold2DiffusionModuleConfig`], *optional*):
+    diffusion_module (`EsmFold2DiffusionModuleConfig`, *optional*):
         Configuration for the denoiser this head samples from.
     distogram_bins (`int`, *optional*, defaults to 128):
         Number of distance bins predicted by the distogram head.
@@ -312,15 +312,15 @@ class EsmFold2Config(PreTrainedConfig):
         Number of pair-update blocks in the folding trunk.
     parcae_num_coda_layers (`int`, *optional*, defaults to 2):
         Number of pair-update blocks in the parcae coda.
-    atom_encoder ([`EsmFold2AtomEncoderConfig`], *optional*):
+    atom_encoder (`EsmFold2AtomEncoderConfig`, *optional*):
         Configuration for the inputs-embedder SWA atom encoder.
-    structure_head ([`EsmFold2StructureHeadConfig`], *optional*):
+    structure_head (`EsmFold2StructureHeadConfig`, *optional*):
         Configuration for the diffusion structure-prediction head (holds the `diffusion_module` sub-config).
-    confidence_head ([`EsmFold2ConfidenceHeadConfig`], *optional*):
+    confidence_head (`EsmFold2ConfidenceHeadConfig`, *optional*):
         Configuration for the confidence head.
-    msa_encoder ([`EsmFold2MsaEncoderConfig`], *optional*):
+    msa_encoder (`EsmFold2MsaEncoderConfig`, *optional*):
         Configuration for the MSA encoder.
-    lm_encoder ([`EsmFold2LmEncoderConfig`], *optional*):
+    lm_encoder (`EsmFold2LmEncoderConfig`, *optional*):
         Configuration for the language-model hidden-state encoder.
     esmc_config ([`EsmcConfig`], *optional*):
         Configuration for the bundled ESMC backbone.

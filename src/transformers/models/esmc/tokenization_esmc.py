@@ -86,7 +86,8 @@ class EsmcTokenizer(TokenizersBackend):
         bos_token (`str`, *optional*, defaults to `"<cls>"`):
             The beginning-of-sequence token (prepended to every sequence). When unset, uses cls_token.
         chain_break_token (`str`, *optional*, defaults to `"|"`):
-            Token inserted between chains in multi-chain protein inputs.
+            Token inserted between chains in multi-chain protein inputs. Registered as a model-specific
+            special token, so it is exposed as `chain_break_token` / `chain_break_token_id`.
         extra_special_tokens (`list[str]`, *optional*):
             Additional special tokens to register with the tokenizer (round-tripped from a saved config).
 
@@ -104,8 +105,6 @@ class EsmcTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
-    # The chain-break token, which this exposes as ``chain_break_token`` / ``chain_break_token_id``.
-    SPECIAL_TOKENS_ATTRIBUTES = TokenizersBackend.SPECIAL_TOKENS_ATTRIBUTES + ["chain_break_token"]
 
     def __init__(
         self,

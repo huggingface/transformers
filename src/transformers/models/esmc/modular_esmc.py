@@ -85,11 +85,6 @@ class EsmcConfig(LlamaConfig):
     """
 
     model_type = "esmc"
-    attribute_map = {
-        "d_model": "hidden_size",
-        "n_heads": "num_attention_heads",
-        "n_layers": "num_hidden_layers",
-    }
 
     # Llama fields re-declared only where ESMC's default differs from the parent's.
     vocab_size: int = 64
@@ -114,12 +109,18 @@ class EsmcConfig(LlamaConfig):
     keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        # Derived after the base ``__post_init__`` applies ``attribute_map``. ESMC never uses GQA.
-        self.num_key_value_heads = self.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_attention_heads
         if self.intermediate_size is None:
             self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        # ESMC never uses grouped-query attention; the parent derives the two to match when unset.
+        if self.num_key_value_heads != self.num_attention_heads:
+            raise ValueError(
+                f"ESMC does not support grouped-query attention: `num_key_value_heads` "
+                f"({self.num_key_value_heads}) must equal `num_attention_heads` ({self.num_attention_heads})."
+            )
 
 
 class EsmcLayerNorm(nn.LayerNorm):
@@ -355,6 +356,9 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         self.lm_head = EsmcMaskedLMHead(config.hidden_size, config.vocab_size)
         self.post_init()
 
+    # ``lm_head`` is a dense/norm/decoder stack rather than the output projection itself, so the
+    # base-class accessors (which return ``lm_head``) would hand ``resize_token_embeddings`` a module
+    # with no ``weight``. Same reason ``EsmForMaskedLM`` overrides these.
     def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head.decoder
 
@@ -427,7 +431,7 @@ class EsmcClassificationHead(EsmClassificationHead):
 
 class EsmcForSequenceClassification(EsmForSequenceClassification):
     def __init__(self, config: EsmcConfig):
-        EsmcPreTrainedModel.__init__(self, config)
+        super().__init__(config)
         self.num_labels = config.num_labels
         self.esmc = EsmcModel(config)
         self.classifier = EsmcClassificationHead(config)

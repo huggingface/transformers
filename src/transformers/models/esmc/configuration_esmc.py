@@ -93,11 +93,6 @@ class EsmcConfig(PreTrainedConfig):
     attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
-    attribute_map = {
-        "d_model": "hidden_size",
-        "n_heads": "num_attention_heads",
-        "n_layers": "num_hidden_layers",
-    }
 
     # ESMC-specific fields.
     mask_token_id: int | None = 32
@@ -106,17 +101,14 @@ class EsmcConfig(PreTrainedConfig):
     scale_residue: bool | None = True
 
     def __post_init__(self, **kwargs):
+        if self.intermediate_size is None:
+            self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
-        # Derived after the base ``__post_init__`` applies ``attribute_map``. ESMC never uses GQA.
-        self.num_key_value_heads = self.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        if self.intermediate_size is None:
-            self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -124,6 +116,12 @@ class EsmcConfig(PreTrainedConfig):
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
+            )
+        # ESMC never uses grouped-query attention; the parent derives the two to match when unset.
+        if self.num_key_value_heads != self.num_attention_heads:
+            raise ValueError(
+                f"ESMC does not support grouped-query attention: `num_key_value_heads` "
+                f"({self.num_key_value_heads}) must equal `num_attention_heads` ({self.num_attention_heads})."
             )
 
 
