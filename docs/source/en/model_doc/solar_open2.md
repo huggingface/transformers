@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The SolarOpen2 model was proposed in [Solar Open 2 Technical Report](https://arxiv.org/abs/2607.20062) by Upstage Team.
+The SolarOpen2 model was proposed in [Solar Open 2 Technical Report](https://huggingface.co/papers/2607.20062) by Upstage Team.
 
 SolarOpen2 is the second model in the Solar Open series of open-weights LLMs created by
 [Upstage](https://huggingface.co/upstage), following
