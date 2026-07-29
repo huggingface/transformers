@@ -1350,16 +1350,6 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             shared_kv_states=outputs.shared_kv_states,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
-        )
-        if not (is_first_iteration or not use_cache):
-            # Don't pass to not apply bidirectional mask on top
-            model_inputs["token_type_ids"] = None
-
-        return model_inputs
-
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,
@@ -1390,6 +1380,16 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             )
 
         return create_masks_for_generate(**mask_kwargs)
+
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
+        )
+        if not (is_first_iteration or not use_cache):
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
+
+        return model_inputs
 
 
 __all__ = [

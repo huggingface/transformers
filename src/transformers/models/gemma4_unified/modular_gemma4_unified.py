@@ -1231,7 +1231,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         )
         if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
-            model_inputs["token_type_ids"] = None
+            model_inputs["mm_token_type_ids"] = None
 
         return model_inputs
 

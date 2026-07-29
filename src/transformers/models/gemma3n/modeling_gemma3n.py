@@ -2335,15 +2335,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        # position_ids in Gemma3n are 1-indexed
-        if model_inputs.get("position_ids") is not None:
-            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
-            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
-
-        return model_inputs
-
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
 

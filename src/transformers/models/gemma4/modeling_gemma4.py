@@ -2620,19 +2620,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             shared_kv_states=outputs.shared_kv_states,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
-        )
-        if not (is_first_iteration or not use_cache):
-            # Don't pass to not apply bidirectional mask on top
-            model_inputs["mm_token_type_ids"] = None
-        # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
-        if not is_first_iteration:
-            _ = model_inputs.pop("per_layer_inputs", None)
-
-        return model_inputs
-
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
 
@@ -2669,6 +2656,19 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             )
 
         return create_masks_for_generate(**mask_kwargs)
+
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
+        )
+        if not (is_first_iteration or not use_cache):
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
+        # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
+        if not is_first_iteration:
+            _ = model_inputs.pop("per_layer_inputs", None)
+
+        return model_inputs
 
 
 __all__ = [

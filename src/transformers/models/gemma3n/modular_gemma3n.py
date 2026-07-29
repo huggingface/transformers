@@ -2440,8 +2440,11 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
+    def prepare_inputs_for_generation(self, **super_kwargs):
+        raise NotImplementedError("Do not inherit prepare_inputs_for_generation from PaliGemma")
+
     def create_masks_for_generate(self, **super_kwargs):
-        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
+        raise NotImplementedError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [
