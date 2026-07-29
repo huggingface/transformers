@@ -497,6 +497,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MetaClip2VisionModelWithProjection",
         "Molmo2VisionModel",
         "Molmo2VisionBackbone",
+        "Molmo2Adapter",  # Building part of bigger (tested) model
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
