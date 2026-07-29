@@ -35,17 +35,11 @@ seq[S/2:S] │ ░░░░░░░ │ ░░░░░░░ │  │ ░░�
 
 ```
 
-## Choosing a strategy
+## Composing strategies
 
-No single strategy solves every scaling problem. Stack them to address multiple bottlenecks at once.
+Stack strategies when one doesn't solve your bottleneck on its own. Each one you add costs more collective communication, so reach for a second or third only after the first is exhausted. See [Choosing a strategy](./distributed_overview) to work out which one you need first.
 
-- Start with DP (FSDP or ZeRO) if a single layer fits on one GPU. Start with ZeRO-1 (least communication overhead) and move to ZeRO-2 or ZeRO-3 if you run out of memory. Add offloading if a model still doesn't fit in memory.
-- If a single layer doesn't fit on one GPU, add TP within a node to shrink per-GPU layer size. Use DP across the remaining GPUs.
-- If sequences are too long to fit in memory, add SP.
-
-Generally, TP should be used *within* a node to utilize fast interconnect and DP should be used *across* nodes because it tolerates a slower network.
-
-The examples below show some of the ways you can compose the strategies.
+The examples below run on 8 GPUs and show three combinations worth knowing. Each is configured through [`Trainer`], which is the path that supports stacking today.
 
 <hfoptions id="parallelism-combo">
 <hfoption id="TP + SP (large layers and long sequences)">
@@ -88,8 +82,8 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model=model,
     args=training_args,
-    tokenizer=tokenizer,
-    train_dataset=dataset,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
 )
 trainer.train()
 ```
@@ -120,7 +114,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 training_args = TrainingArguments(
     output_dir="./output",
-    fsdp="full_shard auto_wrap",
+    fsdp=True,
     fsdp_config={"version": 2},
     per_device_train_batch_size=1,
     bf16=True,
@@ -129,8 +123,8 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model=model,
     args=training_args,
-    tokenizer=tokenizer,
-    train_dataset=dataset,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
 )
 trainer.train()
 ```
@@ -178,8 +172,8 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model=model,
     args=training_args,
-    tokenizer=tokenizer,
-    train_dataset=dataset,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
 )
 trainer.train()
 ```
@@ -193,4 +187,7 @@ torchrun --nproc-per-node 8 train.py
 
 ## Next steps
 
+- See [Choosing a strategy](./distributed_overview) if you aren't sure which strategies you need.
+- See [Ulysses sequence parallelism](./deepspeed_alst) for the sequence parallel fields used above.
+- See [Debugging](./debugging) for diagnosing mesh and communication errors.
 - Read the [5D Parallelism in a Nutshell](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=5d_parallelism_in_a_nutshell) chapter from The Ultra-Scale Playbook for more details about how the different parallelism strategies interact with each other.

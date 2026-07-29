@@ -46,10 +46,10 @@ print(config.base_model_tp_plan is not None)
 print(config.base_model_tp_plan)
 ```
 
-If a model supports TP, pass a [`DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Transformers initializes the device mesh and shards the supported layers for you.
+If a model supports TP, pass a [`~distributed.DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Transformers initializes the device mesh and shards the supported layers for you.
 
 > [!WARNING]
-> Don't use `device_map` with a [`DistributedConfig`]. The two conflict at the weight-loading level. `device_map` places whole modules on specific GPUs, while TP shards those same parameters across all GPUs.
+> Don't use `device_map` with a [`~distributed.DistributedConfig`]. The two conflict at the weight-loading level. `device_map` places whole modules on specific GPUs, while TP shards those same parameters across all GPUs.
 
 ```py
 import torch
@@ -79,7 +79,7 @@ Pass [`~accelerate.parallelism_config.ParallelismConfig`] explicitly when combin
 ```py
 import torch
 
-from accelerate import ParallelismConfig
+from accelerate.utils import ParallelismConfig
 from transformers import AutoModelForCausalLM, TrainingArguments
 from transformers.distributed import DistributedConfig
 

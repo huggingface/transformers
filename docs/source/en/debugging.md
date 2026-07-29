@@ -239,6 +239,32 @@ Set `NCCL_DEBUG=INFO` to get detailed NCCL debugging output.
 NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
 ```
 
+## FSDP2 and tensor parallelism
+
+Sharding a model at load time with [`~distributed.DistributedConfig`] fails fast rather than training on a half-sharded model. The table below maps each error to its cause.
+
+| Error | Cause |
+|---|---|
+| `tp_size (N) * fsdp_size (M) is not equal to world_size (W)` | The mesh doesn't match your launcher. Set `--nproc-per-node` to `tp_size * fsdp_size`. |
+| `FSDP+TP is not supported yet` | Both `tp_size` and `fsdp_size` are above 1. Set one at a time, and see [N-D parallelism](./perf_train_gpu_many) to stack strategies through [`Trainer`] instead. |
+| ``` `tp_plan` and `device_map` are mutually exclusive ``` | Drop `device_map`. A distributed config places the shards itself. |
+| `<Model> does not have a FSDP2 plan declared` | The architecture has no FSDP plan. See [DistributedConfig](./distributed_config#fsdp2) for what a plan looks like. |
+| `FSDP2 requires torch>=2.7` | Upgrade torch. `fully_shard` alone needs 2.6, but distributed checkpoint save and load need 2.7. |
+| `Tensor parallelism is not supported on MPS devices` | Apple silicon can't run TP. Use CUDA, XPU, or HPU. |
+| `We tried to initialize torch.distributed for you, but it failed` | `RANK`, `LOCAL_RANK`, or `WORLD_SIZE` is missing. Launch with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) rather than plain `python`. |
+| `Unsupported tensor parallel style '<style>'` | A manual `tp_plan` names a strategy that isn't registered. See [Partitioning strategies](./perf_infer_gpu_multi#partitioning-strategies). |
+
+The two warnings below are worth reading, because both mean part of your model silently went unsharded.
+
+```shell
+The following TP rules were not applied on any of the layers: {...}
+The following FSDP rules were not applied to any module: {...}
+```
+
+A rule that matches nothing usually means a typo in a module path, or a wildcard that doesn't line up with the model's actual layer names. Print `model.tp_plan` or `model.fsdp_plan` after loading to see the merged plan, and compare it against `model.named_parameters()`.
+
+If a run hangs instead of erroring, it's a communication problem rather than a sharding one. Start from [Communication](#communication) above.
+
 ## DeepSpeed
 
 When you hit an error, first check whether DeepSpeed is the cause. Retry your setup without DeepSpeed, and if the error persists, report the issue. For issues unrelated to the Transformers integration, open an issue on the DeepSpeed [repository](https://github.com/microsoft/DeepSpeed).
@@ -427,3 +453,9 @@ This generates a binary wheel like `dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linu
 ```bash
 pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl
 ```
+
+## Next steps
+
+- See [Choosing a strategy](./distributed_overview) if the fix is a different parallelism strategy.
+- See [DistributedConfig](./distributed_config) for the sharding fields referenced above.
+- See [DeepSpeed ZeRO](./deepspeed) for the ZeRO stage and offload config these errors point back to.

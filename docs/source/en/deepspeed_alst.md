@@ -41,13 +41,14 @@ Ulysses sequence parallelism (SP) trains on very long sequences by splitting the
 
 ## Configure
 
-Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [`~TrainingArguments#parallelism_config`] or an [Accelerate config file](./accelerate#accelerate-config-file).
+Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.parallelism_config.ParallelismConfig`] and pass it to [`~TrainingArguments#parallelism_config`] or an [Accelerate config file](./accelerate#accelerate-config-file).
 
 <hfoptions id="launch">
 <hfoption id="parallelism_config">
 
 ```py
-from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
+from accelerate.utils import DeepSpeedSequenceParallelConfig, ParallelismConfig
+from transformers import TrainingArguments
 
 parallelism_config = ParallelismConfig(
     sp_backend="deepspeed",
@@ -155,5 +156,5 @@ parallelism_config = ParallelismConfig(
 
 - The Accelerate [Sequence Parallelism](https://huggingface.co/docs/accelerate/concept_guides/sequence_parallelism) guide covers the Ulysses implementation in more depth and shows how to write a custom training loop.
 - The [DeepSpeed ALST tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) covers the full ALST system, including TiledMLP and activation checkpoint offloading.
-- The [parallelism methods](./perf_train_gpu_many) guide shows how to combine sequence parallelism with other strategies like ZeRO.
+- The [N-D parallelism](./perf_train_gpu_many) guide shows how to combine sequence parallelism with other strategies like ZeRO.
 - The [Ulysses Sequence Parallelism: Training with Million-Token Contexts](https://huggingface.co/blog/ulysses-sp) blog post explains how Ulysses works and how it's integrated in Accelerate, Trainer, and SFTTrainer.

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Distributed
 
-[`DistributedConfig`] shards a model across GPUs at load time when passed to [`~PreTrainedModel.from_pretrained`]. It configures [tensor parallelism](../tensor_parallelism), [FSDP2](../fsdp), and [expert parallelism](../expert_parallelism) for custom training loops and inference, outside of [`Trainer`].
+[`~distributed.DistributedConfig`] shards a model across GPUs at load time when passed to [`~PreTrainedModel.from_pretrained`]. It configures [tensor parallelism](../tensor_parallelism), [FSDP2](../fsdp), and [expert parallelism](../expert_parallelism) for custom training loops and inference, outside of [`Trainer`].
 
 See the [DistributedConfig](../distributed_config) guide for how to choose these fields and launch a sharded run.
 

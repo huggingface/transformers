@@ -48,22 +48,20 @@ rendered properly in your Markdown viewer.
         step               step               step
 ```
 
-This guide configures FSDP2 through [`Trainer`] and Accelerate. To shard a model at load time for a custom training loop or inference, pass [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] instead. Both paths drive the same FSDP2 implementation. See [DistributedConfig](./distributed_config).
-
-## Sharding strategies
-
-FSDP2 controls sharding with [`~TrainingArguments.fsdp_config`]. Set `fsdp=True` to enable FSDP, and set `reshard_after_forward` in the FSDP config to choose the memory and throughput tradeoff.
-
-| `reshard_after_forward` | behavior |
-|---|---|
-| `true` | reshard parameters after the forward pass to save more memory |
-| `false` | keep parameters gathered between forward and backward to avoid the re-all-gather, at the cost of higher peak memory |
-
-`auto_wrap_policy` controls how modules are wrapped into FSDP units. It defaults to `"TRANSFORMER_BASED_WRAP"`, which wraps the model's transformer layers. Without wrapping (`"NO_WRAP"`), the entire model is one FSDP unit and you lose the memory benefit of sharding.
+This guide configures FSDP2 through [`Trainer`] and Accelerate. To shard a model at load time for a custom training loop or inference, pass [`~distributed.DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] instead. Both paths drive the same FSDP2 implementation. See [DistributedConfig](./distributed_config).
 
 ## Configure FSDP
 
-These fields control how FSDP2 wraps, shards, and loads the model. `reshard_after_forward` and `auto_wrap_policy` are covered in [Sharding strategies](#sharding-strategies).
+Set `fsdp=True` to enable FSDP, then pass the fields below to [`~TrainingArguments#fsdp_config`] to control how FSDP2 wraps, shards, and loads the model.
+
+- `reshard_after_forward` chooses the memory and throughput tradeoff.
+
+  | `reshard_after_forward` | behavior |
+  |---|---|
+  | `true` | reshard parameters after the forward pass to save more memory (default) |
+  | `false` | keep parameters gathered between forward and backward to avoid the re-all-gather, at the cost of higher peak memory |
+
+- `auto_wrap_policy` controls how modules are wrapped into FSDP units. It defaults to `"TRANSFORMER_BASED_WRAP"`, which wraps the model's transformer layers. Without wrapping (`"NO_WRAP"`), the entire model is one FSDP unit and you lose the memory benefit of sharding.
 
 - `cpu_offload` offloads parameters and gradients to CPU when they aren't in use to save GPU memory.
 
@@ -77,7 +75,7 @@ These fields control how FSDP2 wraps, shards, and loads the model. `reshard_afte
 
 - `cpu_ram_efficient_loading` loads the checkpoint from disk on rank 0 only. Other GPUs initialize an empty model and receive the weights by broadcast, avoiding multiple processes loading a large model into CPU RAM.
 
-- `activation_checkpointing` recomputes activations during the backward pass instead of storing them. Use this instead of [gradient checkpointing](./grad_checkpointing) in [`TrainingArguments`]. Setting both raises an error.
+- `activation_checkpointing` recomputes activations during the backward pass instead of storing them. Prefer it over [gradient checkpointing](./grad_checkpointing) in [`TrainingArguments`]. Setting both logs a warning and keeps training, but `gradient_checkpointing` adds a redundant all-gather in the backward pass.
 
 Configure FSDP training with either an [Accelerate config file](./accelerate#accelerate-config-file) or an FSDP config file passed to `fsdp_config`.
 
@@ -123,9 +121,27 @@ TrainingArguments(
 </hfoption>
 </hfoptions>
 
+## Checkpoints
+
+The checkpoint format follows `state_dict_type`. With the `"FULL_STATE_DICT"` default, [`Trainer`] gathers the shards and writes a single Transformers-compatible checkpoint you can reload anywhere. With `"SHARDED_STATE_DICT"`, each rank writes its own file, which is faster for large models but only loads back into FSDP.
+
+Two combinations raise a `ValueError`, both involving [`~TrainingArguments.save_only_model`], which skips writing optimizer and scheduler state.
+
+- `save_only_model=True` with [`~TrainingArguments.load_best_model_at_end`]. Reloading the best checkpoint needs the state that `save_only_model` discards.
+- `save_only_model=True` with `state_dict_type="SHARDED_STATE_DICT"`. If you configured FSDP through an [Accelerate config file](./accelerate#accelerate-config-file), check this combination, where the state dict type is easy to set and forget.
+
+To keep a portable checkpoint at the end of a run that used sharded state dicts, call [`~Trainer.save_model`] after training.
+
+```py
+trainer.train()
+trainer.save_model("./final-model")
+```
+
 ## Next steps
 
 - See [DDP](./ddp) for data-parallel training when your model fits on one GPU.
-- See [DeepSpeed](./deepspeed) for ZeRO optimization and NVMe offloading.
-- For FSDP on TPUs with PyTorch/XLA, set `xla`, `xla_fsdp_settings`, and `xla_fsdp_grad_ckpt` in [`~TrainingArguments.fsdp_config`].
+- See [DeepSpeed ZeRO](./deepspeed) for ZeRO optimization and NVMe offloading.
+- See [DistributedConfig](./distributed_config) to shard with FSDP2 at load time, without [`Trainer`].
+- See [Debugging](./debugging) for diagnosing FSDP and communication errors.
+- For FSDP on TPUs with PyTorch/XLA, set `xla`, `xla_fsdp_settings`, and `xla_fsdp_grad_ckpt` in [`~TrainingArguments#fsdp_config`].
 - Read the [FSDP chapter](https://nanotron-ultrascale-playbook.static.hf.space/index.html#zero-3:_adding_parameter_partitioning_(fsdp)) from The Ultra-Scale Playbook for more information about how FSDP works.
