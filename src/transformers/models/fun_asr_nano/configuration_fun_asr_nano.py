@@ -111,6 +111,10 @@ class FunAsrNanoConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        audio_config = kwargs.pop("audio_config", None)
+        if self.encoder_config is None and audio_config is not None:
+            self.encoder_config = audio_config
+
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "fun_asr_nano_encoder")
             self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)

@@ -94,6 +94,10 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
 
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
     def decode(self, *args, strip_prefix=False, **kwargs):
         """Decode token IDs and optionally remove common assistant framing from each transcription."""
         decoded = self.tokenizer.decode(*args, **kwargs)
