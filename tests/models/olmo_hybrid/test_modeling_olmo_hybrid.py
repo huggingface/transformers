@@ -34,11 +34,11 @@ if is_torch_available():
 
     from transformers import (
         Cache,
+        DynamicCache,
         OlmoHybridForCausalLM,
         OlmoHybridModel,
     )
     from transformers.models.olmo_hybrid.modeling_olmo_hybrid import (
-        OlmoHybridDynamicCache,
         OlmoHybridRotaryEmbedding,
     )
 
@@ -87,7 +87,7 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
         prompt = ids_tensor((1, prefill_len), config.vocab_size).to(torch_device)
         next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
 
-        cache_single = OlmoHybridDynamicCache(config=config)
+        cache_single = DynamicCache(config=config)
         with torch.no_grad():
             model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
             single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
@@ -95,7 +95,7 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
         distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
         multi_input = torch.cat([next_token, distractors], dim=1)
-        cache_multi = OlmoHybridDynamicCache(config=config)
+        cache_multi = DynamicCache(config=config)
         with torch.no_grad():
             model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
             multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
@@ -106,7 +106,7 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
-        self.assertIsInstance(past_key_values, OlmoHybridDynamicCache)
+        self.assertIsInstance(past_key_values, DynamicCache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
