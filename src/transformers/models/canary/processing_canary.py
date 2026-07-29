@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import (
+    AudioInput,
+    make_audio_chat_template_content,
+    make_list_of_audio_chat_template,
+    prepare_language_inputs,
+)
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -22,24 +27,36 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-def _audio_content_item(audio_item) -> dict:
-    """Build a chat-template content dict for a single audio item."""
-    if isinstance(audio_item, str):
-        return {"type": "audio", "path": audio_item}
-    return {"type": "audio", "audio": audio_item}
-
-
-def _prepare_language_inputs(language: str | list[str] | None, batch_size: int) -> list[str | None]:
-    """Broadcast / validate a language argument to match batch_size."""
-    if language is None:
-        return [None] * batch_size
-    if isinstance(language, str):
-        return [language] * batch_size
-    if isinstance(language, (list, tuple)):
-        if len(language) != batch_size:
-            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
-        return list(language)
-    raise TypeError("`language` must be a string, a list of strings, or `None`.")
+# fmt: off
+# Languages supported by Canary. See https://huggingface.co/nvidia/canary-1b-v2 for details.
+LANGUAGE_CODE_TO_NAME = {
+    "bg": "Bulgarian",
+    "hr": "Croatian",
+    "cs": "Czech",
+    "da": "Danish",
+    "nl": "Dutch",
+    "en": "English",
+    "et": "Estonian",
+    "fi": "Finnish",
+    "fr": "French",
+    "de": "German",
+    "el": "Greek",
+    "hu": "Hungarian",
+    "it": "Italian",
+    "lv": "Latvian",
+    "lt": "Lithuanian",
+    "mt": "Maltese",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "es": "Spanish",
+    "sv": "Swedish",
+    "ru": "Russian",
+    "uk": "Ukrainian",
+}
+# fmt: on
 
 
 class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
@@ -110,10 +127,11 @@ class CanaryProcessor(ProcessorMixin):
             audio (`AudioInput` or `list[AudioInput]`):
                 Audio to transcribe or translate. Can be a URL string, local path, numpy array, or a list of these.
             source_language (`str` or `list[str]`, *optional*, defaults to `"en"`):
-                The ISO language code of the input speech (e.g. `"en"`, `"de"`, `"fr"`).
+                The language of the input speech. Accepts ISO codes (e.g. `"en"`, `"de"`, `"fr"`) or full names
+                (e.g. `"English"`, `"German"`, `"French"`).
             target_language (`str` or `list[str]`, *optional*):
-                The ISO language code of the output text. Defaults to `source_language` (transcription); set it to a
-                different language for speech-to-text translation.
+                The language of the output text. Accepts ISO codes or full names. Defaults to `source_language`
+                (transcription); set it to a different language for speech-to-text translation.
             punctuation (`bool`, *optional*, defaults to `True`):
                 Whether to request punctuation and capitalization in the output.
             **kwargs:
@@ -128,16 +146,16 @@ class CanaryProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        source_languages = _prepare_language_inputs(source_language, batch_size)
+        source_languages = prepare_language_inputs(source_language, batch_size, LANGUAGE_CODE_TO_NAME)
         if target_language is None:
             target_languages = list(source_languages)
         else:
-            target_languages = _prepare_language_inputs(target_language, batch_size)
+            target_languages = prepare_language_inputs(target_language, batch_size, LANGUAGE_CODE_TO_NAME)
 
         conversations = []
         for source, target, audio_item in zip(source_languages, target_languages, audio_items):
             content = [
-                _audio_content_item(audio_item),
+                make_audio_chat_template_content(audio_item),
                 {
                     "type": "text",
                     "source_language": source,
