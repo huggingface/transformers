@@ -90,7 +90,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config: DeepseekV4Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -106,7 +106,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type, device=device)
             self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
@@ -1424,6 +1424,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

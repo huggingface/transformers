@@ -631,7 +631,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -822,6 +822,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     @can_return_tuple
     @auto_docstring
