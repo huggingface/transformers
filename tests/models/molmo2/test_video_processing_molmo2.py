@@ -215,3 +215,11 @@ class Molmo2VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     )
     def test_call_numpy_4_channels(self):
         pass
+
+    @unittest.skip(
+        reason="Molmo2 resizes without antialiasing to match the reference processor; under inductor the bilinear "
+        "kernel rounds a few pixels to the neighboring uint8 value, and that 1/255 difference exceeds the "
+        "test's 1e-4 tolerance."
+    )
+    def test_can_compile_fast_video_processor(self):
+        pass

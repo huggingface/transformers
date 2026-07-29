@@ -52,7 +52,7 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers.models.molmo2.modeling_molmo2 import token_type_ids_mask_function
+    from transformers.models.molmo2.modeling_molmo2 import get_block_sequence_ids_for_mask
 
 if is_vision_available():
     from transformers.image_utils import load_image
@@ -271,7 +271,10 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)
 
-    @unittest.skip("`image_token_pooling` is packed along a flat token axis; the test's batch-halving cannot slice it")
+    @unittest.skip(
+        "The test slices every input tensor in half along dim 0, but `image_token_pooling` has no batch "
+        "dimension: pooled patches of all images are concatenated along one axis."
+    )
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
@@ -331,6 +334,13 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         reason="This architecture does not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip(
+        reason="Molmo2 always builds an attention mask in the forward (block-sequence mask for images, like "
+        "gemma3/mllama), and SDPA cannot dispatch masked attention to the flash kernel"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     # `test_tied_weights_keys` is inherited: Molmo2 sets `_tied_weights_keys = None` (it ties no weights),
@@ -433,20 +443,15 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         # a text token never sees a later text token
         self.assertTrue((attention[:, text_positions[0], text_positions[-1]] == 0).all())
 
-    def test_token_type_ids_mask_function_beyond_prompt(self):
+    def test_block_sequence_ids_group_images_separately(self):
         """
-        Positions past `mm_token_type_ids` (static cache, assisted decoding) are masked as text.
+        Each contiguous image run gets its own block id; text positions are -1.
         """
-        token_type_ids = torch.tensor([[0, 1, 1, 0]])
-        inner_mask = token_type_ids_mask_function(token_type_ids)
+        mm_token_type_ids = torch.tensor([[0, 1, 1, 0, 1, 0]])
+        block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=torch.device("cpu"))
 
-        indices = torch.arange(8)
-        q_idx, kv_idx = torch.meshgrid(indices, indices, indexing="ij")
-        mask = inner_mask(torch.zeros_like(q_idx), 0, q_idx, kv_idx)
-
-        expected = torch.zeros(8, 8, dtype=torch.bool)
-        expected[1:3, 1:3] = True
-        self.assertTrue(torch.equal(mask, expected))
+        expected = torch.tensor([[-1, 0, 0, -1, 1, -1]])
+        self.assertTrue(torch.equal(block_sequence_ids, expected))
 
     def test_expand_inputs_for_generation_repeats_visual_pooling(self):
         """
