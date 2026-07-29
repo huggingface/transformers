@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
-import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,13 +22,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -1168,37 +1166,6 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         return timestamps
 
 
-def smart_resize(
-    num_frames: int,
-    height: int,
-    width: int,
-    temporal_factor: int = 2,
-    factor: int = 32,
-    min_pixels: int = 128 * 128,
-    max_pixels: int = 16 * 16 * 2 * 2 * 2 * 6144,
-):
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
-
-    if t_bar * h_bar * w_bar > max_pixels:
-        beta = math.sqrt((num_frames * height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif t_bar * h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (num_frames * height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-
-    return h_bar, w_bar
-
-
 class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 16):
@@ -1274,24 +1241,6 @@ class Qwen3VLVideoProcessor(Glm4vVideoProcessor):
         indices = np.linspace(0, total_num_frames - 1, num_frames).round().astype(int)
 
         return indices
-
-    def resize(
-        self,
-        videos: "torch.Tensor",
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        factor: int,
-        temporal_factor: int,
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super().resize(
-            videos=videos,
-            size=size,
-            resample=resample,
-            factor=factor,
-            temporal_factor=temporal_factor,
-            **kwargs,
-        )
 
 
 __all__ = [

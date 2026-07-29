@@ -53,7 +53,7 @@ class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# Adapted from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
+# Copied from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):

@@ -47,7 +47,6 @@ class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
     patch_expand_factor: int
 
 
-# Adapted from transformers.models.glmga.image_processing_glmga.smart_resize
 def smart_resize(
     num_frames: int,
     height: int,

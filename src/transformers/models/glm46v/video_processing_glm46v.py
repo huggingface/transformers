@@ -19,6 +19,8 @@
 # limitations under the License.
 
 
+import math
+
 import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -29,7 +31,6 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from .image_processing_glm46v import smart_resize
 
 
 class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -38,6 +39,42 @@ class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
     max_duration: int
+
+
+def smart_resize(
+    num_frames: int,
+    height: int,
+    width: int,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
+):
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
+    if height < factor or width < factor:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
+
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
+
+    if t_bar * h_bar * w_bar > max_pixels:
+        beta = math.sqrt((num_frames * height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif t_bar * h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (num_frames * height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+
+    return h_bar, w_bar
 
 
 @add_start_docstrings(

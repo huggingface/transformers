@@ -33,7 +33,7 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
+    temporal_patch_size (`int`, *optional*, defaults to 1):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
@@ -44,7 +44,6 @@ class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# Adapted from transformers.models.cosmos3_edge.image_processing_cosmos3_edge.smart_resize
 def smart_resize(
     num_frames: int,
     height: int,

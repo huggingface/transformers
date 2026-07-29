@@ -46,7 +46,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# Adapted from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):

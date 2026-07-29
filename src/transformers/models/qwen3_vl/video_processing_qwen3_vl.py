@@ -22,14 +22,17 @@ import math
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, logging
+from ...utils import TensorType, add_start_docstrings, is_torchvision_available, logging
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -57,19 +60,24 @@ def smart_resize(
     height: int,
     width: int,
     temporal_factor: int = 2,
-    factor: int = 32,
-    min_pixels: int = 128 * 128,
-    max_pixels: int = 16 * 16 * 2 * 2 * 2 * 6144,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
 ):
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
     if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
+
+    if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
 
     if t_bar * h_bar * w_bar > max_pixels:
         beta = math.sqrt((num_frames * height * width) / max_pixels)

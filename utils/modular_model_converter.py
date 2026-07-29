@@ -566,7 +566,6 @@ class ModuleMapper(CSTVisitor, ABC):
         self.objects_imported_from_modeling = set()
         # regex pattern joining every possible file type
         self.match_patterns = "|".join(ALL_FILE_TYPES)
-        self.modular_defined_global_objects: set[str] = set()       # global scope object names defined explicitly in modular
         # fmt: on
 
     def _is_direct_module_child(self) -> bool:
@@ -832,7 +831,6 @@ class ModelFileMapper(ModuleMapper):
         instead of the original ones (this may mean to add new functions as well, if any redefined function uses a new one).
         """
         # Add/overwrite all needed function nodes and dependencies, but save fn names from modular file before
-        self.modular_defined_global_objects.update(functions.keys())
         self.functions.update(functions)
         self.object_dependency_mapping.update({obj: dep for obj, dep in object_mapping.items() if obj in functions})
         # Add them to global nodes
@@ -845,7 +843,6 @@ class ModelFileMapper(ModuleMapper):
         a pattern in `ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE` and its value is not None, or if it matches a pattern in `ASSIGNMENTS_REGEX_TO_KEEP.
         Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the big docstrings.
         """
-        self.modular_defined_global_objects.update(assignments.keys())
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
@@ -1594,11 +1591,7 @@ class ModularFileMapper(ModuleMapper):
                         file_type = excluded_file["type"]
                         break
 
-            # Do not treat as "imported" any object that is redefined in the modular file: it should be copied
-            # into the generated file instead of being imported from a neighbor file (which may not even exist)
-            self.imported_objects_per_file[file_type].update(
-                mapper.objects_imported_from_modeling - mapper.modular_defined_global_objects
-            )
+            self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
