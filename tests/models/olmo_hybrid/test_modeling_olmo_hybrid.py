@@ -58,6 +58,7 @@ class OlmoHybridModelTester(CausalLMModelTester):
         self.linear_value_head_dim = 8
         self.linear_conv_kernel_dim = 4
         self.linear_allow_neg_eigval = False
+        self.hidden_act = "silu"
 
 
 @require_torch

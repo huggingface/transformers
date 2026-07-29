@@ -415,7 +415,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
         if use_precomputed_states and seq_len == 1:
-            output, new_recurrent_state = torch_recurrent_gated_delta_rule(
+            output, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
                 v,
@@ -427,7 +427,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 **kwargs,
             )
         else:
-            output, new_recurrent_state = torch_chunk_gated_delta_rule(
+            output, last_recurrent_state = torch_chunk_gated_delta_rule(
                 q,
                 k,
                 v,
@@ -439,8 +439,9 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 **kwargs,
             )
 
+        # Update cache
         if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = new_recurrent_state
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         gate = self.g_proj(hidden_states)
         output = output.reshape(-1, self.head_v_dim)
