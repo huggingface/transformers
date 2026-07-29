@@ -13,7 +13,6 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring, logging
-from .onyx_chat_template import build_chat_template
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +42,7 @@ class OnyxProcessor(ProcessorMixin):
             image_processor=image_processor,
             video_processor=video_processor,
             tokenizer=tokenizer,
-            chat_template=chat_template or build_chat_template(),
+            chat_template=chat_template,
             **kwargs,
         )
 
