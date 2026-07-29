@@ -28,7 +28,7 @@ DeepSeek-V3 모델은 [DeepSeek-V3 기술 보고서](https://huggingface.co/pape
 저희는 이 코드를 커뮤니티 기반으로 만들게 되어 매우 기쁘며, 여러분이 다음 사항들을 어떻게 최적화할 수 있는지 확인하고 싶습니다.
 
 - 현재 구현은 "기본적인" 어텐션 계산을 사용합니다. 따라서 실제 Multi-head Latent Attention (MLA) 가 아닙니다.
-- 현재 구현은 전문가들을 순회하는 루프를 사용합니다. 이는 교체되어야 하기에 `integrations/tensor_parallel`의 `get_packed_weights`를 사용하는 것을 제안합니다.
+- 현재 구현은 전문가들을 순회하는 루프를 사용합니다. 이는 교체되어야 하기에 `distributed/tensor_parallel`의 `get_packed_weights`를 사용하는 것을 제안합니다.
 - 현재 구현에서는 ROPE에 EleutherAI의 수식을 사용하지만, 원본 수식을 적용하면 더 효율적일 것입니다! (단, 기존 API는 그대로 준수해야 합니다)
 - generation config 또는 config shape의 문제일 것으로 추정되는 문제로 인해 정적 캐시는 지원되지 않습니다.
 

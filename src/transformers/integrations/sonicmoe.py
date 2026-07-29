@@ -28,7 +28,7 @@ import torch
 
 from ..utils import logging
 from .hub_kernels import lazy_load_kernel
-from .tensor_parallel import to_local
+from ..distributed.utils import to_local
 
 
 logger = logging.get_logger(__name__)

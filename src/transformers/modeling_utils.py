@@ -81,11 +81,8 @@ from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
-from .integrations.tensor_parallel import (
-    _get_parameter_tp_plan,
-    shard_and_distribute_module,
-    verify_tp_plan,
-)
+from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
+from .distributed.sharding_utils import _dtensor_from_local_like
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -165,6 +162,10 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 _is_quantized = False
 _is_ds_init_called = False
+
+#TODO(3outeille): remove this after rebasing on https://github.com/huggingface/transformers/pull/47619 PR
+# if torch.distributed.is_available():
+#     from torch.distributed import DTensor
 
 
 @dataclass(frozen=True)
@@ -4746,11 +4747,12 @@ class PreTrainedModel(
         device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
     ) -> None:
-        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
-        back from meta device to their device according to the `device_map` if any, else cpu. Takes care of sharding those
-        missing parameters if `device_mesh` is provided, i.e. we are using TP.
-        All non-persistent buffers are also moved back to the correct device (they are not part of the state_dict, but are
-        not missing either).
+        """Move missing params/buffers off meta to their target device.
+
+        Loaded weights are handled earlier in `convert_and_load_state_dict_in_model`
+        via `DtensorShardOperation` and `set_param_for_module`. This only
+        materializes keys that were not loaded (or mismatched) so
+        `_initialize_missing_keys` can run proper init on them.
         """
         is_quantized = hf_quantizer is not None
         # This is the only case where we do not initialize the model on meta device, so we don't have to do anything here
@@ -4775,13 +4777,14 @@ class PreTrainedModel(
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
-            if device_mesh is not None:
-                shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+            #TODO(3outeille): add distributed guarding after rebasing
+            if isinstance(param, DTensor):
+                local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
+                value = torch.nn.Parameter(
+                    _dtensor_from_local_like(local, param),
+                    requires_grad=param.requires_grad,
                 )
-            # Otherwise, just move it to device
-            else:
-                _load_parameter_into_model(self, key, value)
+            _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)

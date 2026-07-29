@@ -18,17 +18,15 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import (
+from .tensor_parallel import (
     ALL_PARALLEL_STYLES,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
-    initialize_tensor_parallelism,
 )
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
-from .tensor_parallel import apply_tensor_parallelism_dtensor
 from .utils import (
     _distributed_barrier,
     _ensure_torch_distributed,
@@ -37,6 +35,7 @@ from .utils import (
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    initialize_tensor_parallelism,
     save_model_checkpoint_distributed,
 )
 
@@ -50,9 +49,6 @@ if TYPE_CHECKING:
 
 class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`].
-
-    Stateless heavy lifting stays in `transformers.distributed.*` and
-    `integrations.tensor_parallel`. This mixin owns orchestration and instance state.
     """
 
     _device_mesh = None
@@ -198,17 +194,9 @@ class DistributedMixin:
             model._device_mesh = device_mesh
 
             if distributed_config.tp_size > 1:
-                tp_backend = os.environ.get("TP_BACKEND", "plain")
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-                if tp_backend == "dtensor":
-                    model = apply_tensor_parallelism_dtensor(model, tp_mesh)
-                else:
-                    model = apply_tensor_parallelism(
-                        model,
-                        distributed_config.tp_plan,
-                        distributed_config,
-                        device_mesh,
-                    )
+                model = apply_tensor_parallelism(model, tp_mesh)
+             
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
@@ -274,7 +262,9 @@ class DistributedMixin:
             return state_dict
 
         if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+            state_dict = gather_state_dict_for_save(
+                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+            )
             if not save_on_this_rank:
                 state_dict = {}
             return state_dict

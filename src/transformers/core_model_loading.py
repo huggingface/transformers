@@ -31,19 +31,18 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
-from .distributed.utils import _torch_distributed_available
 from .integrations.accelerate import get_device, offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
 
+_torch_distributed_available = torch.distributed.is_available()
 if _torch_distributed_available:
     from torch.distributed.tensor import DTensor
 
 if TYPE_CHECKING:
-    from .integrations.tensor_parallel import TensorParallelLayer
+    from .distributed.tensor_parallel import TensorParallelLayer
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
@@ -1656,26 +1655,11 @@ def convert_and_load_state_dict_in_model(
 
             # 4. Handle TP/Dtensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-            sharding_op = None
-            materialize_device = param_device
-
-            if isinstance(empty_param, DTensor):
-                sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
-                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                        )
-                    sharding_op = mapping.distributed_operation
-                    materialize_device = device_map[""]
-
+            sharding_op = DtensorShardOperation(empty_param) if isinstance(empty_param, DTensor) else None
             future_or_tensor = spawn_materialize(
                 thread_pool,
                 tensor,
-                materialize_device,
+                param_device,
                 _dtype,
                 sharding_op=sharding_op,
                 tensor_idx=tensor_idx,

@@ -31,7 +31,6 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
-
 def replace_layer_number_by_wildcard(name: str) -> str:
     """
     Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
@@ -40,6 +39,36 @@ def replace_layer_number_by_wildcard(name: str) -> str:
     numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
     """
     return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
+    """
+    Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
+    """
+
+    if tp_plan is None:
+        return
+
+    generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
+    unsharded_layers = set(generic_keys)
+    unused_rules = tp_plan.copy()
+
+    for key in generic_keys:
+        param_name = key.rsplit(".", 1)[0] if "." in key else key
+        generic_param_name = re.sub(r"\d+", "*", param_name)
+
+        if generic_param_name in tp_plan:
+            unused_rules.pop(generic_param_name, None)
+            unsharded_layers.discard(key)
+        elif "." in generic_param_name and (parent_param_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
+            unused_rules.pop(parent_param_name, None)
+            unsharded_layers.discard(key)
+
+    if len(unused_rules) > 0:
+        logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
+    if len(unsharded_layers) > 0:
+        logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
 
 
 def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
@@ -393,7 +422,7 @@ class EpRouterParallel(TensorParallelLayer):
         return router_logits, router_scores, router_indices
 
 
-class RouterParallelMegaMoe(TensorParallelLayer):
+class RouterParallelMegaMoe(EpRouterParallel):
     """Router TP plan used with DeepGEMM Mega MoE.
 
     Mega MoE handles EP dispatch inside the kernel and wants raw global expert ids
@@ -422,8 +451,6 @@ class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles for the DTensor backend.
 
-    Style names match ``integrations.tensor_parallel.ALL_PARALLEL_STYLES`` where
-    implemented; unimplemented integrations styles are omitted until added.
     """
 
     _global_mapping = (
@@ -449,7 +476,7 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def apply_tensor_parallelism_dtensor(model, tp_mesh):
+def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
 
     for name, module in model.named_modules():
@@ -463,3 +490,24 @@ def apply_tensor_parallelism_dtensor(model, tp_mesh):
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     return model
+
+
+def gather_state_dict_for_save(
+    state_dict: dict[str, torch.Tensor],
+    _tp_plan: dict[str, str],
+    _device_mesh,
+    _tp_size: int,
+) -> dict[str, torch.Tensor]:
+    """Gather TP-sharded ``DTensor`` parameters to full CPU tensors for checkpoint saving.
+
+    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
+    """
+    gathered = {}
+    for key, tensor in state_dict.items():
+        if isinstance(tensor, torch.Tensor):
+            if isinstance(tensor, DTensor):
+                tensor = tensor.full_tensor()
+            gathered[key] = tensor.detach().cpu().contiguous()
+        else:
+            gathered[key] = tensor
+    return gathered

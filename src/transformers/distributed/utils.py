@@ -29,6 +29,24 @@ if is_torch_available():
 else:
     _torch_distributed_available = False
 
+if is_torch_available() and _torch_distributed_available:
+    from torch.distributed.tensor import DTensor
+
+
+#TODO(3outeille): should remove later to favor of _local_params_for_forward() context manager in tensor_parallel.py
+def to_local(t):
+    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
+
+    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
+    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
+    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
+    path: backward rewraps the gradient as a DTensor matching each parameter's
+    placements.
+    """
+    if _torch_distributed_available and isinstance(t, DTensor):
+        return t.to_local()
+    return t
+
 if is_torch_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
@@ -117,6 +135,50 @@ def _distributed_barrier():
     else:
         torch.distributed.barrier()
 
+
+#TODO(3outeille): unify initialization across parallelism
+def initialize_tensor_parallelism(
+    tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
+):
+    r"""
+    Sets up the device mesh and initialized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    if tp_size is not None and tp_plan is None:
+        raise ValueError("tp_plan has to be set when tp_size is passed.")
+    if tp_plan is not None and device_map is not None:
+        raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
+    if device_mesh is None:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
+
+        # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+        device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
+        current_device = getattr(torch, device_type)
+
+        if device_type != "cpu":
+            current_device.set_device(int(os.environ["LOCAL_RANK"]))
+            index = current_device.current_device()
+            tp_device = torch.device(device_type, index)
+            device_map = tp_device
+        else:
+            tp_device = torch.device(device_type)
+            device_map = device_type or {}
+
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    else:
+        if device_mesh.ndim > 1:
+            if "tp" not in device_mesh.mesh_dim_names:
+                raise ValueError(
+                    "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                    "Please provide a valid `device_mesh`."
+                )
+            device_mesh = device_mesh["tp"]
+        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+
+    return device_map, device_mesh
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     if not is_torch_greater_or_equal("2.5"):

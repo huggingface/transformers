@@ -390,7 +390,7 @@ Cheile după numele clasei sunt preferate când `model_type`-ul este partajat, d
 
 ## Integrarea cu tensor parallelism
 
-Sistemul de încărcare dinamică se integrează cu tensor parallelism (TP) prin ierarhia `TensorParallelLayer` definită în `src/transformers/integrations/tensor_parallel.py`.
+Sistemul de încărcare dinamică se integrează cu tensor parallelism (TP) prin ierarhia `TensorParallelLayer` definită în `src/transformers/distributed/tensor_parallel.py`.
 
 Când TP este activat, tensorii sunt fragmentați **în timpul** materializării, nu după. Aceasta înseamnă că fiecare rang încarcă doar porțiunea de tensor de care are nevoie.
 
@@ -693,5 +693,5 @@ Aceste API-uri sunt expuse pentru a-ți permite să gestionezi cod personalizat,
 |--------|------|
 | `src/transformers/core_model_loading.py` | Logica de bază de încărcare, `WeightConverter`, `WeightRenaming`, `ConversionOps` |
 | `src/transformers/conversion_mapping.py` | Mapări integrate și compoziție per-submodel (`get_model_conversion_mapping`) |
-| `src/transformers/integrations/tensor_parallel.py` | Clase și utilitare pentru sharding TP |
+| `src/transformers/distributed/tensor_parallel.py` | Clase și utilitare pentru sharding TP |
 | `src/transformers/quantizers/base.py` | Hook-uri de quantization și clasa de bază |
