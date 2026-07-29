@@ -2567,15 +2567,29 @@ class PreTrainedModel(
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
-        # If the config does not specify any tying, return empty dict
+        # If None, return empty dict
+        if tied_mapping is None:
+            return {}
+        # `tie_word_embeddings` only controls whether the *output* embeddings (e.g. `lm_head`) are tied to the input
+        # embeddings. The other entries of `_tied_weights_keys` are structural (e.g. in encoder-decoder models, both
+        # `encoder.embed_tokens` and `decoder.embed_tokens` are aliases of `shared`) and must be tied in all cases,
+        # otherwise they would stay randomly initialized as they are absent from the checkpoints.
         # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
         # modules do not have any word embeddings!
         tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
         if not tie_word_embeddings:
-            return {}
-        # If None, return empty dict
-        elif tied_mapping is None:
-            return {}
+            output_embeddings = self.get_output_embeddings()
+            if output_embeddings is not None:
+                output_embeddings_names = {
+                    name for name, module in self.named_modules(remove_duplicate=False) if module is output_embeddings
+                }
+                tied_mapping = {
+                    target: source
+                    for target, source in tied_mapping.items()
+                    if target.rsplit(".", 1)[0] not in output_embeddings_names
+                }
+            if not tied_mapping:
+                return {}
         # Short-cut for the most common cases: if the tied weights mapping only contains already expanded params,
         # return it directly (the regex matches names containing only letters, numbers, dots, and underscores to make
         # sure it does not contain a regex pattern, and finishing by "bias" or "weight" to make sure it's not a module)
