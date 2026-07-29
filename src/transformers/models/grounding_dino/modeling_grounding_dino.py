@@ -1828,7 +1828,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
     # Previous special token: cummax of special token indices
-    prev_special = torch.where(special_mask, indices, torch.tensor(-1, device=device))
+    prev_special = torch.where(special_mask, indices, torch.full((), -1, device=device))
     prev_special = torch.cummax(prev_special, dim=1)[0]
 
     # Next special token: flip, cummin, flip back

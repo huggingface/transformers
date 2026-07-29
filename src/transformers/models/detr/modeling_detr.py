@@ -1600,7 +1600,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             min_dtype = torch.finfo(memory.dtype).min
             attention_mask = torch.where(
                 attention_mask.unsqueeze(1).unsqueeze(1),
-                torch.tensor(0.0, device=memory.device, dtype=memory.dtype),
+                torch.full((), 0.0, device=memory.device, dtype=memory.dtype),
                 min_dtype,
             )
 
