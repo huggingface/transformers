@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import BitsAndBytesConfig, is_torch_available
+from transformers import BitsAndBytesConfig, Starcoder2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -53,6 +53,15 @@ class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
+
+    def test_default_special_token_ids_within_vocab(self):
+        # The defaults used to be GPT-2's `50256`, which is outside `vocab_size` (49152): building a
+        # model from a default config and calling `generate()` without a prompt raised an `IndexError`
+        # when `bos_token_id` was used as the decoder start token.
+        config = Starcoder2Config()
+        for name in ("bos_token_id", "eos_token_id"):
+            token_id = getattr(config, name)
+            self.assertTrue(0 <= token_id < config.vocab_size, f"{name}={token_id} is outside the vocabulary")
 
 
 @slow

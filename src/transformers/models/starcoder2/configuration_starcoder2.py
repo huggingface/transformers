@@ -69,8 +69,10 @@ class Starcoder2Config(PreTrainedConfig):
     initializer_range: float = 0.018042
     norm_epsilon: float = 1e-5
     use_cache: bool = True
-    bos_token_id: int | None = 50256
-    eos_token_id: int | list[int] | None = 50256
+    # `50256` was inherited from GPT-2 and falls outside `vocab_size`; the released
+    # Starcoder2 checkpoints all use `0` (`<|endoftext|>`) for both.
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 0
     pad_token_id: int | None = None
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int | None = None
