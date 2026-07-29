@@ -430,11 +430,9 @@ else is left alone. Already-typed values, arguments the schema does not describe
 are all untouched, so `tools=` only ever adds type information, and it is a no-op for templates that
 already recover types.
 
-Because coercion only reworks strings, it never revisits values something else already typed. In
-particular, a lax `value_parser` such as `json` with `allow_non_json` reads `1.50` as the number
-`1.5` before coercion sees it, even if the parameter is typed `string`. If a template's tool-call
-field expects callers to pass `tools=`, prefer leaving `value_parser` off and letting the schema own
-the typing.
+Because coercion only reworks strings, it cannot undo typing the template itself applied: if the
+template's own parsing reads `1.50` as the number `1.5`, it stays a number even when the parameter's
+schema says `string`.
 
 ### Transform
 
