@@ -86,7 +86,7 @@ source .my-env/bin/activate
 uv venv .my-env
 source .my-env/bin/activate
 ```
-برای نصب این کتابخانه، به **Python 3.10+** و **PyTorch 2.4+** نیاز دارید. نصب می‌تواند از طریق `pip` یا `uv` انجام شود:
+برای نصب این کتابخانه، به **Python 3.10+** و **PyTorch 2.5+** نیاز دارید. نصب می‌تواند از طریق `pip` یا `uv` انجام شود:
 
 ```py
 # pip
