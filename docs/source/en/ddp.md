@@ -55,10 +55,10 @@ accelerate launch --num_processes 4 train.py
 Pass these [`TrainingArguments`] to control DDP behavior.
 
 - [`~TrainingArguments.gradient_accumulation_steps`] determines when to perform the all-reduce. [`Trainer`] skips the all-reduce on intermediate accumulation steps and runs it only on the final micro-batch. For example, with `gradient_accumulation_steps=4`, the all-reduce runs every 4 backward passes.
-- [`~TrainingArguments.ddp_find_unused_parameters`] traverses the autograd graph at the end of the forward pass for parameters that won't receive a gradient and marks them as ready so they don't block the all-reduce. Don't use with [`~TrainingArguments.gradient_checkpointing`] because gradient checkpointing discards intermediate activations and recomputes them on the fly.
-- [`~TrainingArguments.ddp_bucket_cap_mb`] is the bucket size for batching gradients into a single all-reduce during the backward pass. A larger bucket means fewer all-reduce calls and less launch overhead.
-- [`~TrainingArguments.ddp_broadcast_buffers`] synchronizes model buffers (such as BatchNorm running statistics) from rank 0 to all other ranks at the start of every forward pass. Disable if your model only uses LayerNorm. Don't use with [`~TrainingArguments.gradient_checkpointing`].
-- [`~TrainingArguments.ddp_backend`] sets the communication backend. Use `"nccl"` for NVIDIA GPUs (default and fastest), `"gloo"` for CPU training or debugging, and `"xccl"`, `"hccl"`, or `"cncl"` for other hardware.
+- [`~TrainingArguments#ddp_find_unused_parameters`] traverses the autograd graph at the end of the forward pass for parameters that won't receive a gradient and marks them as ready so they don't block the all-reduce. Leave it unset and [`Trainer`] disables it whenever [`~TrainingArguments.gradient_checkpointing`] is on, because the two conflict. Only set it explicitly if you need to override.
+- [`~TrainingArguments#ddp_bucket_cap_mb`] is the bucket size for batching gradients into a single all-reduce during the backward pass. A larger bucket means fewer all-reduce calls and less launch overhead.
+- [`~TrainingArguments#ddp_broadcast_buffers`] synchronizes model buffers (such as BatchNorm running statistics) from rank 0 to all other ranks at the start of every forward pass. Disable it if your model only uses LayerNorm, since there's nothing to synchronize and you save a broadcast.
+- [`~TrainingArguments#ddp_backend`] sets the communication backend. Use `"nccl"` for NVIDIA GPUs (default and fastest) and `"gloo"` for CPU training or debugging. For other hardware, use `"xccl"` (Intel XPU), `"hccl"` (Habana), `"cncl"` (Cambricon), `"mccl"` (Moore Threads), or `"mpi"`.
 - [`~TrainingArguments.ddp_timeout`] sets the time limit for all processes and operations (all-reduce, broadcast) to complete. If a process hangs, like when loading a large model slowly, the timeout raises an error instead of blocking indefinitely.
 
 ```py
@@ -77,6 +77,6 @@ args = TrainingArguments(
 
 ## Next steps
 
-- See [FSDP](./fsdp) for training models too large to fit on a single GPU.
-- See [DeepSpeed](./deepspeed) for ZeRO optimization and offloading.
+- See [FSDP2](./fsdp) for training models too large to fit on a single GPU.
+- See [DeepSpeed ZeRO](./deepspeed) for ZeRO optimization and offloading.
 - Read the [Data Parallelism](https://nanotron-ultrascale-playbook.static.hf.space/index.html#data_parallelism) chapter from The Ultra-Scale Playbook for more information about how DDP works.

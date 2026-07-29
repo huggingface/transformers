@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Tensor parallelism
 
-[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) slices a model layer into pieces so multiple hardware accelerators work on it simultaneously. This lets you run models that exceed a single GPU's memory capacity and achieve higher throughput. You'll need fast intra-node communication because GPUs exchange partial results at each layer.
+[Tensor parallelism](./tensor_parallelism) slices a model layer into pieces so multiple hardware accelerators work on it simultaneously. This lets you run models that exceed a single GPU's memory capacity and achieve higher throughput. You'll need fast intra-node communication because GPUs exchange partial results at each layer.
 
 The list below shows models with native tensor parallelism support. Open a GitHub issue or pull request to add support for a model.
 
@@ -40,7 +40,7 @@ This guide covers enabling tensor parallelism in Transformers and the available 
 
 ## Partitioning a model
 
-Transformers enables tensor parallelism when you pass a [`DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Choose from two partitioning methods.
+Transformers enables tensor parallelism when you pass a [`~distributed.DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Choose from two partitioning methods.
 
 - Leave `tp_plan` unset for an automatic plan based on the model's predefined configuration.
 - Define and pass a manual `tp_plan`.
@@ -79,7 +79,7 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer and pass it as the `tp_plan` field of a [`DistributedConfig`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
+Define a tensor parallel plan for each layer and pass it as the `tp_plan` field of a [`~distributed.DistributedConfig`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
 
 Manual partitioning requires a deep understanding of model architecture and strategy interactions. Poor partitioning choices create slow models that fail or produce incorrect results. The [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) explains partitioning strategies in detail.
 
@@ -108,7 +108,7 @@ print(model.tp_plan)
 
 ## Partitioning strategies
 
-The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies in a [`DistributedConfig`] `tp_plan`. It's useful for checking available strategies.
+The [`~integrations.tensor_parallel.ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies in a [`~distributed.DistributedConfig`] `tp_plan`. It's useful for checking available strategies.
 
 ```py
 class ParallelInterface(MutableMapping):
@@ -239,7 +239,7 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
     ```
 
-3. Register the strategy to [`ParallelInterface`] to enable it for use in a `tp_plan`.
+3. Register the strategy to [`~integrations.tensor_parallel.ParallelInterface`] to enable it for use in a `tp_plan`.
 
     ```python
     from transformers.distributed import DistributedConfig

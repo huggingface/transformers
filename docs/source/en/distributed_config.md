@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # DistributedConfig
 
-[`DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), and [expert parallelism](./expert_parallelism).
+[`~distributed.DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), and [expert parallelism](./expert_parallelism).
 
 Use this for a custom training loop or inference, where you shard the model at load time instead of through [`Trainer`]. If you're training with [`Trainer`], configure FSDP2 through [Accelerate](./accelerate) instead.
 
-Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] and Transformers builds the device mesh and shards the supported layers for you.
+Pass a [`~distributed.DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] and Transformers builds the device mesh and shards the supported layers for you.
 
 The fields below control how the model is sharded.
 
@@ -35,7 +35,7 @@ The fields below control how the model is sharded.
 
 The product of `tp_size` and `fsdp_size` must equal the number of devices you launch with. Set one of them at a time. Setting both above 1 raises a `ValueError` because combining FSDP2 and tensor parallelism in a single mesh isn't supported yet. To stack parallelism strategies today, train with [`Trainer`] and see [N-D parallelism](./perf_train_gpu_many).
 
-[`DistributedConfig`] is mutually exclusive with `device_map`. `device_map` places whole modules on specific GPUs, while a distributed config shards those same parameters across GPUs.
+[`~distributed.DistributedConfig`] is mutually exclusive with `device_map`. `device_map` places whole modules on specific GPUs, while a distributed config shards those same parameters across GPUs.
 
 ## Tensor parallelism
 
@@ -125,7 +125,7 @@ Gathering a large model onto one CPU is slow and can run out of host memory. Set
 model.save_pretrained("./checkpoint", distributed_checkpoint=True)
 ```
 
-The result is an ordinary checkpoint directory that is reloaded with [`~PreTrainedModel.from_pretrained`]. This path only works for FSDP2-sharded models loaded with a [`DistributedConfig`], and it requires torch>=2.7.
+The result is an ordinary checkpoint directory that is reloaded with [`~PreTrainedModel.from_pretrained`]. This path only works for FSDP2-sharded models loaded with a [`~distributed.DistributedConfig`], and it requires torch>=2.7.
 
 To resume training, save and load the optimizer state alongside the model with `save_optimizer_distributed` and `load_optimizer_distributed`.
 
@@ -146,7 +146,7 @@ torchrun --nproc-per-node 4 train.py
 
 ## Next steps
 
-- See [Distributed](./main_classes/distributed) for the [`DistributedConfig`] API reference.
+- See [Distributed](./main_classes/distributed) for the [`~distributed.DistributedConfig`] API reference.
 - See [Tensor parallelism](./tensor_parallelism) for how weight sharding works and how to combine it with [`Trainer`].
 - See [FSDP2](./fsdp) for sharded training through [`Trainer`] and Accelerate.
 - See [Expert parallelism](./expert_parallelism) for sharding mixture-of-experts models.

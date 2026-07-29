@@ -123,7 +123,7 @@ outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_imp
 
 [Parallelism](./perf_infer_gpu_multi) distributes a model across devices so models too big for one device run fast. This approach uses more memory due to sharding overhead and communication to sync results.
 
-[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to enable it.
+[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Pass a [`~distributed.DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to enable it.
 
 ```py
 import torch

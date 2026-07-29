@@ -223,6 +223,8 @@
     title: Performance
   - isExpanded: false
     sections:
+    - local: distributed_overview
+      title: Choosing a strategy
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -237,12 +239,12 @@
       title: Ulysses sequence parallelism
     - local: tensor_parallelism
       title: Tensor parallelism
-    - local: debugging
-      title: Debugging
     - local: perf_train_gpu_many
       title: N-D parallelism
     - local: distributed_config
       title: DistributedConfig
+    - local: debugging
+      title: Debugging
     title: Distributed training
   - isExpanded: false
     sections:
