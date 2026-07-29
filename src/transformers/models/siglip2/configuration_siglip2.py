@@ -62,8 +62,10 @@ class Siglip2TextConfig(PreTrainedConfig):
     # This differs from `CLIPTokenizer`'s default and from openai/siglip2
     # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
     pad_token_id: int | None = 1
-    bos_token_id: int | None = 49406
-    eos_token_id: int | list[int] | None = 49407
+    # No Siglip2 checkpoint uses a BOS token, and EOS resolves to id 1 in the reference tokenizers.
+    # The previous defaults (49406/49407) were CLIP leftovers outside the default 32k vocabulary.
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = 1
     projection_size: int | None = None
 
     def __post_init__(self, **kwargs):

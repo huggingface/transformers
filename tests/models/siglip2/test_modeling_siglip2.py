@@ -24,6 +24,7 @@ from pytest import mark
 
 from transformers import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     is_flaky,
     require_flash_attn,
@@ -36,6 +37,7 @@ from transformers.testing_utils import (
 from transformers.utils import (
     is_torch_available,
     is_vision_available,
+    logging,
 )
 
 from ...test_configuration_common import ConfigTester
@@ -456,6 +458,18 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         model_name = "google/siglip2-base-patch16-naflex"
         model = Siglip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+
+class Siglip2TextConfigTest(unittest.TestCase):
+    def test_default_special_tokens_within_vocab(self):
+        # Regression test for #47612: the default bos/eos token ids used to be CLIP leftovers
+        # (49406/49407) outside the default 32k vocabulary, so any internally built default config
+        # (e.g. by `to_diff_dict`) emitted an out-of-vocabulary warning about the class defaults.
+        logger = logging.get_logger("transformers.configuration_utils")
+        with CaptureLogger(logger) as cl:
+            config = Siglip2TextConfig()
+            config.to_diff_dict()
+        self.assertNotIn("within the vocabulary", cl.out)
 
 
 class Siglip2ModelTester:
