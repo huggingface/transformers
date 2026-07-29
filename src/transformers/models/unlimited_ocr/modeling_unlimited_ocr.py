@@ -1302,8 +1302,8 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
 
     _layer_type = "reference_sliding_attention"
 
-    def __init__(self, config: PreTrainedConfig | None = None, sliding_window: int | None = None):
-        super().__init__(config=config, sliding_window=sliding_window)
+    def __init__(self, sliding_window: int | None = None, **kwargs):
+        super().__init__(sliding_window=sliding_window, **kwargs)
         self.prefill_length: int | None = None
 
     def update(
