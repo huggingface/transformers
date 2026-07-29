@@ -44,7 +44,7 @@ from ..utils.import_utils import (
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .distributed.utils import to_local
+from ..distributed.utils import to_local
 
 
 logger = logging.get_logger(__name__)
