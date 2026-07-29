@@ -36,11 +36,9 @@ logger = logging.get_logger(__name__)
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
-    max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
     merge_size: int
-    max_duration: int
 
 
 def smart_resize(
@@ -94,7 +92,7 @@ def smart_resize(
 class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
-    max_image_size = {"longest_edge": 28 * 28 * 2 * 30000}
+    max_image_size = None
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_resize = True
@@ -104,7 +102,7 @@ class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
     do_sample_frames = True
     patch_size = 16
     temporal_patch_size = 1
-    max_duration = 300
+    max_duration = None
     merge_size = 2
     valid_kwargs = Cosmos3EdgeVideoProcessorInitKwargs
     num_frames = None

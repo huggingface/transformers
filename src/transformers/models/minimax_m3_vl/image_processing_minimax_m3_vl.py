@@ -103,6 +103,10 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
         size = self.size if size is None else size
+        # The default size saved in offcial ckpt isn't correct and wasn't used prev!
+        # Override with the correct, new default value in that case
+        if size == [672, 672]:
+            size = self.size
         if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
             size["shortest_edge"] = min_pixels
             size.pop("min_pixels", None)

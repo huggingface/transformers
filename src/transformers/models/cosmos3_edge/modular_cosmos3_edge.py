@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
     add_start_docstrings,
     auto_docstring,
@@ -58,7 +58,7 @@ from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
-from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor, Glm4vVideoProcessorInitKwargs
+from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -1091,8 +1091,10 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
         return flatten_patches, grid_h, grid_w
 
 
-class Cosmos3EdgeVideoProcessorInitKwargs(Glm4vVideoProcessorInitKwargs):
-    pass
+class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 @add_start_docstrings(
@@ -1116,6 +1118,8 @@ class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     min_frames = 4
     max_frames = 768
     num_frames = None
+    max_duration = None
+    max_image_size = None
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeVideoProcessorInitKwargs]):
         if kwargs.get("temporal_patch_size", self.temporal_patch_size) != 1:
