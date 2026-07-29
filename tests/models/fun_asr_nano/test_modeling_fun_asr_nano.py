@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for Fun-ASR-Nano model."""
 
+import tempfile
 import unittest
 
 from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
@@ -24,6 +25,7 @@ from ...test_modeling_common import is_torch_available, torch_device
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import AutoProcessor, FunAsrNanoEncoder, FunAsrNanoForConditionalGeneration, FunAsrNanoModel
     from transformers.conversion_mapping import get_checkpoint_conversion_mapping
@@ -133,6 +135,9 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     # `(batch, seq, hidden)` shape the common test expects.
     skip_test_audio_features_output_shape = True
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def test_encoder_input_size_is_derived_from_mel_bins_and_stacked_frames(self):
         config = FunAsrNanoEncoderConfig(num_mel_bins=64, num_stacked_frames=5)
 
@@ -229,6 +234,57 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
                 for transform in mapping
             )
         )
+
+    def test_conditional_generation_checkpoint_round_trip_preserves_hub_keys(self):
+        model = FunAsrNanoForConditionalGeneration(self.model_tester.get_config())
+        expected_weight = model.model.audio_adaptor.blocks[0].fc1.weight.detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            saved_keys = load_file(f"{tmp_dir}/model.safetensors").keys()
+            reloaded_model, loading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+        self.assertTrue(torch.equal(reloaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
+        self.assertIn("model.multi_modal_projector.blocks.0.fc1.weight", saved_keys)
+        self.assertNotIn("model.audio_adaptor.blocks.0.fc1.weight", saved_keys)
+
+    def test_legacy_projector_block_checkpoint_keys_load_into_audio_adaptor(self):
+        config = self.model_tester.get_config()
+        model = FunAsrNanoForConditionalGeneration(config)
+        expected_weight = model.model.audio_adaptor.blocks[0].fc1.weight.detach().clone()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            checkpoint_path = f"{tmp_dir}/pytorch_model.bin"
+            legacy_state_dict = {
+                key.replace("model.audio_adaptor.blocks.", "model.multi_modal_projector.blocks."): value
+                for key, value in model.state_dict().items()
+            }
+            torch.save(legacy_state_dict, checkpoint_path)
+
+            loaded_model, loading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+            resaved_dir = f"{tmp_dir}/resaved"
+            loaded_model.save_pretrained(resaved_dir)
+            resaved_keys = load_file(f"{resaved_dir}/model.safetensors").keys()
+            reloaded_model, reloading_info = FunAsrNanoForConditionalGeneration.from_pretrained(
+                resaved_dir, output_loading_info=True
+            )
+
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+        self.assertTrue(torch.equal(loaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
+        self.assertIn("model.multi_modal_projector.blocks.0.fc1.weight", resaved_keys)
+        self.assertNotIn("model.audio_adaptor.blocks.0.fc1.weight", resaved_keys)
+        self.assertEqual(reloading_info["missing_keys"], set())
+        self.assertEqual(reloading_info["unexpected_keys"], set())
+        self.assertTrue(torch.equal(reloaded_model.model.audio_adaptor.blocks[0].fc1.weight, expected_weight))
 
     def test_checkpoint_key_mapping_uses_standard_whisper_component_names(self):
         self.assertEqual(
