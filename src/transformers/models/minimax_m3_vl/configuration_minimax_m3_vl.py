@@ -89,7 +89,7 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     num_key_value_heads: int = 4
     head_dim: int = 128
     hidden_act: str = "silu"
-    max_position_embeddings: int = 524288
+    max_position_embeddings: int = 1000000
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-06
     use_cache: bool = True

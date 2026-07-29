@@ -100,7 +100,7 @@ class MiniMaxM2Config(PreTrainedConfig):
     num_key_value_heads: int = 8
     head_dim: int = 128
     hidden_act: str = "silu"
-    max_position_embeddings: int = 196608
+    max_position_embeddings: int = 204800
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-06
     use_cache: bool = True

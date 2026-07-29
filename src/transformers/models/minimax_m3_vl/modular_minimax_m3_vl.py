@@ -104,7 +104,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
     head_dim: int = 128
-    max_position_embeddings: int = 524288
+    max_position_embeddings: int = 1000000
     vocab_size: int = 200064
     rms_norm_eps: float = 1e-06
     num_local_experts: int = 128
