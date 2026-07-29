@@ -2269,9 +2269,8 @@ class ProcessorMixin(PushToHubMixin):
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
             tools (`list[Union[Dict, Callable]]`, *optional*):
-                The tools that were available to the model, in the same format as accepted by
-                `apply_chat_template` (JSON schemas or callable functions). Tool-call arguments are
-                typed from the calling tool's JSON Schema as each region closes.
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                Tool-call arguments are cast using the calling tool's JSON schema.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")

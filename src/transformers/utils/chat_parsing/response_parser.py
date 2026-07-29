@@ -24,16 +24,7 @@ from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
-# Tool-call argument coercion (`tools=`): a JSON tool-call body carries its types in the
-# syntax itself, but an inline body (`xml-inline` / `kv-lines`) is plain text, so its
-# arguments parse as strings. When the caller passes the request's tools, string arguments
-# are instead cast from the JSON Schema of the tool the parsed call names.
-
-
 def _schema_types(schema: Any) -> tuple[str, ...]:
-    """Candidate type names declared by a parameter's JSON Schema, in the dialect
-    `get_json_schema` emits: a `type` name or list of names, `anyOf` subschemas, and
-    `nullable` marking an Optional. Empty when the parameter is undescribed."""
     if not isinstance(schema, dict):
         return ()
     declared = schema.get("type")
@@ -42,15 +33,12 @@ def _schema_types(schema: Any) -> tuple[str, ...]:
         types.extend(t for t in declared if isinstance(t, str))
     for choice in schema.get("anyOf") or []:
         types.extend(_schema_types(choice))
-    if schema.get("nullable") and "null" not in types:
+    if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
         types.append("null")
     return tuple(types)
 
 
 def _coerce(raw: str, types: tuple[str, ...]) -> Any:
-    """Cast text to the first type in `types` that accepts it. Failed casts, `string`,
-    and unknown types leave the text unchanged, so coercion only ever adds typing.
-    Booleans follow the `bool` content parser; `object` / `array` need JSON of that shape."""
     for type_name in types:
         try:
             if type_name == "integer":
@@ -71,7 +59,7 @@ def _coerce(raw: str, types: tuple[str, ...]) -> Any:
                     return decoded
         except ValueError:
             continue
-    return raw
+    return raw  # `string` params, unknown types and failed casts all keep the original text
 
 
 def parse_response(
@@ -84,8 +72,8 @@ def parse_response(
     """The main function for response parsing when you don't want streaming. Takes generated output
     and the prompt prefix and parses them without streaming any events, then returns the parsed message.
 
-    Pass `tools` (JSON schemas or Python functions, as accepted by `apply_chat_template`) to type
-    tool-call arguments from each tool's JSON Schema.
+    Pass `tools` (in the same format as `apply_chat_template` accepts) to cast tool-call arguments
+    using the calling tool's JSON schema.
     """
     response_template = load_response_template(response_template)
     stream = ResponseParser(response_template, prefix=prefix, tools=tools)
@@ -111,9 +99,8 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
-    Pass `tools=` (JSON schemas or Python functions, as accepted by `apply_chat_template`) to type
-    tool-call arguments from each tool's JSON Schema as each region closes. Anything the schema
-    does not describe is left alone.
+    Pass `tools=` (in the same format as `apply_chat_template` accepts) to cast tool-call arguments
+    using the calling tool's JSON schema as each region closes.
 
     Events can be either "region_open", "region_chunk", or "region_close".
 
@@ -139,8 +126,7 @@ class ResponseParser:
                 "opening `<think>` tag) that the parser must see to parse the output correctly. If the generation "
                 'already contains the complete message, pass `prefix=""` to opt out explicitly.'
             )
-        # `tools=`: tool name -> JSON Schema `properties`, for typing parsed arguments.
-        # Functions are converted to schemas, matching how `apply_chat_template` takes tools.
+        # Maps tool name -> schema `properties`, used to cast parsed tool-call arguments
         self._tool_params: dict[str, dict] = {}
         for tool in tools or []:
             if isfunction(tool) or ismethod(tool):
@@ -381,9 +367,6 @@ class ResponseParser:
         self._reset_to_implicit()
 
     def _coerce_tool_calls(self, value: Any) -> Any:
-        """Cast the string arguments of any parsed value shaped like an OpenAI call to a
-        known tool. Values of any other shape -- and arguments the schema does not
-        describe -- pass through unchanged, so this only ever adds type information."""
         if isinstance(value, list):
             return [self._coerce_tool_calls(item) for item in value]
         fn = value.get("function") if isinstance(value, dict) else None

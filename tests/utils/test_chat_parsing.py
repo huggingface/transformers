@@ -1329,7 +1329,6 @@ _SET_ALARM_CALL = (
 
 
 def _set_alarm_tools(**properties):
-    """A one-tool `tools=` list for `set_alarm` with the given JSON Schema properties."""
     return [
         {
             "type": "function",
@@ -1353,7 +1352,6 @@ def _first_tool_args(message):
 
 
 def _parser_with_tools(tools):
-    """A ResponseParser configured with `tools`, for exercising coercion directly."""
     return ResponseParser(_XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools)
 
 
@@ -1424,8 +1422,6 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(parser._coerce_tool_calls("hello"), "hello")
 
     def test_schema_types_handles_get_json_schema_dialect(self):
-        # The subset of JSON Schema that `get_json_schema` emits: a type name or list of
-        # names, `anyOf` subschemas, and `nullable` marking an Optional.
         self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
         self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
         self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
@@ -1468,17 +1464,14 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
 
     def test_coercion_never_reworks_already_typed_values(self):
-        # Coercion only casts strings: anything a value_parser already typed is final, even
-        # when the schema disagrees. Templates whose tool-call regions expect callers to
-        # pass tools= should omit value_parser and let the schema own the typing.
+        # Coercion only casts strings: values the value_parser already typed are final
         model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
-        # qwen3's lax json value_parser reads 1.50 as the float 1.5 before coercion sees it,
-        # so the string-typed label stays a float ...
+        # qwen3's lax value_parser has already read 1.50 as the float 1.5, so the string-typed label stays a float ...
         self.assertEqual(
             _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)),
             {"label": 1.5},
         )
-        # ... while without a value_parser the raw text reaches the schema cast intact.
+        # ... while without a value_parser the raw text reaches the schema cast intact
         self.assertEqual(
             _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)),
             {"label": "1.50"},
@@ -1519,8 +1512,7 @@ class ToolArgCoercionTest(unittest.TestCase):
         )
 
     def test_merge_duplicates_arguments_are_cast_element_wise(self):
-        # merge_duplicates collects repeated tags into a list, so coercion has to reach
-        # inside it and cast per element.
+        # merge_duplicates collects repeated tags into a list, which is cast element-wise
         template = copy.deepcopy(_XML_STRING_ARGS_TEMPLATE)
         template["fields"]["tool_calls"]["content_args"]["merge_duplicates"] = True
         model_out = (
@@ -1564,9 +1556,7 @@ class ToolArgCoercionTest(unittest.TestCase):
         )
 
     def test_callable_tools_are_converted_to_schemas(self):
-        # Functions are accepted and converted with `get_json_schema`, matching how tools
-        # are passed to `apply_chat_template`; an Optional parameter is nullable, so a
-        # literal "null" casts to None.
+        # Functions are converted with `get_json_schema`; `label` is Optional, so "null" casts to None
         def set_alarm(hour: int, enabled: bool, label: str | None = None):
             """
             Set an alarm.

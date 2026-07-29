@@ -3375,11 +3375,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
             tools (`list[Union[Dict, Callable]]`, *optional*):
-                The tools that were available to the model, in the same format as accepted by
-                `apply_chat_template` (JSON schemas, or callable functions that are auto-converted to
-                schemas). Tool-call arguments are typed from the calling tool's JSON Schema, so `"7"`
-                becomes `7` for an integer parameter while a string parameter keeps `"7"`. Already-typed
-                values and arguments the schema does not describe are left untouched.
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                When passed, tool-call arguments are cast using the calling tool's JSON schema:
+                `"7"` becomes `7` for an integer parameter but stays `"7"` for a string one.
 
         Returns:
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.
@@ -3448,10 +3446,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         emitted assistant-turn content (e.g., `<think>\\n`) that the model continues from. Omitting it
         raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out.
 
-        `tools` (`list[Union[Dict, Callable]]`, *optional*): the tools that were available to the
-        model, in the same format as accepted by `apply_chat_template` (JSON schemas or callable
-        functions). When set, tool-call arguments are typed from the calling tool's JSON Schema as
-        each region closes, so streaming `region_close` events carry schema-typed arguments.
+        `tools` (`list[Union[Dict, Callable]]`, *optional*): tools available to the model, in the
+        same format as `apply_chat_template` accepts. When set, tool-call arguments are cast using
+        the calling tool's JSON schema as each region closes, so streaming `region_close` events
+        carry typed arguments.
         """
         template = response_template if response_template is not None else getattr(self, "response_template", None)
         if template is None:
