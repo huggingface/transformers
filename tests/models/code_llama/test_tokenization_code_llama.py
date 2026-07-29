@@ -206,10 +206,38 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
-    @unittest.skip(
-        "Skipped in v5 - CodeLlama tokenization differences related to SPM legacy flag and Metaspace handling. "
-        "CodeLlama always uses legacy=False (Metaspace pre_tokenizer, no normalizer)"
-    )
+    def test_decode_preserves_leading_whitespace(self):
+        # Decode must keep real leading whitespace, including a single leading space, which the
+        # old `Metaspace` pipeline fused into the synthetic prefix and could not recover.
+        tokenizer = self.tokenizer
+        # Real leading whitespace round-trips exactly, down to a single space.
+        for text in [" hello", "  hello", "   leading spaces", "    indented_line", "\tindented"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+        # The synthetic prefix is still stripped, so text without leading
+        # whitespace does not gain a spurious leading space.
+        for text in ["hello", "def foo():", "import numpy"]:
+            ids = tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokenizer.decode(ids), text)
+        # A real leading space is encoded as a distinct `▁` token rather than fused into
+        # the prefix, so " hello" and "hello" no longer collapse to the same ids.
+        self.assertNotEqual(
+            tokenizer.encode(" hello", add_special_tokens=False),
+            tokenizer.encode("hello", add_special_tokens=False),
+        )
+        # The same holds when the ids carry special tokens (e.g. BOS) that are
+        # skipped on decode: the synthetic prefix is still removed.
+        for text in ["hello", "Hello world", "  hello", "    indented_line"]:
+            ids = tokenizer.encode(text, add_special_tokens=True)
+            self.assertEqual(tokenizer.decode(ids, skip_special_tokens=True), text)
+        # batch_decode routes each sequence through the same path.
+        batch = ["  hello", "world", "\tindented"]
+        batch_ids = [tokenizer.encode(text, add_special_tokens=False) for text in batch]
+        self.assertEqual(tokenizer.batch_decode(batch_ids), batch)
+        # A dict of ids (as returned by the tokenizer call) decodes the same way.
+        encoded = tokenizer("  hello", add_special_tokens=True)
+        self.assertEqual(tokenizer.decode(encoded["input_ids"], skip_special_tokens=True), "  hello")
+
     def test_simple_encode_decode(self):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
@@ -258,10 +286,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
         self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
 
-    @unittest.skip(
-        "Skipped in v5 - CodeLlama tokenization differences related to SPM legacy flag and Metaspace handling. "
-        "CodeLlama always uses legacy=False (Metaspace pre_tokenizer, no normalizer)"
-    )
     def test_no_differences_showcase(self):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
@@ -277,8 +301,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
         self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
 
-        self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
-        self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
+        # Use the published checkpoint: the `hf-internal-testing` fixture marks `<s>` as
+        # `normalized=True`, so the normalizer prepends a stray `▁` before it.
+        published_tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        self.assertEqual(published_tokenizer.encode("<s>"), [1, 1])
 
     def test_no_differences_decode(self):
         pyth_tokenizer = self.tokenizer
@@ -288,7 +314,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.decode([30112, 869]), "ا .")
 
     def test_no_differences_special_tokens(self):
-        pyth_tokenizer = self.tokenizer
+        # Use the published checkpoint: the `hf-internal-testing` fixture marks `<s>` as
+        # `normalized=True`, so the normalizer prepends a stray `▁` before it.
+        pyth_tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         self.assertEqual(pyth_tokenizer.encode(""), [1])
 
         self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
@@ -351,15 +379,16 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_spm_edge_cases(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
+        # The `▁` before `[` after `<s>` matches the reference SentencePiece tokenizer: the
+        # `Prepend("▁")` normalizer re-adds a metaspace at the start of the fragment following the
+        # special token, exactly as the shipped tokenizer.json does.
         self.assertEqual(
-            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "▁[", "/", "INST", "]"]
         )
         inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
-        self.assertEqual(
-            inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
-        )
+        self.assertEqual(inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 518, 29914, 25580, 29962])
 
     def test_infilling_tokenization(self):
         PROMPTS = [

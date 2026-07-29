@@ -150,7 +150,7 @@ visualizer("""def func(a, b):
 
 - Use `bfloat16` for further training or fine-tuning and `float16` for inference.
 - The `BOS` character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
-- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, “Banana”), the tokenizer doesn’t prepend the prefix space to the string.
+- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). Leading whitespace is preserved on decode, so indented text round trips exactly, including a single leading space, leading tabs and newlines, and multiple spaces.
 
 ## CodeLlamaTokenizer
 

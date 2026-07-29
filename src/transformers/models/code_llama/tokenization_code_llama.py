@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -155,15 +155,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
-        prepend_scheme = "first" if self.add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-            replacement="▁", prepend_scheme=prepend_scheme, split=False
-        )
-
-        self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
-        )
-
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
@@ -180,6 +171,18 @@ class CodeLlamaTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+        # `super().__init__()` builds the added-token trie against the normalizer in place, so the
+        # pipeline is assigned after it. A `Prepend` set earlier would split `normalized=True`
+        # tokens like `<s>`.
+        self._tokenizer.normalizer = self._build_normalizer()
+        self._tokenizer.pre_tokenizer = None
+
+        decoder_sequence = [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
+        if self.add_prefix_space:
+            # Strip the single leading space the `Prepend("▁")` normalizer added back on decode.
+            decoder_sequence.append(decoders.Strip(content=" ", left=1))
+        self._tokenizer.decoder = decoders.Sequence(decoder_sequence)
+
         self._prefix_token = prefix_token
         self._middle_token = middle_token
         self._suffix_token = suffix_token
@@ -226,6 +229,15 @@ class CodeLlamaTokenizer(TokenizersBackend):
     def eot_token(self):
         return self._eot_token
 
+    def _build_normalizer(self):
+        # `Prepend("▁")` (only with `add_prefix_space`) adds the leading metaspace; `Replace`
+        # escapes the remaining spaces. Shared with the `set_infilling_processor` reset.
+        sequence = []
+        if self.add_prefix_space:
+            sequence.append(normalizers.Prepend(prepend="▁"))
+        sequence.append(normalizers.Replace(pattern=" ", content="▁"))
+        return normalizers.Sequence(sequence)
+
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """
         Updates the normalizer to make sure the prompt format for `infilling` is respected. The infilling format is the
@@ -238,12 +250,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
         is to add a prefix space for the normalizer, and add a `bos_token` to the input text for the `post_processor`.
         """
         if reset:
-            self._tokenizer.normalizer = normalizers.Sequence(
-                [
-                    normalizers.Prepend(prepend="▁"),
-                    normalizers.Replace(pattern=" ", content="▁"),
-                ]
-            )
+            self._tokenizer.normalizer = self._build_normalizer()
             self.update_post_processor()
             return
 
