@@ -43,12 +43,17 @@ ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
 
 
+@torch._dynamo.assume_constant_result
 def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
     """Whether the sonic-moe kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on
     Hopper (SM90) or newer, and `nvidia-cutlass-dsl` / `apache-tvm-ffi` no newer than the versions the
     kernel was validated against (`SONICMOE_DEPENDENCIES`) — newer releases may break its CuteDSL / TVM
     FFI dispatch. A one-glance gate for callers, including external stacks. With `raise_error=True` (used
     by the loader) it re-raises the specific `ImportError` instead of returning `False`.
+
+    `@assume_constant_result` makes dynamo evaluate this once at trace time and inline the bool (its probe
+    is untraceable — an `lru_cache`'d import check, the `get_device_capability` pybind, and
+    `importlib.metadata` version lookups), so it stays compile-safe if called from a compiled region.
     """
     if not is_kernels_available():
         return maybe_import_error(
