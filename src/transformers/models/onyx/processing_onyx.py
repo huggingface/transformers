@@ -17,50 +17,6 @@ from ...utils import auto_docstring, logging
 
 logger = logging.get_logger(__name__)
 
-ONYX_MM_CHAT_TEMPLATE = (
-    "{{- bos_token -}}"
-    "{%- macro render_parts(content) -%}"
-    "{%- if content is string -%}{{- content -}}"
-    "{%- else -%}"
-    "{%- for part in content -%}"
-    "{%- if part['type'] == 'image' -%}{{- '<|patch|>' -}}"
-    "{%- elif part['type'] == 'video' -%}{{- '<|video|>' -}}"
-    "{%- elif part['type'] == 'text' -%}{{- part['text'] -}}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- endif -%}"
-    "{%- endmacro -%}"
-    "{%- set ns = namespace(has_system=false) -%}"
-    "{%- for m in messages -%}{%- if m['role'] == 'system' -%}{%- set ns.has_system = true -%}{%- endif -%}{%- endfor -%}"
-    "{%- if add_generation_prompt and not ns.has_system -%}"
-    "{{- '<|start|>system<|message|>You are a helpful assistant.<|eot|>' -}}"
-    "{%- endif -%}"
-    "{%- for message in messages -%}"
-    "{%- set role = message['role'] -%}"
-    "{%- if role == 'assistant' -%}"
-    "{%- set recipient = message.get('recipient') -%}"
-    "{%- set end_turn = message.get('end_turn') -%}"
-    "{%- if end_turn is none -%}"
-    "{%- set end_turn = not (recipient and recipient != 'user') -%}"
-    "{%- endif -%}"
-    "{{- '<|start|>assistant' -}}"
-    "{%- if recipient -%}{{- ' to=' + recipient -}}{%- endif -%}"
-    "{{- '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- ('<|eot|>' if end_turn else '<|eom|>') -}}"
-    "{%- elif role == 'tool' -%}"
-    "{%- set name = message.get('name', '') -%}"
-    "{{- '<|start|>tool ' + name + '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- '<|eot|>' -}}"
-    "{%- else -%}"
-    "{%- set header = role -%}"
-    "{%- if message.get('name') -%}{%- set header = role + ' ' + message['name'] -%}{%- endif -%}"
-    "{{- '<|start|>' + header + '<|message|>' -}}{{- render_parts(message['content']) -}}"
-    "{{- '<|eot|>' -}}"
-    "{%- endif -%}"
-    "{%- endfor -%}"
-    "{%- if add_generation_prompt -%}{{- '<|start|>assistant to=user<|message|>' -}}{%- endif -%}"
-)
-
 
 @auto_docstring
 class OnyxProcessor(ProcessorMixin):
@@ -86,7 +42,7 @@ class OnyxProcessor(ProcessorMixin):
             image_processor=image_processor,
             video_processor=video_processor,
             tokenizer=tokenizer,
-            chat_template=chat_template or ONYX_MM_CHAT_TEMPLATE,
+            chat_template=chat_template,
             **kwargs,
         )
 
@@ -115,7 +71,7 @@ class OnyxProcessor(ProcessorMixin):
         return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
-        merge_length = self.video_processor.downsample_factor**2
+        merge_length = self.video_processor.merge_size**2
         grid_thw = video_inputs["video_grid_thw"][video_idx]
         n_frames = int(grid_thw[0])
         tokens_per_group = int(grid_thw[1:].prod() // merge_length)

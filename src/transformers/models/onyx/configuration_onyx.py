@@ -114,7 +114,7 @@ class OnyxTextConfig(PreTrainedConfig):
     num_key_value_heads: int = 2
     head_dim: int = 128
     hidden_activation: str = "silu"
-    max_position_embeddings: int = 16_384
+    max_position_embeddings: int = 131_072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
