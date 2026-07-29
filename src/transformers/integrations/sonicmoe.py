@@ -20,13 +20,15 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 
 from __future__ import annotations
 
-import functools
+import importlib.metadata
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
+from packaging import version
 
 from ..utils import logging
+from ..utils.import_utils import is_kernels_available, maybe_import_error
 from .hub_kernels import lazy_load_kernel
 from .tensor_parallel import to_local
 
@@ -35,6 +37,54 @@ logger = logging.get_logger(__name__)
 
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
+
+# Max sonic-moe build-dependency versions: newer CuteDSL / TVM-FFI releases haven't been validated
+# against the kernel and may break its dispatch, so we refuse to load past them.
+SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
+
+
+def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
+    """Whether the sonic-moe kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on
+    Hopper (SM90) or newer, and `nvidia-cutlass-dsl` / `apache-tvm-ffi` no newer than the versions the
+    kernel was validated against (`SONICMOE_DEPENDENCIES`) — newer releases may break its CuteDSL / TVM
+    FFI dispatch. A one-glance gate for callers, including external stacks. With `raise_error=True` (used
+    by the loader) it re-raises the specific `ImportError` instead of returning `False`.
+    """
+    if not is_kernels_available():
+        return maybe_import_error(
+            "sonic-moe requires the `kernels` package. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    if not torch.cuda.is_available():
+        return maybe_import_error(
+            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    major = torch.cuda.get_device_capability()[0]
+    if major < 9:
+        return maybe_import_error(
+            f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device has compute "
+            f"capability {major}.x. Use a different `experts_implementation`.",
+            raise_error=raise_error,
+        )
+    for distribution, max_version in SONICMOE_DEPENDENCIES.items():
+        # These are distribution (`pip install`) names, not import names, so resolve the version directly
+        # via `importlib.metadata`. `_is_package_available` looks packages up through `find_spec`, which
+        # can't resolve a distribution whose import name differs (e.g. `nvidia-cutlass-dsl` imports as
+        # `cutlass`), so it would report these as missing.
+        try:
+            installed = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            return maybe_import_error(
+                f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
+            )
+        if version.parse(installed) > version.parse(max_version):
+            return maybe_import_error(
+                f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
+                f"but {installed} is installed.",
+                raise_error=raise_error,
+            )
+    return True
 
 
 @dataclass(frozen=True)
@@ -45,28 +95,32 @@ class SonicMoE:
     moe_general_routing_inputs: Callable
 
 
-@functools.cache
-def _load_sonicmoe_kernel() -> SonicMoE:
+# Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
+# can change between attempts. A module global (not `@functools.cache`) avoids Dynamo warning about
+# tracing a cache-wrapped function on every compile.
+_SONICMOE: SonicMoE | None = None
+
+
+@torch._dynamo.allow_in_graph
+def _load_sonicmoe_kernel() -> None:
     """
-    Load sonic-moe once and return its entry points.
+    Load sonic-moe once into the `_SONICMOE` module global.
+
+    `@allow_in_graph` makes `torch.compile` treat the untraceable hub download + dynamic import as a
+    single opaque node instead of tracing into it; it returns `None` (proxyable) and populates the
+    global, which `load_sonicmoe_kernel` then returns.
+
+    Under NO circumstances may this function return a value: an `@allow_in_graph` fx node's
+    return must be proxyable, and returning the bundle (e.g. from the warm-cache
+    short-circuit) breaks torch.compile with `Unsupported: torch.* op returned non-Tensor`.
 
     Raises `ImportError` if CUDA/hardware requirements are not met, or if the kernel or
     required symbols are not found.
     """
-
-    if not torch.cuda.is_available():
-        raise ImportError(
-            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
-        )
-
-    # sonic-moe requires Hopper (SM90) or newer
-    major = torch.cuda.get_device_capability()[0]
-    if major < 9:
-        raise ImportError(
-            f"sonic-moe requires a Hopper (SM90+) or newer GPU, but the current device "
-            f"has compute capability {major}.x. Use a different `experts_implementation`."
-        )
-
+    global _SONICMOE
+    if _SONICMOE is not None:
+        return
+    is_sonicmoe_loadable(raise_error=True)
     kernel = lazy_load_kernel("sonic-moe")
     if kernel is None:
         raise ImportError(
@@ -91,10 +145,15 @@ def _load_sonicmoe_kernel() -> SonicMoE:
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
-    return SonicMoE(
+    _SONICMOE = SonicMoE(
         activation_type_enum=activation_type_enum,
         moe_general_routing_inputs=moe_general_routing_inputs,
     )
+
+
+def load_sonicmoe_kernel() -> SonicMoE:
+    _load_sonicmoe_kernel()
+    return _SONICMOE
 
 
 @torch._dynamo.allow_in_graph
@@ -121,11 +180,9 @@ def _sonicmoe_wrapper(
     flows normally. The decorator must be applied at module load time, not inside the compiled
     function — hence this shim plus the `allow_in_graph` decorator above.
     """
-    sonicmoe = _load_sonicmoe_kernel()
+    sonicmoe = load_sonicmoe_kernel()
     activation_type_enum = sonicmoe.activation_type_enum
-    activation_type = getattr(
-        activation_type_enum, ACT_MAP.get(act_name, "swiglu").upper(), activation_type_enum.SWIGLU
-    )
+    activation_type = getattr(activation_type_enum, ACT_MAP[act_name].upper())
     output, _ = sonicmoe.moe_general_routing_inputs(
         hidden_states,
         router_scores,
@@ -152,8 +209,6 @@ def sonicmoe_experts_forward(
 ) -> torch.Tensor:
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
-    if hidden_states.device.type != "cuda":
-        raise ValueError("sonicmoe requires CUDA device")
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -177,6 +232,9 @@ def sonicmoe_experts_forward(
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
+    if act_name not in ACT_MAP:
+        raise ValueError(f"sonicmoe does not support the {act_name!r} activation; expected one of {sorted(ACT_MAP)}.")
+
     # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size).
     # Non-transposed: gate_up_proj is (E, 2*I, H), down_proj is (E, H, I) -> permute(1, 2, 0).
     # Transposed: gate_up_proj is (E, H, 2*I), down_proj is (E, I, H) -> permute(2, 1, 0).

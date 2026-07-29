@@ -478,7 +478,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             image_mask = image_mask[..., 0]  # slice off the hidden dim
         else:

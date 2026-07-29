@@ -1975,17 +1975,17 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
         else:
@@ -2612,6 +2612,7 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3OmniMoeP
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config_class = Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor"
     _can_record_outputs = {
@@ -2995,6 +2996,8 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_gather_output"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _can_record_outputs = {

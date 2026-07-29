@@ -688,7 +688,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             if inputs_embeds is None:
                 raise ValueError("Either `input_ids` or `inputs_embeds` has to be provided.")
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:

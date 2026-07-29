@@ -496,7 +496,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:

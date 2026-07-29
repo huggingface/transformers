@@ -63,8 +63,8 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> torch.Tensor:
     # more stable https://github.com/pytorch/pytorch/issues/41663
     gumbel_dist = torch.distributions.gumbel.Gumbel(
-        torch.tensor(0.0, device=logits.device, dtype=logits.dtype),
-        torch.tensor(1.0, device=logits.device, dtype=logits.dtype),
+        torch.full((), 0.0, device=logits.device, dtype=logits.dtype),
+        torch.full((), 1.0, device=logits.device, dtype=logits.dtype),
     )
     gumbels = gumbel_dist.sample(logits.shape)
 
