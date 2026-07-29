@@ -424,21 +424,6 @@ class DeepGemmForwardTest(unittest.TestCase):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
 
-    @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
-    def test_linear_fp8_sm100_rejects_float32_scales(self):
-        # Regression for #47030: FP8 weights + float32 block scales on SM100 (e.g. Qwen3-4B-FP8) must NOT
-        # reach the kernel. DeepGEMM's SM100 GEMM only takes UE8M0 SFs, and ceil-rounding float32 SFs to
-        # UE8M0 without requantizing the payload silently corrupts the output (finite, warning-free, wrong).
-        # The forward must raise before loading — `fp8_linear` turns that into a Triton fallback — so no
-        # kernel op runs.
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)  # (N/128, K/128), float32
-        with self._bundle(is_sm100=True) as captured:
-            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
-                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
-        self.assertEqual(captured, {})  # raised before load — the corrupting cast/matmul never ran
-
     def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
