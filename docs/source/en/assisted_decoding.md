@@ -141,11 +141,11 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-## Multi-token prediction
+## Multi-Token Prediction (MTP)
 
-Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers trained into the model itself, so it does not need a separate assistant model. The MTP layers predict several future tokens from a single position and share the main model's embeddings and output head. The main model verifies the drafts in one forward pass, which speeds up generation without loading a second model.
+Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head, and each layer drafts one token, so a checkpoint with two MTP layers proposes two candidates per step. The main model verifies the drafts in one forward pass.
 
-MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These models have a `num_mtp_layers` config value and MTP weights. [`~GenerationMixin.generate`] raises an error if the checkpoint has no MTP layers.
+MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These models have a `num_mtp_layers` config value and MTP weights. [`~GenerationMixin.generate`] raises an error if the checkpoint has no MTP layers. Every MTP layer in the checkpoint is used.
 
 Pass `use_mtp=True` to [`~GenerationMixin.generate`]. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
 
