@@ -1053,7 +1053,7 @@ class Molmo2Processor(ProcessorMixin):
                 if sample.count(self.video_token) > 1:
                     raise ValueError("At most one video is supported per sample.")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_grid = image_inputs["image_grids"][image_idx]
         if hasattr(image_grid, "tolist"):
             image_grid = image_grid.tolist()
@@ -1102,7 +1102,7 @@ class Molmo2Processor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         video_grid = video_inputs["video_grids"][video_idx]
         video_metadata = video_inputs.get("video_metadata", [])
         metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
