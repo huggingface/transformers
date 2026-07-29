@@ -145,15 +145,12 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertEqual(config.audio_token_id, 151646)
         self.assertFalse(config.is_encoder_decoder)
 
-    def test_legacy_audio_encoder_config_aliases_are_deserialized(self):
+    def test_audio_config_alias_is_deserialized(self):
         encoder_config = {"input_size": 560, "model_type": "fun_asr_nano_encoder"}
+        config = FunAsrNanoConfig(audio_config=encoder_config)
 
-        for alias in ("audio_config", "audio_encoder_config"):
-            with self.subTest(alias=alias):
-                config = FunAsrNanoConfig(**{alias: encoder_config.copy()})
-
-                self.assertIsInstance(config.encoder_config, FunAsrNanoEncoderConfig)
-                self.assertEqual(config.encoder_config.input_size, 560)
+        self.assertIsInstance(config.encoder_config, FunAsrNanoEncoderConfig)
+        self.assertEqual(config.encoder_config.input_size, 560)
 
     def test_reuses_audioflamingo3_model_wrappers(self):
         self.assertTrue(issubclass(ModularFunAsrNanoPreTrainedModel, AudioFlamingo3PreTrainedModel))
@@ -175,7 +172,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         )
         self.assertEqual(
             convert_key("audio_adaptor.blocks.0.feed_forward.w_2.bias"),
-            "model.multi_modal_projector.blocks.0.fc2.bias",
+            "model.audio_adaptor.blocks.0.fc2.bias",
         )
         self.assertEqual(
             convert_key("audio_adaptor.linear1.weight"),
@@ -248,7 +245,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         )
         self.assertEqual(
             convert_key("audio_adaptor.blocks.0.self_attn.linear_q.weight"),
-            "model.multi_modal_projector.blocks.0.self_attn.q_proj.weight",
+            "model.audio_adaptor.blocks.0.self_attn.q_proj.weight",
         )
 
     def test_checkpoint_conversion_splits_fused_encoder_qkv(self):
