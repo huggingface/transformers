@@ -327,7 +327,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "image [383, 87, 497, 171]\ntitle [333",
+                ("cuda", 9): "image [383, 88, 497, 175]\ntitle [333",
                 ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
             }
         ).get_expectation()  # fmt: skip
@@ -359,7 +359,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         )
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
+                ("cuda", 9): "<|det|>image [383, 88, 497, 175]<|/det|>\n<|det|>title [333",
                 ("cpu", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
             }
         ).get_expectation()  # fmt: skip
@@ -367,7 +367,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DETECTIONS = Expectations(
             {
-                ("cuda", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
+                ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 175], "text": "\n"}],
                 ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
             }
         ).get_expectation()  # fmt: skip
@@ -410,8 +410,8 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): [
-                    "image [383, 88, 497, 171]\ntitle [333",
+                ("cuda", 9): [
+                    "image [383, 88, 497, 174]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cpu", None): [
@@ -458,7 +458,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "<PAGE>image [382, 87, 489, 174]\n",
+                ("cuda", 9): "<PAGE>image [382, 87, 489, 180]\n",
                 ("cpu", None): "<PAGE>image [382, 87, 489, 174]\n",
             }
         ).get_expectation()
