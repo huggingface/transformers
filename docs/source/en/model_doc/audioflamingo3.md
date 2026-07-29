@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-07-10 and contributed to Hugging Face Transformers on 2026-05-21.*
+*This model was published in HF papers on 2025-07-10 and contributed to Hugging Face Transformers on 2025-11-12.*
 
 # Audio Flamingo 3
 
@@ -289,6 +289,7 @@ conversation = [
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
+    add_generation_prompt=True,
     return_dict=True,
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
