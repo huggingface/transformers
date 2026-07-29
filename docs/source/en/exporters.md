@@ -384,9 +384,6 @@ if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
 For `ExecutorchExporter` with the XNNPACK backend, the exporter swaps MoE experts to
 `batched_mm` because XNNPACK has no `_grouped_mm.out` kernel.
-- A short list of models (`EXPORT_SKIP_MODEL_CLASSES`) is skipped from the export sweep when
-the model itself is fundamentally non-exportable. Each entry carries a `TODO` with the
-model-side change needed.
 
 ## Next steps
 
