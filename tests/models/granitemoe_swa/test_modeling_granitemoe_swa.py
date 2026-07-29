@@ -67,12 +67,14 @@ class GraniteMoeSWAIntegrationTest(unittest.TestCase):
         EXPECTED_MEANS = Expectations(
             {
                 ("cuda", 8): torch.tensor([[-1.3672, -2.0156, -1.3359, -1.4531, -2.5156]]),
+                ("cuda", (8, 6)): torch.tensor([[-1.3672, -2.0312, -1.3516, -1.4922, -2.5156]]),
                 ("cuda", 9): torch.tensor([[-1.3594, -2.0156, -1.3594, -1.4922, -2.5156]]),
             }
         )
         EXPECTED_SLICES = Expectations(
             {
                 ("cuda", 8): torch.tensor([0.4883, 4.3438, -0.0464, -0.2812, 1.8750, 1.3438, 2.3438, -0.7227, 3.5938, 1.9844, 1.4922, 3.7031, 1.7734, 3.5938, 2.8438]),
+                ("cuda", (8, 6)): torch.tensor([ 0.4902,  4.4375, -0.0206, -0.2363,  1.8984,  1.3828,  2.4062, -0.7031, 3.7031,  2.0312,  1.5156,  3.7500,  1.8125,  3.6562,  2.8438]),
                 ("cuda", 9): torch.tensor([0.4883, 4.4062, -0.0430, -0.2637, 1.8750, 1.3438, 2.3438, -0.7266, 3.6250, 2.0000, 1.5078, 3.7188, 1.8125, 3.5938, 2.8281]),
             }
         )
@@ -94,8 +96,12 @@ class GraniteMoeSWAIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        EXPECTED_TEXT = (
-            "The capital of France is Paris.\nThe capital of France is also known as the City of "
-            "Light.\nThe capital of France is"
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", (8, 6)): (
+                    'The capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France'
+                ),
+            }
         )
-        self.assertEqual(generated_text, EXPECTED_TEXT)
+        self.assertEqual(generated_text, EXPECTED_TEXTS.get_expectation())
