@@ -1842,7 +1842,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
         patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
-            The patches grid `(num_columns, num_rows)` per image.
+            The patches grid `(num_columns, num_rows)` per image. Required if `pixel_values_local` is passed.
         """
         if isinstance(num_local_patches, torch.Tensor):
             num_local_patches = num_local_patches.tolist()
@@ -2000,6 +2000,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         pixel_values: torch.FloatTensor,
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
+        patches_grid: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -2009,11 +2010,14 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
+        patches_grid (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
+            The patches grid `(num_columns, num_rows)` per image. Required if `pixel_values_local` is passed.
         """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_values_local=pixel_values_local,
             num_local_patches=num_local_patches,
+            patches_grid=patches_grid,
             **kwargs,
         )
 
