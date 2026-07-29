@@ -38,6 +38,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        DynamicCache,
+        StaticCache,
         UnlimitedOcrForConditionalGeneration,
         UnlimitedOcrModel,
     )
@@ -207,6 +209,66 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_static_cache_sliding_window_too_small_cache_full(self):
         """Continue from full cache"""
         self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=6)
+
+    def _check_manual_forward_cache(self, cache_implementation: str):
+        """Test that the states of the first forward pass are the prefill states if set_prefill_length is not explicitly called."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            sliding_window = config.text_config.sliding_window
+            num_decode_steps = 2 * sliding_window
+
+            model = model_class(config).to(torch_device).eval()
+            input_ids = inputs_dict["input_ids"]
+            prompt_length = input_ids.shape[1]
+            past_key_values = (
+                StaticCache(config=config.get_text_config(), max_cache_len=prompt_length + num_decode_steps)
+                if cache_implementation == "static"
+                else DynamicCache(config=config.get_text_config())
+            )
+
+            next_tokens = input_ids
+            with torch.no_grad():
+                for _ in range(num_decode_steps + 1):
+                    outputs = model(input_ids=next_tokens, past_key_values=past_key_values, use_cache=True)
+                    next_tokens = outputs.logits[:, -1:].argmax(dim=-1)
+
+            reference_layers = [
+                layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+            ]
+            self.assertGreater(len(reference_layers), 0)
+            for layer in reference_layers:
+                self.assertEqual(layer.prefill_length, prompt_length)
+
+    def test_manual_forward_dynamic_cache(self):
+        self._check_manual_forward_cache(cache_implementation="dynamic")
+
+    def test_manual_forward_loop_static_cache(self):
+        self._check_manual_forward_cache(cache_implementation="static")
+
+    def test_generate_cache_chunked_prefill(self):
+        """Test that a chunked prefill keeps all prompt tokens as prefill, not only the first chunk."""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            input_ids = inputs_dict["input_ids"]
+            prompt_length = input_ids.shape[1]
+            out = model.generate(
+                input_ids=input_ids,
+                attention_mask=torch.ones_like(input_ids),
+                max_new_tokens=3,
+                min_new_tokens=3,
+                do_sample=False,
+                prefill_chunk_size=prompt_length // 2,
+                return_dict_in_generate=True,
+            )
+
+            reference_layers = [
+                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+            ]
+            self.assertGreater(len(reference_layers), 0)
+            for layer in reference_layers:
+                self.assertEqual(layer.prefill_length, prompt_length)
 
     def test_generate_without_sliding_window(self):
         """With `use_sliding_window=False` every layer is a full attention layer."""

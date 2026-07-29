@@ -62,22 +62,28 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
         model_kwargs: dict,
         is_first_iteration: bool = True,
     ):
-        outputs = super()._prefill(
+        # A prefill can span several forward passes when chunked, which the cache layers cannot tell apart from
+        # decode steps, so declare its length before the first one.
+        past_key_values = model_kwargs.get("past_key_values")
+        if past_key_values is not None and past_key_values.get_seq_length() == 0:
+            prefill_length = self._get_prefill_length(input_ids, model_kwargs)
+            for layer in past_key_values.layers:
+                if layer._layer_type == "reference_sliding_attention":
+                    layer.set_prefill_length(prefill_length)
+        return super()._prefill(
             input_ids,
             generation_config,
             model_kwargs,
             is_first_iteration=is_first_iteration,
         )
-        # The cache layers cannot tell prefill and decode apart on their own, so mark the prefill as complete once
-        # all prefill forward passes are done (a prefill can span several forward passes when chunked).
-        past_key_values = model_kwargs.get("past_key_values")
-        if past_key_values is None:
-            past_key_values = getattr(outputs, "past_key_values", None)
-        if past_key_values is not None:
-            for layer in past_key_values.layers:
-                if layer._layer_type == "reference_sliding_attention":
-                    layer.end_prefill()
-        return outputs
+
+    def _get_prefill_length(self, input_ids: torch.LongTensor, model_kwargs: dict) -> int:
+        """Number of tokens the prefill caches, including padding tokens."""
+        inputs_embeds = model_kwargs.get("inputs_embeds")
+        # `input_ids` is empty when generating from embeddings
+        if inputs_embeds is not None:
+            return inputs_embeds.shape[1]
+        return input_ids.shape[1]
 
     def _get_logits_processor(
         self,
