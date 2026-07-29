@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoModel, AutoTokenizer, is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
@@ -57,7 +59,7 @@ class JinaEmbeddingsV3ModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=8,
+        max_position_embeddings=12,
         type_vocab_size=1,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -259,6 +261,11 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    @unittest.skip("Model doesn't support scaling - due to non-RoPE related reasons")
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

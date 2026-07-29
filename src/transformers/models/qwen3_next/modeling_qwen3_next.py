@@ -647,7 +647,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 mixed_qkv,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
-                self.activation,
+                activation=self.activation,
                 seq_idx=kwargs.get("seq_idx"),
             )
 
@@ -1082,6 +1082,7 @@ class Qwen3NextForCausalLM(Qwen3NextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

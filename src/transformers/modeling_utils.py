@@ -149,8 +149,6 @@ if TYPE_CHECKING:
     from ._typing import DeviceMeshLike
 
 
-_torch_distributed_available = torch.distributed.is_available()
-
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
@@ -1757,16 +1755,6 @@ class PreTrainedModel(
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
-
-        if (
-            torch.version.hip is not None
-            and torch.cuda.device_count() > 1
-            and version.parse(torch.__version__) < version.parse("2.4.1")
-        ):
-            logger.warning_once(
-                "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
-            )
-            torch.backends.cuda.enable_flash_sdp(False)
 
         return True
 
@@ -4037,13 +4025,6 @@ class PreTrainedModel(
                 `DistributedConfig(tp_size=N)` for tensor parallelism, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism

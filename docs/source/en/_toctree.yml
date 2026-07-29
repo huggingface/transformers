@@ -126,6 +126,8 @@
       title: torch.compile
     - local: exporters
       title: Exporters
+    - local: exporters_extend
+      title: Extending the exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -505,6 +507,8 @@
     - sections:
       - local: model_doc/axk1
         title: A.X-K1
+      - local: model_doc/axk2
+        title: A.X-K2
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert

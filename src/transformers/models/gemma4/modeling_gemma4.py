@@ -1822,6 +1822,7 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Gemma4TextConfig
     base_model_prefix = "model"
 
@@ -2257,19 +2258,19 @@ class Gemma4Model(Gemma4PreTrainedModel):
             special_image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
             special_video_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
 

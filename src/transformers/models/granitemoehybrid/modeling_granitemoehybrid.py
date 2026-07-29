@@ -33,7 +33,6 @@ from ...integrations import (
     lazy_load_kernel,
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
@@ -60,7 +59,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -431,7 +430,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 hidden_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
-                self.activation,
+                activation=self.activation,
                 seq_idx=kwargs.get("seq_idx"),
             )
 
@@ -501,11 +500,11 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         if use_precomputed_states and seq_len == 1:
             # 3. SSM transformation
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dt = dt[:, :, None].expand(-1, -1, self.head_dim)
+            dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
-            B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
+            B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
+            C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
                 recurrent_state,
@@ -519,11 +518,11 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(batch_size, 1, self.num_heads * self.head_dim)
             hidden_states = self.norm(hidden_states, gate)
 
             # 4. Final linear projection
-            out = self.out_proj(hidden_states)[:, None, ...]
+            out = self.out_proj(hidden_states)
 
         # Fused calculations or step by step if no initialized cache is found
         else:
@@ -592,22 +591,20 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params.layers[self.layer_idx].device
 
-            # Note: there is no need to pad parameter matrices here, as there is just one new token
-            # for batched generation
-            dt = dt[:, 0, :][:, None, ...]
+            # Note: there is no need to pad parameter matrices here, as there is just one new token for batched generation
             dt = dt.transpose(1, 2).expand(batch_size, dt.shape[-1], self.head_dim)
             dt_bias = self.dt_bias[..., None].expand(self.dt_bias.shape[0], self.head_dim)
 
-            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))
+            dt = torch.nn.functional.softplus(dt + dt_bias.to(dt.dtype))[..., None]
             dt = torch.clamp(dt, self.time_step_limit[0], self.time_step_limit[1])
             A = A[..., None, None].expand(self.num_heads, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            dA = (torch.exp(dt[..., None] * A)).to(device=cache_device)
+            dA = (torch.exp(dt * A)).to(device=cache_device)
 
             # Discretize B
-            B = B.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            B = B.reshape(batch_size, self.n_groups, 1, -1)
             B = B.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, B.shape[-1]).contiguous()
-            B = B.reshape(batch_size, -1, B.shape[-1])
-            dB = dt[..., None] * B[..., None, :]
+            B = B.reshape(batch_size, -1, 1, B.shape[-1])
+            dB = dt * B
 
             # Discretize x into dB
             hidden_states = hidden_states.reshape(batch_size, -1, self.head_dim)
@@ -618,7 +615,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
-            C = C.reshape(batch_size, self.n_groups, -1)[..., None, :]
+            C = C.reshape(batch_size, self.n_groups, 1, -1)
             C = C.expand(batch_size, self.n_groups, self.num_heads // self.n_groups, C.shape[-1]).contiguous()
             C = C.reshape(batch_size, -1, C.shape[-1])
 
@@ -633,7 +630,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             D = self.D[..., None].expand(self.D.shape[0], self.head_dim)
             y = (y + hidden_states * D).to(y.dtype)
 
-            y = y.reshape(batch_size, -1)[:, None, ...]
+            y = y.reshape(batch_size, 1, -1)
         else:
             # begin ssd naive implementation without einsums
             dt = nn.functional.softplus(dt + self.dt_bias)
@@ -1246,6 +1243,7 @@ class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMix
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

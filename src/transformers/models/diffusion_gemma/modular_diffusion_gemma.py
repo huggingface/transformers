@@ -14,7 +14,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -182,8 +182,44 @@ class DiffusionGemmaConfig(Gemma4Config):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+# Add support for `partial_rotary_factor` in full attention layers
 class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
-    pass
+    def compute_default_rope_parameters(
+        config: DiffusionGemmaTextConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+        layer_type: str | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
+        dim = int(dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
 
 class DiffusionGemmaRMSNorm(Gemma4RMSNorm):
@@ -872,7 +908,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             special_image_mask = input_ids == self.config.image_token_id
         else:
             image_token_embeddings = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == image_token_embeddings).all(-1)
 
@@ -1188,6 +1224,11 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             mask.ndim == 4 for mask in decoder_attention_mask.values()
         ):
             return decoder_attention_mask
+
+        # Contrarily to the high-level mask creation functions, the mask interface used below does not cast the 2D
+        # mask, and an integer one would propagate its dtype to the final mask instead of yielding a boolean mask
+        if isinstance(decoder_attention_mask, torch.Tensor) and decoder_attention_mask.ndim == 2:
+            decoder_attention_mask = decoder_attention_mask.bool()
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
