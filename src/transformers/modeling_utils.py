@@ -129,7 +129,6 @@ from .utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
-    is_flash_attn_torch_available,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,

@@ -267,7 +267,9 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None,
+    config=None,
+    requested_attention_implementation: str | None = None,
+    version: int | list[int] | None = None,
 ) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
