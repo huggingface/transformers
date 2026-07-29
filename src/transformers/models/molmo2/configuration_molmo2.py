@@ -95,8 +95,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         Number of additional vocabulary tokens beyond the base vocabulary.
     qkv_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in query, key, and value projections.
-    use_qk_norm (`bool`, *optional*, defaults to `True`):
-        Serialized compatibility flag for checkpoints that use query/key normalization.
     qk_norm_type (`str`, *optional*, defaults to `"qwen3"`):
         Query/key normalization layout used by the checkpoint. `"qwen3"` normalizes per head; `"olmo"` normalizes the
         full projected query/key tensors.
@@ -108,9 +106,9 @@ class Molmo2TextConfig(PreTrainedConfig):
         RoPE parameters for the model.
     layer_types (`list[str]`, *optional*):
         List of layer types to use for the model, `"full_attention"` for every layer when not provided.
-    rope_layer_types (`list[str]`, *optional*):
-        Per-layer RoPE type keying into a nested `rope_parameters`. Built from the checkpoint's `rope_scaling_layers`
-        when not provided (`"scaling"` for the scaled layers, `"default"` otherwise).
+    rope_scaling_layers (`list[int]`, *optional*):
+        Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
+        unscaled RoPE with the same theta. All layers are scaled when not provided.
     norm_after (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization after the attention/FFN blocks instead of before.
     """
@@ -138,7 +136,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     vocab_size: int = 152064
     additional_vocab_size: int = 128
     qkv_bias: bool = True
-    use_qk_norm: bool = True
     qk_norm_type: str = "qwen3"
     num_hidden_layers: int = 48
     intermediate_size: int = 18944
@@ -149,7 +146,7 @@ class Molmo2TextConfig(PreTrainedConfig):
     max_position_embeddings: int = 4096
     rope_parameters: RopeParameters | dict | None = None
     layer_types: list[str] | None = None
-    rope_layer_types: list[str] | None = None
+    rope_scaling_layers: list[int] | None = None
     layer_norm_eps: float = 1e-6
     norm_after: bool = False
     initializer_range: float = 0.02
@@ -165,53 +162,21 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         super().validate_architecture()
-        if not self.use_qk_norm:
-            raise ValueError(
-                "Molmo2 requires `use_qk_norm=True`; all shipped checkpoints apply Q/K norm and "
-                "no q_norm/k_norm-less path is provided."
-            )
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
 
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_scaling_layers = kwargs.pop("rope_scaling_layers", None)
-        rope_theta = kwargs.pop("rope_theta", None)
-        if self.rope_layer_types is None:
-            self.rope_layer_types = [
-                "scaling" if rope_scaling_layers is not None and layer_idx in rope_scaling_layers else "default"
-                for layer_idx in range(self.num_hidden_layers)
-            ]
-        rope_parameters = rope_scaling or self.rope_parameters or {}
-        if rope_parameters and set(rope_parameters).issubset(self.rope_layer_types):
-            self.rope_parameters = rope_parameters
-        else:
-            scaling_parameters = dict(rope_parameters)
-            scaling_parameters.setdefault("rope_type", "default")
-            if rope_theta is not None:
-                scaling_parameters.setdefault("rope_theta", rope_theta)
-            default_parameters = {"rope_type": "default"}
-            if "rope_theta" in scaling_parameters:
-                default_parameters["rope_theta"] = scaling_parameters["rope_theta"]
-            self.rope_parameters = {
-                layer_type: scaling_parameters if layer_type == "scaling" else default_parameters
-                for layer_type in set(self.rope_layer_types)
-            }
-        self.standardize_rope_params()
-        return kwargs
+    # Read and written by vLLM; the value moved into `rope_parameters` in the v5 RoPE standardization.
+    # Raises AttributeError before standardization so `getattr(config, "rope_theta", default)` returns the default.
+    @property
+    def rope_theta(self) -> float:
+        rope_parameters = self.rope_parameters or {}
+        if "rope_theta" not in rope_parameters:
+            raise AttributeError("rope_theta")
+        return rope_parameters["rope_theta"]
 
-    def standardize_rope_params(self):
-        for rope_parameters in (self.rope_parameters or {}).values():
-            rope_parameters.setdefault("rope_type", "default")
-            if rope_parameters["rope_type"] in ("llama3", "yarn", "longrope"):
-                rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
-
-    def validate_rope(self):
-        for rope_parameters in (self.rope_parameters or {}).values():
-            rope_type = rope_parameters["rope_type"]
-            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
-            if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
+    @rope_theta.setter
+    def rope_theta(self, value: float):
+        self.rope_parameters["rope_theta"] = value
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -295,6 +260,11 @@ class Molmo2Config(PreTrainedConfig):
             self.vision_config.num_hidden_layers = last_layer_needed
 
         super().__post_init__(**kwargs)
+
+    # Read by vLLM's native Molmo2 port, which predates the rename to `vision_config`.
+    @property
+    def vit_config(self) -> Molmo2VisionConfig:
+        return self.vision_config
 
 
 __all__ = ["Molmo2AdapterConfig", "Molmo2Config", "Molmo2TextConfig", "Molmo2VisionConfig"]

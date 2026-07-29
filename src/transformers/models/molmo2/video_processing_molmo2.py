@@ -87,12 +87,18 @@ def resize_and_normalize_image(
     image_mean: list[float],
     image_std: list[float],
 ) -> torch.Tensor:
+    # Under `torch.compile`, torchvision's uint8 bilinear resize can produce values slightly outside 0-255,
+    # which overflow and wrap around (-1 becomes 255, so a near-black pixel becomes white). Resizing in
+    # float, then rounding and clamping back, avoids that and gives the exact same bytes in eager mode.
+    is_integer_input = not image_chw.dtype.is_floating_point
     resized = backend.resize(
-        image_chw,
+        image_chw.float() if is_integer_input else image_chw,
         size=SizeDict(height=output_size[0], width=output_size[1]),
         resample=resample,
         antialias=False,
     )
+    if is_integer_input:
+        resized = resized.round().clamp(0, 255).to(image_chw.dtype)
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
@@ -141,6 +147,9 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
+    # Read by vLLM's native Molmo2 port, which runs its own frame sampling from these attributes.
+    frame_sample_mode = "uniform_last_frame"
+    sampling_fps = 2
     valid_kwargs = Molmo2VideosKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 
@@ -197,7 +206,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         image_pooling_h: int,
         image_pooling_w: int,
     ) -> tuple[list[int], torch.Tensor, torch.Tensor]:
-        # `build_resized_image` is batch-native (`[N, C, H, W]`); all frames of a video are one batch.
+        # `build_resized_image` takes a whole `[N, C, H, W]` batch, so all frames of a video are resized in one call.
         resized_frames, resized_index_grid = build_resized_image(
             self,
             video_tchw,

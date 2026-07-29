@@ -107,12 +107,18 @@ def resize_and_normalize_image(
     image_mean: list[float],
     image_std: list[float],
 ) -> torch.Tensor:
+    # Under `torch.compile`, torchvision's uint8 bilinear resize can produce values slightly outside 0-255,
+    # which overflow and wrap around (-1 becomes 255, so a near-black pixel becomes white). Resizing in
+    # float, then rounding and clamping back, avoids that and gives the exact same bytes in eager mode.
+    is_integer_input = not image_chw.dtype.is_floating_point
     resized = backend.resize(
-        image_chw,
+        image_chw.float() if is_integer_input else image_chw,
         size=SizeDict(height=output_size[0], width=output_size[1]),
         resample=resample,
         antialias=False,
     )
+    if is_integer_input:
+        resized = resized.round().clamp(0, 255).to(image_chw.dtype)
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
@@ -308,7 +314,8 @@ class Molmo2ImageProcessor(TorchvisionBackend):
             crops.reshape(num_images * total_crops, *crops.shape[2:]), image_patch_size
         ).reshape(num_images, total_crops, -1, image_patch_size * image_patch_size * 3)
 
-        # Expand the shared grid / pooling indices to the batch so they reorder per-image.
+        # The grid and pooling indices are shared by all images of this shape; expand them to one row
+        # per image so the batch can later be restored to the original image order.
         return image_grid.expand(num_images, -1), patches, pooling_indices.unsqueeze(0).expand(num_images, -1, -1)
 
     @auto_docstring
@@ -393,6 +400,12 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        image_grid, _ = self.get_image_grid_and_crops(height, width, images_kwargs)
+        resized_h, resized_w, high_res_rows, high_res_cols = image_grid
+        return resized_h * resized_w + high_res_rows * high_res_cols
+
+    def get_image_grid_and_crops(self, height: int, width: int, images_kwargs=None) -> tuple[list[int], int]:
+        """Return the `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled grid and the crop count for one image."""
         if images_kwargs is None:
             images_kwargs = {}
         max_crops = images_kwargs.get("max_crops", self.max_crops)
@@ -425,7 +438,7 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         resized_h = math.ceil(crop_patch_h / pooling_h)
         resized_w = math.ceil(crop_patch_w / pooling_w)
 
-        return resized_h * resized_w + num_patch_rows_high * num_patch_cols_high
+        return [resized_h, resized_w, num_patch_rows_high, num_patch_cols_high], tiling_h * tiling_w + 1
 
 
 __all__ = ["Molmo2ImageProcessor"]

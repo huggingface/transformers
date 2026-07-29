@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...utils import auto_docstring, logging
 
 
@@ -51,11 +51,17 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
         `[pool_h, pool_w]` pooling window applied to video patch features.
     max_fps (`int`, *optional*):
         Maximum sampling rate in frames per second for short videos.
+    frame_sample_mode (`str`, *optional*):
+        Frame sampling strategy declared by the checkpoint.
+    sampling_fps (`int` or `float`, *optional*):
+        Base frames-per-second step declared by the checkpoint for frame sampling.
     """
 
     patch_size: int | None
     pooling_size: list[int] | None
     max_fps: int | None
+    frame_sample_mode: str | None
+    sampling_fps: int | float | None
 
 
 class Molmo2ProcessorImagesKwargs(Molmo2ImagesKwargs, total=False):
@@ -207,6 +213,33 @@ class Molmo2Processor(ProcessorMixin):
 
         return "".join(low_res_tokens + high_res_tokens)
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Molmo2ProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            num_image_tokens, num_image_patches = [], []
+            for image_size in image_sizes:
+                image_grid, num_crops = self.image_processor.get_image_grid_and_crops(*image_size, images_kwargs)
+                image_string = self.replace_image_token({"image_grids": [image_grid]}, image_idx=0)
+                num_image_tokens.append(len(self.tokenizer.tokenize(image_string)))
+                num_image_patches.append(num_crops)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
     def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         video_grid = video_inputs["video_grids"][video_idx]
         video_metadata = video_inputs.get("video_metadata", [])
@@ -227,33 +260,6 @@ class Molmo2Processor(ProcessorMixin):
             num_frames = int(video_grid[0].item())
             timestamps = [i / fps for i in range(num_frames)]
         return self.get_video_string(video_grid, timestamps)
-
-    def apply_chat_template(
-        self,
-        conversation,
-        chat_template: str | None = None,
-        **kwargs,
-    ):
-        uses_default_template = chat_template is None
-        if chat_template is None:
-            if isinstance(self.chat_template, dict):
-                chat_template = self.chat_template.get("default")
-            else:
-                chat_template = self.chat_template
-        elif isinstance(self.chat_template, dict) and chat_template in self.chat_template:
-            uses_default_template = True
-            chat_template = self.chat_template[chat_template]
-
-        if (
-            uses_default_template
-            and isinstance(chat_template, str)
-            and self.tokenizer.bos_token is not None
-            and "{{ bos_token" not in chat_template
-            and not chat_template.lstrip().startswith(self.tokenizer.bos_token)
-        ):
-            chat_template = "{{ bos_token }}" + chat_template
-
-        return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
 
 
 __all__ = ["Molmo2Processor"]
