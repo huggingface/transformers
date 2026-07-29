@@ -640,6 +640,32 @@ def get_kernel(
     )
 
 
+def use_kernel_func_from_hub_with_fallback(package: str, func_name: str, internal_path: str | None = None):
+    # TODO: change when we sync to 0.16.x+
+    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
+
+    def decorator(torch_function: Callable) -> Callable:
+        implementation = None
+        try:
+            module = importlib.import_module(package)
+            implementation = resolve_internal_import(module, internal_path or func_name)
+        except Exception:
+            implementation = torch_function
+        finally:
+            implementation = torch_function if implementation is None else implementation
+
+        applicable_params = inspect.signature(implementation).parameters
+
+        @functools.wraps(torch_function)
+        def wrapped(*args, **kwargs):
+            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            return implementation(*args, **kwargs)
+
+        return kernel_wrapper_decorator(wrapped)
+
+    return decorator
+
+
 # Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`
 ALLOW_ALL_KERNELS = False
 
