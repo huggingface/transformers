@@ -1138,13 +1138,13 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoModel, AutoProcessor
+        >>> from transformers import AutoModelForCTC, AutoProcessor
         >>> from transformers.audio_utils import load_audio
 
         >>> model_id = "ibm-granite/granite-speech-4.1-2b-nar"
         >>> revision = "refs/pr/6"  # native-format weights; drop once merged to `main`
         >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-        >>> model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
+        >>> model = AutoModelForCTC.from_pretrained(model_id, revision=revision, device_map="auto")
 
         >>> url = "https://huggingface.co/buckets/huggingface/audio-samples/resolve/mister-quilter.mp3"
         >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)

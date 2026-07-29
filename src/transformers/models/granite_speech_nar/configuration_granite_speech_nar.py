@@ -62,7 +62,6 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech_nar_encoder"
-    attribute_map = {}
 
     input_dim: int = 160
 
