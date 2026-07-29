@@ -72,12 +72,12 @@ class UnlimitedOcrProcessor(ProcessorMixin):
         if text is None:
             raise ValueError("You have to specify text.")
 
-        total_placeholders = sum(prompt.count(self.image_token) for prompt in text)
-        num_images = len(images) if images is not None else 0
-        if total_placeholders != num_images:
-            raise ValueError(
-                f"Found {total_placeholders} placeholders across the batch, but have {num_images} flattened images."
-            )
+        if images is not None:
+            total_placeholders = sum(prompt.count(self.image_token) for prompt in text)
+            if total_placeholders != len(images):
+                raise ValueError(
+                    f"Found {total_placeholders} placeholders across the batch, but have {len(images)} flattened images."
+                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
         image_size = kwargs.get("size") or self.image_processor.size
