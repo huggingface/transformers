@@ -58,6 +58,20 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = OlmoHybridModelTester
     rotary_embedding_layer = OlmoHybridRotaryEmbedding if is_torch_available() else None
 
+    def _get_conv_state_shape(self, batch_size: int, config):
+        conv_kernel = config.linear_conv_kernel_dim
+        key_dim = config.linear_key_head_dim * config.linear_num_key_heads
+        value_dim = config.linear_value_head_dim * config.linear_num_value_heads
+        # We have 3 conv states per layer, with different shapes
+        return [
+            (batch_size, key_dim, conv_kernel),
+            (batch_size, key_dim, conv_kernel),
+            (batch_size, value_dim, conv_kernel),
+        ]
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim)
+
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
