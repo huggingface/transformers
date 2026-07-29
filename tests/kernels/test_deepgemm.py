@@ -426,8 +426,9 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     def test_linear_rejects_float32_scales_on_sm100(self):
         # Regression for #47030: rounding a checkpoint's float32 scales up to UE8M0 without requantizing
-        # silently corrupts the output on SM100. The forward must reject them before the kernel runs (so
-        # `fp8_linear` falls back to Triton) — no kernel op should execute.
+        # silently corrupts the output on SM100. `fp8_linear` skips DeepGEMM up front for this combo, but
+        # this guards the backstop inside the forward itself (which also protects the experts / megamoe
+        # paths, that have no such gate): the forward must reject float32 scales before any kernel op runs.
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
         weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)
