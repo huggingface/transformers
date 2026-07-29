@@ -641,8 +641,10 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, image_grid_thw.prod(-1).tolist())
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = self.projector(vision_outputs.last_hidden_state)
+        split_sizes = (image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
 
         return vision_outputs
 

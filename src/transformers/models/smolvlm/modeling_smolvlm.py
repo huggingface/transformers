@@ -605,8 +605,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and encoder_outputs at the same time")
 
         encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if isinstance(encoder_outputs, dict):
-            if encoder_outputs.get("images") is None and pixel_values is not None:
+        if (isinstance(encoder_outputs, dict) and encoder_outputs.get("images")) or pixel_values is not None:
+            if encoder_outputs.get("images") is None:
                 encoder_outputs["images"] = self.get_image_features(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
@@ -825,13 +825,13 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         pixel_values=None,
         pixel_attention_mask=None,
-        image_hidden_states=None,
+        encoder_outputs=None,
         logits_to_keep=None,
         is_first_iteration=False,
         use_cache=False,
         **kwargs,
     ):
-        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
+        # Overwritten -- there are mutually exclusive inputs (if the logic to make `encoder_outputs` take
         # precedence is moved to the model, we can remove this fn)
 
         model_inputs = super().prepare_inputs_for_generation(
@@ -841,14 +841,14 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
+            encoder_outputs=encoder_outputs,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
             **kwargs,
         )
 
-        if image_hidden_states is not None or (use_cache and not is_first_iteration):
+        if encoder_outputs.get("images") or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

@@ -102,7 +102,7 @@ class DeepseekVLHybridModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.high_res_image_size = high_res_vision_config["image_size"]
         self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
+        self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
         self.image_token_id = self.vocab_size - 1
 

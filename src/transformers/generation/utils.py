@@ -610,7 +610,7 @@ class GenerationMixin(ContinuousMixin):
             not is_first_iteration
             and kwargs.get("use_cache", True)
             and encoder_outputs is not None
-            and "last_hidden_states" not in encoder_outputs
+            and "last_hidden_state" not in encoder_outputs
         ):
             encoder_outputs = None
         else:
@@ -797,6 +797,23 @@ class GenerationMixin(ContinuousMixin):
         model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
+        if self.config.is_encoder_decoder:
+            return self._prepare_text_encoder_decoder_kwargs_for_generation(
+                inputs_tensor=inputs_tensor,
+                model_kwargs=model_kwargs,
+                model_input_name=model_input_name,
+                generation_config=generation_config,
+            )
+        else:
+            return self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+
+    def _prepare_text_encoder_decoder_kwargs_for_generation(
+        self: "GenerativePreTrainedModel",
+        inputs_tensor: torch.Tensor,
+        model_kwargs,
+        model_input_name: str | None,
+        generation_config: GenerationConfig,
+    ) -> dict[str, Any]:
         # 1. get encoder
         encoder = self.get_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
@@ -836,46 +853,25 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs,
     ) -> torch.FloatTensor:
         # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
-        model_kwargs.setdefault("encoder_outputs", {})
-        if (
-            "image" in self.input_modalities
-            and model_kwargs["encoder_outputs"].get("images") is None
-            and hasattr(self.base_model, "get_image_features")
-        ):
-            image_signature = {
-                k: v
-                for k, v in inspect.signature(self.base_model.get_image_features).parameters.items()
-                if k != "kwargs"
-            }
-            required_args = [
-                name for name, param in image_signature.items() if param.default is inspect.Parameter.empty
-            ]
-            if all(model_kwargs.get(n) is not None for n in required_args):
-                image_encoder_kwargs = {
-                    argument: model_kwargs.get(argument, None) for argument in set(image_signature)
-                }
-                image_encoder_kwargs["return_dict"] = True
-                model_kwargs["encoder_outputs"]["images"] = self.base_model.get_image_features(**image_encoder_kwargs)
+        if not any(key in self.input_modalities for key in ["image", "video"]):
+            return model_kwargs
 
-        if (
-            "video" in self.input_modalities
-            and model_kwargs["encoder_outputs"].get("videos") is None
-            and hasattr(self.base_model, "get_video_features")
-        ):
-            video_signature = {
-                k: v
-                for k, v in inspect.signature(self.base_model.get_video_features).parameters.items()
-                if k != "kwargs"
-            }
-            required_args = [
-                name for name, param in video_signature.items() if param.default is inspect.Parameter.empty
-            ]
-            if all(model_kwargs.get(n) is not None for n in required_args):
-                video_encoder_kwargs = {
-                    argument: model_kwargs.get(argument, None) for argument in set(video_signature)
-                }
-                video_encoder_kwargs["return_dict"] = True
-                model_kwargs["encoder_outputs"]["videos"] = self.base_model.get_video_features(**video_encoder_kwargs)
+        model_kwargs.setdefault("encoder_outputs", {})
+        for modality in ["image", "video"]:
+            if (
+                modality in self.input_modalities
+                and model_kwargs["encoder_outputs"].get(f"{modality}s") is None
+                and hasattr(self.base_model, f"get_{modality}_features")
+            ):
+                encoder_fn = getattr(self.base_model, f"get_{modality}_features")
+                fn_signature = {k: v for k, v in inspect.signature(encoder_fn).parameters.items() if k != "kwargs"}
+                required_args = [
+                    name for name, param in fn_signature.items() if param.default is inspect.Parameter.empty
+                ]
+                if all(model_kwargs.get(n) is not None for n in required_args):
+                    encoder_kwargs = {argument: model_kwargs.get(argument, None) for argument in set(fn_signature)}
+                    encoder_kwargs["return_dict"] = True
+                    model_kwargs["encoder_outputs"][f"{modality}s"] = encoder_fn(**encoder_kwargs)
 
         return model_kwargs
 
@@ -960,7 +956,7 @@ class GenerationMixin(ContinuousMixin):
                 return inputs * repeat_times
 
         def _expand_multimodal_outputs(model_outputs, token_id_key):
-            if model_outputs is None:
+            if model_outputs is None or model_outputs.pooler_output is None:
                 return
 
             if input_ids is None or input_ids.numel() == 0:
@@ -1721,7 +1717,7 @@ class GenerationMixin(ContinuousMixin):
                 value is not None
                 and key not in model_args
                 and key not in TransformersKwargs.__optional_keys__
-                and key != "debug_io"
+                and key not in ["debug_io", "encoder_outputs"]
             ):
                 unused_model_args.append(key)
 
@@ -2653,9 +2649,7 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
-
-        if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+        if not model_kwargs.get("encoder_outputs"):
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config

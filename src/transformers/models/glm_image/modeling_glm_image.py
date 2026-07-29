@@ -1179,8 +1179,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
         for i, embed in enumerate(image_embeds):
             grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
             embed = embed.view(grid_t, grid_h, grid_w, -1)
-            embed = embed.permute(0, 3, 1, 2).contiguous()
-            reshaped_embeds.append(embed)
+            # grid-h is always one for images, so we squeeze the extrac dim back in reality
+            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h * grid_w)
+            reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds
 
@@ -1342,7 +1343,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         """
         all_image_toks = []
         for hs in hidden_states:
-            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
+            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs[None, ...])
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 

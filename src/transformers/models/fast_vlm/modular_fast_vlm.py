@@ -207,9 +207,7 @@ class FastVlmModel(LlavaModel):
             )
 
         if encoder_outputs.get("images") is not None:
-            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

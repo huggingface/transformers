@@ -31,9 +31,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
@@ -691,16 +690,13 @@ class GlmImageModel(Glm4vModel):
         """
         all_image_toks = []
         for hs in hidden_states:
-            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
+            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs[None, ...])
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -732,8 +728,9 @@ class GlmImageModel(Glm4vModel):
         for i, embed in enumerate(image_embeds):
             grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
             embed = embed.view(grid_t, grid_h, grid_w, -1)
-            embed = embed.permute(0, 3, 1, 2).contiguous()
-            reshaped_embeds.append(embed)
+            # grid-h is always one for images, so we squeeze the extrac dim back in reality
+            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h * grid_w)
+            reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds
 

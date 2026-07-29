@@ -774,7 +774,7 @@ class Florence2Model(Florence2PreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if encoder_outputs is None else None,
         )
 
     def get_encoder(self, modality=None):
@@ -970,11 +970,13 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if (image_outputs := model_kwargs.pop("image_outputs", None)) is not None:
+        if (image_outputs := model_kwargs.get("encoder_outputs", {}).pop("image_outputs", None)) is not None:
             image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
@@ -982,7 +984,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
+        model_kwargs = super()._prepare_text_encoder_decoder_kwargs_for_generation(
             None, model_kwargs, model_input_name, generation_config
         )
         model_kwargs.pop("inputs_embeds", None)
