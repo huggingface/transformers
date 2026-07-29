@@ -90,7 +90,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
-    "kernels>=0.15.2,<0.16",
+    "kernels>=0.16.0,<0.17",
     "librosa",
     "mistral-common[image]>=1.11.5",
     "nltk<=3.8.1",
