@@ -729,7 +729,7 @@ class GlmImageModel(Glm4vModel):
             grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
             embed = embed.view(grid_t, grid_h, grid_w, -1)
             # grid-h is always one for images, so we squeeze the extrac dim back in reality
-            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h * grid_w)
+            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h, grid_w)
             reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds

@@ -893,7 +893,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        if encoder_outputs.get("images") or (use_cache and not is_first_iteration):
+        if encoder_outputs and encoder_outputs.get("images") or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
