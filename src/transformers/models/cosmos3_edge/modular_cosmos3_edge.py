@@ -41,7 +41,6 @@ from ...utils import (
     add_start_docstrings,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
 )
@@ -87,10 +86,6 @@ from ..siglip2.modeling_siglip2 import (
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_torchvision_available():
-    pass
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
