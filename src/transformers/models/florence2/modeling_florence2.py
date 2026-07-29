@@ -976,7 +976,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if (image_outputs := model_kwargs.get("encoder_outputs", {}).pop("image_outputs", None)) is not None:
+        if (image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image_outputs")) is not None:
             image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
@@ -988,6 +988,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             None, model_kwargs, model_input_name, generation_config
         )
         model_kwargs.pop("inputs_embeds", None)
+        model_kwargs.pop("mm_encoder_outputs", None)
         return model_kwargs
 
 

@@ -648,6 +648,26 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
         return vision_outputs
 
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_embeds = self.projector(vision_outputs.last_hidden_state)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(video_embeds, split_sizes)
+
+        return vision_outputs
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,

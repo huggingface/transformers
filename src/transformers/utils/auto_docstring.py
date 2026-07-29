@@ -2089,6 +2089,16 @@ class ModelArgs:
         "shape": None,
     }
 
+    mm_encoder_outputs = {
+        "description": """
+    Dict where keys are supported modalities and values are encoded outputs for that modality. Each encoded output is a tuple
+    that consists of (`pooler_output`, *optional*: `last_hidden_states`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `pooler_output` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    multimmodal features of the encoder merged into text embeddings.
+    """,
+        "shape": None,
+    }
+
     output_router_logits = {
         "description": """
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and

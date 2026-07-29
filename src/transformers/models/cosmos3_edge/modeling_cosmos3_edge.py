@@ -982,8 +982,9 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_embeds = self.projector(vision_outputs.last_hidden_state)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = torch.split(video_embeds, split_sizes)
 
         return vision_outputs
 
