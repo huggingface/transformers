@@ -29,7 +29,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -208,7 +208,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -777,7 +777,7 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         if window_size is not None:
             new_inputs: list[torch.Tensor] = []
             for ts in inputs:
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                new_inputs.extend(self._timesfm2_5_moving_average(ts, window_size))
             inputs = new_inputs
 
         if truncate_negative is None:

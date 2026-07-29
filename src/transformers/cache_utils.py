@@ -200,6 +200,14 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self.sliding_window = sliding_window
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+        self.record_past = False
+
+    def activate_past_recording(self):
+        """
+        Calling this function will activate past state recording, meaning that a call to `update` will wait for a call to `crop`
+        before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
+        """
+        self.record_past = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
@@ -228,8 +236,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
         # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
-        self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
-        self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+        if not self.record_past:
+            self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
+            self.values = full_value_states[:, :, -self.sliding_window + 1 :, :]
+        # If we record the past, we keep them all for now, and they'll be restricted to the window size in `crop`
+        else:
+            self.keys = full_key_states
+            self.values = full_value_states
 
         # Return the full states
         return full_key_states, full_value_states
@@ -256,16 +269,31 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
     def crop(self, max_length: int) -> None:
         """
-        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens.
+        Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be negative to remove `max_length`
+        tokens.
         """
+        # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
-            raise ValueError(
-                "Cannot `crop` a `DynamicSlidingWindowLayer` after it has seen more tokens than its"
-                "sliding window (otherwise some states are lost)"
-            )
-        super().crop(max_length)
-        self.cumulative_length = self.keys.shape[-2]
+            if not self.record_past:
+                raise RuntimeError(
+                    "`crop` was called, but the current layer does not track past states, and the sliding window size was already "
+                    "reached. Call `activate_past_recording` before `crop` to be able to rollback the cache."
+                )
+            if max_length > 0:
+                raise RuntimeError(
+                    "Once the sliding window size has been reached, `DynamicSlidingWindowLayer` can only be cropped by passing a "
+                    "negative int, to specify how many tokens to remove"
+                )
+            tokens_to_remove = abs(max_length)
+            # We crop, and restrict the size back to the sliding window if still larger
+            self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+            self.cumulative_length = self.cumulative_length - tokens_to_remove
+
+        # If we did not reach the sliding window, we can do the same as for a full attention layer
+        else:
+            super().crop(max_length)
+            self.cumulative_length = self.keys.shape[-2]
 
 
 class DynamicIndexedLayer(DynamicLayer):
@@ -1161,13 +1189,18 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
-    "moe": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
+    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
+    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
+    # we don't need
+    "moe": LinearAttentionLayer,
+    "mlp": LinearAttentionLayer,
 }
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
@@ -1177,13 +1210,18 @@ STATIC_LAYER_TYPE_MAPPING = {
     "chunked_attention": StaticSlidingWindowLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
-    "moe": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
+    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
+    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
+    # we don't need
+    "moe": LinearAttentionLayer,
+    "mlp": LinearAttentionLayer,
 }
 
 

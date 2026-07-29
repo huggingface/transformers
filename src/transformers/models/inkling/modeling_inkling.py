@@ -31,12 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -437,7 +432,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
+@use_kernel_forward_from_hub("causal_conv1d_update")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -457,7 +452,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
+@use_kernel_forward_from_hub("causal_conv1d_fn")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -535,7 +530,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -728,6 +723,7 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: InklingTextConfig
 
     def __init__(self, config: InklingTextConfig):
@@ -759,14 +755,14 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, InklingForCausalLM
 
-        >>> model = InklingForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = InklingForCausalLM.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
@@ -985,7 +981,7 @@ class InklingVisionModel(InklingPreTrainedModel):
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
@@ -1098,8 +1094,8 @@ class InklingModel(InklingPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/inkling2-3b-mix-224")
-        >>> processor = AutoProcessor.from_pretrained("google/inkling2-3b-mix-224")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -1232,8 +1228,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, InklingForConditionalGeneration
 
-        >>> model = InklingForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")
-        >>> processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
+        >>> model = InklingForConditionalGeneration.from_pretrained("thinkingmachines/Inkling-NVFP4")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-NVFP4")
 
         >>> messages = [
         ...     {

@@ -83,6 +83,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists, None
 
 
+def maybe_import_error(message: str, *, raise_error: bool) -> bool:
+    """Report an unmet dependency precondition: raise `ImportError(message)` when `raise_error`, else
+    return `False`. Lets an `is_*_available` / `is_*_loadable` check read as a flat
+    `if unmet: return maybe_import_error(msg, ...)` — a bool for callers probing availability, the specific
+    error for callers that want to fail loudly (`raise_error=True`)."""
+    if raise_error:
+        raise ImportError(message)
+    return False
+
+
 def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Callable | ModuleType | None:
     """
     Check if a given `module` has an internal import path as defined by the `chained_path`.
@@ -141,8 +151,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.15.2"
-KERNELS_MAX_VERSION = "0.16.0"
+KERNELS_MIN_VERSION = "0.16.0"
+KERNELS_MAX_VERSION = "0.17.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -151,9 +161,9 @@ def is_torch_available() -> bool:
     try:
         is_available, torch_version = _is_package_available("torch", return_version=True)
         parsed_version = version.parse(torch_version)
-        if is_available and parsed_version < version.parse("2.4.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.4 is required but found {torch_version}")
-        return is_available and version.parse(torch_version) >= version.parse("2.4.0")
+        if is_available and parsed_version < version.parse("2.5.0"):
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.5 is required but found {torch_version}")
+        return is_available and version.parse(torch_version) >= version.parse("2.5.0")
     except packaging.version.InvalidVersion:
         return False
 
@@ -1422,11 +1432,6 @@ def is_jinja_available() -> bool:
 
 
 @lru_cache
-def is_jmespath_available() -> bool:
-    return _is_package_available("jmespath")[0]
-
-
-@lru_cache
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")[0]
 
@@ -2034,6 +2039,13 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+SOUNDFILE_IMPORT_ERROR = """
+{0} requires the soundfile library. But that was not found in your environment. You can install it with pip:
+`pip install soundfile`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
 {0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
@@ -2088,6 +2100,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
         ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
+        ("soundfile", (is_soundfile_available, SOUNDFILE_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),

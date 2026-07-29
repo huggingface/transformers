@@ -5,38 +5,57 @@ import math
 import os
 import time
 import traceback
+import urllib.error
+import urllib.request
 import zipfile
 from collections import Counter
 
-import requests
+# All GitHub REST API access goes through the shared, standard-library-only helper so rate limiting,
+# retries, and rejected-token handling behave identically across every CI utility. `get_github_json`
+# is re-exported here because other modules import it as `from get_ci_error_statistics import ...`.
+from github_utils import build_github_headers, get_github_json  # noqa: F401
 
 
 logger = logging.getLogger(__name__)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Redirect handler that refuses to follow redirects, so the caller can read ``Location`` itself."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _get_paginated_items(url, key, token=None):
+    """Return all items found under ``key`` across the paginated pages of a GitHub API endpoint.
+
+    ``url`` must already request ``per_page=50``. A missing ``key`` in a page raises ``KeyError``,
+    but only after :func:`get_github_json` has already retried transient/rate-limit errors, so this
+    only fires on a genuinely unexpected payload.
+    """
+    result = get_github_json(url, token=token)
+    items = list(result[key])
+    total_count = result.get("total_count", len(items))
+    pages_to_iterate_over = math.ceil((total_count - 50) / 50)
+
+    for i in range(pages_to_iterate_over):
+        # Space out requests: a large run has ~20+ pages of jobs, and hammering them back-to-back is
+        # what trips GitHub's secondary rate limit in the first place.
+        time.sleep(3)
+        result = get_github_json(url + f"&page={i + 2}", token=token)
+        items.extend(result[key])
+
+    return items
+
+
 def get_jobs(workflow_run_id, token=None):
     """Extract jobs in a GitHub Actions workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    jobs = []
-
     try:
-        jobs.extend(result["jobs"])
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            jobs.extend(result["jobs"])
-
-        return jobs
+        return _get_paginated_items(url, "jobs", token=token)
     except Exception:
-        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
+        print(f"Unknown error, could not fetch jobs:\n{traceback.format_exc()}")
 
     return []
 
@@ -44,24 +63,10 @@ def get_jobs(workflow_run_id, token=None):
 def get_job_links(workflow_run_id, token=None):
     """Extract job names and their job links in a GitHub Actions workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    job_links = {}
-
     try:
-        job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
-
-        return job_links
+        jobs = _get_paginated_items(url, "jobs", token=token)
+        return {job["name"]: job["html_url"] for job in jobs}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
@@ -71,24 +76,10 @@ def get_job_links(workflow_run_id, token=None):
 def get_artifacts_links(workflow_run_id, token=None):
     """Get all artifact links from a workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=50"
-    result = requests.get(url, headers=headers).json()
-    artifacts = {}
-
     try:
-        artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
-
-        for i in range(pages_to_iterate_over):
-            time.sleep(1)
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
-            artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
-
-        return artifacts
+        artifacts = _get_paginated_items(url, "artifacts", token=token)
+        return {artifact["name"]: artifact["archive_download_url"] for artifact in artifacts}
     except Exception:
         print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
@@ -102,16 +93,24 @@ def download_artifact(artifact_name, artifact_url, output_dir, token):
     but it can't be used to download directly. We need to get a redirect URL first.
     See https://docs.github.com/en/rest/actions/artifacts#download-an-artifact
     """
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+    # First request keeps the auth header but must NOT follow the redirect, so we can read the signed
+    # download URL from `Location`. A redirect surfaces as an HTTPError once auto-redirection is off.
+    request = urllib.request.Request(artifact_url, headers=build_github_headers(token), method="GET")
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=30) as result:
+            download_url = result.headers["Location"]
+    except urllib.error.HTTPError as error:
+        if error.code not in (301, 302, 303, 307, 308) or "Location" not in error.headers:
+            raise
+        download_url = error.headers["Location"]
 
-    result = requests.get(artifact_url, headers=headers, allow_redirects=False)
-    download_url = result.headers["Location"]
-    response = requests.get(download_url, allow_redirects=True)
+    # Second request fetches the signed URL WITHOUT the GitHub auth header (it points at storage).
+    with urllib.request.urlopen(download_url, timeout=60) as response:
+        content = response.read()
     file_path = os.path.join(output_dir, f"{artifact_name}.zip")
     with open(file_path, "wb") as fp:
-        fp.write(response.content)
+        fp.write(content)
 
 
 def get_errors_from_single_artifact(artifact_zip_path, job_links=None):

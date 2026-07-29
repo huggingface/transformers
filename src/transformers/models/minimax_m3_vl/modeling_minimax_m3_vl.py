@@ -79,11 +79,12 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
             self.idx_keys = self.idx_keys[indices, ...]
 
     def crop(self, max_length: int) -> None:
-        super().crop(max_length)
+        # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
         if max_length < 0:
             max_length = self.get_seq_length() - abs(max_length)
         if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
             self.idx_keys = self.idx_keys[..., :max_length, :]
+        super().crop(max_length)
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
@@ -881,6 +882,7 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: MiniMaxM3VLTextConfig
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
@@ -1341,11 +1343,11 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
