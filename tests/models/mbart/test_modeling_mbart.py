@@ -334,8 +334,8 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config.tie_word_embeddings = False
         model = MBartForConditionalGeneration(config)
 
-        # MBart shares four weights.
-        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        # `tie_word_embeddings=False` only unties the LM head: the encoder/decoder embeddings are structural
+        # aliases of `model.shared` and stay tied, so two distinct storages are left.
         self.assertEqual(
             len(
                 {
@@ -345,7 +345,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     model.base_model.encoder.embed_tokens.weight.data_ptr(),
                 }
             ),
-            4,
+            2,
         )
 
     @unittest.skip(
