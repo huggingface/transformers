@@ -179,6 +179,34 @@ if is_kernels_available():
                     ),
                 },
             },
+            "chunk_gated_delta_rule": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
+            "recurrent_gated_delta_rule": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        version=1,
+                    ),
+                },
+            },
             "SwiGLUMLP": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
@@ -266,6 +294,20 @@ if is_kernels_available():
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
                         version=3,
+                    ),
+                },
+            },
+            "RMSNormGated": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
                     ),
                 },
             },
@@ -640,15 +682,17 @@ def get_kernel(
     )
 
 
-def use_kernel_func_from_hub_with_fallback(package: str, func_name: str, internal_path: str | None = None):
-    # TODO: change when we sync to 0.16.x+
-    kernel_wrapper_decorator = use_kernel_func_from_hub(func_name)
+def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
+    kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
+
+    # Allow internal path prefix if given to resolve non __init__ imports
+    full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
 
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
             module = importlib.import_module(package)
-            implementation = resolve_internal_import(module, internal_path or func_name)
+            implementation = resolve_internal_import(module, full_path)
         except Exception:
             implementation = torch_function
         finally:

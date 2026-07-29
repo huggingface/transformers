@@ -51,7 +51,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -59,7 +59,6 @@ from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -68,17 +67,6 @@ from ...vision_utils import (
 )
 from ..auto.modeling_auto import AutoModel
 from .configuration_qwen3_5_moe import Qwen3_5MoeConfig, Qwen3_5MoeTextConfig, Qwen3_5MoeVisionConfig
-
-
-if is_flash_linear_attention_available():
-    from fla.modules import FusedRMSNormGated
-    from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
-else:
-    chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
-    FusedRMSNormGated = None
-
-
-logger = logging.get_logger(__name__)
 
 
 class Qwen3_5MoeVisionRotaryEmbedding(nn.Module):
@@ -187,11 +175,13 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         return freqs_t
 
 
+@use_kernel_forward_from_hub("RMSNormGated")
 class Qwen3_5MoeRMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.activation = "silu"
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -200,7 +190,7 @@ class Qwen3_5MoeRMSNormGated(nn.Module):
         # Norm before gate
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * F.silu(gate.to(torch.float32))
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
 
         return hidden_states.to(input_dtype)
 
@@ -266,6 +256,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+@use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -347,8 +338,17 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
 def torch_recurrent_gated_delta_rule(
-    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
+    query,
+    key,
+    value,
+    g,
+    beta,
+    initial_state,
+    output_final_state,
+    use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -426,26 +426,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         A = torch.empty(self.num_v_heads).uniform_(0, 16)
         self.A_log = nn.Parameter(torch.log(A))
 
-        self.norm = (
-            Qwen3_5MoeRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
-            if FusedRMSNormGated is None
-            else FusedRMSNormGated(
-                self.head_v_dim,
-                eps=self.layer_norm_epsilon,
-                activation=self.activation,
-            )
-        )
-
+        self.norm = Qwen3_5MoeRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
-
-        self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
-        self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
-
-        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
-            logger.warning_once(
-                "The fast path is not available because the required library is not installed. Falling back to "
-                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation"
-            )
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -498,7 +480,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
 
             # Drop the additional previous states
@@ -529,7 +511,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -538,9 +520,10 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_chunk_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -549,8 +532,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
+                **kwargs,
             )
 
         # Update cache

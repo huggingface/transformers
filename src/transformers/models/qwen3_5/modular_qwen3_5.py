@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -52,6 +52,8 @@ from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    torch_chunk_gated_delta_rule,
+    torch_recurrent_gated_delta_rule,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
@@ -206,6 +208,9 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+)
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -266,7 +271,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
 
             # Drop the additional previous states
@@ -297,7 +302,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -306,9 +311,10 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_chunk_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -317,8 +323,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
+                **kwargs,
             )
 
         # Update cache

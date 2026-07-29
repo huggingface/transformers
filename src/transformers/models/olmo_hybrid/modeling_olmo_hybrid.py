@@ -31,14 +31,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
@@ -46,15 +46,9 @@ from .configuration_olmo_hybrid import OlmoHybridConfig
 
 
 if is_flash_linear_attention_available():
-    from fla.modules import FusedRMSNormGated, ShortConvolution
-    from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
+    from fla.modules import ShortConvolution
 else:
-    chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
-    FusedRMSNormGated = None
     ShortConvolution = None
-
-
-logger = logging.get_logger(__name__)
 
 
 class OlmoHybridDynamicCache:
@@ -162,11 +156,13 @@ class OlmoHybridDynamicCache:
         return self.get_seq_length(layer_idx=layer_idx)
 
 
+@use_kernel_forward_from_hub("RMSNormGated")
 class OlmoHybridRMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.activation = "silu"
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -175,7 +171,7 @@ class OlmoHybridRMSNormGated(nn.Module):
         # Norm before gate
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * F.silu(gate.to(torch.float32))
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
 
         return hidden_states.to(input_dtype)
 
@@ -503,6 +499,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+@use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -584,8 +581,17 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
 def torch_recurrent_gated_delta_rule(
-    query, key, value, g, beta, initial_state, output_final_state, use_qk_l2norm_in_kernel=False
+    query,
+    key,
+    value,
+    g,
+    beta,
+    initial_state,
+    output_final_state,
+    use_qk_l2norm_in_kernel=False,
+    **kwargs,
 ):
     initial_dtype = query.dtype
     if use_qk_l2norm_in_kernel:
@@ -628,11 +634,6 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-is_fast_path_available = all(
-    (ShortConvolution, chunk_gated_delta_rule, fused_recurrent_gated_delta_rule, FusedRMSNormGated)
-)
-
-
 class OlmoHybridGatedDeltaNet(nn.Module):
     """
     GatedDeltaNet linear attention for OLMo Hybrid.
@@ -668,6 +669,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         self.o_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
+        # TODO: can be moved into kernels as well
         Conv1dClass = ShortConvolution if ShortConvolution is not None else OlmoHybridShortConvolution
 
         self.q_conv1d = Conv1dClass(
@@ -703,24 +705,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(inv_dt)
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
-        self.o_norm = (
-            OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
-            if FusedRMSNormGated is None
-            else FusedRMSNormGated(
-                self.head_v_dim,
-                eps=1e-5,
-            )
-        )
-
-        self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
-        self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
-
-        if not is_fast_path_available:
-            logger.warning_once(
-                "The fast path is not available because one of the required libraries is not installed. "
-                "Falling back to torch implementation. To install, follow: "
-                "https://github.com/fla-org/flash-linear-attention#installation"
-            )
+        self.o_norm = OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -782,7 +767,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
         if use_precomputed and seq_len == 1:
-            output, new_recurrent_state = self.recurrent_gated_delta_rule(
+            output, new_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
                 v,
@@ -791,9 +776,10 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                **kwargs,
             )
         else:
-            output, new_recurrent_state = self.chunk_gated_delta_rule(
+            output, new_recurrent_state = torch_chunk_gated_delta_rule(
                 q,
                 k,
                 v,
@@ -802,6 +788,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state if use_precomputed else None,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                **kwargs,
             )
 
         if cache_params is not None:
