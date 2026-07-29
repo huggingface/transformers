@@ -87,7 +87,7 @@ class GraniteSpeechNarEncoderConfig(GraniteSpeechPlusEncoderConfig):
     ```"""
 
     model_type = "granite_speech_nar_encoder"
-    attribute_map = {}
+    attribute_map = AttributeError()
 
     num_layers: int = 16
     output_dim: int = 348
