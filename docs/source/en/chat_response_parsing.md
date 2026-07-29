@@ -58,8 +58,8 @@ prompt to understand the message. All of the prefix before the final turn is dis
 at a time. We just need the prefix to ensure we're seeing the entire final message, and not miss any prefilled
 fields!
 
-Because a missing prefix can silently mis-parse a prefilled message, `prefix` is required when parsing with a
-new-style `response_template`: omitting it raises an error. In the rare case where you are sure the generation
+Because a missing prefix can silently mis-parse a prefilled message, `prefix` is required. Omitting it raises an
+error. In the rare case where you are sure the generation
 already contains the complete message and no prefix context is needed, pass `prefix=""` (or an empty list of
 token ids) to opt out explicitly.
 

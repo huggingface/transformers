@@ -1926,7 +1926,12 @@ Reasoning models emit a hidden chain-of-thought before the final answer. The ser
 - Chat Completions returns reasoning as `reasoning_content` on the assistant message.
 - The Responses API returns reasoning as a `reasoning` output item that precedes the `message` item.
 
-Reasoning detection relies on the model's chat template and tokenizer. Models with custom thinking delimiters (Gemma 4) declare them with the tokenizer's `response_schema`. Models with inline `<think>...</think>` tags (Qwen3, DeepSeek-R1) work with the default schema.
+Reasoning detection relies on a [response template](../chat_response_parsing), which tells the server where a thinking span starts and ends. The server looks for one in two places, in order.
+
+1. The tokenizer's `response_template` attribute, if the model ships one.
+2. A built-in fallback matched on the model architecture, for tokenizers that don't ship a template yet.
+
+Models with neither are served without response parsing. The raw decoded text is returned as `content` and no reasoning field is surfaced, even if the model emits `<think>...</think>` tags.
 
 ### Enable reasoning on the server
 
