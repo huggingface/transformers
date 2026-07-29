@@ -28,9 +28,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/canary"
-
-
 if is_torch_available():
     import torch
 
@@ -402,12 +399,13 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 class CanaryIntegrationTest(unittest.TestCase):
     checkpoint = "harshaljanjani/canary-1b-v2-hf"
 
-    def _load(self):
+    @classmethod
+    def setUp(cls):
         from transformers import AutoProcessor
 
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = CanaryForConditionalGeneration.from_pretrained(self.checkpoint).to(torch_device).eval()
-        return processor, model
+        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/canary"
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
+        cls.model = CanaryForConditionalGeneration.from_pretrained(cls.checkpoint).to(torch_device).eval()
 
     def _load_datasamples(self, processor, num_samples):
         from datasets import Audio, load_dataset
@@ -421,44 +419,41 @@ class CanaryIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/harshaljanjani/ff11260652a115da61037ecfc288c74f#file-reproducer_transcription-py
         """
-        with open(FIXTURES_DIR / "expected_results_transcription.json") as f:
+        with open(self.fixtures_path / "expected_results_transcription.json") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
-        processor, model = self._load()
-        inputs = self._load_datasamples(processor, 1)
-        features = processor.apply_transcription_request(audio=inputs, source_language="en").to(torch_device)
-        generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
+        inputs = self._load_datasamples(self.processor, 1)
+        features = self.processor.apply_transcription_request(audio=inputs, source_language="en").to(torch_device)
+        generated = self.model.generate(**features, max_new_tokens=128)
+        transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
     def test_transcription_en_batched(self):
         """
         reproducer: https://gist.github.com/harshaljanjani/d93abd784d09a7f25291080ebcdf805d#file-reproducer_batch-py
         """
-        with open(FIXTURES_DIR / "expected_results_batch.json") as f:
+        with open(self.fixtures_path / "expected_results_batch.json") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
-        processor, model = self._load()
-        inputs = self._load_datasamples(processor, 2)
-        features = processor.apply_transcription_request(
+        inputs = self._load_datasamples(self.processor, 2)
+        features = self.processor.apply_transcription_request(
             audio=inputs, source_language="en", target_language=["en", "de"]
         ).to(torch_device)
-        generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
+        generated = self.model.generate(**features, max_new_tokens=128)
+        transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
 
     def test_translation_en_to_de(self):
         """
         reproducer: https://gist.github.com/harshaljanjani/5b093d7fc25507694b7b6ada08fa7988#file-reproducer_translation-py
         """
-        with open(FIXTURES_DIR / "expected_results_translation.json") as f:
+        with open(self.fixtures_path / "expected_results_translation.json") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
-        processor, model = self._load()
-        inputs = self._load_datasamples(processor, 1)
-        features = processor.apply_transcription_request(audio=inputs, source_language="en", target_language="de").to(
-            torch_device
-        )
-        generated = model.generate(**features, max_new_tokens=128)
-        transcriptions = [text.strip() for text in processor.decode(generated, skip_special_tokens=True)]
+        inputs = self._load_datasamples(self.processor, 1)
+        features = self.processor.apply_transcription_request(
+            audio=inputs, source_language="en", target_language="de"
+        ).to(torch_device)
+        generated = self.model.generate(**features, max_new_tokens=128)
+        transcriptions = [text.strip() for text in self.processor.decode(generated, skip_special_tokens=True)]
         self.assertListEqual(transcriptions, expected_transcriptions)
