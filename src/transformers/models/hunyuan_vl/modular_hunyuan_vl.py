@@ -1229,8 +1229,6 @@ class HunYuanVLModel(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Encode images and return the complete vision tower outputs.
-
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -1252,7 +1250,7 @@ class HunYuanVLModel(Qwen2VLModel):
         """
         if input_ids is None:
             placeholder_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == placeholder_token_embed).all(-1)
         else:

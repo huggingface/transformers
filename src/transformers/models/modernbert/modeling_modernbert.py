@@ -29,7 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -199,7 +199,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -833,7 +833,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
                 cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+                cls_mask = torch.full((), 0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
 
