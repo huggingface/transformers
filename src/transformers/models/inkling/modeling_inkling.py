@@ -535,7 +535,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -728,6 +728,7 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: InklingTextConfig
 
     def __init__(self, config: InklingTextConfig):
