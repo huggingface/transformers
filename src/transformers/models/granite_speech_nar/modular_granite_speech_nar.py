@@ -801,7 +801,10 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             }
 
             log_probs = torch.log_softmax(logits.squeeze(0).float(), dim=-1)
-            log_probs_padded = nn.utils.rnn.pad_sequence(log_probs.split(seq_lengths))
+            max_len = max(seq_lengths)
+            log_probs_padded = torch.stack(
+                [F.pad(chunk, (0, 0, 0, max_len - chunk.shape[0])) for chunk in log_probs.split(seq_lengths)], dim=1
+            )
             input_lengths = torch.tensor(seq_lengths, device=logits.device)
 
             loss = (
