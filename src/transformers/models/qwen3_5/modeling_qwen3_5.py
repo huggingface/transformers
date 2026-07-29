@@ -263,7 +263,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 def forward_substitution_inverse(tril: torch.Tensor, chunk_size: int) -> torch.Tensor:
     """Computes (I + L)^-1 by forward substitution, where `tril` holds -L, a strictly lower triangular matrix, in
     its last two dimensions. This is the "T" matrix of the chunked delta rule (UT transform), which turns the
-    within-chunk k/v pairs into the pseudo-values actually written to the recurrent state.
+    within-chunk k/v pairs into the pseudo-values actually written to the recurrent state. Input is modified in place.
     """
     for i in range(1, chunk_size):
         row = tril[..., i, :i].clone()
@@ -298,16 +298,17 @@ def torch_chunk_gated_delta_rule(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes linear attention using the gated delta rule, by chunking along the sequence dimension.
     Args:
-        query: Query tensor of shape [batch_size, sequence_length, num_heads, qk_head_dim]
-        key: Key tensor of shape [batch_size, sequence_length, num_heads, qk_head_dim]
+        query: Query tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
+        key: Key tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
         value: Value tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
         g: Log-decay tensor of shape [batch_size, sequence_length, num_heads]: the recurrent state is multiplied
             by exp(g) at each step, so entries must be <= 0. Also supports per-channel decay, where g has an added
-            trailing dimension of size qk_head_dim.
+            trailing dimension of size k_head_dim.
         beta: Beta tensor of shape [batch_size, sequence_length, num_heads]
         chunk_size: Size of the chunks along the sequence dimension.
         initial_state: The recurrent state, an optional tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
+        use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
     Returns:
         - The output tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
         - Either None or the new recurrent state tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
