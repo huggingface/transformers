@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.6"):
+if _torch_distributed_available and is_torch_greater_or_equal("2.6"):
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
