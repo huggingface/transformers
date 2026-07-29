@@ -1493,84 +1493,32 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
 
-        # Everything below mirrors `StaticSlidingWindowLayer.update` with the difference that the sliding window
-        # is in the `sliding_window` slots right after the prefill instead of spanning the whole buffer.
-        window_start = self.prefill_length
-        current_length = self.cumulative_length_int - self.prefill_length
-        is_full = current_length >= self.sliding_window
-        # Update it now that we saved the value above
-        self.cumulative_length_int += kv_length
+        # Decode
+        # Call `StaticSlidingWindowLayer.update` to reduce code duplication. This requires setting temporary
+        # attributes to match expectations of parent class.
+        keys, values = self.keys, self.values
+        window = slice(self.prefill_length, self.prefill_length + self.sliding_window)
+        sliding_keys_buffer, sliding_values_buffer = keys[:, :, window, :], values[:, :, window, :]
+        self.keys, self.values = sliding_keys_buffer, sliding_values_buffer
+        self.cumulative_length -= self.prefill_length
+        self.cumulative_length_int -= self.prefill_length
+        max_cache_len, self.max_cache_len = self.max_cache_len, self.sliding_window
+        try:
+            sliding_keys, sliding_values = super().update(key_states, value_states, *args, **kwargs)
+        finally:
+            self.keys, self.values = keys, values
+            self.cumulative_length += self.prefill_length
+            self.cumulative_length_int += self.prefill_length
+            self.max_cache_len = max_cache_len
 
-        if is_full:
-            # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
-            # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
-            if key_states.shape[-2] == 1:
-                # Roll the window region to the left by 1 position
-                new_keys = self.keys[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
-                new_values = self.values[:, :, window_start : window_start + self.sliding_window, :].roll(-1, dims=-2)
-                # Overwrite the last position with new states
-                # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
-                index = torch.tensor([-1], dtype=int, device=self.device)
-                new_keys[:, :, index] = key_states
-                new_values[:, :, index] = value_states
-
-                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(new_keys)
-                self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(new_values)
-
-                # Very important to return the `self` tensors here, as they have the static dynamo address
-                return self.keys, self.values
-            # Already full but using more than 1 new token (e.g. chat continuation, etc...)
-            else:
-                full_key_states = torch.cat(
-                    (
-                        self.keys[:, :, :window_start, :],
-                        self.keys[:, :, window_start + 1 : window_start + self.sliding_window, :],
-                        key_states,
-                    ),
-                    dim=-2,
-                )
-                full_value_states = torch.cat(
-                    (
-                        self.values[:, :, :window_start, :],
-                        self.values[:, :, window_start + 1 : window_start + self.sliding_window, :],
-                        value_states,
-                    ),
-                    dim=-2,
-                )
-        # Not yet full, but becoming full on this update
-        elif current_length + kv_length > self.sliding_window:
-            full_key_states = torch.cat((self.keys[:, :, : window_start + current_length, :], key_states), dim=-2)
-            full_value_states = torch.cat(
-                (self.values[:, :, : window_start + current_length, :], value_states), dim=-2
-            )
-        else:
-            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
-            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten.
-            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                # Fallback for devices like MPS where index_copy_ might not be supported.
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
-
-            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
-            # of this branch, as we don't need the tensor anymore)
-            self.cumulative_length.add_(kv_length)
-
-            # Very important to return the `self` tensors here, as they have the static dynamo address
+        # The parent returned the original buffers
+        if sliding_keys is sliding_keys_buffer:
             return self.keys, self.values
-
-        # We only cache the last `sliding_window` tokens
-        self.keys[:, :, window_start : window_start + self.sliding_window, :].copy_(
-            full_key_states[:, :, -self.sliding_window :, :]
+        # The parent returned concatenated states
+        return (
+            torch.cat((self.keys[:, :, : self.prefill_length, :], sliding_keys), dim=-2),
+            torch.cat((self.values[:, :, : self.prefill_length, :], sliding_values), dim=-2),
         )
-        self.values[:, :, window_start : window_start + self.sliding_window, :].copy_(
-            full_value_states[:, :, -self.sliding_window :, :]
-        )
-        return full_key_states, full_value_states
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
