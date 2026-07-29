@@ -471,8 +471,9 @@ def _run_executorch_program(program_manager, inputs):
 # mismatch). Load: 0x14 missing portable kernel, 0x21 arena can't be allocated, 0x1 XNNPACK partition
 # won't compile (`xnn_status_unsupported_parameter`). Execute: 0x12 portable-kernel InvalidArgument
 # (constant_pad_nd/convolution/upsample_aa out-tensor sizing), 0x1 XNNPACK delegate failure, 0x10
-# XNNPACK delegate can't resize a static tensor to the runtime shape.
-_ET_LOAD_LIMIT_CODES = {"1", "14", "21"}
+# XNNPACK delegate can't resize a static tensor to the runtime shape. The execute-phase codes surface
+# from either `execute()` or `set_inputs()` (binding the runtime inputs is part of `Method.execute`).
+_ET_LOAD_LIMIT_CODES = {"0x1", "0x14", "0x21"}
 _ET_EXECUTE_LIMIT_CODES = {"0x1", "0x10", "0x12"}
 
 
@@ -482,10 +483,10 @@ def _is_executorch_runtime_limit(exc):
     if isinstance(exc, MemoryError) or "bad_alloc" in msg:
         return True
     load = re.search(r"Failed to load method forward, error: 0x:?([0-9a-fA-F]+)", msg)
-    if load and load.group(1) in _ET_LOAD_LIMIT_CODES:
+    if load and f"0x{load.group(1)}" in _ET_LOAD_LIMIT_CODES:
         return True
-    execute = re.search(r"execute\(\) failed with error (0x[0-9a-fA-F]+)", msg)
-    return bool(execute and execute.group(1) in _ET_EXECUTE_LIMIT_CODES)
+    execute = re.search(r"(?:execute\(\)|set_inputs\(\) for method '\w+') failed with error 0x([0-9a-fA-F]+)", msg)
+    return bool(execute and f"0x{execute.group(1)}" in _ET_EXECUTE_LIMIT_CODES)
 
 
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
