@@ -580,7 +580,7 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
 
         elif input_ids is None:
             special_audio_mask = inputs_embeds == self.embed_tokens(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
 

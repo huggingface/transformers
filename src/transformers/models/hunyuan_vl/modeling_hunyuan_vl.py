@@ -1040,7 +1040,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         """
         if input_ids is None:
             placeholder_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == placeholder_token_embed).all(-1)
         else:
