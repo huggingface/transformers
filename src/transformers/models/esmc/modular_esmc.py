@@ -233,8 +233,6 @@ class EsmcPreTrainedModel(NomicBertPreTrainedModel):
         "hidden_states": EsmcLayer,
         "attentions": EsmcAttention,
     }
-    # Non-persistent rotary buffers, plus the published checkpoint's TransformerEngine state blobs.
-    _keys_to_ignore_on_load_unexpected = ["extra_state", "inv_freq"]
 
     def _init_weights(self, module):
         raise AttributeError()

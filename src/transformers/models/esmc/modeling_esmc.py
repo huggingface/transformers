@@ -314,8 +314,10 @@ class EsmcPreTrainedModel(PreTrainedModel):
         "hidden_states": EsmcLayer,
         "attentions": EsmcAttention,
     }
-    # Non-persistent rotary buffers, plus the published checkpoint's TransformerEngine state blobs.
-    _keys_to_ignore_on_load_unexpected = ["extra_state", "inv_freq"]
+
+    # Are kept as non-persistent buffers to avoid being saved in the state dict
+    # and causing mismatch when loading from a checkpoint that doesn't have them
+    _keys_to_ignore_on_load_unexpected = ["inv_freq", "original_inv_freq"]
     _no_split_modules = ["EsmcLayer"]
 
 
@@ -435,6 +437,9 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         self.lm_head = EsmcMaskedLMHead(config.hidden_size, config.vocab_size)
         self.post_init()
 
+    # ``lm_head`` is a dense/norm/decoder stack rather than the output projection itself, so the
+    # base-class accessors (which return ``lm_head``) would hand ``resize_token_embeddings`` a module
+    # with no ``weight``. Same reason ``EsmForMaskedLM`` overrides these.
     def get_output_embeddings(self) -> nn.Linear:
         return self.lm_head.decoder
 

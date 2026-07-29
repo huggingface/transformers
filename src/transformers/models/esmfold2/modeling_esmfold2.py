@@ -825,9 +825,10 @@ class EsmFold2DiffusionModule(nn.Module):
         ``batch_size * num_diffusion_samples``. The two attention masks are only ever broadcast
         against, so they stay at the unexpanded batch size whenever that broadcasts over the sample
         batch (``batch_size == 1``, i.e. every single-sequence fold) and are materialized only when it
-        cannot. They are also the only large tensors here: at length 1000 with the default eight
-        samples the per-block token biases are ~2.9 GB expanded against ~370 MB unexpanded. Everything
-        else is a few MB, and expanding it keeps the scatter/gather helpers on a single shape.
+        cannot. They are also the only large tensors here: at length 1000 the per-block token biases
+        are ~366 MiB unexpanded, against ~11.4 GiB expanded across the 32 samples the released
+        checkpoints ask for (the class default is 8). Everything else is a few MB, and expanding it
+        keeps the scatter/gather helpers on a single shape.
         """
         samples = num_diffusion_samples
         # A batch dim of 1 broadcasts over the sample batch; anything else has to be materialized.
@@ -1857,7 +1858,6 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2DiffusionTransformer",
     ]
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"\._extra_state$"]
     # Every norm weight/bias, plus the Fourier noise-embedding buffers, stay fp32 under a bf16 load.
     _keep_in_fp32_modules_strict = ["fourier", "norm", "_ln"]
     _supports_sdpa = True
