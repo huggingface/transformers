@@ -22,7 +22,8 @@ import torch
 from huggingface_hub import HfApi, save_torch_state_dict, snapshot_download
 from safetensors.torch import load_file
 
-from transformers import AutoTokenizer, EsmcTokenizer, EsmFold2Config
+from transformers import EsmcTokenizer, EsmFold2Config
+from transformers.models.esmc.convert_esmc_checkpoint import build_esmc_config_dict, convert_esmc_state_dict
 
 
 # EsmFold2Config paths spelled the same in the research checkpoint's config.json; renamed ones live
@@ -87,13 +88,6 @@ _LEGACY_RENAMES = {
 }
 
 _LEGACY_PORT_PATHS = (*_LEGACY_FIELDS, *_LEGACY_RENAMES)
-
-# The published ESMC backbone repos predate the port and spell these three fields the old way.
-_LEGACY_ESMC_RENAMES = {
-    "d_model": "hidden_size",
-    "n_heads": "num_attention_heads",
-    "n_layers": "num_hidden_layers",
-}
 
 # Leaves not carried over: backbone id/size, re-derived fields, always-on head flags, training knobs.
 _LEGACY_DROP_PATHS = {
@@ -233,16 +227,10 @@ def _load_state_dict(directory: str) -> dict[str, torch.Tensor]:
     return state_dict
 
 
-def build_esmc_config(esmc_dir: str) -> dict:
-    """The backbone repo's config.json, with the pre-port field spellings renamed."""
-    esmc = _read_json(esmc_dir)
-    return {_LEGACY_ESMC_RENAMES.get(key, key): value for key, value in esmc.items()}
-
-
 def build_config(esmfold2_dir: str, esmc_dir: str) -> EsmFold2Config:
     config = build_legacy_config(_read_json(esmfold2_dir))
     config["architectures"] = ["EsmFold2Model"]  # experimental repos ship a now-removed architecture string
-    config["esmc_config"] = build_esmc_config(esmc_dir)
+    config["esmc_config"] = build_esmc_config_dict(esmc_dir)
     return EsmFold2Config.from_dict(config)
 
 
@@ -268,12 +256,9 @@ def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, t
     pair-bias attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
     ``chunk`` order) and rename the attention output projection ``out_proj`` -> ``o_proj``. Scoped to
     the atom ``.attn.`` modules and the token ``attn_blocks`` so the (non-MHA) row-attention-pooling
-    ``out_proj`` and the bundled ``esmc.*`` backbone keys are left untouched."""
+    ``out_proj`` is left untouched."""
     out: dict[str, torch.Tensor] = {}
     for key, tensor in renamed.items():
-        if key.startswith("esmc."):
-            out[key] = tensor
-            continue
         if "attn_blocks." in key and key.endswith(".kv_proj.weight"):
             base = key[: -len("kv_proj.weight")]
             k, v = (chunk.clone() for chunk in torch.chunk(tensor, 2, dim=0))
@@ -308,20 +293,26 @@ def merge_state_dict(esmfold2_dir: str, esmc_dir: str) -> dict[str, torch.Tensor
         raise RuntimeError("the ESMFold2 checkpoint already contains esmc.* keys — already bundled?")
     trunk = rename_trunk_keys(trunk)
 
-    # A standalone ESMC checkpoint already stores its encoder under esmc.*; keep only those.
+    # A standalone ESMC checkpoint already stores its encoder under esmc.*; keep only those, dropping
+    # the masked-LM head the trunk does not use, then run them through the same conversion the
+    # standalone ESMC script applies so the bundle needs no runtime renaming either.
     esmc = _load_state_dict(esmc_dir)
-    kept = {k: v for k, v in esmc.items() if k.startswith("esmc.") and not k.endswith("_extra_state")}
+    kept = {k: v for k, v in esmc.items() if k.startswith("esmc.")}
     if not kept:
         raise RuntimeError(f"no esmc.* tensors found in {esmc_dir}")
-    return {**trunk, **kept}
+    return {**trunk, **convert_esmc_state_dict(kept)}
 
 
-def save_tokenizer(esmc_dir: str, output_dir: str) -> None:
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(esmc_dir)
-    except Exception:  # backbone dir ships no tokenizer files
-        tokenizer = EsmcTokenizer()
-    tokenizer.save_pretrained(output_dir)
+def save_tokenizer(output_dir: str) -> None:
+    """Write a fresh ESMC tokenizer next to the bundled weights.
+
+    Built rather than copied from the backbone directory on purpose: the ESMC vocabulary is fixed
+    biology notation, so there is nothing checkpoint-specific to carry over, and the published
+    backbone repos predate the port -- their ``tokenizer_class`` names a class that no longer
+    exists, which ``AutoTokenizer`` resolves to the plain backend instead of raising, silently
+    dropping the ``chain_break_token`` registration.
+    """
+    EsmcTokenizer().save_pretrained(output_dir)
 
 
 def main() -> None:
@@ -339,7 +330,7 @@ def main() -> None:
     os.makedirs(args.output_dir, exist_ok=True)
     config.save_pretrained(args.output_dir)
     save_torch_state_dict(state_dict, args.output_dir)
-    save_tokenizer(esmc_dir, args.output_dir)
+    save_tokenizer(args.output_dir)
     print(f"bundled {len(state_dict)} tensors to {args.output_dir}")
 
     if args.push_to_hub:
