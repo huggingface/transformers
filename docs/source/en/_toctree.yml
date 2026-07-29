@@ -126,6 +126,8 @@
       title: torch.compile
     - local: exporters
       title: Exporters
+    - local: exporters_extend
+      title: Extending the exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism

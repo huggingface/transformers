@@ -129,8 +129,8 @@ The table below describes each strategy.
 | `ColwiseParallel` | Partitions weights and biases column-wise. |
 | `RowwiseParallel` | Partitions weights and biases row-wise. Supports `nn.Embedding` modules partitioning. |
 | `SequenceParallel` | Sequence parallel implementation to support `LayerNorm` and `Dropout` layers. Supports Python implementation of [RMSNorm](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34). |
-| `PackedColwiseParallel` | A variant of `ColwiseParallel` that supports packed weights (for example, packing `up_proj` and `gate_proj` together). Refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108) for more details. |
-| `PackedRowwiseParallel` | A variant of `RowwiseParallel` that supports packed weights (refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108) for more details). |
+| `PackedColwiseParallel` | A variant of `ColwiseParallel` that supports packed weights (for example, packing `up_proj` and `gate_proj` together). Refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details. |
+| `PackedRowwiseParallel` | A variant of `RowwiseParallel` that supports packed weights (refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details). |
 | `GatherParallel` | Gathers module outputs across devices. |
 | `IsolatedParallel` | Isolates a module from other devices. Used for Experts in Mixture-of-Experts (MoE) layers. |
 | `ReplicateParallel` | Replicates modules across all devices. Prevents `torch.distributed` APIs from breaking due to a partially sharded model. |
@@ -157,7 +157,7 @@ def forward(self, hidden_states):
 ```
 
 > [!TIP]
-> See [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108) for a visual representation of why `Packed*` needs to be used.
+> See [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for a visual representation of why `Packed*` needs to be used.
 
 ### Local strategies
 
@@ -171,7 +171,7 @@ Readd this when I get the exact error message
 
 ## Custom partitioning strategies
 
-Inherit from [TensorParallelLayer](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py) to create a custom partitioning strategy. Implement `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn`.
+Inherit from [TensorParallelLayer](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) to create a custom partitioning strategy. Implement `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn`.
 
 Register the strategy in the `ParallelInterface` mapping so the dispatching logic finds it when specified in `tp_plan`.
 
@@ -232,7 +232,7 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
 3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
 
     ```python
-    from transformers.distributed.tensor_parallel import ParallelInterface
+    from transformers.integrations.tensor_parallel import ParallelInterface
 
     ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
     tp_plan = {

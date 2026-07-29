@@ -394,7 +394,7 @@ Class-name keys are preferred when the `model_type` is shared but a specific cla
 
 ## Tensor parallelism integration
 
-The dynamic loading system integrates with tensor parallelism (TP) through the `TensorParallelLayer` hierarchy defined in `src/transformers/distributed/tensor_parallel.py`.
+The dynamic loading system integrates with tensor parallelism (TP) through the `TensorParallelLayer` hierarchy defined in `src/transformers/integrations/tensor_parallel.py`.
 
 When TP is enabled, tensors are sharded **during** materialization, not after. This means each rank only loads the portion of the tensor it needs.
 
@@ -703,5 +703,5 @@ These APIs are exposed to allow you to handle custom code, custom weight formats
 |------|---------|
 | `src/transformers/core_model_loading.py` | Core loading logic, `WeightConverter`, `WeightRenaming`, `ConversionOps` |
 | `src/transformers/conversion_mapping.py` | Built-in mappings and per-submodel composition (`get_model_conversion_mapping`) |
-| `src/transformers/distributed/tensor_parallel.py` | TP sharding classes and utilities |
+| `src/transformers/integrations/tensor_parallel.py` | TP sharding classes and utilities |
 | `src/transformers/quantizers/base.py` | Quantization hooks and base class |

@@ -137,8 +137,8 @@ class ParallelInterface(MutableMapping):
 | `ColwiseParallel` | 가중치와 편향의 열 방향 분할. |
 | `RowwiseParallel` | 가중치와 편향의 행 방향 분할. `nn.Embedding` 모듈 분할도 지원. |
 | `SequenceParallel` | `LayerNorm`과 `Dropout` 레이어를 지원하는 시퀀스 병렬 구현. [RMSNorm](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34)의 Python 구현도 지원. |
-| `PackedColwiseParallel` | 패킹된 가중치를 지원하는 `ColwiseParallel`의 변형(예: `up_proj`와 `gate_proj`를 함께 패킹). 자세한 내용은 [코드](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108)를 참조하세요. |
-| `PackedRowwiseParallel` | 패킹된 가중치를 지원하는 `RowwiseParallel`의 변형([코드](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108) 참조). |
+| `PackedColwiseParallel` | 패킹된 가중치를 지원하는 `ColwiseParallel`의 변형(예: `up_proj`와 `gate_proj`를 함께 패킹). 자세한 내용은 [코드](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)를 참조하세요. |
+| `PackedRowwiseParallel` | 패킹된 가중치를 지원하는 `RowwiseParallel`의 변형([코드](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) 참조). |
 | `GatherParallel` | 기기 간 모듈의 출력을 수집. |
 | `IsolatedParallel` | Mixture-of-Experts(MoE) 레이어의 전문가에 사용되어 다른 기기로부터 모듈을 격리. |
 | `ReplicateParallel` | 부분적으로 분할된 모델로 인해 `torch.distributed` API가 중단되는 것을 방지하기 위해 모든 기기에 모듈을 복제. |
@@ -165,7 +165,7 @@ def forward(self, hidden_states):
 ```
 
 > [!TIP]
-> `Packed*`를 사용해야 하는 이유에 대한 시각적 표현은 [이 주석](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py#L79-#L108)을 참고하세요.
+> `Packed*`를 사용해야 하는 이유에 대한 시각적 표현은 [이 주석](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108)을 참고하세요.
 
 ### 로컬 전략[[local-strategies]]
 
@@ -179,7 +179,7 @@ Readd this when I get the exact error message
 
 ## 사용자 정의 분할 전략[[custom-partitioning-strategies]]
 
-사용자 정의 분할 전략은 [`TensorParallelLayer`](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py)를 상속하고 `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn`을 구현해야 합니다.
+사용자 정의 분할 전략은 [`TensorParallelLayer`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py)를 상속하고 `partition_tensor`, `_prepare_input_fn`, `_prepare_output_fn`을 구현해야 합니다.
 
 그런 다음 `tp_plan`에서 해당 전략을 지정했을 때 디스패칭 로직이 찾을 수 있도록 `ParallelInterface` 매핑에 등록해야 합니다.
 
@@ -240,7 +240,7 @@ Readd this when I get the exact error message
 3. `tp_plan`과 함께 사용할 수 있도록 전략을 [`ParallelInterface`]에 등록합니다.
 
     ```python
-    from transformers.distributed.tensor_parallel import ParallelInterface
+    from transformers.integrations.tensor_parallel import ParallelInterface
 
     ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
     tp_plan = {
