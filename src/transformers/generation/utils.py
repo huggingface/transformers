@@ -606,7 +606,8 @@ class GenerationMixin(ContinuousMixin):
             # Those keys are never forwarded
             if key in kwargs_to_avoid_forwarding:
                 continue
-            # Those keys are forwarded only during prefill, or without a cache
+            # Those keys are forwarded only during prefill (or the first forward of a new batch of inputs, such as with cache
+            # continuation), or without a cache
             elif key in kwargs_only_prefill_forwarding and (not is_first_iteration and kwargs.get("use_cache", True)):
                 continue
             elif key not in model_inputs:
