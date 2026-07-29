@@ -832,7 +832,7 @@ class GlmImageModel(Glm4vModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
@@ -845,13 +845,15 @@ class GlmImageModel(Glm4vModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
             source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-            encoder_outputs["images"] = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
+            mm_encoder_outputs["images"] = self.get_image_features(
+                pixel_values, source_grids, return_dict=True, **kwargs
+            )
 
-        if encoder_outputs.get("images") is not None:
-            image_ids = self.get_image_tokens(encoder_outputs["images"].pooler_output)
+        if mm_encoder_outputs.get("images") is not None:
+            image_ids = self.get_image_tokens(mm_encoder_outputs["images"].pooler_output)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
             input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
@@ -938,7 +940,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
@@ -994,7 +996,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

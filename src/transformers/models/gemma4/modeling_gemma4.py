@@ -2294,7 +2294,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
@@ -2337,12 +2337,12 @@ class Gemma4Model(Gemma4PreTrainedModel):
             per_layer_inputs = self.language_model.get_per_layer_inputs(llm_input_ids, llm_inputs_embeds)
 
         # Merge text and images
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
 
-        if encoder_outputs.get("images") is not None:
-            image_features = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("images") is not None:
+            image_features = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
 
@@ -2359,13 +2359,13 @@ class Gemma4Model(Gemma4PreTrainedModel):
                 image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
             )
 
-        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            encoder_outputs["videos"] = self.get_video_features(
+        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["videos"] = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             )
 
-        if encoder_outputs.get("videos") is not None:
-            video_features = encoder_outputs["videos"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("videos") is not None:
+            video_features = mm_encoder_outputs["videos"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -2448,7 +2448,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
             shared_kv_states=outputs.shared_kv_states,
         )
@@ -2564,7 +2564,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         per_layer_inputs: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -2601,7 +2601,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )

@@ -216,7 +216,7 @@ class PerceptionLMModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **lm_kwargs,
     ) -> tuple | PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -230,12 +230,12 @@ class PerceptionLMModel(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         image_features = None
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
-        if encoder_outputs.get("images") is not None:
-            image_features = encoder_outputs["images"].pooler_output.to(
+        if mm_encoder_outputs.get("images") is not None:
+            image_features = mm_encoder_outputs["images"].pooler_output.to(
                 inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             special_image_mask, _ = self.get_placeholder_mask(
@@ -244,11 +244,11 @@ class PerceptionLMModel(LlavaModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
-        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            encoder_outputs["videos"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["videos"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
 
-        if encoder_outputs.get("videos") is not None:
-            video_features = encoder_outputs["videos"].pooler_output.to(
+        if mm_encoder_outputs.get("videos") is not None:
+            video_features = mm_encoder_outputs["videos"].pooler_output.to(
                 inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             _, special_video_mask = self.get_placeholder_mask(
@@ -270,8 +270,8 @@ class PerceptionLMModel(LlavaModel):
             hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
-            video_hidden_states=video_features if encoder_outputs.get("videos") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
+            video_hidden_states=video_features if mm_encoder_outputs.get("videos") is not None else None,
         )
 
 
@@ -323,7 +323,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple | PerceptionLMCausalLMOutputWithPast:
@@ -384,7 +384,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **lm_kwargs,
         )
 

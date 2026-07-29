@@ -711,7 +711,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         # Unused for processor compatibility kept in signature.
         token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -722,12 +722,12 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
 
-        if encoder_outputs.get("images") is not None:
-            image_features = encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("images") is not None:
+            image_features = mm_encoder_outputs["images"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_image_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

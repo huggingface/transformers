@@ -343,7 +343,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        encoder_outputs: BaseModelOutputWithPooling | None = None,
+        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
@@ -410,18 +410,18 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> print(generated_text)
         "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("videos") is None:
-            encoder_outputs["videos"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("videos") is None:
+            mm_encoder_outputs["videos"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
                 interpolate_pos_encoding=interpolate_pos_encoding,
                 **kwargs,
             )
-        language_model_inputs = encoder_outputs["videos"].pooler_output
-        qformer_outputs = encoder_outputs["videos"].qformer_outputs
-        vision_outputs = encoder_outputs["videos"].vision_outputs
+        language_model_inputs = mm_encoder_outputs["videos"].pooler_output
+        qformer_outputs = mm_encoder_outputs["videos"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["videos"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

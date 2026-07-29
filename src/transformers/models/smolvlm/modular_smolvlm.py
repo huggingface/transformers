@@ -213,7 +213,7 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="image_outputs")
+    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="mm_encoder_outputs")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -223,7 +223,7 @@ class SmolVLMModel(Idefics3Model):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
+        mm_encoder_outputs: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
@@ -236,18 +236,20 @@ class SmolVLMModel(Idefics3Model):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        if pixel_values is not None and encoder_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values and encoder_outputs at the same time")
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(
+                pixel_values, pixel_attention_mask, return_dict=True
+            )
 
-        if encoder_outputs.get("images") is not None:
+        if mm_encoder_outputs.get("images") is not None:
             image_hidden_states = (
-                encoder_outputs["images"].pooler_output
-                if not isinstance(encoder_outputs, torch.Tensor)
-                else encoder_outputs
+                mm_encoder_outputs["images"].pooler_output
+                if not isinstance(mm_encoder_outputs, torch.Tensor)
+                else mm_encoder_outputs
             )
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 
@@ -271,7 +273,7 @@ class SmolVLMModel(Idefics3Model):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=encoder_outputs.get("images"),
+            image_hidden_states=mm_encoder_outputs.get("images"),
         )
 
 

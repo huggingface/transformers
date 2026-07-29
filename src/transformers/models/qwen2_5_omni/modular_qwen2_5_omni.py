@@ -1890,7 +1890,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_cache: bool | None = None,
         use_audio_in_video: bool | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
         r"""
@@ -1960,27 +1960,27 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"]: BaseModelOutputWithPooling = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"]: BaseModelOutputWithPooling = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
-        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            encoder_outputs["videos"]: BaseModelOutputWithPooling = self.get_video_features(
+        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["videos"]: BaseModelOutputWithPooling = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
-        if encoder_outputs.get("images") is not None:
-            image_embeds = torch.cat(encoder_outputs["images"].pooler_output, dim=0)
+        if mm_encoder_outputs.get("images") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if encoder_outputs.get("videos") is not None:
-            video_embeds = torch.cat(encoder_outputs["videos"].pooler_output, dim=0)
+        if mm_encoder_outputs.get("videos") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["videos"].pooler_output, dim=0)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

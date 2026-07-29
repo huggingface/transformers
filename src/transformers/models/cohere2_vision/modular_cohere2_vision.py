@@ -116,7 +116,7 @@ class Cohere2VisionModel(AyaVisionModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -125,12 +125,12 @@ class Cohere2VisionModel(AyaVisionModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
 
-        if encoder_outputs.get("images") is not None:
-            image_features = encoder_outputs["images"].pooler_output
+        if mm_encoder_outputs.get("images") is not None:
+            image_features = mm_encoder_outputs["images"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -151,7 +151,7 @@ class Cohere2VisionModel(AyaVisionModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if encoder_outputs.get("images") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -174,7 +174,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
         r"""
@@ -221,7 +221,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             image_sizes=image_sizes,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

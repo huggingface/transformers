@@ -623,7 +623,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="encoder_outputs")
+    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="mm_encoder_outputs")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -633,7 +633,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Idefics3BaseModelOutputWithPast:
@@ -659,18 +659,18 @@ class Idefics3Model(Idefics3PreTrainedModel):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
 
         # START VISUAL INPUTS INTEGRATION
-        if pixel_values is not None and encoder_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values and encoder_outputs at the same time")
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if (isinstance(encoder_outputs, dict) and encoder_outputs.get("images")) or pixel_values is not None:
-            if encoder_outputs.get("images") is None:
-                encoder_outputs["images"] = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("images")) or pixel_values is not None:
+            if mm_encoder_outputs.get("images") is None:
+                mm_encoder_outputs["images"] = self.get_image_features(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
-            image_hidden_states = encoder_outputs["images"].pooler_output
-        elif isinstance(encoder_outputs, torch.Tensor):
-            image_hidden_states = encoder_outputs
+            image_hidden_states = mm_encoder_outputs["images"].pooler_output
+        elif isinstance(mm_encoder_outputs, torch.Tensor):
+            image_hidden_states = mm_encoder_outputs
         else:
             image_hidden_states = None
 
@@ -749,7 +749,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
 
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="encoder_outputs")
+    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="mm_encoder_outputs")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -759,7 +759,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -835,7 +835,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -870,7 +870,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         pixel_values=None,
         pixel_attention_mask=None,
-        encoder_outputs=None,
+        mm_encoder_outputs=None,
         logits_to_keep=None,
         is_first_iteration=False,
         use_cache=False,
@@ -886,14 +886,14 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             use_cache=use_cache,
             **kwargs,
         )
 
-        if encoder_outputs and encoder_outputs.get("images") or (use_cache and not is_first_iteration):
+        if mm_encoder_outputs and mm_encoder_outputs.get("images") or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

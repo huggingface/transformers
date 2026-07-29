@@ -155,7 +155,7 @@ class FuyuModel(FuyuPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -181,12 +181,12 @@ class FuyuModel(FuyuPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and image_patches is not None:
-            encoder_outputs["images"] = self.get_image_features(image_patches, return_dict=True)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and image_patches is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(image_patches, return_dict=True)
 
-        if encoder_outputs.get("images") is not None:
-            patch_embeddings = encoder_outputs["images"].last_hidden_state.to(
+        if mm_encoder_outputs.get("images") is not None:
+            patch_embeddings = mm_encoder_outputs["images"].last_hidden_state.to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(
@@ -234,7 +234,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | None = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -283,7 +283,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

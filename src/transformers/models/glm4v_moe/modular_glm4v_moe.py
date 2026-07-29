@@ -361,7 +361,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
@@ -376,7 +376,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

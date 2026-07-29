@@ -1185,7 +1185,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipForConditionalGenerationModelOutput:
         r"""
@@ -1250,18 +1250,18 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> print(generated_text)
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None:
-            encoder_outputs["images"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None:
+            mm_encoder_outputs["images"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
                 interpolate_pos_encoding=interpolate_pos_encoding,
                 return_dict=True,
             )
-        language_model_inputs = encoder_outputs["images"].pooler_output
-        qformer_outputs = encoder_outputs["images"].qformer_outputs
-        vision_outputs = encoder_outputs["images"].vision_outputs
+        language_model_inputs = mm_encoder_outputs["images"].pooler_output
+        qformer_outputs = mm_encoder_outputs["images"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["images"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

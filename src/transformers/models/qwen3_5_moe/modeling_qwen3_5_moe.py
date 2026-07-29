@@ -1647,7 +1647,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3_5MoeModelOutputWithPast:
         r"""
@@ -1660,19 +1660,19 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        encoder_outputs = encoder_outputs if encoder_outputs else {}
-        if encoder_outputs.get("images") is None and pixel_values is not None:
-            encoder_outputs["images"] = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+            mm_encoder_outputs["images"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
-        if encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            encoder_outputs["videos"] = self.get_video_features(
+        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["videos"] = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
-        if encoder_outputs.get("images") is not None:
-            image_embeds = torch.cat(encoder_outputs["images"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("images") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             image_mask = self.get_placeholder_mask(
@@ -1680,8 +1680,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if encoder_outputs.get("videos") is not None:
-            video_embeds = torch.cat(encoder_outputs["videos"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("videos") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["videos"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             video_mask = self.get_placeholder_mask(
@@ -1715,7 +1715,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            image_hidden_states=image_embeds if encoder_outputs.get("images") is not None else None,
+            image_hidden_states=image_embeds if mm_encoder_outputs.get("images") is not None else None,
         )
 
 
@@ -1966,7 +1966,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3_5MoeCausalLMOutputWithPast:
@@ -2030,7 +2030,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            encoder_outputs=encoder_outputs,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
