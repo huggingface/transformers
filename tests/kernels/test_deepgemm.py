@@ -424,6 +424,18 @@ class DeepGemmForwardTest(unittest.TestCase):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
 
+    def test_linear_rejects_float32_scales_on_sm100(self):
+        # Regression for #47030: rounding a checkpoint's float32 scales up to UE8M0 without requantizing
+        # silently corrupts the output on SM100. The forward must reject them before the kernel runs (so
+        # `fp8_linear` falls back to Triton) — no kernel op should execute.
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)
+        with self._bundle(is_sm100=True) as captured:
+            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
+        self.assertEqual(captured, {})  # raised before the kernel ran
+
     def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
