@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import tempfile
 import unittest
 
@@ -36,6 +37,10 @@ if is_torch_available():
         DynamicCache,
         Qwen3NextForCausalLM,
         Qwen3NextModel,
+    )
+    from transformers.models.qwen3_next.modeling_qwen3_next import (
+        torch_chunk_gated_delta_rule,
+        torch_recurrent_gated_delta_rule,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -287,6 +292,65 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # This should not crash
                 _ = model.generate(**inputs_dict, max_new_tokens=5, min_new_tokens=5)
+
+
+@require_torch
+class Qwen3NextGatedDeltaRuleTest(unittest.TestCase):
+    """
+    Parity tests for the torch-native gated delta rule implementations: the chunked implementation must match the
+    token-by-token recurrent one, which is simpler and serves as the reference. A small chunk_size with sequence
+    lengths around chunk boundaries exercises the chunk-grouping loop, the padding path and the inter-chunk state
+    hand-off, which full-model tests never reach (their sequences are shorter than the default chunk_size of 64).
+    Both per-token (3D g) and per-channel (4D g) decays are covered.
+    """
+
+    def _random_inputs(self, seq_length: int, per_channel_decay: bool, with_initial_state: bool):
+        torch.manual_seed(0)
+        batch_size, num_heads, k_head_dim, v_head_dim = 2, 3, 8, 16
+        query = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
+        key = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
+        value = torch.randn(batch_size, seq_length, num_heads, v_head_dim, device=torch_device)
+        decay_shape = (
+            (batch_size, seq_length, num_heads, k_head_dim)
+            if per_channel_decay
+            else (batch_size, seq_length, num_heads)
+        )
+        g = -torch.rand(decay_shape, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(batch_size, seq_length, num_heads, device=torch_device)
+        initial_state = None
+        if with_initial_state:
+            initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
+        return query, key, value, g, beta, initial_state
+
+    @parameterized.expand(itertools.product([3, 12, 13], [False, True], [False, True]))
+    def test_chunked_matches_recurrent(self, seq_length, per_channel_decay, with_initial_state):
+        """seq_length 3 fits in one padded chunk, 12 spans exactly 3 chunks, 13 spans 4 chunks with padding."""
+        query, key, value, g, beta, initial_state = self._random_inputs(
+            seq_length, per_channel_decay, with_initial_state
+        )
+        chunk_out, chunk_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g,
+            beta,
+            chunk_size=4,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_out, recurrent_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g,
+            beta,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        torch.testing.assert_close(chunk_out, recurrent_out, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(chunk_state, recurrent_state, rtol=1e-4, atol=1e-5)
 
 
 @slow
