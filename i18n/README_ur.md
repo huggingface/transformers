@@ -262,7 +262,7 @@ limitations under the License.
 
 #### &#8207; pip کے ساتھ
 
-یہ ریپوزٹری Python 3.10+ اور PyTorch 2.4+ پر ٹیسٹ کی گئی ہے۔
+یہ ریپوزٹری Python 3.10+ اور PyTorch 2.5+ پر ٹیسٹ کی گئی ہے۔
 
 آپ کو 🤗 Transformers کو ایک [ورچوئل ماحول](https://docs.python.org/3/library/venv.html) میں انسٹال کرنا چاہیے۔ اگر آپ Python ورچوئل ماحول سے واقف نہیں ہیں، تو [یوزر گائیڈ](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) دیکھیں۔
 
