@@ -196,7 +196,7 @@ class OlmoHybridShortConvolution(nn.Conv1d):
 
         hidden_states = hidden_states.transpose(1, 2)
 
-        return hidden_states, conv_state
+        return hidden_states
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
