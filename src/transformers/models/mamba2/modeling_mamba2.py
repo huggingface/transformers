@@ -298,10 +298,8 @@ def mamba2_chunk_scan(
     hidden_states = hidden_states * dt[..., None].float()
     A = A.to(hidden_states.dtype) * dt.float()
 
-     # Rearrange into blocks/chunks
-    hidden_states, A, B, C = [
-        reshape_into_chunks(tensor, pad_size, chunk_size) for tensor in (hidden_states, A, B, C)
-    ]
+    # Rearrange into blocks/chunks
+    hidden_states, A, B, C = [reshape_into_chunks(tensor, pad_size, chunk_size) for tensor in (hidden_states, A, B, C)]
 
     A = A.permute(0, 3, 1, 2)
     A_cumsum = torch.cumsum(A, dim=-1)
