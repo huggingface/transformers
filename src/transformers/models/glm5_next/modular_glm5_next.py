@@ -189,10 +189,10 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
             self.linear_head_dim = linear_attn_dict.get("head_dim", self.linear_head_dim)
             self.linear_num_heads = linear_attn_dict.get("num_heads", self.linear_num_heads)
             self.linear_conv_kernel_dim = linear_attn_dict.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
-            self.linear_lower_bound = linear_attn_dict.get("lower_bound", self.linear_lower_bound)
+            self.linear_lower_bound = linear_attn_dict.get("gate_lower_bound", self.linear_lower_bound)
 
             # Additional lower bound logic as per original dict
-            if linear_attn_dict.get("safe_gate", False) and self.linear_lower_bound is None:
+            if linear_attn_dict.get("safe_gate", True) and self.linear_lower_bound is None:
                 self.linear_lower_bound = -5.0
 
         # NOTE: this forces an intentional override as we have the convention of head_dim being the RoPE based dim
