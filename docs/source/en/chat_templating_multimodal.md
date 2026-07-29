@@ -109,6 +109,37 @@ print(processor.decode(out[0]))
 
 The decoded output contains the full conversation so far, including the user message and the placeholder tokens that contain the image information. You may need to trim the previous conversation from the output before displaying it to the user.
 
+## Audio inputs
+
+Audio models accept content blocks with `"type": "audio"` pointing at a URL, a local path, or an already decoded array. See [chat content patterns](./chat_content_patterns#audio) for the message format.
+
+[`~ProcessorMixin.apply_chat_template`] decodes a URL or path, and resamples it to the sampling rate of the model's feature extractor.
+
+### Audio decoding backends
+
+Decoding is done by one of three optional libraries, each with its own resampler, so the waveform reaching the model depends on which one runs. An array you decoded yourself passes through untouched, and none of this applies.
+
+Unless the processor sets its own default, audio loads with `load_audio_backend="auto"`, which picks torchcodec when it's installed at 0.3.0 or newer and librosa otherwise.
+
+| Backend | Install | Decodes |
+|---|---|---|
+| `"torchcodec"` | `pip install torchcodec` | Plain audio, plus container formats such as MP4, WebM, M4A, and AAC. |
+| `"librosa"` | `pip install librosa` | Plain audio only, such as WAV, FLAC, and MP3. |
+| `"torchaudio"` | `pip install torchaudio` | Plain audio only. Resamples with `torchaudio.functional.resample`. |
+
+Only torchcodec reads the container formats, so a `.mp4` or `.webm` source fails at load time under librosa or torchaudio with a `RuntimeError` telling you to install torchcodec.
+
+```python
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    load_audio_backend="torchcodec",
+)
+```
+
 ## Video inputs
 
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
