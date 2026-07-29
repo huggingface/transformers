@@ -141,6 +141,25 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
+## Multi-token prediction (MTP)
+
+Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head. Every MTP layer drafts one token, so the number of candidates per step matches the checkpoint's MTP layer count. The main model verifies the drafts in one forward pass.
+
+MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These checkpoints carry MTP weights and set `num_mtp_layers` in their config, listed as `num_nextn_predict_layers` in `config.json`.
+
+Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if the model has no MTP layers. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5-Air")
+model = AutoModelForCausalLM.from_pretrained("zai-org/GLM-4.5-Air", device_map="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(model.device)
+
+outputs = model.generate(**inputs, use_mtp=True, do_sample=False, max_new_tokens=50)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+```
+
 ## Universal assisted decoding
 
 Universal assisted decoding (UAD) makes speculative decoding possible even when the main and assistant models have different tokenizers. It lets you pair any small assistant model with the main model. Candidate tokens are re-encoded and the algorithm computes the longest common subsequence so the continuation stays aligned.
