@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 import torch
+from PIL import Image
 
 from transformers import Molmo2ImageProcessor, Molmo2Processor, Molmo2VideoProcessor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
@@ -248,6 +249,18 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_dict=True,
                 processor_kwargs={"fps": 10, "num_frames": 3},
             )
+
+    # `num_image_tokens` is covered by the inherited `test_get_num_multimodal_tokens_matches_processor_call`;
+    # `num_image_patches` is not, and vLLM's transformers backend splits `pixel_values` per image with it.
+    def test_get_num_multimodal_tokens_matches_num_patches(self):
+        processor = self.get_processor()
+
+        for height, width in ((354, 536), (768, 1024), (100, 100)):
+            image = Image.fromarray(np.random.randint(255, size=(height, width, 3), dtype=np.uint8))
+            inputs = processor(text=[processor.image_token], images=[image], return_tensors="pt")
+            predicted = processor._get_num_multimodal_tokens(image_sizes=[(height, width)])
+
+            self.assertEqual(predicted["num_image_patches"][0], inputs["pixel_values"].shape[0])
 
     def test_model_input_names(self):
         processor = self.get_processor()
