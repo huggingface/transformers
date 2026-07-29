@@ -137,10 +137,9 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
 
     def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
         super().__init__(config)
-        if input_dim is not None:
-            self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
-            self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
-            self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.q_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.k_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.v_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
 
     # TODO: check other implementation, as we should use `ALL_ATTENTION_FUNCTIONS.get_interface`
     def forward(

@@ -123,14 +123,10 @@ class FunAsrNanoAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_decoder = False
         self.is_causal = False
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.k_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.v_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.q_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        if input_dim is not None:
-            self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
-            self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
-            self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
 
     def forward(
         self,
