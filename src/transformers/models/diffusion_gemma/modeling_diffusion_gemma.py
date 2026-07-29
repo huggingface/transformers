@@ -122,6 +122,8 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
+        dim = int(dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
@@ -1072,7 +1074,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
         else:
             image_token_embeddings = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == image_token_embeddings).all(-1)
 
@@ -1391,6 +1393,11 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             mask.ndim == 4 for mask in decoder_attention_mask.values()
         ):
             return decoder_attention_mask
+
+        # Contrarily to the high-level mask creation functions, the mask interface used below does not cast the 2D
+        # mask, and an integer one would propagate its dtype to the final mask instead of yielding a boolean mask
+        if isinstance(decoder_attention_mask, torch.Tensor) and decoder_attention_mask.ndim == 2:
+            decoder_attention_mask = decoder_attention_mask.bool()
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]

@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Union
 
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
@@ -858,7 +859,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = torch.device("cpu")
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
+        if _is_torch_distributed_initialized():
             self.device = self.model.device
         logger.debug(f"Device set to use {self.device}")
 
