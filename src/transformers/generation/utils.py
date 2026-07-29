@@ -601,6 +601,8 @@ class GenerationMixin(ContinuousMixin):
             "image_patches",
             "image_sizes",
             "image_sizes_videos",
+            "pixel_attention_mask",
+            "pixel_values_images",
         )
         for key, value in kwargs.items():
             # Those keys are never forwarded

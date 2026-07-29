@@ -917,12 +917,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        # Force recomputation of 2D-RoPE and ignore rope_deltas
-        model_inputs["position_ids"] = None
-        return model_inputs
-
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
@@ -1047,6 +1041,12 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # Force recomputation of 2D-RoPE and ignore rope_deltas
+        model_inputs["position_ids"] = None
+        return model_inputs
 
 
 __all__ = [
