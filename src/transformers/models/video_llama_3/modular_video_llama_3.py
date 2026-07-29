@@ -44,7 +44,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
     group_videos_by_shape,
     reorder_videos,
@@ -1299,9 +1299,9 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
             width,
             factor=factor,
             min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge / height,  # diff from Qwen!
+            max_pixels=size.longest_edge // videos.shape[1],  # diff from Qwen!
         )
-        return super().resize(
+        return BaseVideoProcessor.resize(
             image=videos,
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,

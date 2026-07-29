@@ -222,18 +222,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             width,
             factor=factor,
             min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge / height,  # diff from Qwen!
-        )
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = videos.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
+            max_pixels=size.longest_edge // videos.shape[1],  # diff from Qwen!
         )
         return super().resize(
             image=videos,
