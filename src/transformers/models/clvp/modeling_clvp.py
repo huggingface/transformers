@@ -793,13 +793,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             init.normal_(module.mel_conv.weight, mean=0.0, std=factor)
             init.zeros_(module.mel_conv.bias)
         elif isinstance(module, ClvpDecoderMLP):
-            # Special Scaled Initialization for the residual projection, following the GPT-2 scheme:
-            # scale the residual-path weights (`c_proj`) by 1/sqrt(2 * num_hidden_layers). This is
-            # applied on the concrete module that owns `c_proj`; the previous `named_parameters()`
-            # check against the exact name "c_proj.weight" never matched (parameters are yielded
-            # with their fully-qualified dotted names), so the scaling was silently never applied.
-            # `self.config` is the composite `ClvpConfig` when the full model is initialized, so
-            # resolve the decoder sub-config to read `initializer_range`/`num_hidden_layers`.
+            # Special Scaled Initialization --> residual projection (`c_proj`) per Transformer Block (GPT-2 scheme)
             decoder_config = getattr(self.config, "decoder_config", None) or self.config
             init.normal_(
                 module.c_proj.weight,
