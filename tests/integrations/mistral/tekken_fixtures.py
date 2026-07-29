@@ -55,6 +55,8 @@ def build_fake_tekken_dict(
     image_config: dict | None = None,
     num_special_tokens: int | None = None,
     mixed_token_str: bool = False,
+    keys_to_drop: tuple[tuple[str, str], ...] = (),
+    special_tokens: list[dict] | None = None,
 ) -> dict:
     """Build a minimal tekken.json dict for testing.
 
@@ -67,6 +69,13 @@ def build_fake_tekken_dict(
             Defaults to ``NUM_SPECIAL_TOKENS`` (no fillers).
         mixed_token_str: When ``True``, printable ASCII bytes (0x20–0x7E) carry a real
             ``token_str`` equal to their decoded character; all other bytes carry ``null``.
+        keys_to_drop: ``(namespace, key)`` pairs to remove before returning, to exercise the
+            fallback paths that trigger when a real tekken.json omits them. ``namespace`` is
+            either ``"top"`` (e.g. ``("top", "special_tokens")``, for the old tekken format) or
+            ``"config"`` (e.g. ``("config", "default_vocab_size")``).
+        special_tokens: Override for the top-level ``"special_tokens"`` list, to exercise
+            malformed-input paths (e.g. non-contiguous ranks). Defaults to
+            `FAKE_TEKKEN_SPECIAL_TOKENS`.
 
     Returns:
         A dict representing a minimal tekken.json structure.
@@ -89,7 +98,7 @@ def build_fake_tekken_dict(
 
     tekken_data: dict = {
         "vocab": vocab_list,
-        "special_tokens": FAKE_TEKKEN_SPECIAL_TOKENS,
+        "special_tokens": special_tokens if special_tokens is not None else FAKE_TEKKEN_SPECIAL_TOKENS,
         "config": {
             "pattern": FAKE_TEKKEN_PATTERN,
             "num_vocab_tokens": num_bpe,
@@ -104,6 +113,14 @@ def build_fake_tekken_dict(
     if image_config is not None:
         tekken_data["image"] = image_config
 
+    for namespace, key in keys_to_drop:
+        if namespace == "config":
+            tekken_data["config"].pop(key, None)
+        elif namespace == "top":
+            tekken_data.pop(key, None)
+        else:
+            raise ValueError(f"Unknown keys_to_drop namespace {namespace!r}; expected 'config' or 'top'.")
+
     return tekken_data
 
 
@@ -113,26 +130,37 @@ def write_fake_tekken_json(
     image_config: dict | None = None,
     num_special_tokens: int | None = None,
     mixed_token_str: bool = False,
+    keys_to_drop: tuple[tuple[str, str], ...] = (),
+    special_tokens: list[dict] | None = None,
+    filename: str = "tekken.json",
 ) -> Path:
-    """Write a minimal tekken.json into ``directory`` and return its path.
+    """Write a minimal tekken-format JSON file into ``directory`` and return its path.
 
     Args:
-        directory: Directory to write tekken.json into.
+        directory: Directory to write the file into.
         vocab_size: Total vocabulary size (special + BPE tokens).
         image_config: Optional image config dict added under ``"image"`` key.
         num_special_tokens: Override for ``default_num_special_tokens`` in config.
         mixed_token_str: When ``True``, printable ASCII bytes carry a real ``token_str``.
+        keys_to_drop: ``(namespace, key)`` pairs to remove before writing (see
+            `build_fake_tekken_dict`).
+        special_tokens: Override for the top-level ``"special_tokens"`` list (see
+            `build_fake_tekken_dict`).
+        filename: Name of the file to write, e.g. to exercise non-canonical tekken
+            filenames such as ``tekken_240911.json`` or ``my_tekken.json``.
 
     Returns:
-        Path to the written ``tekken.json`` file.
+        Path to the written file.
     """
     tekken_data = build_fake_tekken_dict(
         vocab_size=vocab_size,
         image_config=image_config,
         num_special_tokens=num_special_tokens,
         mixed_token_str=mixed_token_str,
+        keys_to_drop=keys_to_drop,
+        special_tokens=special_tokens,
     )
-    output_path = Path(directory) / "tekken.json"
+    output_path = Path(directory) / filename
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(tekken_data, f, ensure_ascii=False)
     return output_path

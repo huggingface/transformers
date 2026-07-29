@@ -1575,7 +1575,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
 
         save_directory = Path(save_directory)
-        save_directory.mkdir(parents=True, exist_ok=True)
 
         if save_format == "hf":
             from transformers.integrations.mistral import convert_tekken_tokenizer
@@ -1595,11 +1594,13 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             )
 
         # Default: save in native mistral format.
-        dest = save_directory / self._tokenizer_path.name
-        if self._tokenizer_path.is_file():
-            shutil.copy(self._tokenizer_path, save_directory)
-        else:
+        if not self._tokenizer_path.is_file():
             raise FileNotFoundError(f"Original tokenizer file {self._tokenizer_path} is no longer accessible.")
+
+        save_directory.mkdir(parents=True, exist_ok=True)
+        dest = save_directory / self._tokenizer_path.name
+        if not (dest.exists() and os.path.samefile(self._tokenizer_path, dest)):
+            shutil.copy(self._tokenizer_path, save_directory)
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]

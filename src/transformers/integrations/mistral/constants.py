@@ -14,5 +14,25 @@
 
 """Lightweight constants for the Mistral native-format integration."""
 
-# File name of the native Mistral tekken tokenizer vocabulary.
+import os
+
+
+# File name of the native Mistral tekken tokenizer vocabulary. This remains the canonical
+# name used for hub/directory discovery.
 TEKKEN_VOCAB_FILE = "tekken.json"
+
+
+def is_tekken_vocab_filename(path: str | os.PathLike) -> bool:
+    """Return whether *path*'s filename identifies it as a Mistral tekken vocabulary file.
+
+    Mirrors the classification rule of `mistral_common.tokens.tokenizers.tekken.is_tekken`:
+    the basename must contain `"tekken"` and end with `.json`.
+
+    Args:
+        path (`str` or `os.PathLike`): Path (or bare filename) to classify.
+
+    Returns:
+        `bool`: `True` if the basename contains `"tekken"` and ends with `.json`.
+    """
+    basename = os.path.basename(path)
+    return "tekken" in basename and basename.endswith(".json")

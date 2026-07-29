@@ -25,7 +25,7 @@ import pytest
 from parameterized import parameterized
 
 import transformers
-from tests.integrations.mistral.tekken_fixtures import build_fake_tekken_dict
+from tests.integrations.mistral.tekken_fixtures import write_fake_tekken_json
 from transformers import (
     AutoTokenizer,
     BertConfig,
@@ -290,17 +290,13 @@ class AutoTokenizerTest(unittest.TestCase):
         (tokenizer_config.json / tokenizer.json), AutoTokenizer must return
         MistralCommonBackend because tekken.json takes priority.
         """
-        # Build fake tekken.json matching the minimal required structure.
-        tekken_data = build_fake_tekken_dict()
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save any real HF tokenizer into the dir (provides tokenizer.json + tokenizer_config.json).
             hf_tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
             hf_tokenizer.save_pretrained(tmp_dir)
 
             # Add fake tekken.json alongside the HF files.
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(tekken_data, f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             # With MistralConfig, the registered tokenizer is MistralCommonBackend and tekken.json
             # is present, so tekken-first logic selects MistralCommonBackend.
@@ -315,12 +311,9 @@ class AutoTokenizerTest(unittest.TestCase):
         When a checkpoint contains tekken.json and NO HF-format markers, AutoTokenizer
         should select MistralCommonBackend (mistral-common native path).
         """
-        tekken_data = build_fake_tekken_dict()
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Write ONLY tekken.json — no config.json, tokenizer_config.json, or tokenizer.json.
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(tekken_data, f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             # Config must be supplied externally because no config.json is present.
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig())
@@ -338,12 +331,9 @@ class AutoTokenizerTest(unittest.TestCase):
         the backend is switched to ``TokenizersBackend`` which can load tekken.json via
         ``MistralConverter``.
         """
-        tekken_data = build_fake_tekken_dict()
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Write ONLY tekken.json — no tokenizer.json or tokenizer_config.json.
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(tekken_data, f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             # mistral_format=False must override tekken-first selection.
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig(), mistral_format=False)
@@ -359,16 +349,13 @@ class AutoTokenizerTest(unittest.TestCase):
         Even when tekken.json is present (which would normally trigger tekken-first selection),
         ``mistral_format=False`` forces the HF ``TokenizersBackend``.
         """
-        tekken_data = build_fake_tekken_dict()
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Provide HF-format files (tokenizer.json + tokenizer_config.json).
             hf_tokenizer = AutoTokenizer.from_pretrained(SMALL_MODEL_IDENTIFIER)
             hf_tokenizer.save_pretrained(tmp_dir)
 
             # Also add tekken.json so tekken-first would normally win.
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(tekken_data, f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig(), mistral_format=False)
 
@@ -378,11 +365,8 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_mistral_common
     def test_mistral_format_true_tekken_only_dir(self):
         """mistral_format=True on a tekken-only dir → MistralCommonBackend."""
-        tekken_data = build_fake_tekken_dict()
-
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(tekken_data, f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, config=MistralConfig(), mistral_format=True)
 
@@ -405,11 +389,54 @@ class AutoTokenizerTest(unittest.TestCase):
             ),
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
-            with open(os.path.join(tmp_dir, "tekken.json"), "w", encoding="utf-8") as f:
-                json.dump(build_fake_tekken_dict(), f)
+            write_fake_tekken_json(Path(tmp_dir))
 
             with self.assertRaises(ImportError):
                 AutoTokenizer.from_pretrained(tmp_dir, mistral_format=True)
+
+    @require_tokenizers
+    def test_mistral_save_format_round_trip_through_auto_tokenizer(self):
+        """End-to-end: AutoTokenizer loads a tekken-only checkpoint with mistral_format=False,
+        saves it back out with save_format="mistral", and AutoTokenizer reloads the result."""
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as out_dir:
+            write_fake_tekken_json(Path(src_dir))
+
+            tokenizer = AutoTokenizer.from_pretrained(src_dir, config=MistralConfig(), mistral_format=False)
+            tokenizer.save_pretrained(out_dir, save_format="mistral")
+
+            out_path = Path(out_dir)
+            self.assertTrue((out_path / "tekken.json").exists())
+            self.assertFalse((out_path / "tokenizer.json").exists())
+            self.assertFalse((out_path / "tokenizer_config.json").exists())
+
+            reloaded = AutoTokenizer.from_pretrained(out_dir, config=MistralConfig(), mistral_format=False)
+
+            self.assertIsInstance(reloaded, TokenizersBackend)
+            text = "hello world"
+            expected_ids = tokenizer.encode(text, add_special_tokens=False)
+            actual_ids = reloaded.encode(text, add_special_tokens=False)
+            self.assertEqual(actual_ids, expected_ids)
+
+    @require_tokenizers
+    @require_mistral_common
+    def test_mistral_save_format_loads_via_mistral_common_backend(self):
+        """The whole point of `save_format="mistral"` is producing a native checkpoint:
+        a directory it writes must be loadable through `MistralCommonBackend`, not just
+        through `TokenizersBackend` (which every other round-trip test in this file uses).
+        """
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as out_dir:
+            write_fake_tekken_json(Path(src_dir))
+
+            source = AutoTokenizer.from_pretrained(src_dir, config=MistralConfig(), mistral_format=False)
+            source.save_pretrained(out_dir, save_format="mistral")
+
+            reloaded = AutoTokenizer.from_pretrained(out_dir, config=MistralConfig())
+
+            self.assertIsInstance(reloaded, MistralCommonBackend)
+            text = "hello world"
+            expected_ids = source.encode(text, add_special_tokens=False)
+            actual_ids = reloaded.encode(text, add_special_tokens=False)
+            self.assertEqual(actual_ids, expected_ids)
 
     @require_tokenizers
     def test_do_lower_case(self):

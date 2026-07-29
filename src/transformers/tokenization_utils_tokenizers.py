@@ -37,6 +37,7 @@ from transformers.utils.hub import cached_file
 
 from .convert_slow_tokenizer import SpmConverter
 from .integrations.ggml import convert_gguf_tokenizer
+from .integrations.mistral.constants import is_tekken_vocab_filename
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -47,7 +48,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
     generate_merges,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
@@ -200,7 +201,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         merges = local_kwargs.get("merges")
 
         # Tekken converter (Mistral)
-        if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
+        if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and is_tekken_vocab_filename(vocab_file):
             from .integrations.mistral.tokenizer import MistralConverter
 
             converter = MistralConverter(vocab_file)
@@ -517,6 +518,93 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    def save_pretrained(
+        self,
+        save_directory: str | os.PathLike,
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
+        push_to_hub: bool = False,
+        save_format: str | None = None,
+        **kwargs,
+    ) -> tuple[str, ...]:
+        """
+        Save the full tokenizer state.
+
+
+        This method make sure the full tokenizer can then be re-loaded using the
+        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] class method..
+
+        Warning,None This won't save modifications you may have applied to the tokenizer after the instantiation (for
+        instance, modifying `tokenizer.do_lower_case` after creation).
+
+        Args:
+            save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
+            legacy_format (`bool`, *optional*):
+                Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
+                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
+                added_tokens files.
+
+                If `False`, will only save the tokenizer in the unified JSON format. This format is incompatible with
+                "slow" tokenizers (not powered by the *tokenizers* library), so the tokenizer will not be able to be
+                loaded in the corresponding "slow" tokenizer.
+
+                If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
+                error is raised.
+            filename_prefix (`str`, *optional*):
+                A prefix to add to the names of the files saved by the tokenizer.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            save_format (`str`, *optional*):
+                `"mistral"` to save as a native `tekken.json` by copying the original
+                file (requires the original tekken vocabulary file to be available). The name is
+                normalized to `tekken.json` on save, and the instantiated tokenizer must still match
+                it exactly.
+                `"hf"` or `None` for the default HuggingFace format.
+            kwargs (`dict[str, Any]`, *optional*):
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+
+        Returns:
+            A tuple of `str`: The files saved.
+        """
+        if save_format not in (None, "hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
+
+        if save_format == "mistral":
+            from .integrations.mistral.tokenizer import save_tekken_format
+
+            # Snapshot timestamps before writing anything, so the freshly written tekken.json is
+            # correctly detected as modified by `_upload_modified_files` below. `save_directory` may
+            # not exist yet at this point (`save_tekken_format` creates it), hence the empty fallback.
+            files_timestamps = {}
+            if push_to_hub and os.path.isdir(save_directory):
+                files_timestamps = self._get_files_timestamps(save_directory)
+
+            save_files = save_tekken_format(self, save_directory)
+
+            if push_to_hub:
+                commit_message = kwargs.pop("commit_message", None)
+                repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
+                repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+                self._upload_modified_files(
+                    working_dir=save_directory,
+                    repo_id=repo_id,
+                    files_timestamps=files_timestamps,
+                    commit_message=commit_message,
+                    token=kwargs.get("token"),
+                )
+
+            return save_files
+
+        return super().save_pretrained(
+            save_directory,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix,
+            push_to_hub=push_to_hub,
+            **kwargs,
+        )
 
     def update_post_processor(self):
         """

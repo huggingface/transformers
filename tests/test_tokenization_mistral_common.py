@@ -232,6 +232,20 @@ class TestMistralCommonBackend(unittest.TestCase):
             with self.assertRaises(OSError):
                 backend.save_pretrained(out_dir, save_format="hf")
 
+    def test_save_pretrained_hf_format_missing_source_leaves_no_directory(self):
+        """A failed hf-format save (missing source tekken.json) must not create the output directory."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            # Delete the source file so the path is no longer valid.
+            tekken_path.unlink()
+
+            out_dir = tmp_path / "does-not-exist-yet"
+            with self.assertRaises(OSError):
+                backend.save_pretrained(str(out_dir), save_format="hf")
+            self.assertFalse(out_dir.exists())
+
     def test_save_pretrained_mistral_format_copy_is_byte_identical(self):
         """Saving with save_format='mistral' writes the native tekken.json byte-for-byte."""
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -251,6 +265,19 @@ class TestMistralCommonBackend(unittest.TestCase):
             with open(saved, encoding="utf-8") as f:
                 copied = json.load(f)
             self.assertEqual(original, copied)
+
+    def test_save_pretrained_mistral_format_in_place_resave_succeeds(self):
+        """Resaving into the same directory the tokenizer was loaded from is idempotent: no
+        `shutil.SameFileError`, and the source tekken.json is left byte-for-byte unchanged."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tekken_path = write_fake_tekken_json(Path(tmp_dir))
+            original_bytes = tekken_path.read_bytes()
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            result = backend.save_pretrained(tmp_dir, save_format="mistral")
+
+            self.assertEqual(result, (str(tekken_path),))
+            self.assertEqual(tekken_path.read_bytes(), original_bytes)
 
     def test_save_pretrained_unknown_format_raises_value_error(self):
         """save_pretrained rejects any save_format outside 'hf'/'mistral'/None."""

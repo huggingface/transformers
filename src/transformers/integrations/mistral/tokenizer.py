@@ -25,11 +25,15 @@ from tokenizers import AddedToken, Regex, Tokenizer, decoders, pre_tokenizers, p
 from tokenizers.models import BPE
 
 from ...convert_slow_tokenizer import bytes_to_unicode
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
-from ...utils import cached_file, hf_api, logging, requires_backends
+from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...utils import cached_file, logging, requires_backends
 from ...utils.hub import CHAT_TEMPLATE_FILE, LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE
 from ...utils.import_utils import is_mistral_common_available
-from .constants import TEKKEN_VOCAB_FILE
+from .constants import TEKKEN_VOCAB_FILE, is_tekken_vocab_filename
+
+
+if is_mistral_common_available():
+    from mistral_common.tokens.tokenizers.tekken import Tekkenizer
 
 
 logger = logging.get_logger(__name__)
@@ -172,6 +176,8 @@ def resolve_mistral_format(
             raise ImportError(
                 "mistral_format=True requires `mistral-common`. Install it with: pip install mistral-common"
             )
+        # Hub/directory discovery uses strict equality against TEKKEN_VOCAB_FILE (mirroring
+        # mistral-common's own discovery rule).
         tekken_file = _probe_file(pretrained_model_name_or_path, TEKKEN_VOCAB_FILE, **cache_kwargs)
         if tekken_file is None:
             raise OSError(
@@ -194,6 +200,58 @@ _MAP_SPECIALS = {
     "pad_token": "<pad>",
     "unk_token": "<unk>",
 }
+
+
+def _derive_tekken_specials(raw: dict) -> tuple[list[str], int]:
+    """Derive the expected special-token strings and special-token count from a parsed tekken.json.
+
+    Single source of truth for the special-token layout, shared by
+    `MistralConverter._parse_tekken_file` (to build the vocab) and
+    `_check_tekken_vocab_unchanged` (to compare against a live tokenizer), so the two cannot
+    silently drift apart.
+
+    Args:
+        raw (`dict`): A parsed tekken.json, i.e. the result of `json.load` on the file.
+
+    Returns:
+        `tuple[list[str], int]`: The special-token strings, ordered by rank (the real entries
+        from *raw* followed by any `<SPECIAL_i>` filler needed to reach `num_special_tokens`),
+        and the resolved `num_special_tokens`.
+
+    Raises:
+        ImportError: If *raw* has no top-level `"special_tokens"` key (old tekken format) and
+            `mistral-common` is not installed.
+    """
+    config = raw["config"]
+    filler_template = "<SPECIAL_{id}>"
+
+    special_tokens_dicts = raw.get("special_tokens")
+    if special_tokens_dicts is None:
+        # Old tekken format has no special_tokens key; use mistral-common's defaults.
+        requires_backends(MistralConverter, ["mistral-common"])
+        filler_template = getattr(Tekkenizer, "SPECIAL_TOKEN_TEMPLATE", filler_template)
+        special_tokens_dicts = list(Tekkenizer.DEPRECATED_SPECIAL_TOKENS)
+
+    # Only the string order is returned below, not the real ranks: ids are re-derived by
+    # enumerating that order, which requires ranks to be contiguous starting at 0.
+    declared_ranks = sorted(entry["rank"] for entry in special_tokens_dicts)
+    if declared_ranks != list(range(len(declared_ranks))):
+        raise ValueError(f"tekken.json special_tokens ranks must be contiguous starting at 0, got {declared_ranks}")
+
+    special_strings = [
+        token_str
+        for _, token_str in sorted(
+            (entry["rank"], str(getattr(entry["token_str"], "value", entry["token_str"])))
+            for entry in special_tokens_dicts
+        )
+    ]
+
+    num_special_tokens = config.get("default_num_special_tokens")
+    if num_special_tokens is None:
+        num_special_tokens = len(special_strings)
+
+    filler_strings = [filler_template.format(id=i) for i in range(len(special_strings), num_special_tokens)]
+    return special_strings + filler_strings, num_special_tokens
 
 
 class MistralConverter:
@@ -222,36 +280,11 @@ class MistralConverter:
 
         config = untyped["config"]
         pattern = config["pattern"]
-
         vocab_size = config.get("default_vocab_size")
-        num_special_tokens = config.get("default_num_special_tokens")
 
-        filler_template = "<SPECIAL_{id}>"
+        special_token_strings, num_special_tokens = _derive_tekken_specials(untyped)
 
-        special_tokens_dicts = untyped.get("special_tokens")
-        if special_tokens_dicts is None:
-            # Old tekken format has no special_tokens key; use mistral-common's defaults.
-            requires_backends(self, ["mistral-common"])
-            from mistral_common.tokens.tokenizers.tekken import Tekkenizer
-
-            filler_template = getattr(Tekkenizer, "SPECIAL_TOKEN_TEMPLATE", filler_template)
-            special_tokens_dicts = list(Tekkenizer.DEPRECATED_SPECIAL_TOKENS)
-
-        special_tokens_dicts = [
-            {"rank": entry["rank"], "token_str": str(getattr(entry["token_str"], "value", entry["token_str"]))}
-            for entry in special_tokens_dicts
-        ]
-
-        if num_special_tokens is None:
-            num_special_tokens = len(special_tokens_dicts)
-
-        special_filler = [
-            {"rank": i, "token_str": filler_template.format(id=i)}
-            for i in range(len(special_tokens_dicts), num_special_tokens)
-        ]
-        special_tokens_dicts = special_tokens_dicts + special_filler
-
-        additional_special_tokens = [AddedToken(entry["token_str"], special=True) for entry in special_tokens_dicts]
+        additional_special_tokens = [AddedToken(token_str, special=True) for token_str in special_token_strings]
 
         # Drop padded vocab: keep only the real tokens (matches mistral-common).
         bpe_ranks_raw = untyped["vocab"]
@@ -265,8 +298,8 @@ class MistralConverter:
         vocab, merges = self._extract_merges(bpe_ranks_dict)
 
         vocab = {k: v + num_special_tokens for k, v in vocab.items()}
-        for entry in special_tokens_dicts:
-            vocab[entry["token_str"]] = entry["rank"]
+        for rank, token_str in enumerate(special_token_strings):
+            vocab[token_str] = rank
 
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
@@ -326,99 +359,148 @@ class MistralConverter:
         return tokenizer
 
 
-class TekkenBackend(PreTrainedTokenizerFast):
-    """Fast tokenizer backend for checkpoints originating from a Mistral `tekken.json` file.
+def _resolve_tekken_source(tokenizer: TokenizersBackend) -> str:
+    """Locate the on-disk `tekken.json` a tokenizer was built from.
 
-    Adds `save_format="mistral"` support to `save_pretrained` for round-tripping back to the
-    native tekken format, on top of the standard HuggingFace `tokenizers`-library backend.
+    Called once by `save_tekken_format`, which passes the resolved path on to
+    `_check_tekken_vocab_unchanged` to know what to diff against.
+
+    Args:
+        tokenizer (`TokenizersBackend`): The tokenizer to resolve a source file for. Must
+            have been loaded or converted from a native Mistral tekken vocabulary file,
+            i.e. its `vocab_file` must still point at an existing file whose name identifies
+            it as tekken (see `is_tekken_vocab_filename`).
+
+    Returns:
+        `str`: The validated path to the tokenizer's source tekken vocabulary file.
+
+    Raises:
+        OSError: If the tokenizer's `vocab_file` does not resolve to an existing file
+            identified as tekken (see `is_tekken_vocab_filename`).
     """
-
-    def save_pretrained(
-        self,
-        save_directory: str | os.PathLike,
-        legacy_format: bool | None = None,
-        filename_prefix: str | None = None,
-        push_to_hub: bool = False,
-        save_format: str | None = None,
-        **kwargs,
-    ) -> tuple[str, ...]:
-        """Save the full tokenizer state.
-
-        Extends the base class method with support for ``save_format="mistral"``, which
-        copies the original ``tekken.json`` file directly into *save_directory* instead
-        of writing the standard HuggingFace format files.
-
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                The path to a directory where the tokenizer will be saved.
-            legacy_format (`bool`, *optional*):
-                Passed to the base class for HuggingFace format saves.
-            filename_prefix (`str`, *optional*):
-                A prefix to add to the names of the saved files.
-            push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether to push the saved tokenizer to the HuggingFace Hub.
-            save_format (`str`, *optional*):
-                `"mistral"` to save as a native ``tekken.json`` by copying the original
-                file (requires the original ``tekken.json`` to be available via ``vocab_file``).
-                `"hf"` or `None` for the default HuggingFace format.
-            **kwargs:
-                Additional keyword arguments passed to the base class or
-                [`~utils.PushToHubMixin.push_to_hub`].
-
-        Returns:
-            `tuple[str, ...]`: The paths of the saved files.
-        """
-        if save_format is not None and save_format not in ("hf", "mistral"):
-            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
-
-        if save_format == "mistral":
-            os.makedirs(save_directory, exist_ok=True)
-
-            if push_to_hub:
-                commit_message = kwargs.pop("commit_message", None)
-                repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-                repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
-                files_timestamps = self._get_files_timestamps(save_directory)
-
-            vocab_file = self.init_kwargs.get("vocab_file") or getattr(self, "vocab_file", None)
-            if (
-                isinstance(vocab_file, str)
-                and os.path.basename(vocab_file) == TEKKEN_VOCAB_FILE
-                and os.path.isfile(vocab_file)
-            ):
-                dest = os.path.join(save_directory, TEKKEN_VOCAB_FILE)
-                copyfile(vocab_file, dest)
-                save_files = (dest,)
-            else:
-                raise OSError(
-                    "Cannot save in 'mistral' format: the original tekken.json is not available. "
-                    "Load a native checkpoint (that still contains tekken.json) or install "
-                    "mistral-common to use MistralCommonBackend."
-                )
-            if push_to_hub:
-                self._upload_modified_files(
-                    save_directory,
-                    repo_id,
-                    files_timestamps,
-                    commit_message=commit_message,
-                    token=kwargs.get("token"),
-                )
-            return save_files
-
-        return super().save_pretrained(
-            save_directory,
-            legacy_format=legacy_format,
-            filename_prefix=filename_prefix,
-            push_to_hub=push_to_hub,
-            **kwargs,
+    vocab_file = tokenizer.init_kwargs.get("vocab_file") or getattr(tokenizer, "vocab_file", None)
+    if not (isinstance(vocab_file, str) and is_tekken_vocab_filename(vocab_file) and os.path.isfile(vocab_file)):
+        raise OSError(
+            "Cannot save in 'mistral' format: the original tekken.json is not available. "
+            "Load a native checkpoint (that still contains tekken.json) or install "
+            "mistral-common to use MistralCommonBackend."
         )
+    return vocab_file
+
+
+def _check_tekken_vocab_unchanged(tokenizer: TokenizersBackend, vocab_file: str) -> None:
+    """Compare *tokenizer*'s vocab against the `tekken.json` it was converted from.
+
+    `save_format="mistral"` writes a native `tekken.json` by copying the source file
+    directly, so any in-session mutation (`add_tokens`, `add_special_tokens`) would be
+    silently dropped, and `tekken.json` cannot represent arbitrary added tokens anyway.
+    This guard is called only from `save_tekken_format`, right before that lossy copy, to
+    turn a silent drop into a raised error.
+
+    Only two things are compared: the total vocab size, and the *set* of added-token
+    content strings (via `tokenizer.added_tokens_decoder`). This does not check token ids
+    or other `AddedToken` attributes (e.g. `lstrip`, `rstrip`, `normalized`).
+
+    Args:
+        tokenizer (`TokenizersBackend`): The tokenizer to check. Never mutated.
+        vocab_file (`str`): Path to the source `tekken.json` to compare against.
+
+    Raises:
+        ValueError: If the vocab size or the added-token set diverges from the source
+            `tekken.json`.
+        OSError: If `vocab_file` cannot be opened.
+    """
+    with open(vocab_file, encoding="utf-8") as f:
+        raw = json.load(f)
+
+    config = raw["config"]
+    expected_special_tokens_list, num_special_tokens = _derive_tekken_specials(raw)
+    expected_special_tokens = set(expected_special_tokens_list)
+
+    expected_vocab_size = config.get("default_vocab_size")
+    if expected_vocab_size is None:
+        expected_vocab_size = len(raw["vocab"]) + num_special_tokens
+
+    observed_vocab_size = len(tokenizer)
+    observed_added_tokens = {token.content for token in tokenizer.added_tokens_decoder.values()}
+
+    unexpected_tokens = sorted(observed_added_tokens - expected_special_tokens)
+    missing_tokens = sorted(expected_special_tokens - observed_added_tokens)
+    size_diverges = observed_vocab_size != expected_vocab_size
+
+    if unexpected_tokens or missing_tokens:
+        lines = [
+            "Cannot save in 'mistral' format: the tokenizer vocab state has diverged from its source "
+            "tekken.json, which cannot represent arbitrary added tokens."
+        ]
+        if unexpected_tokens:
+            lines.append(f"Unexpected added tokens: {unexpected_tokens}")
+        if missing_tokens:
+            lines.append(f"Missing expected special tokens: {missing_tokens}")
+        if size_diverges:
+            lines.append(f"Vocab size: observed={observed_vocab_size}, expected={expected_vocab_size}")
+        lines.append("Use save_format='hf' instead to preserve these changes.")
+        raise ValueError("\n".join(lines))
+
+    if size_diverges:
+        raise ValueError(
+            "Cannot save in 'mistral' format: the tokenizer reports a vocab size of "
+            f"{observed_vocab_size}, but its source tekken.json declares {expected_vocab_size} "
+            "(via default_vocab_size/default_num_special_tokens). The source tekken.json is "
+            "internally inconsistent; regenerate it with matching vocab and config sizes."
+        )
+
+
+def save_tekken_format(tokenizer: TokenizersBackend, save_directory: str | os.PathLike) -> tuple[str, ...]:
+    """Write a tokenizer back out in native Mistral format by copying its source tekken file.
+
+    Used by `TokenizersBackend.save_pretrained` for `save_format="mistral"`. The tokenizer's
+    original tekken vocabulary file (resolved via `vocab_file`) is copied byte-for-byte into
+    *save_directory* as `tekken.json`, regardless of the source's own basename (e.g. a source
+    named `tekken_240911.json` is normalized to `tekken.json` on save, so the output directory
+    stays discoverable by both `resolve_mistral_format` and mistral-common.
+
+    Resaving into the same directory the tokenizer was loaded from is a no-op copy: the
+    source and destination are the same file, so the copy is skipped instead of raising
+    `shutil.SameFileError`. The divergence guard still runs first, so an in-place resave of
+    a mutated tokenizer is still rejected.
+
+    Args:
+        tokenizer (`TokenizersBackend`): The tokenizer to save. Must have been loaded or
+            converted from a native Mistral tekken vocabulary file, i.e. its `vocab_file`
+            must still point at an existing file identified as tekken (see
+            `is_tekken_vocab_filename`), and it must not have diverged from that source
+            file (see `_check_tekken_vocab_unchanged`).
+        save_directory (`str` or `os.PathLike`): The path to a directory where the tekken
+            vocabulary file will be written.
+
+    Returns:
+        `tuple[str, ...]`: A 1-tuple containing the path of the saved tekken vocabulary file.
+
+    Raises:
+        OSError: If the tokenizer's `vocab_file` does not resolve to an existing file
+            identified as tekken (see `is_tekken_vocab_filename`).
+        ValueError: If the tokenizer has diverged from its source tekken vocabulary file
+            (added tokens, changed vocab size). See `_check_tekken_vocab_unchanged`.
+    """
+    vocab_file = _resolve_tekken_source(tokenizer)
+    _check_tekken_vocab_unchanged(tokenizer, vocab_file)
+
+    os.makedirs(save_directory, exist_ok=True)
+
+    # The source may carry a non-canonical name (e.g. tekken_240911.json, accepted by
+    # is_tekken_vocab_filename), but the output is always written as TEKKEN_VOCAB_FILE.
+    dest = os.path.join(save_directory, TEKKEN_VOCAB_FILE)
+    if not (os.path.exists(dest) and os.path.samefile(vocab_file, dest)):
+        copyfile(vocab_file, dest)
+    return (dest,)
 
 
 def convert_tekken_tokenizer(
     tokenizer_file: str,
     chat_template: str | None = None,
-) -> TekkenBackend:
-    """Build a `TekkenBackend` from a Mistral `tekken.json` file.
+) -> TokenizersBackend:
+    """Build a `TokenizersBackend` from a Mistral `tekken.json` file.
 
     The chat template is resolved via a fixed precedence order (see
     `_resolve_chat_template`): explicit `chat_template` argument → sibling
@@ -432,13 +514,12 @@ def convert_tekken_tokenizer(
             from sibling files or generated via `mistral-common` if available.
 
     Returns:
-        Configured `TekkenBackend` (a `PreTrainedTokenizerFast` subclass) with BPE model,
-        special token mappings, and an attached chat template (or `None` when none could
-        be resolved).
+        Configured `TokenizersBackend` with BPE model, special token mappings, and
+        an attached chat template (or `None` when none could be resolved).
     """
     resolved = _resolve_chat_template(tokenizer_file, chat_template)
     converter = MistralConverter(vocab_file=tokenizer_file, add_prefix_space=False)
-    fast = TekkenBackend(
+    fast = TokenizersBackend(
         tokenizer_object=converter.converted(),
         vocab_file=tokenizer_file,
         chat_template=resolved,
