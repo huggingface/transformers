@@ -709,19 +709,16 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
 
-        # Prefill
-        if self.record_past or self.prefill_length is None:
-            # While recording the past, all states are kept and the layer stays in the prefill phase
-            if not self.record_past:
-                self.prefill_length = self.cumulative_length
-            self.keys = full_key_states
-            self.values = full_value_states
-            return self.keys, self.values
-
         # Cache growing
-        if self.cumulative_length <= self.prefill_length + self.sliding_window - 1:
+        if (
+            self.record_past
+            or self.prefill_length is None
+            or self.cumulative_length <= self.prefill_length + self.sliding_window - 1
+        ):
             self.keys = full_key_states
             self.values = full_value_states
+            if self.prefill_length is None:
+                self.prefill_length = self.cumulative_length
         # Cache full
         elif self.keys.shape[-2] == self.prefill_length + self.sliding_window - 1:
             self.keys[:, :, -self.sliding_window + 1 :].copy_(full_key_states[:, :, -self.sliding_window + 1 :, :])
@@ -771,7 +768,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
 
     def set_prefill_length(self, prefill_length: int) -> None:
         """Declare how many leading tokens are prefill states, before they are cached."""
-        if self.prefill_length is None and not self.record_past:
+        if self.prefill_length is None:
             self.prefill_length = prefill_length
 
     def reset(self) -> None:
@@ -830,8 +827,8 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
     _layer_type = "reference_sliding_attention"
 
-    def __init__(self, max_cache_len: int, sliding_window: int):
-        super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window)
+    def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
+        super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window, **kwargs)
         # Keep `max_cache_len` as max value for length bookkeeping.
         # The physical buffer doesn't exceed `prefill_length + sliding_window`.
         self.max_cache_len = max_cache_len
@@ -858,11 +855,15 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         kv_length = key_states.shape[-2]
 
         # Prefill
-        if self.is_prefilling:
-            # Chunked prefill: the buffer was sized for the first chunk only, so grow it to hold all prefill seen so far plus this chunk plus the reserved window.
-            required_length = min(self.max_cache_len, self.cumulative_length_int + kv_length + self.sliding_window)
+        if self.prefill_length is None or self.cumulative_length_int < self.prefill_length:
+            if self.prefill_length is None:
+                self.prefill_length = self.cumulative_length_int + kv_length
+
+            # Resize buffer if necessary
+            required_length = min(self.max_cache_len, self.prefill_length + self.sliding_window)
             if self.keys.shape[-2] < required_length:
                 self._allocate_key_value_buffers(required_length, copy_existing=True)
+
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
             cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
@@ -877,9 +878,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             # Keep both the int (control flow) and the tensor (cudagraph-safe indexing) versions in sync.
             self.cumulative_length_int += kv_length
             self.cumulative_length.add_(kv_length)
-
-            if self.prefill_length is None:
-                self.prefill_length = self.cumulative_length_int
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
@@ -971,8 +969,11 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
         kv_offset = 0
         # Prefill: the buffer is not necessarily allocated yet, so its size cannot be used
-        if self.is_prefilling:
-            kv_length = min(self.max_cache_len, self.cumulative_length_int + query_length + self.sliding_window)
+        if self.prefill_length is None or self.cumulative_length_int < self.prefill_length:
+            prefill_length = (
+                self.cumulative_length_int + query_length if self.prefill_length is None else self.prefill_length
+            )
+            kv_length = min(self.max_cache_len, prefill_length + self.sliding_window)
         # Decode: cache is already full
         elif is_full:
             kv_offset = max(self.cumulative_length_int - self.prefill_length - self.sliding_window + 1, 0)
@@ -994,11 +995,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         if self.prefill_length is None:
             return self.max_cache_len
         return min(self.max_cache_len, self.prefill_length + self.sliding_window)
-
-    @property
-    def is_prefilling(self) -> bool:
-        """Whether the prefill states are still being cached."""
-        return self.prefill_length is None or self.cumulative_length_int < self.prefill_length
 
     def set_prefill_length(self, prefill_length: int) -> None:
         """Declare how many leading tokens are prefill states, before they are cached."""
