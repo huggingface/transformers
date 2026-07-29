@@ -141,16 +141,15 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-## Multi-Token Prediction (MTP)
+## Multi-token prediction (MTP)
 
-Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head, and each layer drafts one token, so a checkpoint with two MTP layers proposes two candidates per step. The main model verifies the drafts in one forward pass.
+Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head. Every MTP layer drafts one token, so the number of candidates per step matches the checkpoint's MTP layer count. The main model verifies the drafts in one forward pass.
 
-MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These models have a `num_mtp_layers` config value and MTP weights. [`~GenerationMixin.generate`] raises an error if the checkpoint has no MTP layers. Every MTP layer in the checkpoint is used.
+MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These checkpoints carry MTP weights and set `num_mtp_layers` in their config, listed as `num_nextn_predict_layers` in `config.json`.
 
-Pass `use_mtp=True` to [`~GenerationMixin.generate`]. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
+Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if the model has no MTP layers. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
 
 ```py
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5-Air")
