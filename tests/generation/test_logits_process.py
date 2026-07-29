@@ -61,6 +61,9 @@ if is_torch_available():
         DiaEOSChannelFilterLogitsProcessor,
         DiaEOSDelayPatternLogitsProcessor,
     )
+    from transformers.models.unlimited_ocr.generation_unlimited_ocr import (
+        UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
+    )
 
 
 @require_torch
@@ -648,6 +651,19 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores_2_gram))
         self.assertFalse(torch.all(scores == filtered_scores_3_gram))
+
+    def test_sliding_window_no_repeat_ngram_dist_processor(self):
+        vocab_size = 3
+        # The (0, 1) bigram appears at the start, so a full-sequence processor would forbid token 1
+        # after the trailing 0. A small window should not see that early bigram.
+        input_ids = torch.tensor([[0, 1, 2, 0]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros((1, vocab_size), device=torch_device, dtype=torch.float)
+
+        small_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=2)
+        full_window = UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(ngram_size=2, window_size=4)
+
+        self.assertListEqual(torch.isinf(small_window(input_ids, scores.clone())).tolist(), [[False, False, False]])
+        self.assertListEqual(torch.isinf(full_window(input_ids, scores.clone())).tolist(), [[False, True, False]])
 
     def test_encoder_no_repeat_ngram_dist_processor(self):
         vocab_size = 3
