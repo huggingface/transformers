@@ -80,7 +80,6 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("moe_intermediate_size", 64)
         kwargs.setdefault("num_experts_per_tok", 2)
         kwargs.setdefault("sliding_window", 4)
-        kwargs.setdefault("use_sliding_window", True)
         super().__init__(parent, **kwargs)
 
         self.sam_config = {
@@ -271,8 +270,8 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                 self.assertEqual(layer.prefill_length, prompt_length)
 
     def test_generate_without_sliding_window(self):
-        """With `use_sliding_window=False` every layer is a full attention layer."""
-        model_tester = self.model_tester_class(self, use_sliding_window=False)
+        """With `sliding_window=None` every layer is a full attention layer."""
+        model_tester = self.model_tester_class(self, sliding_window=None)
         config, inputs_dict = model_tester.prepare_config_and_inputs_for_common()
         self.assertEqual(config.text_config.layer_types, ["full_attention"] * config.text_config.num_hidden_layers)
 

@@ -394,11 +394,9 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
         MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     layer_types (`list[str]`, *optional*):
         Attention type for each decoder layer. Defaults to `"reference_sliding_attention"` on every layer.
-    use_sliding_window (`bool`, *optional*, defaults to `True`):
-        Whether to use reference sliding window attention.
     sliding_window (`int`, *optional*, defaults to `128`):
         Sliding window size for reference sliding window attention. If set, every token attends to the last
-        `sliding_window` and all image and prompt tokens.
+        `sliding_window` and all image and prompt tokens. Set to `None` to use full attention on every layer.
 
     Example:
 
@@ -426,11 +424,9 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
     topk_group: int | None = 1
     num_experts_per_tok: int | None = 6
     layer_types: list[str] | None = None
-    use_sliding_window: bool = True
     sliding_window: int | None = 128
 
     def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.layer_types is None:
             self.layer_types = [
                 "reference_sliding_attention" if self.sliding_window is not None else "full_attention"
