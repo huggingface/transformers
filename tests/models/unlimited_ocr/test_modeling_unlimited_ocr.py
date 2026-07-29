@@ -125,7 +125,6 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = UnlimitedOcrVisionText2TextModelTester
-    test_all_params_have_gradient = False
 
     @unittest.skip(
         reason="UnlimitedOcrVisionModel builds a hybrid bidirectional+causal mask internally, so SDPA is always called with a non-null `attn_mask`."
