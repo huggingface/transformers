@@ -1937,10 +1937,7 @@ class PreTrainedModel(
             )
 
             # preload flash attention here to allow compile with fullgraph
-            if is_flash_attention_requested(
-                requested_attention_implementation=applicable_attn_implementation,
-                allow_torch=is_flash_attn_torch_available(),
-            ):
+            if is_flash_attention_requested(requested_attention_implementation=applicable_attn_implementation):
                 lazy_import_flash_attention(applicable_attn_implementation)
 
         return applicable_attn_implementation

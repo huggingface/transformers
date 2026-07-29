@@ -267,10 +267,7 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None,
-    requested_attention_implementation: str | None = None,
-    version: int | list[int] | None = None,
-    allow_torch: bool | None = None,
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None,
 ) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
@@ -282,7 +279,6 @@ def is_flash_attention_requested(
     The different versions of flash attention are usually
     - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
     - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
-    - Or native torch integrations (as of `torch 2.11.0`) if allowed via `allow_torch`
     """
     if config is not None and requested_attention_implementation is not None:
         raise ValueError(
@@ -305,8 +301,8 @@ def is_flash_attention_requested(
             version = [version]
         return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
 
-    # Otherwise, check whether "flash" is in the attention implementation or "sdpa" if `allow_torch` is enabled (flash attention via torch)
-    return "flash" in checked_attention_implementation or (allow_torch and "sdpa" in checked_attention_implementation)
+    # Otherwise, just check whether "flash" is in the attention implementation
+    return "flash" in checked_attention_implementation
 
 
 def get_max_seqlen(

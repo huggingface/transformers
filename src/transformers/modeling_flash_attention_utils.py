@@ -198,7 +198,7 @@ def _lazy_imports(
 
     is_paged, implementation = split_attention_implementation(implementation)
 
-    if implementation in ["sdpa", "flash_attention_torch"]:
+    if implementation == "flash_attention_torch":
         from torch.nn.attention.varlen import varlen_attn as flash_attn_varlen_func
 
         flash_attn_func = None  # not supported yet
