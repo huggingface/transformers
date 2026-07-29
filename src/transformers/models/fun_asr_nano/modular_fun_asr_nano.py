@@ -136,10 +136,11 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
     """Qwen3-ASR attention adapted for padded batch masks and checkpoint-compatible input projections."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
+        input_dim = input_dim or config.d_model
         super().__init__(config)
-        self.q_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
-        self.k_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
-        self.v_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
 
     # TODO: check other implementation, as we should use `ALL_ATTENTION_FUNCTIONS.get_interface`
     def forward(

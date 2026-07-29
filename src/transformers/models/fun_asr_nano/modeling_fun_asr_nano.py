@@ -107,6 +107,7 @@ class FunAsrNanoAttention(nn.Module):
 
     def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
         super().__init__()
+        input_dim = input_dim or config.d_model
         self.embed_dim = config.d_model
         self.num_heads = config.encoder_attention_heads
         self.dropout = config.attention_dropout
@@ -123,9 +124,9 @@ class FunAsrNanoAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_decoder = False
         self.is_causal = False
-        self.k_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
-        self.v_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
-        self.q_proj = nn.Linear(input_dim or config.d_model, config.d_model, bias=True)
+        self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
+        self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def forward(
