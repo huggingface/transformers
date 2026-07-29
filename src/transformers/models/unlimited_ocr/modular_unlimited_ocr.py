@@ -40,7 +40,7 @@ from ...masking_utils import (
     or_masks,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
     TensorType,
@@ -238,15 +238,14 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
                 Whether or not to also return the layout detections parsed from the decoded text.
 
         Returns:
-            `str` or `tuple[str, list[dict]]`: The decoded text. If `return_detections` is `True`, a tuple of the
-            decoded text and a list of detections, where every detection is a dictionary with the keys `region_type`,
-            `box` and `text`. Boxes are in [x1, y1, x2, y2] format with coordinates normalized to [0, 999].
+            `list[str]` or `tuple[list[str], list[list[dict]]]`: The decoded text. If `return_detections` is `True`,
+            a tuple of the decoded text and the detections of every sequence, where every detection is a dictionary
+            with the keys `region_type`, `box` and `text`. Boxes are in [x1, y1, x2, y2] format with coordinates
+            normalized to [0, 999].
         """
-        if not hasattr(self, "tokenizer"):
-            raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
-        decoded = self.tokenizer.batch_decode(*args, **kwargs)
+        decoded = ProcessorMixin.batch_decode(self, *args, **kwargs)
         if return_detections:
-            detections = self._parse_detections(decoded)
+            detections = [self._parse_detections(text) for text in decoded]
             return decoded, detections
         return decoded
 
@@ -264,9 +263,7 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
             decoded text and a list of detections, where every detection is a dictionary with the keys `region_type`,
             `box` and `text`. Boxes are in [x1, y1, x2, y2] format with coordinates normalized to [0, 999].
         """
-        if not hasattr(self, "tokenizer"):
-            raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
-        decoded = self.tokenizer.decode(*args, **kwargs)
+        decoded = ProcessorMixin.decode(self, *args, **kwargs)
         if return_detections:
             detections = self._parse_detections(decoded)
             return decoded, detections
