@@ -1163,12 +1163,13 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        pixel_mask=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1185,7 +1186,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_mask"] = pixel_mask
 
         return model_inputs
 

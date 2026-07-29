@@ -2087,13 +2087,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-
         model_inputs["position_ids"] = None
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-            model_inputs["input_features"] = None
 
         return model_inputs
 
@@ -2437,7 +2431,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             video_second_per_grid=video_second_per_grid,
             **kwargs,
         )
-
         model_inputs["position_ids"] = None
 
         return model_inputs

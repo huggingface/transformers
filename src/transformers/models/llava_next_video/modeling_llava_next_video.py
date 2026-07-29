@@ -819,14 +819,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        pixel_values_videos=None,
         image_sizes=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- extra custom processing
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -844,7 +843,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["image_sizes"] = image_sizes
 
         return model_inputs

@@ -2342,9 +2342,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         position_ids=None,
         pixel_values=None,
-        input_features=None,
         attention_mask=None,
-        input_features_mask=None,
         token_type_ids=None,
         use_cache=True,
         logits_to_keep=None,
@@ -2366,13 +2364,17 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, multimodal inputs should be None because input ids do not contain special
-        # tokens anymore. Otherwise multimodal inputs should be passed to model.
-        # NOTE: use_cache=False always needs pixel_values, input_features, and input_features_mask
+        # position_ids in Gemma3n are 1-indexed
+        if model_inputs.get("position_ids") is not None:
+            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
+
+        # Pixel values are used only in the first iteration if available
+        # In subsequent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
         if is_first_iteration or not use_cache:
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
 

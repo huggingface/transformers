@@ -1679,13 +1679,14 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         past_key_values=None,
         inputs_embeds=None,
         pixel_values=None,
-        pixel_values_local=None,
-        num_local_patches=None,
+        image_sizes=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1696,10 +1697,13 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
             **kwargs,
         )
 
+        # Pixel values are used only in the first iteration if available
+        # In subsequent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_local"] = pixel_values_local
-            model_inputs["num_local_patches"] = num_local_patches
+            model_inputs["image_sizes"] = image_sizes
 
         return model_inputs
 

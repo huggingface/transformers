@@ -785,8 +785,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         inputs_embeds=None,
         pixel_values=None,
         image_sizes=None,
-        pixel_values_videos=None,
-        image_sizes_videos=None,
         attention_mask=None,
         logits_to_keep=None,
         is_first_iteration=False,
@@ -804,15 +802,13 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             **kwargs,
         )
 
+        # Pixel values are used only in the first iteration if available
+        # In subsequent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["image_sizes_videos"] = image_sizes_videos
 
         return model_inputs
 

@@ -479,9 +479,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         )
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, **kwargs):

@@ -1453,7 +1453,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        second_per_grid_ts=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1469,7 +1468,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,

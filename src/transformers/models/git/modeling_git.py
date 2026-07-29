@@ -1100,31 +1100,5 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        pixel_values=None,
-        attention_mask=None,
-        use_cache=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- `git` has special `pixel_values` handling
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
-
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

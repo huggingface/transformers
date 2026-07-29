@@ -1047,12 +1047,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             use_cache=use_cache,
             **kwargs,
         )
-
         model_inputs["position_ids"] = None
-        model_inputs["images_per_sample"] = images_per_sample
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
 
         return model_inputs
 
