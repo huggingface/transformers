@@ -139,7 +139,7 @@ class Cosmos3EdgeImageProcessorPil(PilBackend):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: time-major, block-major patches with HWC values within each flattened patch
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)

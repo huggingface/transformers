@@ -36,12 +36,7 @@ from ...image_utils import (
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import TensorType, add_start_docstrings, auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -49,6 +44,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import (
     group_videos_by_shape,
     reorder_videos,
@@ -1043,7 +1039,18 @@ class VideoLlama3Processor(Qwen3VLProcessor):
 
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
-    pass
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
 
 
 class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
@@ -1200,6 +1207,26 @@ class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
     use_token_compression: bool | None
 
 
+@add_start_docstrings(
+    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
+    """
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 1):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+        min_frames (`int`, *optional*, defaults to 4):
+            The minimum number of frames that can be sampled.
+        max_frames (`int`, *optional*, defaults to 768):
+            The maximum number of frames that can be sampled.
+    """,
+)
 class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     use_token_compression = True
     image_mean = IMAGENET_STANDARD_MEAN

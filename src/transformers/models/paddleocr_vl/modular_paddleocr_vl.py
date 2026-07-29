@@ -140,7 +140,7 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: final layout is a 4D image instead of flattened 2D seq
         image = np.asarray(image, dtype=np.float32)
         channel, resized_height, resized_width = image.shape
@@ -184,7 +184,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: final layout is a 4D image instead of flattened 2D seq
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

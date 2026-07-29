@@ -127,7 +127,7 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
         patch_size: int,
         merge_size: int,
     ) -> tuple["torch.Tensor", int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: final layout is a 4D image instead of flattened 2D seq
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size

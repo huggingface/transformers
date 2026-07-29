@@ -143,7 +143,7 @@ class Glm4vImageProcessorPil(PilBackend):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)
         channel, resized_height, resized_width = image.shape

@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...utils import (
+    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     is_torchvision_available,
@@ -52,10 +53,11 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
-from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor, Glm4vVideoProcessorInitKwargs
 from ..llama.configuration_llama import LlamaConfig
@@ -993,6 +995,17 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
 # Processor implementations live in the modular source so the fast/PIL/video/generated modules stay synchronized.
 
 
+class Cosmos3EdgeImageProcessorKwargs(Glm4vImageProcessorKwargs):
+    """
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+
 class Cosmos3EdgeImageProcessor(Glm4vImageProcessor):
     size = {"shortest_edge": 256 * 256, "longest_edge": 4096 * 4096}
     image_mean = IMAGENET_STANDARD_MEAN
@@ -1008,7 +1021,7 @@ class Cosmos3EdgeImageProcessor(Glm4vImageProcessor):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: time-major, block-major patches with HWC values within each flattened patch
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
@@ -1050,7 +1063,7 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: time-major, block-major patches with HWC values within each flattened patch
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)
@@ -1087,6 +1100,18 @@ class Cosmos3EdgeVideoProcessorInitKwargs(Glm4vVideoProcessorInitKwargs):
     pass
 
 
+@add_start_docstrings(
+    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
+    BASE_VIDEO_PROCESSOR_DOCSTRING,
+    """
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 1):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+    """,
+)
 class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
     image_mean = IMAGENET_STANDARD_MEAN

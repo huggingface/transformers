@@ -383,7 +383,7 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple["torch.Tensor", int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         patches = images.reshape(
@@ -486,7 +486,7 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Ensure float32 for patch processing
         image = np.asarray(image, dtype=np.float32)
         channel, resized_height, resized_width = image.shape

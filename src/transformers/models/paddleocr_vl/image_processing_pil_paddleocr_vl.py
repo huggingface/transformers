@@ -157,7 +157,7 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
         merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[np.ndarray, int, int]:
-        "Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         # Override: final layout is a 4D image instead of flattened 2D seq
         image = np.asarray(image, dtype=np.float32)
         channel, resized_height, resized_width = image.shape
