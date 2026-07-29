@@ -475,10 +475,8 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
 
         if self.text_config is None:
-            text_config_cls = self.sub_configs["text_config"]
-            text_keys = text_config_cls().to_dict().keys()
-            text_kwargs = {key: kwargs[key] for key in text_keys if key in kwargs}
-            self.text_config = text_config_cls(**text_kwargs)
+            # The reference implementation defines the text config values on the main config
+            self.text_config = self.sub_configs["text_config"](**kwargs)
         elif isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         PreTrainedConfig.__post_init__(self, **kwargs)
