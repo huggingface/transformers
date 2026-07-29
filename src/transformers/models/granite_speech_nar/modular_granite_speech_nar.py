@@ -68,9 +68,9 @@ class GraniteSpeechNarEncoderConfig(GraniteSpeechPlusEncoderConfig):
     self_conditioning_layer (`int`, *optional*):
         Layer index at which self-conditioning (mid-layer CTC feedback) is applied.
         Defaults to `num_layers // 2`.
-    bpe_output_dim (`int`, *optional*, defaults to 49153):
+    vocabulary_size (`int`, *optional*, defaults to 49153):
         Vocabulary size for the BPE CTC head.
-    bpe_pooling_window (`int`, *optional*, defaults to 4):
+    pooling_window (`int`, *optional*, defaults to 4):
         Window size for posterior-weighted pooling before the BPE CTC head.
     cat_hidden_layers (`list[int]`, *optional*, defaults to `[4, 8, 12]`):
         Indices of intermediate encoder layers whose outputs are concatenated (with the always-appended
