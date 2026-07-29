@@ -15,40 +15,39 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable
+from inspect import isfunction, ismethod
 from typing import Any
 
-from .content_parsers import _PLACEHOLDER, STREAMABLE_PARSERS, process_field
+from ..chat_template_utils import get_json_schema
+from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
 # Tool-call argument coercion (`tools=`): a JSON tool-call body carries its types in the
 # syntax itself, but an inline body (`xml-inline` / `kv-lines`) is plain text, so its
-# arguments parse as strings. When the caller passes its OpenAI-style tool specs, each
-# argument is instead cast from the JSON Schema of the tool the parsed call names.
-
-# Container args arrive as one JSON blob, which a `value_parser` already decodes.
-_CONTAINER_TYPES = frozenset({"array", "object"})
+# arguments parse as strings. When the caller passes the request's tools, string arguments
+# are instead cast from the JSON Schema of the tool the parsed call names.
 
 
 def _schema_types(schema: Any) -> tuple[str, ...]:
-    """Candidate type names declared by a parameter's JSON Schema, recursing into
-    `anyOf` / `oneOf` / `allOf`. `$ref` counts as `object`; empty when undeclared."""
+    """Candidate type names declared by a parameter's JSON Schema, in the dialect
+    `get_json_schema` emits: a `type` name or list of names, `anyOf` subschemas, and
+    `nullable` marking an Optional. Empty when the parameter is undescribed."""
     if not isinstance(schema, dict):
         return ()
     declared = schema.get("type")
     types = [declared] if isinstance(declared, str) else []
     if isinstance(declared, list):
         types.extend(t for t in declared if isinstance(t, str))
-    for combinator in ("anyOf", "oneOf", "allOf"):
-        for choice in schema.get(combinator) or []:
-            types.extend(_schema_types(choice))
-    if "$ref" in schema:
-        types.append("object")
+    for choice in schema.get("anyOf") or []:
+        types.extend(_schema_types(choice))
+    if schema.get("nullable") and "null" not in types:
+        types.append("null")
     return tuple(types)
 
 
-def _coerce(raw: str, types: Sequence[str]) -> Any:
+def _coerce(raw: str, types: tuple[str, ...]) -> Any:
     """Cast text to the first type in `types` that accepts it. Failed casts, `string`,
     and unknown types leave the text unchanged, so coercion only ever adds typing.
     Booleans follow the `bool` content parser; `object` / `array` need JSON of that shape."""
@@ -66,7 +65,7 @@ def _coerce(raw: str, types: Sequence[str]) -> Any:
                 return raw.strip().lower() in ("true", "1")
             if type_name == "null" and raw.strip() in ("null", "None"):
                 return None
-            if type_name in _CONTAINER_TYPES:
+            if type_name in ("object", "array"):
                 decoded = json.loads(raw)
                 if isinstance(decoded, dict if type_name == "object" else list):
                     return decoded
@@ -75,24 +74,18 @@ def _coerce(raw: str, types: Sequence[str]) -> Any:
     return raw
 
 
-def _coerce_argument(value: Any, types: Sequence[str]) -> Any:
-    """Coerce one argument; lists (from `merge_duplicates`) are cast element-wise."""
-    if isinstance(value, list):
-        return [_coerce(item, types) if isinstance(item, str) else item for item in value]
-    return _coerce(value, types) if isinstance(value, str) else value
-
-
 def parse_response(
     text: str,
     response_template: dict | ResponseTemplate,
     *,
     prefix: str | None = None,
-    tools: list[dict] | None = None,
+    tools: list[dict | Callable] | None = None,
 ) -> dict:
     """The main function for response parsing when you don't want streaming. Takes generated output
     and the prompt prefix and parses them without streaming any events, then returns the parsed message.
 
-    Pass `tools` (OpenAI-style specs) to type tool-call arguments from their JSON Schema.
+    Pass `tools` (JSON schemas or Python functions, as accepted by `apply_chat_template`) to type
+    tool-call arguments from each tool's JSON Schema.
     """
     response_template = load_response_template(response_template)
     stream = ResponseParser(response_template, prefix=prefix, tools=tools)
@@ -118,8 +111,9 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
-    Pass `tools=` (OpenAI-style specs) to type tool-call arguments from their JSON Schema
-    as each region closes. Anything the schema does not describe is left alone.
+    Pass `tools=` (JSON schemas or Python functions, as accepted by `apply_chat_template`) to type
+    tool-call arguments from each tool's JSON Schema as each region closes. Anything the schema
+    does not describe is left alone.
 
     Events can be either "region_open", "region_chunk", or "region_close".
 
@@ -135,7 +129,7 @@ class ResponseParser:
         response_template: dict | ResponseTemplate,
         prefix: str | None = None,
         *,
-        tools: list[dict] | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         self._spec = load_response_template(response_template)
         if prefix is None:
@@ -146,8 +140,11 @@ class ResponseParser:
                 'already contains the complete message, pass `prefix=""` to opt out explicitly.'
             )
         # `tools=`: tool name -> JSON Schema `properties`, for typing parsed arguments.
+        # Functions are converted to schemas, matching how `apply_chat_template` takes tools.
         self._tool_params: dict[str, dict] = {}
         for tool in tools or []:
+            if isfunction(tool) or ismethod(tool):
+                tool = get_json_schema(tool)
             fn = tool.get("function", tool) if isinstance(tool, dict) else None
             if isinstance(fn, dict) and isinstance(fn.get("name"), str):
                 parameters = fn.get("parameters")
@@ -373,7 +370,7 @@ class ResponseParser:
             self._reset_to_implicit()
             return
         field = self._spec.fields[self._current]
-        value = process_field(self._body, field, self._captures, raw_value_keys=self._schema_typed_keys(field))
+        value = process_field(self._body, field, self._captures)
         if self._tool_params:
             value = self._coerce_tool_calls(value)
         if field.repeats:
@@ -382,26 +379,6 @@ class ResponseParser:
             self._output[self._current] = value
         events.append({"type": "region_close", "field": self._current, "value": value})
         self._reset_to_implicit()
-
-    def _schema_typed_keys(self, field: ResponseTemplateField) -> frozenset[str]:
-        """Parameters of the tool this region is calling whose JSON Schema declares a
-        scalar type. Those keep their raw text through parsing: a lax `value_parser`
-        would settle `1.50` as a float, putting a string-typed parameter beyond a
-        cast's reach. A field emits tool calls when its transform has the OpenAI shape
-        with the parsed inline dict as the arguments; the tool name is then a transform
-        literal or a capture placeholder, both known before the body is parsed."""
-        if not self._tool_params or field.content_args.get("value_parser") is None or field.transform_each:
-            return frozenset()
-        fn = field.transform.get("function") if isinstance(field.transform, dict) else None
-        name = fn.get("name") if isinstance(fn, dict) and fn.get("arguments") == "{content}" else None
-        if isinstance(name, str) and (placeholder := _PLACEHOLDER.fullmatch(name)):
-            name = self._captures.get(placeholder.group(1))
-        properties = self._tool_params.get(name) if isinstance(name, str) else None
-        return frozenset(
-            key
-            for key, schema in (properties or {}).items()
-            if (types := _schema_types(schema)) and not _CONTAINER_TYPES.issuperset(types)
-        )
 
     def _coerce_tool_calls(self, value: Any) -> Any:
         """Cast the string arguments of any parsed value shaped like an OpenAI call to a
@@ -416,10 +393,13 @@ class ResponseParser:
         if not isinstance(name, str) or not isinstance(arguments, dict):
             return value
         if properties := self._tool_params.get(name):
-            fn["arguments"] = {
-                key: _coerce_argument(argument, _schema_types(properties[key])) if key in properties else argument
-                for key, argument in arguments.items()
-            }
+            for key, argument in arguments.items():
+                if key not in properties or not (types := _schema_types(properties[key])):
+                    continue
+                if isinstance(argument, str):
+                    arguments[key] = _coerce(argument, types)
+                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                    arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
         return value
 
     def _reset_to_implicit(self) -> None:

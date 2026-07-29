@@ -25,8 +25,7 @@ import unittest
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
-from transformers.utils.chat_parsing.content_parsers import parse_content
-from transformers.utils.chat_parsing.response_parser import _coerce, _coerce_argument, _schema_types
+from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
 
 
 cohere_template = {
@@ -1305,6 +1304,7 @@ _XML_STRING_ARGS_TEMPLATE = {
     },
 }
 
+# kv-lines without a value_parser: values likewise stay raw strings for tools= to cast.
 _KV_LINES_TOOLS_TEMPLATE = {
     "defaults": {"role": "assistant"},
     "start_anchor": "<|im_start|>assistant\n",
@@ -1314,9 +1314,6 @@ _KV_LINES_TOOLS_TEMPLATE = {
             "close": "</tool_call>",
             "repeats": True,
             "content": "kv-lines",
-            "content_args": {
-                "value_parser": {"name": "json", "args": {"allow_non_json": True}},
-            },
             "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{content}"}},
         },
     },
@@ -1426,12 +1423,13 @@ class ToolArgCoercionTest(unittest.TestCase):
         # Non-tool-call values pass through untouched.
         self.assertEqual(parser._coerce_tool_calls("hello"), "hello")
 
-    def test_schema_types_handles_schema_forms(self):
+    def test_schema_types_handles_get_json_schema_dialect(self):
+        # The subset of JSON Schema that `get_json_schema` emits: a type name or list of
+        # names, `anyOf` subschemas, and `nullable` marking an Optional.
         self.assertEqual(_schema_types({"type": "integer"}), ("integer",))
-        self.assertEqual(_schema_types({"type": ["integer", "null"]}), ("integer", "null"))
-        self.assertEqual(_schema_types({"oneOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
-        self.assertEqual(_schema_types({"allOf": [{"type": "number"}]}), ("number",))
-        self.assertEqual(_schema_types({"$ref": "#/$defs/Item"}), ("object",))
+        self.assertEqual(_schema_types({"type": ["integer", "string"]}), ("integer", "string"))
+        self.assertEqual(_schema_types({"anyOf": [{"type": "boolean"}, {"type": "string"}]}), ("boolean", "string"))
+        self.assertEqual(_schema_types({"type": "integer", "nullable": True}), ("integer", "null"))
         # Undescribed parameters resolve to no candidate types, making coercion a no-op.
         self.assertEqual(_schema_types({"description": "no type"}), ())
 
@@ -1454,28 +1452,9 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(len(closes), 1)
         self.assertEqual(closes[0]["function"]["arguments"], {"hour": 7, "enabled": True, "label": "wake up"})
 
-    def test_streaming_skips_value_parser_for_typed_params(self):
-        # Streaming with a value_parser template still skips per typed parameter before coerce.
-        model_out = (
-            "<tool_call>\n<function=set_alarm>\n"
-            "<parameter=label>\n1.50\n</parameter>\n"
-            "<parameter=hour>\n007\n</parameter>\n"
-            "</function>\n</tool_call>"
-        )
-        stream = ResponseParser(qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)
-        closes = [
-            event["value"]
-            for chunk in _chunk_fixed(model_out, 8)
-            for event in stream.feed(chunk)
-            if event["type"] == "region_close" and event["field"] == "tool_calls"
-        ]
-        self.assertEqual(len(closes), 1)
-        self.assertEqual(closes[0]["function"]["arguments"], {"label": "1.50", "hour": 7})
-
     def test_qwen3_tools_coerces_strings_left_by_value_parser(self):
-        # Without tools=, qwen3's json+allow_non_json value_parser types what it can (`true`) and
-        # leaves invalid JSON (`007`) as a string. With tools=, schema-typed params skip
-        # value_parser and coercion owns typing.
+        # qwen3's json+allow_non_json value_parser types what it can (`true`) and leaves
+        # invalid JSON (`007`) as a string; tools= then casts those leftover strings.
         model_out = (
             "<tool_call>\n<function=set_alarm>\n"
             "<parameter=hour>\n007\n</parameter>\n"
@@ -1488,82 +1467,31 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(_first_tool_args(without), {"hour": "007", "enabled": True, "label": "wake up"})
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True, "label": "wake up"})
 
-    def test_typed_parameters_skip_value_parser_per_argument(self):
-        # value_parser is skipped only for parameters that declare a JSON Schema type.
-        model_out = (
-            "<tool_call>\n<function=set_alarm>\n"
-            "<parameter=label>\n1.50\n</parameter>\n"
-            "<parameter=code>\n7\n</parameter>\n"
-            "</function>\n</tool_call>"
-        )
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, qwen3_template, prefix="")),
-            {"label": 1.5, "code": 7},
-        )
-        # label is typed as string in _SET_ALARM_TOOLS; code is undeclared → value_parser still runs.
+    def test_coercion_never_reworks_already_typed_values(self):
+        # Coercion only casts strings: anything a value_parser already typed is final, even
+        # when the schema disagrees. Templates whose tool-call regions expect callers to
+        # pass tools= should omit value_parser and let the schema own the typing.
+        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
+        # qwen3's lax json value_parser reads 1.50 as the float 1.5 before coercion sees it,
+        # so the string-typed label stays a float ...
         self.assertEqual(
             _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=_SET_ALARM_TOOLS)),
-            {"label": "1.50", "code": 7},
+            {"label": 1.5},
         )
-        # string-typed code also skips: a json value_parser would otherwise parse "7" as an int.
-        string_only = _set_alarm_tools(label={"type": "string"}, code={"type": "string"})
+        # ... while without a value_parser the raw text reaches the schema cast intact.
         self.assertEqual(
-            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=string_only)),
-            {"label": "1.50", "code": "7"},
-        )
-        # Property present but untyped keeps value_parser.
-        untyped_code = _set_alarm_tools(label={"type": "string"}, code={"description": "opaque"})
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=untyped_code)),
-            {"label": "1.50", "code": 7},
-        )
-        # Unknown tool name keeps value_parser for every argument.
-        unknown = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "other_tool",
-                    "parameters": {"type": "object", "properties": {"n": {"type": "integer"}}},
-                },
-            }
-        ]
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=unknown)),
-            {"label": 1.5, "code": 7},
-        )
-
-    def test_kv_lines_skips_value_parser_for_typed_params(self):
-        model_out = "<tool_call>\n<function=set_alarm>\nlabel: 1.50\ncode: 7\n</tool_call>"
-        string_only = _set_alarm_tools(label={"type": "string"}, code={"type": "string"})
-        without = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="")
-        with_tools = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="", tools=string_only)
-        self.assertEqual(_first_tool_args(without), {"label": 1.5, "code": 7})
-        self.assertEqual(_first_tool_args(with_tools), {"label": "1.50", "code": "7"})
-        # The content parsers themselves capture raw text; `value_parser` (and any
-        # schema-driven exemption from it) is applied afterwards, in `process_field`.
-        self.assertEqual(
-            parse_content(
-                "label: 1.50\ncode: 7",
-                "kv-lines",
-                {"value_parser": {"name": "json", "args": {"allow_non_json": True}}},
-            ),
-            {"label": "1.50", "code": "7"},
-        )
-
-    def test_literal_tool_name_in_transform_skips_value_parser(self):
-        # The calling tool is read statically from the field's transform; a hardcoded
-        # name works the same as a `{name}` capture placeholder.
-        template = copy.deepcopy(qwen3_template)
-        field = template["fields"]["tool_calls"]
-        field["open_pattern"] = r"<tool_call>\s*<function=set_alarm>"
-        field["transform"] = {"type": "function", "function": {"name": "set_alarm", "arguments": "{content}"}}
-        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)),
+            _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)),
             {"label": "1.50"},
         )
 
-    def test_non_tool_call_field_keeps_value_parser(self):
+    def test_kv_lines_string_args_are_coerced(self):
+        model_out = "<tool_call>\n<function=set_alarm>\nhour: 7\nenabled: true\n</tool_call>"
+        without = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="")
+        with_tools = parse_response(model_out, _KV_LINES_TOOLS_TEMPLATE, prefix="", tools=_SET_ALARM_TOOLS)
+        self.assertEqual(_first_tool_args(without), {"hour": "7", "enabled": "true"})
+        self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
+
+    def test_non_tool_call_regions_are_untouched(self):
         # A field that captures a `name` but does not parse into a tool call must be left
         # alone, even when the capture happens to match a tool: its keys are not arguments.
         template = {
@@ -1590,10 +1518,10 @@ class ToolArgCoercionTest(unittest.TestCase):
             expected,
         )
 
-    def test_merge_duplicates_arguments_are_typed_element_wise(self):
+    def test_merge_duplicates_arguments_are_cast_element_wise(self):
         # merge_duplicates collects repeated tags into a list, so coercion has to reach
-        # inside it -- otherwise `tools=` would leave raw strings a value_parser had typed.
-        template = copy.deepcopy(qwen3_template)
+        # inside it and cast per element.
+        template = copy.deepcopy(_XML_STRING_ARGS_TEMPLATE)
         template["fields"]["tool_calls"]["content_args"]["merge_duplicates"] = True
         model_out = (
             "<tool_call>\n<function=set_alarm>\n"
@@ -1601,38 +1529,16 @@ class ToolArgCoercionTest(unittest.TestCase):
             "<parameter=hour>\n9\n</parameter>\n"
             "</function>\n</tool_call>"
         )
-        self.assertEqual(_first_tool_args(parse_response(model_out, template, prefix="")), {"hour": [7, 9]})
+        self.assertEqual(_first_tool_args(parse_response(model_out, template, prefix="")), {"hour": ["7", "9"]})
         self.assertEqual(
             _first_tool_args(parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)),
             {"hour": [7, 9]},
         )
-        # An `array` parameter keeps the value_parser, which types elements a whole-list
-        # cast could not.
-        array_tools = _set_alarm_tools(hour={"type": "array", "items": {"type": "integer"}})
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, template, prefix="", tools=array_tools)),
-            {"hour": [7, 9]},
-        )
-
-    def test_skipped_string_argument_is_still_stripped(self):
-        # Skipping the value_parser must not also skip its whitespace handling: a string
-        # parameter keeps the exact text, not the surrounding newlines.
-        template = copy.deepcopy(qwen3_template)
-        # A tag_pattern that leaves whitespace inside `value` for the value_parser to strip.
-        template["fields"]["tool_calls"]["content_args"]["tag_pattern"] = (
-            r"<parameter=(?P<key>\w+)>(?P<value>.*?)</parameter>"
-        )
-        model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n  wake up  \n</parameter>\n</tool_call>"
-        self.assertEqual(_first_tool_args(parse_response(model_out, template, prefix="")), {"label": "wake up"})
-        self.assertEqual(
-            _first_tool_args(parse_response(model_out, template, prefix="", tools=_SET_ALARM_TOOLS)),
-            {"label": "wake up"},
-        )
-
-    def test_coerce_argument_casts_inside_lists(self):
-        self.assertEqual(_coerce_argument(["7", "9"], ("integer",)), [7, 9])
         # Elements that don't cast, and non-string elements, are left as they are.
-        self.assertEqual(_coerce_argument(["7", "x", 9], ("integer",)), [7, "x", 9])
+        parser = _parser_with_tools(_SET_ALARM_TOOLS)
+        call = {"type": "function", "function": {"name": "set_alarm", "arguments": {"hour": ["7", "x", 9]}}}
+        parser._coerce_tool_calls(call)
+        self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
 
     def test_coerce_tool_calls_ignores_unusable_function_name(self):
         # A transform can hand us a name parsed from model output, so a non-string name
@@ -1642,35 +1548,44 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(parser._coerce_tool_calls(call), call)
         self.assertEqual(call["function"]["arguments"], {"hour": "7"})
 
-    def test_schema_typed_keys_exempt_all_but_pure_containers(self):
-        tools = _set_alarm_tools(
-            hour={"type": "integer"},
-            label={"type": "string"},
-            tags={"type": "array"},
-            extra={"type": "object"},
-            # One scalar in a union is enough: the text has to survive for the
-            # `string` branch, since a value_parser would settle it as a number.
-            either={"anyOf": [{"type": "string"}, {"type": "object"}]},
-        )
-        parser = ResponseParser(qwen3_template, prefix="", tools=tools)
-        parser._captures = {"name": "set_alarm"}
-        field = parser._spec.fields["tool_calls"]
-        self.assertEqual(parser._schema_typed_keys(field), frozenset({"hour", "label", "either"}))
-
     def test_union_with_container_still_keeps_scalar_text(self):
         model_out = "<tool_call>\n<function=set_alarm>\n<parameter=label>\n1.50\n</parameter>\n</tool_call>"
         union = _set_alarm_tools(label={"anyOf": [{"type": "string"}, {"type": "object"}]})
-        # The `string` branch keeps the text a json value_parser would have read as 1.5 ...
+        # `string` never casts, so the union keeps scalar-looking text as text ...
         self.assertEqual(
-            _first_tool_args(parse_response(model_out, qwen3_template, prefix="", tools=union)),
+            _first_tool_args(parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=union)),
             {"label": "1.50"},
         )
         # ... while the `object` branch still decodes a body that really is an object.
         object_body = '<tool_call>\n<function=set_alarm>\n<parameter=label>\n{"a": 1}\n</parameter>\n</tool_call>'
         self.assertEqual(
-            _first_tool_args(parse_response(object_body, qwen3_template, prefix="", tools=union)),
+            _first_tool_args(parse_response(object_body, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=union)),
             {"label": {"a": 1}},
         )
+
+    def test_callable_tools_are_converted_to_schemas(self):
+        # Functions are accepted and converted with `get_json_schema`, matching how tools
+        # are passed to `apply_chat_template`; an Optional parameter is nullable, so a
+        # literal "null" casts to None.
+        def set_alarm(hour: int, enabled: bool, label: str | None = None):
+            """
+            Set an alarm.
+
+            Args:
+                hour: The hour the alarm should ring at.
+                enabled: Whether the alarm starts out enabled.
+                label: An optional label for the alarm.
+            """
+
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=hour>\n7\n</parameter>\n"
+            "<parameter=enabled>\ntrue\n</parameter>\n"
+            "<parameter=label>\nnull\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        parsed = parse_response(model_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=[set_alarm])
+        self.assertEqual(_first_tool_args(parsed), {"hour": 7, "enabled": True, "label": None})
 
     def test_get_response_parser_forwards_tools(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")

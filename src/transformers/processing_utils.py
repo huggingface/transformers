@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
@@ -2247,7 +2248,7 @@ class ProcessorMixin(PushToHubMixin):
         schema: dict | None = None,
         *,
         prefix: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None" = None,
-        tools: list[dict] | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -2267,9 +2268,10 @@ class ProcessorMixin(PushToHubMixin):
                 The prompt that came before generation. Many chat templates pre-write part of the message, so
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
-            tools (`list[dict]`, *optional*):
-                OpenAI-style tool definitions. Tool-call arguments are typed from the calling tool's
-                JSON Schema as each region closes.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                The tools that were available to the model, in the same format as accepted by
+                `apply_chat_template` (JSON schemas or callable functions). Tool-call arguments are
+                typed from the calling tool's JSON Schema as each region closes.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")

@@ -399,8 +399,10 @@ Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` t
 A JSON tool-call body carries types in the syntax itself (`7` vs `"7"`, `true` vs `"true"`), so the
 `json` parser recovers them for free. An `xml-inline` or `kv-lines` body does not: everything between
 the tags is plain text, so argument values start out as strings (`{"hour": "7", "enabled": "true"}`).
-Pass the request's OpenAI-style `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
-[`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`:
+Pass the request's `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+[`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`.
+Tools are accepted in the same format as [`~PreTrainedTokenizerBase.apply_chat_template`]: JSON
+schemas, or Python functions with type hints and docstrings that are auto-converted to schemas.
 
 ```python
 tools = [{
@@ -428,14 +430,11 @@ else is left alone. Already-typed values, arguments the schema does not describe
 are all untouched, so `tools=` only ever adds type information, and it is a no-op for templates that
 already recover types.
 
-There is one wrinkle. A lax `value_parser` guesses wrong for `string` parameters: `json` with
-`allow_non_json` reads `1.50` as the number `1.5`, losing the trailing zero for good. Since a cast
-can only rework strings, there is no repairing that afterwards. So the schema is consulted *before*
-the `value_parser` runs: when a field's transform declares a tool call (its `function.arguments` is
-the parsed `"{content}"`), parameters of the calling tool that declare at least one scalar type skip
-the `value_parser` and keep their exact text for the cast to use. Only parameters typed purely as
-`object` or `array` keep the `value_parser`, which reads a JSON body at least as well as a cast does,
-with dialect knobs and typing for the elements.
+Because coercion only reworks strings, it never revisits values something else already typed. In
+particular, a lax `value_parser` such as `json` with `allow_non_json` reads `1.50` as the number
+`1.5` before coercion sees it, even if the parameter is typed `string`. If a template's tool-call
+field expects callers to pass `tools=`, prefer leaving `value_parser` off and letting the schema own
+the typing.
 
 ### Transform
 
