@@ -96,11 +96,10 @@ class GraniteMoeSWAIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 6)): (
-                    'The capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France'
+                    "The capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France is Paris.\nThe capital of France"
                 ),
             }
         )
