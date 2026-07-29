@@ -232,6 +232,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         if pad := -num_frames % temporal_patch_size:
             repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
             videos = torch.cat((videos, repeats), dim=1)
+            num_frames += pad
 
         grid_t = num_frames // temporal_patch_size
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
