@@ -879,7 +879,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
                 cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+                cls_mask = torch.full((), 0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
 

@@ -32,6 +32,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BartConfig,
+    BartForConditionalGeneration,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
@@ -46,7 +48,7 @@ from transformers import (
     logging,
 )
 from transformers.integrations import activate_neftune
-from transformers.loss.loss_utils import ForCausalLMLoss
+from transformers.loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
@@ -223,6 +225,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         loss_tolerance,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
+        label_smoothing_factor=0.0,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -230,6 +233,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         """
         model_name = self._ga_model_name
         args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
+        args_kwargs["label_smoothing_factor"] = label_smoothing_factor
         trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
         if compute_loss_func is not None:
             trainer_kwargs["compute_loss_func"] = compute_loss_func
@@ -313,6 +317,22 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
 
+    def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
+        """
+        With label_smoothing_factor > 0 the Trainer computes the loss through LabelSmoother
+        instead of the model. LabelSmoother must reduce over num_items_in_batch so grad norms
+        and losses match between a large-batch baseline and an equivalent GAS run. Before the
+        fix LabelSmoother mean-reduced over the current micro-batch only, so the GAS grad norm
+        was inflated by roughly gas_steps.
+        """
+        # Tight tolerance: num_items_in_batch properly averages the smoothed loss across micro-batches
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+
     @require_torch_non_multi_accelerator
     def test_num_items_in_batch_causal_lm(self):
         """
@@ -373,6 +393,47 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(trainer._loss_shifts_labels)
 
             # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_encoder_decoder(self):
+        """
+        Encoder-decoder LM heads compute their loss against unshifted `labels` -- their logits are aligned with
+        the targets (typically by right-shifting the decoder inputs), so the loss must not shift again. Their
+        class-name-inferred `loss_type` still maps to ForCausalLMLoss, which would drive the Trainer to count over
+        `labels[..., 1:]` and over-scale the loss; `_get_num_items_in_batch` must instead count the full label
+        tensor whenever `config.is_encoder_decoder`. Bart probes exactly that (`loss_type` -> ForCausalLMLoss,
+        `is_encoder_decoder` True) combination -- though Bart's own forward computes the aligned loss with
+        `CrossEntropyLoss` rather than routing through `ForCausalLMLoss`.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = BartConfig(
+                vocab_size=64,
+                d_model=16,
+                encoder_layers=1,
+                decoder_layers=1,
+                encoder_attention_heads=1,
+                decoder_attention_heads=1,
+                encoder_ffn_dim=16,
+                decoder_ffn_dim=16,
+                max_position_embeddings=32,
+            )
+            model = BartForConditionalGeneration(config)
+            # loss_type routes to ForCausalLMLoss, but the model is encoder-decoder -> the count must NOT shift.
+            self.assertIs(LOSS_MAPPING.get(model.loss_type), ForCausalLMLoss)
+            self.assertTrue(model.config.is_encoder_decoder)
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+            )
+            self.assertFalse(trainer._loss_shifts_labels)
+
+            # 5 valid + 8 valid = 13, counted in full (no shift).
             batch_samples = [
                 {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
                 {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},

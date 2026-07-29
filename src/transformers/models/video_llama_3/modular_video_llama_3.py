@@ -810,13 +810,13 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             video_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
@@ -1010,7 +1010,7 @@ class VideoLlama3Processor(Qwen3VLProcessor):
         )
         ProcessorMixin.__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_video_tokens = [
             grid_thw.prod() // merge_size**2
             for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
@@ -1238,7 +1238,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
         image_merge_sizes = torch.tensor(
             [merge_size] * image_grid_thw.size(0),

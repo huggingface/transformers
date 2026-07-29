@@ -367,7 +367,7 @@ class DogeAttention(nn.Module):
             if attention_mask.dtype == torch.bool:
                 dtype = hidden_states.dtype
                 attention_mask = torch.where(
-                    attention_mask, torch.tensor(0.0, device=attention_mask.device, dtype=dtype), min_dtype
+                    attention_mask, torch.full((), 0.0, device=attention_mask.device, dtype=dtype), min_dtype
                 )
             attn_mask = attn_mask.masked_fill(attention_mask[:, :, :, : attn_mask.shape[-1]] != 0, min_dtype)
         if attn_mask.shape[-1] > keep_window_size:
@@ -718,6 +718,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

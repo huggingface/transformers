@@ -1490,10 +1490,9 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             else:
                 all_features.append(torch.cat([global_flat, view_sep], dim=0))
 
-        image_features = torch.cat(all_features, dim=0)
         return DeepseekOcr2ModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=all_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1508,7 +1507,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -1551,7 +1550,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)

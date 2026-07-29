@@ -110,7 +110,7 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -898,7 +898,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             if inputs_embeds is None:
                 raise ValueError("Either `input_ids` or `inputs_embeds` has to be provided.")
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:

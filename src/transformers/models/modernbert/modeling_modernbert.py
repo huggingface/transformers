@@ -110,7 +110,7 @@ class ModernBertRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device=device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -833,7 +833,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
                 cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+                cls_mask = torch.full((), 0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
 

@@ -387,8 +387,8 @@ class CHMv2FeaturesToDepth(nn.Module):
         linear = torch.linspace(self.min_depth, scaled_max_depth, n_bins, device=device)
         log = torch.exp(
             torch.linspace(
-                torch.log(torch.tensor(self.min_depth, device=device)),
-                torch.log(torch.tensor(scaled_max_depth, device=device)),
+                torch.log(torch.full((), self.min_depth, device=device)),
+                torch.log(torch.full((), scaled_max_depth, device=device)),
                 n_bins,
                 device=device,
             )
