@@ -19,13 +19,17 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
+
 from transformers import FunAsrNanoProcessor
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from transformers.models.auto.auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES
+from transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf import CHAT_TEMPLATE
 from transformers.processing_utils import ProcessorMixin
 from transformers.testing_utils import execute_subprocess_async, require_torch
 from transformers.utils import is_torch_available
+from transformers.utils.chat_template_utils import render_jinja_template
 
 
 if is_torch_available():
@@ -74,10 +78,28 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertEqual(processor.audio_token_id, 151646)
         self.assertFalse(hasattr(processor, "max_audio_len"))
 
-    def test_constructor_defines_fun_asr_nano_default_prompt(self):
-        parameter = inspect.signature(FunAsrNanoProcessor.__init__).parameters["default_transcription_prompt"]
-        self.assertEqual(parameter.default, "Transcribe the audio:")
-        self.assertNotIn("apply_transcription_request", ModularFunAsrNanoProcessor.__dict__)
+    def test_constructor_accepts_but_does_not_expose_legacy_default_prompt(self):
+        self.assertNotIn(
+            "default_transcription_prompt", inspect.signature(ModularFunAsrNanoProcessor.__init__).parameters
+        )
+        self.assertNotIn("default_transcription_prompt", inspect.signature(FunAsrNanoProcessor.__init__).parameters)
+
+        tokenizer = SimpleNamespace(convert_tokens_to_ids=lambda token: 151646)
+        with patch(
+            "transformers.models.audioflamingo3.processing_audioflamingo3.ProcessorMixin.__init__", return_value=None
+        ):
+            processor = FunAsrNanoProcessor(object(), tokenizer, default_transcription_prompt="Transcribe the audio:")
+
+        self.assertFalse(hasattr(processor, "default_transcription_prompt"))
+        self.assertIn("apply_transcription_request", ModularFunAsrNanoProcessor.__dict__)
+
+    def test_constructor_rejects_unknown_keyword_arguments(self):
+        tokenizer = SimpleNamespace(convert_tokens_to_ids=lambda token: 151646)
+        with patch(
+            "transformers.models.audioflamingo3.processing_audioflamingo3.ProcessorMixin.__init__", return_value=None
+        ):
+            with self.assertRaisesRegex(TypeError, "Unexpected keyword argument typo"):
+                FunAsrNanoProcessor(object(), tokenizer, typo=True)
 
     def test_modular_processor_reuses_audioflamingo3_call(self):
         self.assertNotIn("__call__", ModularFunAsrNanoProcessor.__dict__)
@@ -173,7 +195,6 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
     def _make_processor(self):
         captured = {}
         processor = FunAsrNanoProcessor.__new__(FunAsrNanoProcessor)
-        processor.default_transcription_prompt = "Transcribe the audio:"
 
         def apply_chat_template(conversations, **kwargs):
             captured["conversations"] = conversations
@@ -195,7 +216,6 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Transcribe the audio:"},
                             {"type": "audio", "path": "audio.wav"},
                         ],
                     }
@@ -206,13 +226,15 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertTrue(captured["kwargs"]["add_generation_prompt"])
         self.assertTrue(captured["kwargs"]["return_dict"])
 
-    def test_apply_transcription_request_batch_paths_and_prompts(self):
+    def test_apply_transcription_request_structures_batch_options(self):
         processor, captured = self._make_processor()
 
         self.assertEqual(
             processor.apply_transcription_request(
                 audio=["zh.wav", "en.wav"],
-                prompt=["语音转写成中文：", "Transcribe the audio:"],
+                language=["zh", "English"],
+                prompt=["会议讨论了 Fun-ASR-Nano。", "The meeting covered Transformers."],
+                keywords=[["开放时间"], ["Fun-ASR-Nano", "Transformers"]],
             ),
             {"ok": True},
         )
@@ -224,8 +246,10 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "语音转写成中文："},
                             {"type": "audio", "path": "zh.wav"},
+                            {"type": "text", "text": "会议讨论了 Fun-ASR-Nano。"},
+                            {"type": "keywords", "keywords": ["开放时间"]},
+                            {"type": "language", "language": "中文"},
                         ],
                     }
                 ],
@@ -233,13 +257,116 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Transcribe the audio:"},
                             {"type": "audio", "path": "en.wav"},
+                            {"type": "text", "text": "The meeting covered Transformers."},
+                            {"type": "keywords", "keywords": ["Fun-ASR-Nano", "Transformers"]},
+                            {"type": "language", "language": "英文"},
                         ],
                     }
                 ],
             ],
         )
+
+    def test_apply_transcription_request_rejects_unsupported_language(self):
+        processor, _ = self._make_processor()
+
+        with self.assertRaisesRegex(ValueError, "Unsupported language"):
+            processor.apply_transcription_request(audio="audio.wav", language="French")
+
+    def test_apply_transcription_request_broadcasts_language(self):
+        processor, captured = self._make_processor()
+
+        processor.apply_transcription_request(audio=["first.wav", "second.wav"], language="en")
+
+        self.assertEqual(
+            [conversation[0]["content"][-1] for conversation in captured["conversations"]],
+            [
+                {"type": "language", "language": "英文"},
+                {"type": "language", "language": "英文"},
+            ],
+        )
+
+    def test_apply_transcription_request_rejects_language_batch_mismatch(self):
+        processor, _ = self._make_processor()
+
+        with self.assertRaisesRegex(ValueError, "3 language for 2 audio"):
+            processor.apply_transcription_request(
+                audio=["first.wav", "second.wav"],
+                language=["zh", "en", "ja"],
+            )
+
+    def test_apply_transcription_request_converts_tensor_audio_to_numpy(self):
+        processor, captured = self._make_processor()
+
+        processor.apply_transcription_request(audio=torch.tensor([0.0, 0.5]))
+
+        audio = captured["conversations"][0][0]["content"][0]["audio"]
+        self.assertIsInstance(audio, np.ndarray)
+        np.testing.assert_array_equal(audio, np.array([0.0, 0.5], dtype=np.float32))
+
+    def test_apply_transcription_request_rejects_non_string_prompt_item(self):
+        processor, _ = self._make_processor()
+
+        with self.assertRaisesRegex(TypeError, "Each prompt"):
+            processor.apply_transcription_request(audio="audio.wav", prompt=[123])
+
+    def test_apply_transcription_request_rejects_keyword_batch_mismatch(self):
+        processor, _ = self._make_processor()
+
+        with self.assertRaisesRegex(ValueError, "keyword lists"):
+            processor.apply_transcription_request(
+                audio=["first.wav", "second.wav"],
+                keywords=[["first"], ["second"], ["third"]],
+            )
+
+    def test_chat_template_builds_default_and_contextual_prompts(self):
+        conversations = [
+            [{"role": "user", "content": [{"type": "audio"}]}],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio"},
+                        {"type": "text", "text": "The meeting covered Transformers."},
+                        {"type": "text", "text": "The deployment used vLLM."},
+                        {"type": "keywords", "keywords": ["Fun-ASR-Nano", "Transformers"]},
+                        {"type": "keywords", "keywords": ["vLLM"]},
+                        {"type": "language", "language": "英文"},
+                    ],
+                }
+            ],
+        ]
+
+        rendered, _ = render_jinja_template(
+            conversations=conversations,
+            chat_template=CHAT_TEMPLATE,
+            add_generation_prompt=True,
+        )
+
+        self.assertIn("语音转写：<|object_ref_start|>", rendered[0])
+        self.assertIn("**上下文信息：**", rendered[1])
+        self.assertIn("The meeting covered Transformers.", rendered[1])
+        self.assertIn("The deployment used vLLM.", rendered[1])
+        self.assertIn("热词列表：[Fun-ASR-Nano, Transformers, vLLM]", rendered[1])
+        self.assertIn("语音转写成英文：<|object_ref_start|>", rendered[1])
+
+    def test_chat_template_renders_training_conversation_without_generation_prompt(self):
+        conversations = [
+            [
+                {"role": "user", "content": [{"type": "audio"}]},
+                {"role": "assistant", "content": "This is a transcript."},
+            ]
+        ]
+
+        rendered, _ = render_jinja_template(
+            conversations=conversations,
+            chat_template=CHAT_TEMPLATE,
+            add_generation_prompt=False,
+        )
+
+        self.assertIn("语音转写：<|object_ref_start|>", rendered[0])
+        self.assertIn("<|im_start|>assistant\nThis is a transcript.<|im_end|>", rendered[0])
+        self.assertFalse(rendered[0].endswith("<|im_start|>assistant\n"))
 
 
 if __name__ == "__main__":

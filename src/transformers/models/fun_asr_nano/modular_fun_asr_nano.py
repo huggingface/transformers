@@ -18,10 +18,13 @@ from dataclasses import dataclass
 import torch.nn as nn
 
 from ... import initialization as init
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.generic import is_flash_attention_requested
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Model,
@@ -41,6 +44,19 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+LANGUAGE_ALIASES = {
+    "zh": "中文",
+    "chinese": "中文",
+    "中文": "中文",
+    "en": "英文",
+    "english": "英文",
+    "英文": "英文",
+    "ja": "日文",
+    "japanese": "日文",
+    "日文": "日文",
+}
 
 
 # TODO: check other implementation
@@ -64,23 +80,26 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         tokenizer,
         chat_template=None,
         audio_token="<|object_ref_start|>",
-        default_transcription_prompt="Transcribe the audio:",
+        **kwargs,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
             The token used as a placeholder for audio in the text.
-        default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the audio:"`):
-            Default prompt to use for transcription tasks when applying transcription requests.
         """
+        # Older processor configs stored this parent-class option; the chat template now owns the default prompt.
+        kwargs.pop("default_transcription_prompt", None)
+        if kwargs:
+            raise TypeError(f"Unexpected keyword argument {next(iter(kwargs))}.")
         super().__init__(
             feature_extractor,
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,
-            default_transcription_prompt=default_transcription_prompt,
             max_audio_len=None,
+            **kwargs,
         )
         del self.max_audio_len
+        del self.default_transcription_prompt
 
     def _get_audio_token_length(self, audio_lengths):
         return audio_lengths
@@ -97,6 +116,111 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
         num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
         return self.audio_token * num_audio_tokens
+
+    def apply_transcription_request(
+        self,
+        audio: AudioInput | list[AudioInput],
+        language: str | list[str] | None = None,
+        prompt: str | list[str] | None = None,
+        keywords: str | list[str] | list[list[str]] | None = None,
+        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+    ) -> BatchFeature:
+        """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
+
+        Args:
+            audio (`AudioInput` or `list[AudioInput]`):
+                Audio to transcribe. Can be a URL, local path, NumPy array, PyTorch tensor, or a list of these.
+            language (`str` or `list[str]`, *optional*):
+                Target language. Accepts Chinese, English, or Japanese as full English names, ISO codes (`"zh"`,
+                `"en"`, `"ja"`), or the checkpoint's Chinese language names (`"中文"`, `"英文"`, `"日文"`). A
+                single value is broadcast across the batch.
+            prompt (`str` or `list[str]`, *optional*):
+                Contextual information that may improve transcription. A list must match the audio batch size.
+            keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
+                Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
+                supplies separate hotwords for each audio sample.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`].
+
+        Returns:
+            [`BatchFeature`]: Processor outputs ready for [`FunAsrNanoForConditionalGeneration.generate`].
+        """
+        audio_items = list(make_list_of_audio_chat_template(audio))
+        audio_items = [
+            item.detach().cpu().numpy() if is_torch_available() and isinstance(item, torch.Tensor) else item
+            for item in audio_items
+        ]
+        batch_size = len(audio_items)
+        if batch_size == 0:
+            raise ValueError("`audio` must contain at least one sample.")
+
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        if any(item is not None and not isinstance(item, str) for item in prompts):
+            raise TypeError("Each prompt must be a string or `None`.")
+        languages = prepare_prompt_input(language, batch_size, input_name="language")
+        languages = [self._normalize_language(item) if item is not None else None for item in languages]
+        keyword_batches = self._prepare_keyword_inputs(keywords, batch_size)
+
+        conversations = []
+        for audio_item, prompt_text, keyword_list, language_name in zip(
+            audio_items, prompts, keyword_batches, languages
+        ):
+            content = [
+                {"type": "audio", "path": audio_item}
+                if isinstance(audio_item, str)
+                else {"type": "audio", "audio": audio_item}
+            ]
+            if prompt_text is not None:
+                content.append({"type": "text", "text": prompt_text})
+            if keyword_list:
+                content.append({"type": "keywords", "keywords": keyword_list})
+            if language_name is not None:
+                content.append({"type": "language", "language": language_name})
+            conversations.append([{"role": "user", "content": content}])
+
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _normalize_language(language: str) -> str:
+        if not isinstance(language, str):
+            raise TypeError("Each language must be a string or `None`.")
+        resolved = LANGUAGE_ALIASES.get(language.strip().lower())
+        if resolved is None:
+            raise ValueError(
+                f"Unsupported language {language!r}. Use Chinese/zh, English/en, Japanese/ja, 中文, 英文, or 日文."
+            )
+        return resolved
+
+    @staticmethod
+    def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
+        if keywords is None:
+            return [None] * batch_size
+        if isinstance(keywords, str):
+            return [[keywords]] * batch_size
+        if not isinstance(keywords, (list, tuple)):
+            raise TypeError("`keywords` must be a string, a sequence of strings, or a nested sequence of strings.")
+        if all(isinstance(item, str) for item in keywords):
+            return [list(keywords)] * batch_size
+        if len(keywords) != batch_size:
+            raise ValueError(
+                f"Received keyword lists for {len(keywords)} samples, but the audio batch has {batch_size}."
+            )
+
+        prepared = []
+        for items in keywords:
+            if items is None:
+                prepared.append(None)
+            elif isinstance(items, (list, tuple)) and all(isinstance(item, str) for item in items):
+                prepared.append(list(items))
+            else:
+                raise TypeError("Each per-sample keyword value must be a sequence of strings or `None`.")
+        return prepared
 
     def decode(self, *args, strip_prefix=False, **kwargs):
         """Decode token IDs and optionally remove common assistant framing from each transcription."""
@@ -146,7 +270,6 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         self.k_proj = nn.Linear(input_dim, config.d_model, bias=True)
         self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
 
-    # TODO: check other implementation, as we should use `ALL_ATTENTION_FUNCTIONS.get_interface`
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -160,7 +283,14 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(target_shape).transpose(1, 2)
-        attn_output, attn_weights = eager_attention_forward(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        if is_flash_attention_requested(self.config) and attention_mask is not None and attention_mask.ndim == 4:
+            # Fun-ASR-Nano is bidirectional, so every query row has the same padding mask. Flash Attention expects
+            # that mask as a 2D binary tensor rather than the additive 4D form used by eager and SDPA.
+            attention_mask = attention_mask[:, 0, 0, :] == 0
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,

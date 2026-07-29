@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
 from transformers.testing_utils import require_torch, require_torch_gpu, slow
@@ -208,6 +209,46 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(issubclass(FunAsrNanoAdaptorLayer, WhisperEncoderLayer))
         adaptor_layer = FunAsrNanoAdaptorLayer(config)
         self.assertIs(type(adaptor_layer.self_attn), FunAsrNanoAttention)
+
+    def test_attention_uses_configured_attention_interface(self):
+        config = self.model_tester.get_config().encoder_config
+        attention = FunAsrNanoAttention(config)
+        hidden_states = torch.randn(2, 4, config.d_model)
+
+        with patch.object(
+            modular_fun_asr_nano.ALL_ATTENTION_FUNCTIONS,
+            "get_interface",
+            return_value=modular_fun_asr_nano.eager_attention_forward,
+        ) as get_interface:
+            attention(hidden_states)
+
+        get_interface.assert_called_once_with(
+            config._attn_implementation, modular_fun_asr_nano.eager_attention_forward
+        )
+
+    def test_flash_attention_receives_2d_binary_padding_mask(self):
+        config = self.model_tester.get_config().encoder_config
+        config._attn_implementation = "flash_attention_2"
+        attention = FunAsrNanoAttention(config)
+        hidden_states = torch.randn(2, 4, config.d_model)
+        additive_mask = torch.zeros(2, 1, 1, 4)
+        additive_mask[0, :, :, 3] = torch.finfo(additive_mask.dtype).min
+        captured = {}
+
+        def attention_interface(module, query, key, value, attention_mask, **kwargs):
+            captured["attention_mask"] = attention_mask
+            return torch.zeros_like(query), None
+
+        with patch.object(
+            modular_fun_asr_nano.ALL_ATTENTION_FUNCTIONS,
+            "get_interface",
+            return_value=attention_interface,
+        ):
+            attention(hidden_states, attention_mask=additive_mask)
+
+        self.assertEqual(captured["attention_mask"].ndim, 2)
+        self.assertEqual(captured["attention_mask"].dtype, torch.bool)
+        self.assertTrue(torch.equal(captured["attention_mask"], torch.tensor([[1, 1, 1, 0], [1, 1, 1, 1]])))
 
     def test_encoder_separates_fsmn_and_uses_reviewed_component_names(self):
         config = self.model_tester.get_config().encoder_config
@@ -411,8 +452,7 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # TODO: set to final version at `FunAudioLLM/Fun-ASR-Nano-2512-hf`
-        model_id = "bezzam/Fun-ASR-Nano-2512-hf"
+        model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
         cls.processor = AutoProcessor.from_pretrained(model_id)
         cls.processor.tokenizer.padding_side = "left"
         cls.model = FunAsrNanoForConditionalGeneration.from_pretrained(
@@ -433,25 +473,19 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
         generated_ids = generated_ids[:, inputs.input_ids.shape[1] :]
         return self.processor.decode(generated_ids, skip_special_tokens=True)
 
-    def _prepare_inputs(self, audio, prompt_text):
-        """Prepare model inputs using apply_chat_template."""
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt_text},
-                    {"type": "audio"},
-                ],
-            },
-        ]
-        text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        inputs = self.processor(text=text, audio=audio, sampling_rate=16000, return_tensors="pt")
-        return inputs.to(self.model.device)
+    def _prepare_inputs(self, audio, language):
+        """Prepare model inputs using the structured transcription helper."""
+        return self.processor.apply_transcription_request(
+            audio=audio,
+            language=language,
+            processor_kwargs={"audio_kwargs": {"sampling_rate": 16000}},
+            return_tensors="pt",
+        ).to(self.model.device)
 
     def test_generate_chinese(self):
         """Test Chinese transcription matches expected output."""
         audio = self._load_audio("example/zh.mp3")
-        inputs = self._prepare_inputs(audio, "语音转写成中文：")
+        inputs = self._prepare_inputs(audio, "zh")
 
         generated_ids = self.model.generate(**inputs, max_new_tokens=100)
         text = self._decode_generated(generated_ids, inputs)[0].strip()
@@ -462,7 +496,7 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
     def test_generate_english(self):
         """Test English transcription matches expected output."""
         audio = self._load_audio("example/en.mp3")
-        inputs = self._prepare_inputs(audio, "Transcribe the audio:")
+        inputs = self._prepare_inputs(audio, "en")
 
         generated_ids = self.model.generate(**inputs, max_new_tokens=100)
         text = self._decode_generated(generated_ids, inputs)[0].strip()
@@ -475,20 +509,10 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
         audio_zh = self._load_audio("example/zh.mp3")
         audio_en = self._load_audio("example/en.mp3")
 
-        messages_zh = [
-            {"role": "user", "content": [{"type": "text", "text": "语音转写成中文："}, {"type": "audio"}]},
-        ]
-        messages_en = [
-            {"role": "user", "content": [{"type": "text", "text": "Transcribe the audio:"}, {"type": "audio"}]},
-        ]
-
-        text_zh = self.processor.apply_chat_template(messages_zh, add_generation_prompt=True, tokenize=False)
-        text_en = self.processor.apply_chat_template(messages_en, add_generation_prompt=True, tokenize=False)
-
-        inputs = self.processor(
-            text=[text_zh, text_en],
+        inputs = self.processor.apply_transcription_request(
             audio=[audio_zh, audio_en],
-            sampling_rate=16000,
+            language=["zh", "en"],
+            processor_kwargs={"audio_kwargs": {"sampling_rate": 16000}},
             return_tensors="pt",
         ).to(self.model.device)
 

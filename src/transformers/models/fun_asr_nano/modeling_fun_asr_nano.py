@@ -143,7 +143,14 @@ class FunAsrNanoAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(target_shape).transpose(1, 2)
-        attn_output, attn_weights = eager_attention_forward(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        if is_flash_attention_requested(self.config) and attention_mask is not None and attention_mask.ndim == 4:
+            # Fun-ASR-Nano is bidirectional, so every query row has the same padding mask. Flash Attention expects
+            # that mask as a 2D binary tensor rather than the additive 4D form used by eager and SDPA.
+            attention_mask = attention_mask[:, 0, 0, :] == 0
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -732,7 +739,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:

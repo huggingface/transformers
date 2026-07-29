@@ -70,8 +70,8 @@ audio_urls = [
     "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/zh.mp3",
     "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3",
 ]
-prompts = ["语音转写成中文：", "Transcribe the audio:"]
-inputs = processor.apply_transcription_request(audio=audio_urls, prompt=prompts, return_tensors="pt").to(model.device)
+languages = ["zh", "en"]
+inputs = processor.apply_transcription_request(audio=audio_urls, language=languages, return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=200)
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -80,8 +80,8 @@ print(processor.decode(generated_ids, skip_special_tokens=True))
 
 ### Custom prompts and hotwords
 
-Passing `prompt` replaces the processor's default `"Transcribe the audio:"` prompt, so include the complete
-transcription instruction together with any hotwords.
+Pass contextual information with `prompt` and hotwords with `keywords`; the checkpoint chat template builds the full
+transcription instruction. `language` accepts Chinese, English, and Japanese as full names or ISO codes.
 
 ```python
 import torch
@@ -91,16 +91,12 @@ model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
-audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/zh.mp3"
-hotword_prompt = (
-    "请结合上下文信息，更加准确地完成语音转写任务。如果没有相关信息，我们会留空。\n\n\n"
-    "**上下文信息：**\n\n\n"
-    "热词列表：[开放时间]\n"
-    "语音转写成中文："
-)
+audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
 inputs = processor.apply_transcription_request(
     audio=audio_url,
-    prompt=hotword_prompt,
+    language="en",
+    prompt="The recording discusses the Fun-ASR-Nano integration in Transformers.",
+    keywords=["Fun-ASR-Nano", "Transformers"],
     return_tensors="pt",
 ).to(model.device)
 
@@ -125,7 +121,6 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "Transcribe the audio:"},
             {"type": "audio", "path": audio_url},
         ],
     },

@@ -106,8 +106,8 @@ COMPONENT_STATE_DICT_MAPPING = (
 )
 
 
-# Chat template stored in the checkpoint so that `processor.apply_chat_template` works without any
-# Python-side default. Audio elements are replaced with the `<|object_ref_start|>` placeholder token,
+# Chat template stored in the checkpoint so that `processor.apply_chat_template` builds the checkpoint's
+# transcription prompt. Audio elements are replaced with the `<|object_ref_start|>` placeholder token,
 # which the processor later expands to the right number of audio tokens.
 # fmt: off
 CHAT_TEMPLATE = (
@@ -119,13 +119,34 @@ CHAT_TEMPLATE = (
         "{% if message['content'] is string %}"
             "{{ message['content'] }}<|im_end|>\n"
         "{% else %}"
-            "{% for content in message['content'] %}"
-                "{% if content['type'] == 'audio' %}"
-                    "<|object_ref_start|>"
-                "{% elif content['type'] == 'text' %}"
-                    "{{ content['text'] }}"
+            "{% set audio_items = message['content'] | selectattr('type', 'equalto', 'audio') | list %}"
+            "{% if message['role'] == 'user' and audio_items %}"
+                "{% set text_items = message['content'] | selectattr('type', 'equalto', 'text') | list %}"
+                "{% set keyword_items = message['content'] | selectattr('type', 'equalto', 'keywords') | list %}"
+                "{% set language_items = message['content'] | selectattr('type', 'equalto', 'language') | list %}"
+                "{% if text_items or keyword_items %}"
+                    "请结合上下文信息，更加准确地完成语音转写任务。如果没有相关信息，我们会留空。\n\n\n"
+                    "**上下文信息：**\n\n\n"
+                    "{% for item in text_items %}{{ item['text'] }}\n{% endfor %}"
+                    "{% set keyword_namespace = namespace(items=[]) %}"
+                    "{% for item in keyword_items %}"
+                        "{% set keyword_namespace.items = keyword_namespace.items + item['keywords'] %}"
+                    "{% endfor %}"
+                    "{% if keyword_namespace.items %}"
+                        "热词列表：[{{ keyword_namespace.items | join(', ') }}]\n"
+                    "{% endif %}"
                 "{% endif %}"
-            "{% endfor %}"
+                "语音转写{% if language_items %}成{{ language_items[0]['language'] }}{% endif %}："
+                "{% for content in audio_items %}<|object_ref_start|>{% endfor %}"
+            "{% else %}"
+                "{% for content in message['content'] %}"
+                    "{% if content['type'] == 'audio' %}"
+                        "<|object_ref_start|>"
+                    "{% elif content['type'] == 'text' %}"
+                        "{{ content['text'] }}"
+                    "{% endif %}"
+                "{% endfor %}"
+            "{% endif %}"
             "<|im_end|>\n"
         "{% endif %}"
     "{% endfor %}"
