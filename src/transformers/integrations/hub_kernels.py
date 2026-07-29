@@ -104,7 +104,7 @@ if is_kernels_available():
     def use_kernel_func_from_hub(layer_name: str):
         if _kernels_enabled:
             logger.warning_once(
-                "`use_kernel_func_from_hub` and will be deprecated in transformers v5.16. Please use `use_kernel_forward_from_hub` instead."
+                "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
             )
             return _kernels_use_kernel_forward_from_hub(layer_name)
         else:
