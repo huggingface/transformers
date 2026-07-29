@@ -147,6 +147,15 @@ def write_model(hf_repo_id, output_dir, revision=None):
     # dedicated NAR `model_type` so it resolves to the non-causal language-model config.
     if isinstance(config_dict.get("text_config"), dict) and config_dict["text_config"].get("model_type") == "granite":
         config_dict["text_config"]["model_type"] = "granite_speech_nar_text"
+    # The BPE CTC head fields were renamed: `bpe_output_dim` -> `vocabulary_size`,
+    # `bpe_pooling_window` -> `pooling_window`. Rename them in the source dict so the native (strict)
+    # config keeps the checkpoint values instead of falling back to defaults.
+    encoder_config = config_dict.get("encoder_config")
+    if isinstance(encoder_config, dict):
+        if "bpe_output_dim" in encoder_config:
+            encoder_config["vocabulary_size"] = encoder_config.pop("bpe_output_dim")
+        if "bpe_pooling_window" in encoder_config:
+            encoder_config["pooling_window"] = encoder_config.pop("bpe_pooling_window")
     config = GraniteSpeechNarConfig.from_dict(config_dict)
     # Drop remote-code pointers and any stale checkpoint path so the output is a pure native model.
     config.auto_map = {}

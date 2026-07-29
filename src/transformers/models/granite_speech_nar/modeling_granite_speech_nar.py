@@ -84,7 +84,7 @@ class GraniteSpeechNarModelOutput(BaseModelOutput):
     bpe_logits (`torch.Tensor`, *optional*):
         BPE CTC logits from the encoder, returned when the encoder CTC loss is active.
     bpe_lengths (`torch.Tensor`, *optional*):
-        Number of valid BPE (pooled) windows per sample, `ceil(audio_lengths / bpe_pooling_window)`.
+        Number of valid BPE (pooled) windows per sample, `ceil(audio_lengths / pooling_window)`.
     audio_embeds (`torch.FloatTensor`, *optional*):
         Projected, embedding-scaled audio features. Returned so iterative-editing `generate` can reuse
         them across steps without re-running the encoder and projector.
@@ -933,8 +933,8 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         )
 
     def _posterior_weighted_pool(self, hidden_states: torch.Tensor, importance: torch.Tensor) -> torch.Tensor:
-        """Pool every `bpe_pooling_window` frames, weighting each frame by its (non-blank) importance."""
-        window_size = self.config.bpe_pooling_window
+        """Pool every `pooling_window` frames, weighting each frame by its (non-blank) importance."""
+        window_size = self.config.pooling_window
         seq_len = hidden_states.shape[1]
         pad_len = -seq_len % window_size
         if pad_len:
@@ -960,7 +960,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         self.encoder = GraniteSpeechNarCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechNarProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.bpe_output_dim, bias=True)
+        self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.vocabulary_size, bias=True)
         self.post_init()
 
     @can_return_tuple
@@ -1056,8 +1056,8 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
 
             bpe_logits = self.out_bpe(audio_outputs.pooled_hidden_states)
             bpe_lengths = -(
-                audio_lengths // -self.config.encoder_config.bpe_pooling_window
-            )  # ceil(audio_lengths / bpe_pooling_window)
+                audio_lengths // -self.config.encoder_config.pooling_window
+            )  # ceil(audio_lengths / pooling_window)
             input_ids = [self._ctc_greedy_decode(logits[:length]) for logits, length in zip(bpe_logits, bpe_lengths)]
 
         inserted_ctc_token_ids = [self._add_insertion_slots(ids) for ids in input_ids]
@@ -1100,7 +1100,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
     custom_intro="""
     The GraniteSpeechNar model for non-autoregressive CTC-based speech recognition.
     Consists of a conformer encoder with BPE CTC head, a QFormer-based projector,
-    and a bidirectional Granite LLM backbone that refines CTC predictions in a single pass.
+    and a bidirectional Granite LLM backbone that refines CTC predictions non-autoregressively.
     """
 )
 class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):

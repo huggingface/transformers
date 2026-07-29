@@ -64,8 +64,8 @@ class GraniteSpeechNarEncoderModelTester:
         output_dim=10,
         context_size=50,
         self_conditioning_layer=1,
-        bpe_output_dim=51,
-        bpe_pooling_window=4,
+        vocabulary_size=51,
+        pooling_window=4,
         dropout=0.0,
     ):
         self.parent = parent
@@ -83,8 +83,8 @@ class GraniteSpeechNarEncoderModelTester:
         self.output_dim = output_dim
         self.context_size = context_size
         self.self_conditioning_layer = self_conditioning_layer
-        self.bpe_output_dim = bpe_output_dim
-        self.bpe_pooling_window = bpe_pooling_window
+        self.vocabulary_size = vocabulary_size
+        self.pooling_window = pooling_window
         self.dropout = dropout
 
     def get_config(self):
@@ -97,8 +97,8 @@ class GraniteSpeechNarEncoderModelTester:
             output_dim=self.output_dim,
             context_size=self.context_size,
             self_conditioning_layer=self.self_conditioning_layer,
-            bpe_output_dim=self.bpe_output_dim,
-            bpe_pooling_window=self.bpe_pooling_window,
+            vocabulary_size=self.vocabulary_size,
+            pooling_window=self.pooling_window,
             dropout=self.dropout,
             blank_token_id=0,
             cat_hidden_layers=[1],
@@ -148,7 +148,7 @@ class GraniteSpeechNarForCTCModelTester:
             parent,
             batch_size=batch_size,
             seq_length=seq_length,
-            bpe_output_dim=vocab_size,
+            vocabulary_size=vocab_size,
         )
 
     def get_config(self):

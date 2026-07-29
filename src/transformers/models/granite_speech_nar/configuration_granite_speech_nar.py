@@ -43,9 +43,9 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
     self_conditioning_layer (`int`, *optional*):
         Layer index at which self-conditioning (mid-layer CTC feedback) is applied.
         Defaults to `num_layers // 2`.
-    bpe_output_dim (`int`, *optional*, defaults to 49153):
+    vocabulary_size (`int`, *optional*, defaults to 49153):
         Vocabulary size for the BPE CTC head.
-    bpe_pooling_window (`int`, *optional*, defaults to 4):
+    pooling_window (`int`, *optional*, defaults to 4):
         Window size for posterior-weighted pooling before the BPE CTC head.
     cat_hidden_layers (`list[int]`, *optional*, defaults to `[4, 8, 12]`):
         Indices of intermediate encoder layers whose outputs are concatenated (with the always-appended
@@ -80,8 +80,8 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
 
     cat_hidden_layers: list[int] | None = None
     self_conditioning_layer: int | None = None
-    bpe_output_dim: int = 49153
-    bpe_pooling_window: int = 4
+    vocabulary_size: int = 49153
+    pooling_window: int = 4
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -216,7 +216,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     Configuration for the GraniteSpeechNar non-autoregressive ASR model.
 
     This model uses a conformer encoder with BPE CTC head, a windowed Q-Former projector,
-    and a bidirectional Granite LLM backbone for single-pass speech recognition.
+    and a bidirectional Granite LLM backbone for non-autoregressive speech recognition.
 
     encoder_config (`GraniteSpeechNarEncoderConfig` or `dict`, *optional*):
         Configuration for the conformer encoder.
