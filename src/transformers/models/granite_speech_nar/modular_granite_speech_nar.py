@@ -393,11 +393,7 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GraniteSpeechNarQFormerModel):
             init.normal_(module.window_positions, mean=0.0, std=module.config.hidden_size**-0.5)
         elif isinstance(module, GraniteSpeechNarCTCEncoder):
-            context_size = module.config.context_size
-            seq = torch.arange(context_size)
-            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
-            init.copy_(module.attention_dists, attention_dists)
+            init.copy_(module.attention_dists, module.compute_attention_dists())
 
 
 class GraniteSpeechNarQFormerCrossAttention(Blip2QFormerMultiHeadAttention): ...
