@@ -155,13 +155,11 @@ class MPNetTokenizer(TokenizersBackend):
         cls_token_id = self.cls_token_id if self.cls_token_id is not None else 0
         sep_token_id = self.sep_token_id if self.sep_token_id is not None else 2
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{cls_str}:0 $A:0 {sep_str}:0",
-            pair=f"{cls_str}:0 $A:0 {sep_str}:0 {sep_str}:0 $B:1 {sep_str}:1",  # MPNet uses two [SEP] tokens
-            special_tokens=[
-                (cls_str, cls_token_id),
-                (sep_str, sep_token_id),
-            ],
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(sep_str, sep_token_id),
+            cls=(cls_str, cls_token_id),
+            trim_offsets=True,
+            add_prefix_space=False,
         )
 
     @property

@@ -269,7 +269,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         """
         if input_ids is None:
             special_audio_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = special_audio_mask.all(-1)
         else:
@@ -408,7 +408,6 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     """
 )
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
     _tied_weights_keys = None
 
     def __init__(self, config: MusicFlamingoConfig):

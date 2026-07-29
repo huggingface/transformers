@@ -24,7 +24,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -912,6 +911,10 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
 
+        # `shift_labels` is consumed here (the decoder inputs are already right-shifted), so pop it before the
+        # inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
@@ -934,8 +937,17 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.config.vocab_size), labels.reshape(-1))
+            # `decoder_input_ids` are right-shifted from `labels`, so the logits are already aligned with the
+            # targets: pass them as `shift_labels` (with `labels=None`) so `ForCausalLMLoss` does not shift a
+            # second time, and route through `self.loss_function` so the grad-accumulation
+            # `num_items_in_batch` normalization is honored.
+            loss = self.loss_function(
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

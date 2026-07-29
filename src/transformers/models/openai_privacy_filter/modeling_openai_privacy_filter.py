@@ -26,12 +26,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -142,7 +137,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -419,7 +414,13 @@ class OpenAIPrivacyFilterPreTrainedModel(PreTrainedModel):
         "attentions": OpenAIPrivacyFilterAttention,
     }
     _keep_in_fp32_modules = []
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
+    # the others remain the defaults on CUDA.
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+    ]
     _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()

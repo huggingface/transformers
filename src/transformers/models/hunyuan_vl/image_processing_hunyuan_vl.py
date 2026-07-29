@@ -160,6 +160,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        # HunYuanVL expects row-major patches, unlike Qwen2VL's block-major layout.
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -200,9 +201,8 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
                 merge_size,
                 patch_size,
             )
-            # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
+            # Flatten patches in row-major order to match the PIL backend.
+            patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
 
             flatten_patches = (
                 patches.unsqueeze(6)

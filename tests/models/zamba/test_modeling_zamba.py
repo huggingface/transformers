@@ -302,6 +302,15 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @unittest.skip(
+        "Zamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
+        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "
+        "the split-vs-single comparison diverges regardless of padding masking — the scenario is out of "
+        "Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
+    @unittest.skip(
         "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
     )
     def test_disk_offload_safetensors(self):

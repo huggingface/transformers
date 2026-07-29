@@ -165,8 +165,10 @@ model = AutoModelForImageTextToText.from_pretrained(
     dtype=torch.bfloat16,
     # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
     quantization_config=FineGrainedFP8Config(dequantize=True),
-    tp_plan="auto",
-    distributed_config=DistributedConfig(enable_expert_parallel=True),
+    distributed_config=DistributedConfig(
+        tp_size=int(os.environ["WORLD_SIZE"]),
+        enable_expert_parallel=True,
+    ),
     attn_implementation="kernels-staging/msa@v0",  # MSA block-sparse attention kernel
 )
 model.eval()

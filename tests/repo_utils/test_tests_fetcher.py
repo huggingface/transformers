@@ -39,6 +39,7 @@ from tests_fetcher import (  # noqa: E402
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
+    get_conftest_tests,
     get_diff,
     get_module_dependencies,
     get_repo_utils_tests,
@@ -47,6 +48,7 @@ from tests_fetcher import (  # noqa: E402
     init_test_examples_dependencies,
     parse_commit_message,
     print_tree_deps_of,
+    should_run_conftest_tests,
     should_run_repo_utils_tests,
 )
 
@@ -263,6 +265,39 @@ class TestFetcherTester(unittest.TestCase):
     def test_should_run_repo_utils_tests(self):
         assert should_run_repo_utils_tests(["utils/check_modeling_structure.py"])
         assert not should_run_repo_utils_tests(["src/transformers/modeling_utils.py"])
+
+    def test_get_conftest_tests_on_full_repo(self):
+        conftest_tests = get_conftest_tests()
+        assert "tests/conftest_tests/test_cache_fallback.py" in conftest_tests
+
+    def test_should_run_conftest_tests(self):
+        # Triggered by the repo-root conftest.py as well as any nested conftest.py.
+        assert should_run_conftest_tests(["conftest.py"])
+        assert should_run_conftest_tests(["tests/models/bert/conftest.py"])
+        # But not by a change to conftest tooling that is not a conftest.py file.
+        assert not should_run_conftest_tests(["utils/check_modeling_structure.py"])
+        assert not should_run_conftest_tests(["src/transformers/modeling_utils.py"])
+
+    def test_create_test_list_from_filter_routes_conftest_tests(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(
+                [
+                    "tests/conftest_tests/test_cache_fallback.py",
+                    "tests/trainer/test_trainer.py",
+                ],
+                out_path=tmp_folder,
+            )
+
+            with open(Path(tmp_folder) / "tests_repo_utils_test_list.txt", encoding="utf-8") as f:
+                repo_utils_tests = f.read().splitlines()
+
+            # Conftest tests ride along in the repo_utils job and must not leak into non_model.
+            assert repo_utils_tests == ["tests/conftest_tests/test_cache_fallback.py"]
+            assert not (Path(tmp_folder) / "tests_conftest_test_list.txt").exists()
+
+            with open(Path(tmp_folder) / "tests_non_model_test_list.txt", encoding="utf-8") as f:
+                non_model_tests = f.read().splitlines()
+            assert "tests/conftest_tests/test_cache_fallback.py" not in non_model_tests
 
     def test_create_test_list_from_filter_routes_repo_utils_tests(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
