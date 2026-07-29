@@ -208,6 +208,17 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         """Continue from full cache"""
         self._check_generate_cache_sliding_window_too_small(cache_implementation="static", prefill_max_new_tokens=6)
 
+    def test_generate_without_sliding_window(self):
+        """With `use_sliding_window=False` every layer is a full attention layer."""
+        model_tester = self.model_tester_class(self, use_sliding_window=False)
+        config, inputs_dict = model_tester.prepare_config_and_inputs_for_common()
+        self.assertEqual(config.text_config.layer_types, ["full_attention"] * config.text_config.num_hidden_layers)
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            out = model.generate(**inputs_dict, max_new_tokens=3, do_sample=False, return_dict_in_generate=True)
+            self.assertTrue(all(not layer.is_sliding for layer in out.past_key_values.layers))
+
 
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):

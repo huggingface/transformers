@@ -1048,11 +1048,16 @@ def create_reference_sliding_window_causal_mask(
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
-    if past_key_values is None:
+    layer = None
+    if past_key_values is not None:
+        layer = next(
+            (layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"), None
+        )
+
+    if layer is None:
         prefill_length = float("inf")
         kv_offset = 0
     else:
-        layer = next(layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention")
         # A layer that is still prefilling has no reference states yet, all its states are prefill states
         prefill_length = float("inf") if layer.prefill_length is None else layer.prefill_length
         _, kv_offset = layer.get_mask_sizes(query_length=inputs_embeds.shape[1])
@@ -1115,8 +1120,12 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
-                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
+            # The reference sliding window layers are not always activated depending on the config
+            if "reference_sliding_attention" in self.config.layer_types:
+                causal_mask_mapping["reference_sliding_attention"] = create_reference_sliding_window_causal_mask(
+                    **mask_kwargs
+                )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
