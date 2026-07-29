@@ -19,7 +19,7 @@ import math
 import unittest
 from pathlib import Path
 
-from transformers import CanaryConfig, ParakeetEncoderConfig, is_torch_available
+from transformers import CanaryConfig, CanaryDecoderConfig, ParakeetEncoderConfig, is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import CanaryForConditionalGeneration, CanaryModel
+    from transformers import CanaryForConditionalGeneration, CanaryModel, StaticCache
 
 
 class CanaryModelTester:
@@ -89,14 +89,18 @@ class CanaryModelTester:
             subsampling_conv_channels=self.subsampling_conv_channels,
             scale_input=False,
         )
-        return CanaryConfig(
-            encoder_config=encoder_config,
+        decoder_config = CanaryDecoderConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             decoder_layers=self.num_hidden_layers,
             decoder_attention_heads=self.num_attention_heads,
             decoder_ffn_dim=self.intermediate_size,
             max_target_positions=self.max_target_positions,
+            pad_token_id=self.pad_token_id,
+        )
+        return CanaryConfig(
+            encoder_config=encoder_config,
+            decoder_config=decoder_config,
             decoder_start_token_id=self.decoder_start_token_id,
             pad_token_id=self.pad_token_id,
             bos_token_id=self.bos_token_id,
@@ -146,12 +150,12 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = CanaryModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CanaryConfig)
+        self.config_tester = ConfigTester(self, has_text_modality=False, config_class=CanaryConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # Overridden: the FastConformer encoder subsamples the input, so encoder shapes use the subsampled length (like Whisper).
+    # Overridden because the FastConformer encoder subsamples the input, so encoder shapes use the subsampled length.
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -288,7 +292,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
 
-    # Overridden because Canary is an audio model: it takes `input_features` + `decoder_input_ids`, not `input_ids` (like Whisper).
+    # Overridden because Canary takes `input_features` + `decoder_input_ids`, not `input_ids` (like Whisper).
     def test_resize_tokens_embeddings(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
@@ -302,13 +306,13 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 model.eval()
 
             # Retrieve the embeddings and clone theme
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model_embed = model.resize_token_embeddings(model_vocab_size)
             cloned_embeddings = model_embed.weight.clone()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            self.assertEqual(model.config.get_text_config().vocab_size, model_vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
@@ -316,7 +320,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            self.assertEqual(model.config.get_text_config().vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
 
@@ -354,9 +358,9 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 continue
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.vocab_size
+            model_vocab_size = config.get_text_config().vocab_size
             model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            self.assertEqual(model.config.get_text_config().vocab_size, model_vocab_size + 10)
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
             # Check bias if present
@@ -367,7 +371,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            self.assertEqual(model.config.get_text_config().vocab_size, model_vocab_size - 15)
             # Check that it actually resizes the embeddings matrix
             output_embeds = model.get_output_embeddings()
             self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
@@ -392,6 +396,103 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
+    @unittest.skip(reason="Canary is not fed right-shifted `decoder_input_ids`; the loss shifts `labels`")
+    def test_encoder_decoder_loss_no_double_shift(self):
+        pass
+
+    # Overridden because the head count comes from the decoder sub-config (mirrors `DiaModelTest`).
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (output_length - prompt_length))
+
+        use_cache = decoder_past_key_values is not None
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+
+        # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
+        # token(s)
+        for generated_length, iter_attentions in enumerate(attentions):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            if has_static_cache:
+                # hybrid caches have layers with no fixed max, so pick the first layer reporting a real length
+                query_length = next(
+                    (
+                        decoder_past_key_values.get_max_length(i)
+                        for i in range(len(decoder_past_key_values))
+                        if decoder_past_key_values.get_max_length(i) != -1
+                    ),
+                    prompt_length + generated_length,
+                )
+            else:
+                query_length = prompt_length + generated_length
+
+            expected_shape = (
+                batch_size,
+                config.decoder_config.num_attention_heads,  # Decoder config
+                model_input_length,
+                query_length,
+            )
+            # check attn size
+            self.assertListEqual(
+                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+            )
+
+    # Overridden for the same sub-config reason as `_check_attentions_for_generate` (mirrors `DiaModelTest`).
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
+        # Encoder config
+        encoder_expected_shape = (batch_size, config.encoder_config.num_attention_heads, prompt_length, prompt_length)
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
+    # Overridden for the same sub-config reason as `_check_attentions_for_generate` (mirrors `DiaModelTest`).
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+    ):
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
+
+        # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
+        # new token(s)
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
+        # elaborate checks
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            expected_shape = (batch_size, model_input_length, config.decoder_config.hidden_size)  # Decoder config
+            # check hidden size
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [expected_shape] * len(iter_hidden_states),
+            )
+
+    # Overridden for the same sub-config reason as `_check_attentions_for_generate` (mirrors `DiaModelTest`).
+    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
+        # Encoder config
+        encoder_expected_shape = (batch_size, prompt_length, config.encoder_config.hidden_size)
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [layer_hidden_states.shape for layer_hidden_states in hidden_states],
+            [encoder_expected_shape] * len(hidden_states),
+        )
 
 
 @require_torch

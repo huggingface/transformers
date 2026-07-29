@@ -20,12 +20,48 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
 @strict
+class CanaryDecoderConfig(PreTrainedConfig):
+    r"""
+    max_target_positions (`int`, *optional*, defaults to 1024):
+        The maximum sequence length that the decoder might ever be used with.
+    """
+
+    model_type = "canary_decoder"
+
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "decoder_attention_heads",
+        "num_hidden_layers": "decoder_layers",
+    }
+
+    vocab_size: int = 16384
+    d_model: int = 1024
+    decoder_layers: int = 8
+    decoder_attention_heads: int = 8
+    decoder_ffn_dim: int = 4096
+    decoder_layerdrop: float | int = 0.0
+    activation_function: str = "relu"
+    max_target_positions: int = 1024
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    pad_token_id: int | None = 2
+    bos_token_id: int | None = 4
+    eos_token_id: int | None = 3
+
+
+@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
+@strict
 class CanaryConfig(PreTrainedConfig):
     r"""
     encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
         The config object or dictionary of the FastConformer encoder ([`ParakeetEncoderConfig`]).
-    max_target_positions (`int`, *optional*, defaults to 1024):
-        The maximum sequence length that the decoder might ever be used with.
+    decoder_config (`Union[dict, CanaryDecoderConfig]`, *optional*):
+        The config object or dictionary of the Transformer decoder ([`CanaryDecoderConfig`]).
     decoder_start_token_id (`int`, *optional*, defaults to 7):
         The token id that starts decoding (`<|startofcontext|>`, the first token of the multitask prompt).
 
@@ -47,26 +83,10 @@ class CanaryConfig(PreTrainedConfig):
 
     model_type = "canary"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": AutoConfig}
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_attention_heads",
-        "num_hidden_layers": "decoder_layers",
-    }
+    sub_configs = {"encoder_config": AutoConfig, "decoder_config": CanaryDecoderConfig}
 
     encoder_config: dict | PreTrainedConfig | None = None
-    vocab_size: int = 16384
-    d_model: int = 1024
-    decoder_layers: int = 8
-    decoder_attention_heads: int = 8
-    decoder_ffn_dim: int = 4096
-    decoder_layerdrop: float | int = 0.0
-    activation_function: str = "relu"
-    max_target_positions: int = 1024
-    dropout: float | int = 0.1
-    attention_dropout: float | int = 0.1
-    activation_dropout: float | int = 0.1
-    scale_embedding: bool = False
+    decoder_config: CanaryDecoderConfig | dict | None = None
     use_cache: bool = True
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
@@ -88,7 +108,15 @@ class CanaryConfig(PreTrainedConfig):
                 layerdrop=0.0,
                 dropout_positions=0.0,
             )
+
+        if isinstance(self.decoder_config, dict):
+            self.decoder_config = CanaryDecoderConfig(**self.decoder_config)
+        elif self.decoder_config is None:
+            self.decoder_config = CanaryDecoderConfig()
         super().__post_init__(**kwargs)
 
+    def get_text_config(self, *args, **kwargs):
+        return self.decoder_config
 
-__all__ = ["CanaryConfig"]
+
+__all__ = ["CanaryConfig", "CanaryDecoderConfig"]

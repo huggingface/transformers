@@ -44,7 +44,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
-from .configuration_canary import CanaryConfig
+from .configuration_canary import CanaryConfig, CanaryDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -354,7 +354,9 @@ class CanaryDecoder(CanaryPreTrainedModel):
     main_input_name = "input_ids"
     input_modalities = ("text",)
 
-    def __init__(self, config: CanaryConfig):
+    config: CanaryDecoderConfig
+
+    def __init__(self, config: CanaryDecoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -416,7 +418,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         positions = self.embed_positions(position_ids).to(inputs_embeds.dtype)
-        # unlike Whisper, NeMo normalizes the summed token and positional embeddings with a LayerNorm
+        # NOTE: unlike Whisper, NeMo normalizes the summed token and positional embeddings with a LayerNorm
         hidden_states = self.layernorm_embedding(inputs_embeds * self.embed_scale + positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -427,7 +429,7 @@ class CanaryDecoder(CanaryPreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        # unlike Whisper, the encoder outputs have variable length, so padded frames are masked in cross-attention
+        # NOTE: unlike Whisper, the encoder outputs have variable length, so padded frames are masked in cross-attention
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -470,7 +472,7 @@ class CanaryModel(CanaryPreTrainedModel):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
-        self.decoder = CanaryDecoder(config)
+        self.decoder = CanaryDecoder(config.decoder_config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -510,6 +512,10 @@ class CanaryModel(CanaryPreTrainedModel):
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence token in the sinusoidal positional embeddings.
         """
+        for output_flag in ("output_attentions", "output_hidden_states"):
+            if kwargs.get(output_flag) is None:
+                kwargs[output_flag] = getattr(self.config, output_flag, False)
+
         if encoder_outputs is None:
             encoder_outputs = self.get_audio_features(input_features, attention_mask, **kwargs)
 
@@ -562,7 +568,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.model = CanaryModel(config)
-        self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=True)
+        self.proj_out = nn.Linear(config.decoder_config.d_model, config.decoder_config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -634,7 +640,7 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.vocab_size)
+            loss = self.loss_function(logits, labels, self.config.decoder_config.vocab_size)
 
         return Seq2SeqLMOutput(
             loss=loss,

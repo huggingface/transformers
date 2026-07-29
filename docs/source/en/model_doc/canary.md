@@ -134,6 +134,10 @@ outputs.loss.backward()
 
 [[autodoc]] CanaryConfig
 
+## CanaryDecoderConfig
+
+[[autodoc]] CanaryDecoderConfig
+
 ## CanaryProcessor
 
 [[autodoc]] CanaryProcessor

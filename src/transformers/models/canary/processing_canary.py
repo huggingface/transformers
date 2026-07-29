@@ -63,13 +63,7 @@ class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF01
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
         },
-        "text_kwargs": {
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -105,12 +99,16 @@ class CanaryProcessor(ProcessorMixin):
         if audio is None:
             raise ValueError("You need to specify an `audio` input to process.")
 
+        # Check only if passed explicitly as another value since by default we'll use `pt`
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
         if text is not None:
             model_inputs["decoder_input_ids"] = model_inputs.pop("input_ids")
             if output_labels:
                 model_inputs["labels"] = model_inputs["decoder_input_ids"]
-        return model_inputs
+        return BatchFeature(data=model_inputs, tensor_type="pt")
 
     def apply_transcription_request(
         self,

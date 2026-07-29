@@ -22,6 +22,7 @@ import yaml
 
 from transformers import (
     CanaryConfig,
+    CanaryDecoderConfig,
     CanaryForConditionalGeneration,
     CanaryProcessor,
     ParakeetFeatureExtractor,
@@ -115,16 +116,18 @@ def convert_decoder_config(nemo_config) -> CanaryConfig:
 
     return CanaryConfig(
         encoder_config=encoder_config.to_dict(),
-        vocab_size=head_config["num_classes"],
-        d_model=decoder_config["hidden_size"],
-        decoder_layers=decoder_config["num_layers"],
-        decoder_attention_heads=decoder_config["num_attention_heads"],
-        decoder_ffn_dim=decoder_config["inner_size"],
-        activation_function=decoder_config["hidden_act"],
-        max_target_positions=decoder_config["max_sequence_length"],
-        dropout=decoder_config["embedding_dropout"],
-        attention_dropout=decoder_config["attn_score_dropout"],
-        activation_dropout=decoder_config["ffn_dropout"],
+        decoder_config=CanaryDecoderConfig(
+            vocab_size=head_config["num_classes"],
+            d_model=decoder_config["hidden_size"],
+            decoder_layers=decoder_config["num_layers"],
+            decoder_attention_heads=decoder_config["num_attention_heads"],
+            decoder_ffn_dim=decoder_config["inner_size"],
+            activation_function=decoder_config["hidden_act"],
+            max_target_positions=decoder_config["max_sequence_length"],
+            dropout=decoder_config["embedding_dropout"],
+            attention_dropout=decoder_config["attn_score_dropout"],
+            activation_dropout=decoder_config["ffn_dropout"],
+        ),
     )
 
 
@@ -207,7 +210,7 @@ def main(hf_repo_id, output_dir, push_to_repo_id=None):
 
     config = convert_decoder_config(nemo_config)
     print(f"Converted config:\n{config}")
-    converted_state_dict = load_and_convert_state_dict(model_files, config.d_model)
+    converted_state_dict = load_and_convert_state_dict(model_files, config.decoder_config.d_model)
 
     print("Loading the checkpoint in a Canary model.")
     with torch.device("meta"):
