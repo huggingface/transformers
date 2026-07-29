@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DistributedConfig
 
-[`DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [FSDP2](./fsdp), [tensor parallelism](./tensor_parallelism), and [N-D parallelism](./perf_train_gpu_many).
+[`DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), and [expert parallelism](./expert_parallelism).
 
 Use this for a custom training loop or inference, where you shard the model at load time instead of through [`Trainer`]. If you're training with [`Trainer`], configure FSDP2 through [Accelerate](./accelerate) instead.
 
@@ -31,19 +31,49 @@ The fields below control how the model is sharded.
 | `fsdp_size` | Number of devices for FSDP2. Defaults to 1 when only `tp_size` is set. |
 | `fsdp_cpu_offload` | Offload parameters and gradients to CPU to save GPU memory. Defaults to `False`. |
 | `fsdp_mixed_precision` | Compute in `bfloat16` and reduce gradients in `float32`. Defaults to `False`. |
-| `enable_sequence_parallel` | Select the model's sequence parallel plan in place of its default tensor parallel plan. Defaults to `False`. |
 | `enable_expert_parallel` | Shard mixture-of-experts layers across devices. See [Expert parallelism](./expert_parallelism). |
 
-The product of `tp_size` and `fsdp_size` must equal the number of devices you launch with.
+The product of `tp_size` and `fsdp_size` must equal the number of devices you launch with. Set one of them at a time. Setting both above 1 raises a `ValueError` because combining FSDP2 and tensor parallelism in a single mesh isn't supported yet. To stack parallelism strategies today, train with [`Trainer`] and see [N-D parallelism](./perf_train_gpu_many).
 
-## FSDP2
+[`DistributedConfig`] is mutually exclusive with `device_map`. `device_map` places whole modules on specific GPUs, while a distributed config shards those same parameters across GPUs.
 
-[FSDP2](./fsdp) shards parameters, gradients, and optimizer states across GPUs. Set `fsdp_size` to the number of devices to shard across. Requires torch>=2.6.
+## Tensor parallelism
+
+[Tensor parallelism](./tensor_parallelism) splits weight matrices across GPUs. Set `tp_size` to shard the model's supported layers.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM
-from transformers.distributed.configuration_utils import DistributedConfig
+from transformers.distributed import DistributedConfig
+
+distributed_config = DistributedConfig(tp_size=4)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    dtype=torch.bfloat16,
+    distributed_config=distributed_config,
+)
+```
+
+Transformers shards according to the model's `base_model_tp_plan`. Set `tp_plan` to a dict to override the layout, and read the resolved plan back from `model.tp_plan` after loading.
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=4,
+    tp_plan={"model.layers.*.self_attn.q_proj": "colwise"},
+)
+```
+
+See [Tensor parallelism for inference](./perf_infer_gpu_multi) for the full set of partitioning strategies.
+
+## FSDP2
+
+[FSDP2](./fsdp) shards parameters, gradients, and optimizer states across GPUs. Set `fsdp_size` to the number of devices to shard across. Requires torch>=2.7, which is what the distributed checkpoint save and load paths need.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(fsdp_size=4)
 
@@ -53,16 +83,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Transformers wraps each layer according to the model's `base_model_fsdp_plan`. Check whether a model declares one before sharding.
-
-```py
-from transformers import AutoConfig
-
-config = AutoConfig.from_pretrained("Qwen/Qwen3-0.6B")
-print(config.base_model_fsdp_plan)
-```
-
-The plan maps modules to a sharding strategy. `free_full_weight` reshards a module after the forward pass to save memory, and `keep_full_weight` keeps it gathered to avoid a second all-gather during the backward pass.
+Transformers wraps each module according to the model's FSDP plan. The plan maps module names to a sharding strategy, where `free_full_weight` reshards a module after the forward pass to save memory and `keep_full_weight` keeps it gathered to avoid a second all-gather during the backward pass. Every config inherits the default base model plan below, and a model overrides it with `base_model_fsdp_plan`.
 
 ```py
 {
@@ -72,11 +93,13 @@ The plan maps modules to a sharding strategy. `free_full_weight` reshards a modu
 }
 ```
 
-After loading, read the resolved plan from the model with [`~PreTrainedModel.fsdp_plan`]. The model property reflects the plan applied to the instantiated model, while `config.base_model_fsdp_plan` holds the plan declared on the base model config.
+Task-specific classes add their own entries on top, such as `{"lm_head": "keep_full_weight"}` for causal language models. Read the merged plan from the model after loading to see what was actually applied.
 
 ```py
 print(model.fsdp_plan)
 ```
+
+A model without an FSDP plan raises a `ValueError` at load time rather than silently sharding nothing.
 
 Set `fsdp_mixed_precision=True` to compute in `bfloat16` while reducing gradients in `float32`, and set `fsdp_cpu_offload=True` to move parameters and gradients to CPU when they aren't in use.
 
@@ -88,46 +111,34 @@ distributed_config = DistributedConfig(
 )
 ```
 
-## Tensor parallelism
+## Save a sharded model
 
-[Tensor parallelism](./tensor_parallelism) splits weight matrices across GPUs. Set `tp_size` to shard the model's supported layers.
+[`~PreTrainedModel.save_pretrained`] writes a single Hugging Face checkpoint by default. Each rank sends its shards to rank 0, which gathers the full weights on CPU and writes the safetensors files. Call it from every rank so the non-writing ranks wait at the barrier instead of racing ahead.
 
 ```py
-import torch
-from transformers import AutoModelForCausalLM
-from transformers.distributed.configuration_utils import DistributedConfig
-
-distributed_config = DistributedConfig(tp_size=4)
-
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B",
-    distributed_config=distributed_config,
-)
+model.save_pretrained("./checkpoint")
 ```
 
-Transformers shards according to the model's `base_model_tp_plan`. Pass `tp_plan` to override the layout, for example `{"model.layers.*.self_attn.q_proj": "colwise"}`.
-
-## N-D parallelism
-
-Combine FSDP2 and tensor parallelism by setting both sizes. The example below runs on 4 GPUs, sharding each tensor-parallel group of 2 GPUs with FSDP2 across the remaining 2.
+Gathering a large model onto one CPU is slow and can run out of host memory. Set `distributed_checkpoint=True` to take the [distributed checkpoint](https://docs.pytorch.org/docs/stable/distributed.checkpoint.html) path instead, where every rank writes its own shard in parallel and a consolidation pass merges them into standard `model-*-of-N.safetensors` files.
 
 ```py
-import torch
-from transformers import AutoModelForCausalLM
-from transformers.distributed.configuration_utils import DistributedConfig
+model.save_pretrained("./checkpoint", distributed_checkpoint=True)
+```
 
-distributed_config = DistributedConfig(tp_size=2, fsdp_size=2)
+The result is an ordinary checkpoint directory that is reloaded with [`~PreTrainedModel.from_pretrained`]. This path only works for FSDP2-sharded models loaded with a [`DistributedConfig`], and it requires torch>=2.7.
 
-model = AutoModelForCausalLM.from_pretrained(
-    "Qwen/Qwen3-0.6B",
-    dtype=torch.bfloat16,
-    distributed_config=distributed_config,
-)
+To resume training, save and load the optimizer state alongside the model with `save_optimizer_distributed` and `load_optimizer_distributed`.
+
+```py
+from transformers.distributed import load_optimizer_distributed, save_optimizer_distributed
+
+save_optimizer_distributed(model, optimizer, "./checkpoint/optimizer")
+load_optimizer_distributed(model, optimizer, "./checkpoint/optimizer")
 ```
 
 ## Launch
 
-Launch your script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and set `--nproc-per-node` to the total number of devices, equal to `tp_size * fsdp_size`.
+Launch your script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and set `--nproc-per-node` to the number of devices you configured.
 
 ```shell
 torchrun --nproc-per-node 4 train.py
@@ -135,8 +146,9 @@ torchrun --nproc-per-node 4 train.py
 
 ## Next steps
 
-- See [FSDP2](./fsdp) for sharded training.
-- See [Tensor parallelism](./tensor_parallelism) for more details on partitioning strategies and manual plans.
+- See [Distributed](./main_classes/distributed) for the [`DistributedConfig`] API reference.
+- See [Tensor parallelism](./tensor_parallelism) for how weight sharding works and how to combine it with [`Trainer`].
+- See [FSDP2](./fsdp) for sharded training through [`Trainer`] and Accelerate.
 - See [Expert parallelism](./expert_parallelism) for sharding mixture-of-experts models.
-- See [N-D parallelism](./perf_train_gpu_many) for combining parallelism strategies.
+- See [N-D parallelism](./perf_train_gpu_many) for stacking parallelism strategies.
 - Read [The Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook) for a deeper look at how these strategies work.

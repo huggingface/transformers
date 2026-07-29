@@ -40,9 +40,9 @@ This guide covers enabling tensor parallelism in Transformers and the available 
 
 ## Partitioning a model
 
-Transformers enables tensor parallelism when a model has a `tp_plan`. Choose from two partitioning methods.
+Transformers enables tensor parallelism when you pass a [`DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Choose from two partitioning methods.
 
-- Set `tp_plan="auto"` for an automatic plan based on the model's predefined configuration.
+- Leave `tp_plan` unset for an automatic plan based on the model's predefined configuration.
 - Define and pass a manual `tp_plan`.
 
 <hfoptions id="tp_plan">
@@ -52,10 +52,15 @@ Transformers enables tensor parallelism when a model has a `tp_plan`. Choose fro
 import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
 
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct" , dtype=torch.bfloat16, tp_plan="auto")
-print(model._tp_plan)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    dtype=torch.bfloat16,
+    distributed_config=DistributedConfig(tp_size=4),
+)
+print(model.tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 prompt = "Can I help"
@@ -74,12 +79,13 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer in `tp_plan`. Pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
+Define a tensor parallel plan for each layer and pass it as the `tp_plan` field of a [`DistributedConfig`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
 
 Manual partitioning requires a deep understanding of model architecture and strategy interactions. Poor partitioning choices create slow models that fail or produce incorrect results. The [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) explains partitioning strategies in detail.
 
 ```py
 from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
 tp_plan = {
     "model.layers.*.self_attn.q_proj": "colwise",
@@ -89,7 +95,11 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", dtype="auto", tp_plan=tp_plan)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    dtype="auto",
+    distributed_config=DistributedConfig(tp_size=4, tp_plan=tp_plan),
+)
 print(model.tp_plan)
 ```
 
@@ -98,7 +108,7 @@ print(model.tp_plan)
 
 ## Partitioning strategies
 
-The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies with `tp_plan` in [`~PreTrainedModel.from_pretrained`]. It's useful for checking available strategies.
+The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies in a [`DistributedConfig`] `tp_plan`. It's useful for checking available strategies.
 
 ```py
 class ParallelInterface(MutableMapping):
@@ -229,9 +239,10 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
     ```
 
-3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
+3. Register the strategy to [`ParallelInterface`] to enable it for use in a `tp_plan`.
 
     ```python
+    from transformers.distributed import DistributedConfig
     from transformers.integrations.tensor_parallel import ParallelInterface
 
     ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
@@ -239,7 +250,11 @@ The example below shows how to implement `ColwiseParallel` with this workflow.
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...
     }
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        dtype=torch.bfloat16,
+        distributed_config=DistributedConfig(tp_size=4, tp_plan=tp_plan),
+    )
     ```
 
 ## Benchmarks

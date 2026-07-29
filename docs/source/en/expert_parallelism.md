@@ -26,7 +26,7 @@ import os
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.distributed.configuration_utils import DistributedConfig
+from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),

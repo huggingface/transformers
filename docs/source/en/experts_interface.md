@@ -157,11 +157,12 @@ This backend requires:
 
 ```py
 from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
     experts_implementation="deepgemm_megamoe",
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=8),
 )
 ```
 

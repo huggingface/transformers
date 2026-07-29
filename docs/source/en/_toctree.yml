@@ -468,6 +468,8 @@
       title: Continuous batching
     - local: main_classes/data_collator
       title: Data Collator
+    - local: main_classes/distributed
+      title: Distributed
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model

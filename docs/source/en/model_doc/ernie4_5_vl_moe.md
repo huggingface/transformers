@@ -85,7 +85,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
+    device_map="auto",  # Use distributed_config=DistributedConfig(tp_size=4) instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )
 processor = AutoProcessor.from_pretrained(
@@ -136,7 +136,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
+    device_map="auto",  # Use distributed_config=DistributedConfig(tp_size=4) instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )
 processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/11")

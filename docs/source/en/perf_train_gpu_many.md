@@ -55,13 +55,14 @@ TP splits each layer across GPUs within a node while SP splits the sequence acro
 ```py
 from accelerate.utils import DeepSpeedSequenceParallelConfig, ParallelismConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers.distributed import DistributedConfig
 
 model_id = "MiniMaxAI/MiniMax-M2"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=2),
     dtype="auto",
 )
 
@@ -104,13 +105,16 @@ TP splits layers across GPUs within a node and FSDP `full_shard` shards paramete
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers.distributed import DistributedConfig
 
 model_id = "MiniMaxAI/MiniMax-M2"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
+# Trainer auto-detects tp_size from the model.
+# 8 GPUs: tp=2 (from model) * dp_shard=4
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=2),
     dtype="auto",
 )
 

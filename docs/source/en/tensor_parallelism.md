@@ -46,24 +46,25 @@ print(config.base_model_tp_plan is not None)
 print(config.base_model_tp_plan)
 ```
 
-If a model supports TP, set `tp_plan="auto"` in [`~PreTrainedModel.from_pretrained`]. Transformers initializes the device mesh and shards the supported layers for you.
+If a model supports TP, pass a [`DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Transformers initializes the device mesh and shards the supported layers for you.
 
 > [!WARNING]
-> Don't use `device_map` with `tp_plan`. The two conflict at the weight-loading level. `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+> Don't use `device_map` with a [`DistributedConfig`]. The two conflict at the weight-loading level. `device_map` places whole modules on specific GPUs, while TP shards those same parameters across all GPUs.
 
 ```py
 import torch
 
 from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     dtype=torch.bfloat16,
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=4),
 )
 ```
 
-[`Trainer`] detects `tp_plan`, reads `tp_size` from the model, and creates a [`~accelerate.parallelism_config.ParallelismConfig`] automatically.
+[`Trainer`] reads `tp_size` from the model and creates a [`~accelerate.parallelism_config.ParallelismConfig`] automatically.
 
 Launch training on one node with 4 GPUs.
 
@@ -73,27 +74,31 @@ torchrun --nproc-per-node 4 train_tp.py
 
 ## ParallelismConfig
 
-Pass [`~accelerate.parallelism_config.ParallelismConfig`] explicitly when combining TP with other parallelism techniques like [FSDP](./fsdp) under [`Trainer`]. To combine the strategies outside of [`Trainer`], at load time, use [`DistributedConfig`] with [`~PreTrainedModel.from_pretrained`]. See [N-D parallelism](./distributed_config#n-d-parallelism).
+Pass [`~accelerate.parallelism_config.ParallelismConfig`] explicitly when combining TP with other parallelism techniques like [FSDP](./fsdp) under [`Trainer`]. See [N-D parallelism](./perf_train_gpu_many) for the strategies worth stacking.
 
 ```py
 import torch
 
 from accelerate import ParallelismConfig
 from transformers import AutoModelForCausalLM, TrainingArguments
+from transformers.distributed import DistributedConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     dtype=torch.bfloat16,
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=2),
 )
 
-parallelism_config = ParallelismConfig(tp_size=4)
+# 8 GPUs: tp=2 (from the model) * dp_shard=4
+parallelism_config = ParallelismConfig(tp_size=2, dp_shard_size=4)
 
 args = TrainingArguments(
     ...,
     parallelism_config=parallelism_config,
 )
 ```
+
+`tp_size` must match the model's, otherwise [`Trainer`] overwrites it with the value the weights were actually sharded with.
 
 ## Next steps
 
