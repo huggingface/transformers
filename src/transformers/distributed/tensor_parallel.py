@@ -16,9 +16,12 @@ from __future__ import annotations
 import contextlib
 import re
 
+from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
@@ -30,6 +33,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
+
 
 def replace_layer_number_by_wildcard(name: str) -> str:
     """
@@ -70,7 +74,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-
 def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
@@ -89,7 +92,35 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
+@contextlib.contextmanager
+def _params_to_local(module):
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
+    for name, param in originals.items():
+        module._parameters[name] = param.to_local()
+    try:
+        yield
+    finally:
+        module._parameters.update(originals)
+
+
+def _activation_to_local(args):
+    if args and isinstance(args[0], DTensor):
+        args = (args[0].to_local(),) + args[1:]
+    return args
+
+
 class TensorParallelLayer:
+    """Base TP style. DTensor lives only at module boundaries:
+
+    1. ``transform_inputs_pre_forward``: wrap/redistribute the input to the layout the kernel needs.
+    2. ``unwrap_for_kernel``: swap the input activation and any DTensor params for their local
+       shards, so the kernel always runs on plain tensors (quantized weights are plain local
+       shards already and would not compose with DTensor inputs).
+    3. ``transform_output_post_forward``: re-wrap the plain kernel output with the placement the
+       local math produced (e.g. ``Shard(-1)`` for colwise, ``Partial`` for rowwise) and
+       redistribute it to ``output_layouts``.
+    """
+
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
@@ -97,8 +128,11 @@ class TensorParallelLayer:
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
 
-    def context_around_forward(self, module):
-        return contextlib.nullcontext()
+    @contextlib.contextmanager
+    def unwrap_for_kernel(self, module, args, kwargs, mesh):
+        args = _activation_to_local(args)
+        with _params_to_local(module):
+            yield args, kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         return output
@@ -109,7 +143,7 @@ class TensorParallelLayer:
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-            with self.context_around_forward(module):
+            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
@@ -141,11 +175,12 @@ class ColwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
-        return (x,) + args[1:], kwargs  # stay DTensor into F.linear
+        return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
+        # The local kernel produced this rank's shard of the output features (last dim).
         if not isinstance(output, DTensor):
-            return output
+            output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts], async_op=True)
         return output.to_local() if self.use_local_output else output
@@ -188,9 +223,27 @@ class RowwiseParallel(TensorParallelLayer):
             x = x.redistribute(placements=[desired], async_op=True)
         return (x,) + args[1:], kwargs
 
+    @contextlib.contextmanager
+    def unwrap_for_kernel(self, module, args, kwargs, mesh):
+        if isinstance(module, torch.nn.Embedding):
+            # A vocab-sharded lookup needs DTensor's masked embedding kernel; keep everything distributed.
+            yield args, kwargs
+            return
+        # Each rank computes a partial sum, so the replicated bias must be added exactly once.
+        bias = module._parameters.get("bias")
+        if bias is not None and mesh.get_local_rank() != 0:
+            module._parameters["bias"] = None
+        try:
+            with super().unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
+                yield args, kwargs
+        finally:
+            if bias is not None:
+                module._parameters["bias"] = bias
+
     def transform_output_post_forward(self, module, output, mesh):
+        # The local kernel produced partial sums (weight is sharded along the input dim).
         if not isinstance(output, DTensor):
-            return output
+            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts], async_op=True)
         return output.to_local() if self.use_local_output else output
@@ -225,19 +278,8 @@ class SequenceParallel(TensorParallelLayer):
 
 
 # =============================================================================
-# MoE / packed-linear local-param swap (grouped_mm needs plain tensors)
+# MoE / packed-linear (grouped_mm needs plain tensors)
 # =============================================================================
-
-
-@contextlib.contextmanager
-def _local_params_for_forward(module):
-    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
-    for name, param in originals.items():
-        module._parameters[name] = param.to_local()
-    try:
-        yield
-    finally:
-        module._parameters.update(originals)
 
 
 class PackedColwiseParallel(TensorParallelLayer):
@@ -273,11 +315,7 @@ class PackedColwiseParallel(TensorParallelLayer):
             input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
-        input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
-
-    def context_around_forward(self, module):
-        return _local_params_for_forward(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -359,15 +397,12 @@ class MoEExpertsParallel(TensorParallelLayer):
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
-            with self.context_around_forward(module):
+            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
         module.forward = tp_forward
         return module
-
-    def context_around_forward(self, module):
-        return _local_params_for_forward(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
@@ -449,9 +484,7 @@ class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
 
 
 class ParallelInterface(GeneralInterface):
-    """Registry of named TP styles for the DTensor backend.
-
-    """
+    """Registry of named TP styles for the DTensor backend."""
 
     _global_mapping = (
         {
