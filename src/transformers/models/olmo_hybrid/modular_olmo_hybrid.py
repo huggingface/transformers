@@ -236,7 +236,7 @@ class OlmoHybridShortConvolution(nn.Conv1d):
             conv_state = cache_params.layers[self.layer_idx].conv_states[self.conv_idx]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias, self.activation
+                hidden_states, conv_state, self.weight.squeeze(1), self.bias, self.activation
             )
         else:
             if cache_params is not None:
@@ -246,8 +246,8 @@ class OlmoHybridShortConvolution(nn.Conv1d):
 
             hidden_states = causal_conv1d_fn(
                 hidden_states,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
+                self.weight.squeeze(1),
+                self.bias,
                 activation=self.activation,
                 seq_idx=kwargs.get("seq_idx"),
             )
