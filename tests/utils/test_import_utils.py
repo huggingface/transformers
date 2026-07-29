@@ -255,3 +255,49 @@ def test_broken_torchaudio_does_not_break_import():
             pass
         else:
             raise AssertionError("rnnt_loss must raise ImportError when torchaudio is unavailable")
+
+
+@run_test_using_subprocess
+def test_import_without_torch_distributed():
+    """A torch build without distributed support (`USE_DISTRIBUTED=0`, e.g. the ROCm 7.2.1 Windows wheels) must still
+    be able to import transformers and load a model: distributed-only imports have to be gated on
+    `torch.distributed.is_available()`, not just on the torch version. See #47603.
+
+    Runs in a subprocess because transformers must be imported *after* the patching below, and the parent pytest
+    process has already imported it.
+    """
+    import tempfile
+
+    import torch
+
+    # Emulate `USE_DISTRIBUTED=0`: `torch.distributed` exists, but `is_available()` is False and every submodule
+    # needing c10d raises `ModuleNotFoundError` on import (which is what a `None` entry in `sys.modules` does).
+    blocked = dict.fromkeys(
+        [
+            "torch.distributed.tensor",
+            "torch.distributed.checkpoint",
+            "torch.distributed.fsdp",
+            "torch.distributed._composable",
+        ]
+    )
+
+    # `patch.dict` snapshots `sys.modules`, so both the blocking and the reimport below are undone on exit.
+    with patch.dict(sys.modules, blocked), patch.object(torch.distributed, "is_available", lambda: False):
+        for name in list(sys.modules):
+            if name == "transformers" or name.startswith("transformers."):
+                del sys.modules[name]
+
+        from transformers import AutoImageProcessor, LlamaConfig, LlamaForCausalLM  # noqa: F401
+
+        # Loading a checkpoint must not reach the (now undefined) `DTensor` either.
+        config = LlamaConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            intermediate_size=64,
+            vocab_size=128,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            LlamaForCausalLM(config).save_pretrained(tmp_dir)
+            LlamaForCausalLM.from_pretrained(tmp_dir)
