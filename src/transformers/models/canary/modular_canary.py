@@ -17,12 +17,10 @@ import math
 
 import numpy as np
 import torch
-from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,7 +33,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoModel
 from ..moonshine.modeling_moonshine import MoonshineForConditionalGeneration
 from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 from ..whisper.modeling_whisper import (
@@ -45,82 +43,10 @@ from ..whisper.modeling_whisper import (
     WhisperModel,
     WhisperPreTrainedModel,
 )
+from .configuration_canary import CanaryConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-@auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
-@strict
-class CanaryConfig(PreTrainedConfig):
-    r"""
-    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-        The config object or dictionary of the FastConformer encoder ([`ParakeetEncoderConfig`]).
-    max_target_positions (`int`, *optional*, defaults to 1024):
-        The maximum sequence length that the decoder might ever be used with.
-    decoder_start_token_id (`int`, *optional*, defaults to 7):
-        The token id that starts decoding (`<|startofcontext|>`, the first token of the multitask prompt).
-
-    Example:
-
-    ```python
-    >>> from transformers import CanaryForConditionalGeneration, CanaryConfig
-
-    >>> # Initializing a Canary configuration
-    >>> configuration = CanaryConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = CanaryForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "canary"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": AutoConfig}
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_attention_heads",
-        "num_hidden_layers": "decoder_layers",
-    }
-
-    encoder_config: dict | PreTrainedConfig | None = None
-    vocab_size: int = 16384
-    d_model: int = 1024
-    decoder_layers: int = 8
-    decoder_attention_heads: int = 8
-    decoder_ffn_dim: int = 4096
-    decoder_layerdrop: float | int = 0.0
-    activation_function: str = "relu"
-    max_target_positions: int = 1024
-    dropout: float | int = 0.1
-    attention_dropout: float | int = 0.1
-    activation_dropout: float | int = 0.1
-    scale_embedding: bool = False
-    use_cache: bool = True
-    is_encoder_decoder: bool = True
-    tie_word_embeddings: bool = True
-    pad_token_id: int | None = 2
-    bos_token_id: int | None = 4
-    eos_token_id: int | None = 3
-    decoder_start_token_id: int | None = 7
-    initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
-                num_hidden_layers=32,
-                num_mel_bins=128,
-                scale_input=False,
-                layerdrop=0.0,
-                dropout_positions=0.0,
-            )
-        super().__post_init__(**kwargs)
 
 
 class CanaryAttention(WhisperAttention):
@@ -436,4 +362,4 @@ class CanaryForConditionalGeneration(MoonshineForConditionalGeneration):
         )
 
 
-__all__ = ["CanaryConfig", "CanaryForConditionalGeneration", "CanaryModel", "CanaryPreTrainedModel"]
+__all__ = ["CanaryForConditionalGeneration", "CanaryModel", "CanaryPreTrainedModel"]
