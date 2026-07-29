@@ -250,9 +250,12 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
             # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
-            # (`fc1` / `fc2`). Bridge the names on load (and back on save).
-            WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
-            WeightRenaming(source_patterns=r"\.W_up\.", target_patterns=".mlp.fc2."),
+            # (`fc1` / `fc2`). Bridge the names on load (and back on save). Patterns are unanchored (no
+            # surrounding dots) so the same rename also normalizes the bare module names in an fp8 checkpoint's
+            # `modules_to_not_convert` (`W_down`/`W_up` -> `mlp.fc1`/`mlp.fc2`); a dot-anchored pattern would
+            # leave those bare names untouched and the gate MLP would be quantized by mistake.
+            WeightRenaming(source_patterns=r"W_down", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns=r"W_up", target_patterns="mlp.fc2"),
             # The released checkpoints fuse the query up-projection and the attention output gate into a
             # single `q_b_proj` (vLLM layout); the model keeps it fused under the clearer name `q_gate_proj`
             # and splits the activation in the forward. A plain rename (kept fp8-safe: no weight split, and
