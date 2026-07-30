@@ -368,6 +368,7 @@ class Gemma2PreTrainedModel(PreTrainedModel):
         "hidden_states": Gemma2DecoderLayer,
         "attentions": Gemma2Attention,
     }
+    _incompatible_flash_implementations = ["flash_attention_torch"]  # softcapping
 
     @torch.no_grad()
     def _init_weights(self, module):

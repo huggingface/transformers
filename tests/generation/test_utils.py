@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_flash_attn_torch,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -123,10 +124,102 @@ def is_moe_model(config):
     return getattr(config, "_experts_implementation", None) is not None
 
 
+def _prepare_config_headdim(config, requested_dim):
+    """
+    This method allows to update the head dim for all model types including
+    composite models and models that do not support head dim by themselves.
+
+    Why? A lot of kernels including flex attention rely on triton for compilation.
+    However, triton cannot handle hidden dimensions of less than 16 for example.
+    (There are many more examples especially now that the `kernels` library is
+    supported)
+    """
+    config = copy.deepcopy(config)
+
+    def update_config_headdim(config, requested_dim):
+        # Flex Attention cannot use dropout
+        if hasattr(config, "attention_dropout"):
+            config.attention_dropout = 0.0
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0.0
+
+        # Update the head dim and try to update hidden size as well if present in config
+        # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
+        head_dim = None
+        # On a heterogeneous config `head_dim` cannot be read globally, so probe for it without
+        # tripping the guard. Per-layer overrides are bumped below.
+        global_head_dim = config._getattr_without_heterogeneous_validation("head_dim", None)
+        if global_head_dim is not None:
+            head_dim = global_head_dim
+            config.head_dim = max(requested_dim, global_head_dim)
+            if config.is_heterogeneous and "head_dim" in config.per_layer_attributes:
+                overrides = copy.deepcopy(config._heterogeneity_spec.per_layer_overrides)
+                for layer_overrides in overrides.values():
+                    if "head_dim" in layer_overrides:
+                        layer_overrides["head_dim"] = max(requested_dim, layer_overrides["head_dim"])
+                config.per_layer_config = overrides
+
+        cross_head_dim = None
+        if hasattr(config, "cross_head_dim") and config.cross_head_dim is not None:
+            cross_head_dim = config.cross_head_dim
+            config.cross_head_dim = max(requested_dim, config.cross_head_dim)
+
+        if (
+            getattr(config, "hidden_size", None) is not None
+            and getattr(config, "num_attention_heads", None) is not None
+        ):
+            # For some models, num_attention_heads is a list of ints: we take the max to maximize the multiplier
+            num_attn_heads = getattr(config, "num_attention_heads")
+            num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
+            head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
+            config.hidden_size *= max(requested_dim // head_dim, 1)
+
+        if (
+            getattr(config, "decoder_hidden_size", None) is not None
+            and getattr(config, "decoder_num_attention_heads", None) is not None
+        ):
+            decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
+            config.decoder_hidden_size *= max(requested_dim // decoder_head_dim, 1)
+
+        if (
+            getattr(config, "cross_hidden_size", None) is not None
+            and getattr(config, "cross_num_attention_heads", None) is not None
+        ):
+            cross_head_dim = (
+                cross_head_dim
+                if cross_head_dim is not None
+                else config.cross_hidden_size // config.cross_num_attention_heads
+            )
+            config.cross_hidden_size *= max(requested_dim // cross_head_dim, 1)
+
+        # 3d rope also depends on the head dim
+        # (we assume easy shapes here where we get to the requested head dim at least)
+        if (
+            getattr(config, "rope_parameters", None) is not None
+            and len(config.rope_parameters.get("mrope_section", [])) > 0
+        ):
+            scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
+            config.rope_parameters["mrope_section"] = [
+                section * scaling_factor for section in config.rope_parameters["mrope_section"]
+            ]
+
+    # Update config values
+    update_config_headdim(config, requested_dim)
+    for key in config.sub_configs:
+        if getattr(config, key) is not None:
+            sub_config = getattr(config, key)
+            update_config_headdim(sub_config, requested_dim)
+
+    return config
+
+
 class GenerationTesterMixin(ExportGenerateTesterMixin):
     input_name = "input_ids"
     model_tester = None
     max_new_tokens = 3
+
+    # Workaround to make it static within each mixin (model, generate) -> one override for both
+    _prepare_config_headdim = staticmethod(_prepare_config_headdim)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1876,6 +1969,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
             "flash_attention_4": "_supports_flash_attn",
+            "flash_attention_torch": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1891,20 +1985,31 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
-            # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA).
-            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
-                for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
-                    if input_name in inputs_dict:
-                        inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
-
             # make sure that all models have enough positions for generation
             if hasattr(config, "max_position_embeddings"):
                 config.max_position_embeddings = max_new_tokens + main_input.shape[1] + 1
 
             set_config_for_less_flaky_test(config)
             model = model_class(config)
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
+
+                # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+                # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
+                # resulting in a mask with holes (not supported properly by FA).
+                for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
+                    if input_name in inputs_dict:
+                        inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
+
+                # Some FA implementations need specific multiples at least
+                config = self._prepare_config_headdim(config, 16)
 
             # If not all sub-models support flex, skip the test. We could potentially set not supported backbones
             # to "eager" attention, leaving it for future updates on multimodality tests
@@ -1982,6 +2087,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_eager_matches_fa4_generate(self):
         """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_4")
+
+    @pytest.mark.flash_attn_torch_test
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa_torch_generate(self):
+        """Tests that generate has equivalent outputs with FA Torch and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_torch")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2094,6 +2207,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
             "flash_attention_4": "_supports_flash_attn",
+            "flash_attention_torch": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2130,6 +2244,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     if isinstance(submodel, PreTrainedModel)
                 ):
                     self.skipTest(f"At least some parts of {model_class.__name__} don't support {attn_implementation}")
+
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+                # Check for validity of the FA implementation, some are not compatible
+                valid_fa_implementations = model._compatible_flash_implementations
+                if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                    continue
+                invalid_fa_implementations = model._incompatible_flash_implementations
+                if invalid_fa_implementations is not None and attn_implementation in invalid_fa_implementations:
+                    continue
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
@@ -2255,6 +2378,22 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_4", fa_kwargs=True
+        )
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @pytest.mark.flash_attn_torch_test
+    @slow
+    def test_flash_attention_torch_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_torch")
+
+    @require_flash_attn_torch
+    @require_torch_gpu
+    @pytest.mark.flash_attn_torch_test
+    @slow
+    def test_flash_attention_torch_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_torch", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):

@@ -558,6 +558,7 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
     _can_record_outputs = None
+    _incompatible_flash_implementations = ["flash_attention_torch"]  # softcapping
 
     @torch.no_grad()
     def _init_weights(self, module):

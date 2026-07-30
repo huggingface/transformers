@@ -359,6 +359,7 @@ class VaultGemmaPreTrainedModel(PreTrainedModel):
         "hidden_states": VaultGemmaDecoderLayer,
         "attentions": VaultGemmaAttention,
     }
+    _incompatible_flash_implementations = ["flash_attention_torch"]  # softcapping
 
     @torch.no_grad()
     def _init_weights(self, module):

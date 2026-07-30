@@ -97,6 +97,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_attn_torch_available,
     is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
@@ -740,6 +741,15 @@ def require_flash_attn_4(test_case):
     return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
 
 
+def require_flash_attn_torch(test_case):
+    """
+    Decorator marking a test that requires Flash Attention Torch.
+
+    These tests are skipped when Flash Attention Torch isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_torch_available(), "test requires Flash Attention Torch")(test_case)
+
+
 def require_all_flash_attn(test_case):
     flash_attn_available = is_flash_attn_2_available(kernels_fallback_ok=True)
 
@@ -749,6 +759,7 @@ def require_all_flash_attn(test_case):
                 flash_attn_available,
                 is_flash_attn_3_available(),
                 is_flash_attn_4_available(),
+                is_flash_attn_torch_available(),
             )
         ),
         "test requires all mainline Flash Attention packages",
