@@ -27,7 +27,7 @@ You can find all the original BLIP checkpoints under the [BLIP](https://huggingf
 >
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to perform visual question answering with [Pipeline] or the [AutoModel] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
