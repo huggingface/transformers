@@ -146,7 +146,7 @@ jobs:
           echo 'source /root/.env_setup' >> /root/.bashrc
 
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
+        uses: huggingface/tailscale-action@07d36e4c3b68707bd3fe070dbb96f03f993a6efd  # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
