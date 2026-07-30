@@ -579,7 +579,7 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig, device=None):
-        super().__init__(config, device=device)
+        super().__init__(config)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
 
@@ -593,7 +593,7 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -1236,7 +1236,7 @@ class HunYuanVLModel(Qwen2VLModel):
         """
         if input_ids is None:
             placeholder_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == placeholder_token_embed).all(-1)
         else:
