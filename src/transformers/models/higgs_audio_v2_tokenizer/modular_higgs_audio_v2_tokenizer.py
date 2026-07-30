@@ -83,7 +83,7 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
 @requires(backends=("torchaudio",))
 @auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(XcodecPreTrainedModel):
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]  # trf-ignore: TRF022
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
 

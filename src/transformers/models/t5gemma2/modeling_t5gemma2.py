@@ -654,9 +654,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
     ]
     _skip_keys_device_placement = ["past_key_values"]
 

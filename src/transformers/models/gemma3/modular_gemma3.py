@@ -442,12 +442,7 @@ GEMMA3_START_DOCSTRING = None
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    _no_split_modules = [
-        "Gemma3DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
-    ]
+    _no_split_modules = ["Gemma3DecoderLayer"]
 
     @torch.no_grad()
     def _init_weights(self, module):
