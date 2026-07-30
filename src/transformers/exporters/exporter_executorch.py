@@ -400,7 +400,8 @@ def _patch_bucketize(original):
     def patch(input, boundaries, *, out_int32=False, right=False, out=None):
         below = (boundaries <= input.unsqueeze(-1)) if right else (boundaries < input.unsqueeze(-1))
         result = below.sum(dim=-1)
-        return result.to(torch.int32) if out_int32 else result
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
 
     return patch
 
@@ -417,7 +418,8 @@ def _patch_searchsorted(original):
         seq, val = sorted_sequence.unsqueeze(-2), input.unsqueeze(-1)
         below = (seq <= val) if right else (seq < val)
         result = below.sum(dim=-1)
-        return result.to(torch.int32) if out_int32 else result
+        result = result.to(torch.int32) if out_int32 else result
+        return out.copy_(result) if out is not None else result
 
     return patch
 
@@ -493,40 +495,23 @@ def _patch_cummin(_original):
     return patch
 
 
-@register_patch("executorch", "torch.rand_like", "torch.randn_like")
-def _patch_rand_like(_original):
-    """Deterministic stand-in for ``rand_like`` / ``randn_like`` (no portable out-variant kernel).
+@register_patch("executorch", "torch.bernoulli", "torch.Tensor.bernoulli")
+def _patch_bernoulli(_original):
+    """Rewrite ``bernoulli`` as ``rand_like`` + comparison (no portable ``bernoulli`` out-variant).
 
-    These appear in stochastic-depth / dropout / sampling paths that are inert at inference; the
-    exported program just needs a same-shape/dtype tensor, so return zeros.
+    ExecuTorch ships no out-variant kernel for ``aten::bernoulli`` (SpeechT5's speech-decoder prenet
+    consistent-dropout), so ``to_executorch`` fails with ``Missing out variants: {'aten::bernoulli'}``.
+    ``rand_like`` *does* have a portable kernel (it's in the core-aten exception list), so
+    ``(rand_like(input) < probs)`` is a faithful Bernoulli sample — the real randomness is preserved.
     """
 
-    def patch(input, *args, **kwargs):
-        return torch.zeros_like(input)
-
-    return patch
-
-
-@register_patch("executorch", "torch.randint")
-def _patch_randint(_original):
-    """Deterministic stand-in for ``torch.randint`` (no portable kernel). Handles both signatures —
-    ``randint(high, size, ...)`` and ``randint(low, high, size, ...)`` — returning zeros of ``size``.
-    """
-
-    def patch(*args, dtype=torch.long, **kwargs):
-        # `size` is always the last positional arg — `randint(high, size)` or `randint(low, high, size)`.
-        size = kwargs["size"] if "size" in kwargs else args[-1]
-        return torch.zeros(size, dtype=dtype)
-
-    return patch
-
-
-@register_patch("executorch", "torch.randperm")
-def _patch_randperm(_original):
-    """Deterministic stand-in for ``torch.randperm`` (no portable kernel): the identity permutation."""
-
-    def patch(n, *args, dtype=torch.long, **kwargs):
-        return torch.arange(n, dtype=dtype)
+    def patch(input, *args, p=None, generator=None, out=None):
+        # Two API shapes: bernoulli(input) (elementwise probabilities) and
+        # bernoulli(input, p=...) (scalar probability, shape from input).
+        if p is None and len(args) == 1:
+            p = args[0]
+        probs = input if p is None else p
+        return (torch.rand_like(input) < probs).to(input.dtype)
 
     return patch
 
@@ -625,27 +610,6 @@ def _patch_scaled_dot_product_attention(original):
             return original(
                 query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
             ).clone(memory_format=torch.contiguous_format)
-
-    return patch
-
-
-@register_patch("executorch", "torch.bernoulli", "torch.Tensor.bernoulli")
-def _patch_bernoulli(_original):
-    """Sample Bernoulli via ``rand_like`` + comparison.
-
-    ExecuTorch ships no out-variant kernel for ``aten::bernoulli`` (used by
-    SpeechT5's consistent dropout), so ``to_executorch`` fails with
-    ``Missing out variants: {'aten::bernoulli'}``. Rewrite the call into
-    ``(rand_like(input) < probs).to(input.dtype)`` — both ops have out variants.
-    """
-
-    def patch(input, *args, p=None, generator=None, out=None):
-        # Two API shapes: bernoulli(input) (elementwise probabilities) and
-        # bernoulli(input, p=...) (scalar probability, shape from input).
-        if p is None and len(args) == 1:
-            p = args[0]
-        probs = input if p is None else p
-        return (torch.rand_like(input) < probs).to(input.dtype)
 
     return patch
 
