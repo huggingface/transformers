@@ -128,3 +128,13 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 [[autodoc]] OwlViTForObjectDetection
     - forward
     - image_guided_detection
+
+## OwlViTHungarianMatcher
+
+[[autodoc]] OwlViTHungarianMatcher
+    - forward
+
+## OwlViTLoss
+
+[[autodoc]] OwlViTLoss
+    - forward
