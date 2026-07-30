@@ -869,7 +869,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         position_ids=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the

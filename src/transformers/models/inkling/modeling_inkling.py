@@ -1305,7 +1305,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         audio_input_ids=None,
         audio_input_ids_mask=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         labels=None,
         is_first_iteration=False,
         **kwargs,
