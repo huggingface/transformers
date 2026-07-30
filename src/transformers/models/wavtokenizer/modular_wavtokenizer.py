@@ -19,6 +19,9 @@ Ported from the original implementation by Ji et al. (MIT license):
 
 The encoder and quantizer follow EnCodec's SEANet encoder + single-codebook vector quantization; the decoder is a
 Vocos-style backbone (ConvNeXt blocks with adaptive layer norm and a positional conv/attention net) with an ISTFT head.
+
+This is an inference-only port: it covers encoding audio to discrete codes and decoding codes back to audio. The
+original training stack (GAN discriminators, loss modules, differentiable quantization) is not included.
 """
 
 import math
@@ -394,6 +397,9 @@ class WavTokenizerPreTrainedModel(EncodecPreTrainedModel):
     Proposed in [WavTokenizer: an Efficient Acoustic Discrete Codec Tokenizer for Audio Language Modeling](https://huggingface.co/papers/2408.16532)
     by Ji et al. (ICLR 2025). Ported from the original (MIT-licensed) implementation at
     https://github.com/jishengpeng/WavTokenizer.
+
+    The port is inference-only: it encodes audio to discrete codes and decodes codes back to audio, without the
+    original training objectives or a differentiable quantization path.
     """
 )
 class WavTokenizerModel(WavTokenizerPreTrainedModel):
