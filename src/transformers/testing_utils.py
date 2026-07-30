@@ -3350,9 +3350,7 @@ def get_device_properties() -> DeviceProperties:
             gen = (arch & gen_mask) >> 32
             return ("xpu", gen, None)
     if IS_NPU_SYSTEM:
-        import torch
-
-        if hasattr(torch, "npu") and torch.npu.is_available():
+        if torch.npu.is_available():
             return ("npu", None, None)
     return (torch_device, None, None)
 
