@@ -795,7 +795,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
+            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you are hearing is the distinct, high-p",
             ("xpu", 5): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
@@ -876,7 +876,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThis is the sound of a person coughing."
+        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

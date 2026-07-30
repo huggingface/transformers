@@ -195,12 +195,13 @@ def _interpolation_axis_taps_weights(
     target positions on an axis of length `size`. `mode` selects the kernel width — 2 taps
     (`"bilinear"`) or 4 taps (`"bicubic"`, Keys convolution kernel with `a=-0.75`). `size` may be a
     scalar or a per-element tensor (ragged batches)."""
+    index = index.to(torch.float32)
     if align_corners:
         # Closed form of `torch.linspace(0, side-1, size)[index]` — endpoints map to 0 and side-1.
-        # `clamp(min=1)` guards size==1 (only index 0 exists → coord 0), matching `linspace`.
-        src = index.to(torch.float32) * (side - 1) / (size - 1).clamp(min=1)
+        # `clamp(min=1)` avoids a divide-by-zero when size == 1 (index is 0, so src is 0 too).
+        src = index * (side - 1) / torch.clamp(size - 1, min=1)
     else:
-        src = (index.to(torch.float32) + 0.5) * side / size - 0.5  # half-pixel centres (align_corners=False)
+        src = (index + 0.5) * side / size - 0.5  # half-pixel centres (align_corners=False)
     floor = torch.floor(src)
     if mode == "bilinear":
         offsets = torch.arange(0, 2, device=index.device)  # floor, floor+1
