@@ -571,7 +571,7 @@ class Mamba2Mixer(nn.Module):
                 return_final_states=output_final_state,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
-                initial_states=recurrent_state if cache_params is not None else None,
+                initial_states=recurrent_state if use_precomputed_states else None,
                 dt_limit=self.time_step_limit,
                 **kwargs,
             )
