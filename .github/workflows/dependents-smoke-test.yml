@@ -43,7 +43,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Install dependencies
-        run: uv pip install -e vllm -e transformers
+        run: uv pip install --prerelease=allow -e vllm -e transformers
 
       - name: Run tests
         run: |
