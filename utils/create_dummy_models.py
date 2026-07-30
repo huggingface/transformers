@@ -166,6 +166,10 @@ config_class_to_model_tester_map = {
     "ParakeetRNNTConfig": "ParakeetForRNNTModelTest",
     "ParakeetTDTConfig": "ParakeetForTDTModelTest",
     "UVDocConfig": "UVDocModelTest",
+    "Cosmos3EdgeVisionConfig": "Cosmos3EdgeVisionText2TextModelTester",
+    "Gemma4AudioConfig": "Gemma4Audio2TextModelTest",
+    "Qwen3_5VisionConfig": "Qwen3_5VisionText2TextModelTester",
+    "Qwen3_5MoeVisionConfig": "Qwen3_5MoeVisionText2TextModelTester",
 }
 
 
@@ -181,10 +185,6 @@ no_model_tester_at_all = {
     "Sam3VideoConfig",
     "ShieldGemma2Config",
     "PPChart2TableConfig",
-    "Cosmos3EdgeVisionConfig",
-    "Gemma4AudioConfig",
-    "Qwen3_5MoeVisionConfig",
-    "Qwen3_5VisionConfig",
 }
 
 deprecated_models = {
