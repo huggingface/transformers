@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_greater_or_equal
@@ -22,14 +23,20 @@ from ..utils import is_torch_available, is_torch_greater_or_equal
 if TYPE_CHECKING:
     from .configuration_utils import DistributedConfig
 
+
+@lru_cache
+def is_torch_distributed_available() -> bool:
+    if not is_torch_available():
+        return False
+    import torch
+
+    return torch.distributed.is_available()
+
+
 if is_torch_available():
     import torch
 
-    _torch_distributed_available = torch.distributed.is_available()
-else:
-    _torch_distributed_available = False
-
-if _torch_distributed_available and is_torch_greater_or_equal("2.7"):
+if is_torch_distributed_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import (
@@ -41,7 +48,7 @@ if _torch_distributed_available and is_torch_greater_or_equal("2.7"):
 
 
 def _is_torch_distributed_initialized() -> bool:
-    if not _torch_distributed_available:
+    if not is_torch_distributed_available():
         return False
     return torch.distributed.is_initialized()
 

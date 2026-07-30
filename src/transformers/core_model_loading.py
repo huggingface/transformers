@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .distributed.sharding_utils import DtensorShardOperation, _dtensor_from_local_like
-from .distributed.utils import _torch_distributed_available
+from .distributed.utils import is_torch_distributed_available
 from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true
@@ -39,7 +39,7 @@ from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
 
 
-if _torch_distributed_available:
+if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor
 
 if TYPE_CHECKING:
@@ -1343,7 +1343,7 @@ def set_param_for_module(
         loading_info.unexpected_keys.add(target_name)
     else:
         if not isinstance(param_value, torch.nn.Parameter) and not (
-            _torch_distributed_available and isinstance(ref, DTensor)
+            is_torch_distributed_available() and isinstance(ref, DTensor)
         ):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
@@ -1354,7 +1354,7 @@ def set_param_for_module(
         # Determine expected shape: for TP/Dtensor, use sharded shape; otherwise, use full shape
         if distributed_operation is not None:
             expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
-        elif _torch_distributed_available and isinstance(ref, DTensor):
+        elif is_torch_distributed_available() and isinstance(ref, DTensor):
             expected_shape = ref._local_tensor.shape
         else:
             expected_shape = ref.shape
@@ -1362,7 +1362,7 @@ def set_param_for_module(
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
-            if _torch_distributed_available and isinstance(ref, DTensor):
+            if is_torch_distributed_available() and isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 dtensor_param = _dtensor_from_local_like(local_param, ref)
                 param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
@@ -1673,7 +1673,7 @@ def convert_and_load_state_dict_in_model(
             sharding_op = None
             materialize_device = param_device
 
-            if _torch_distributed_available and isinstance(empty_param, DTensor):
+            if is_torch_distributed_available() and isinstance(empty_param, DTensor):
                 sharding_op = DtensorShardOperation(empty_param)
             elif device_mesh and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
