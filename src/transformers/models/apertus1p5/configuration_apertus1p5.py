@@ -243,6 +243,7 @@ class Apertus1p5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
+        """Resolve nested configs and validate multimodal token ranges and pruned-head weight tying."""
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "apertus1p5_text")
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
