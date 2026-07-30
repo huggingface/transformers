@@ -125,6 +125,27 @@ class TDTLossTest(unittest.TestCase):
         self.assertFalse(torch.all(inputs["token_logits"].grad == 0))
         self.assertFalse(torch.all(inputs["duration_logits"].grad == 0))
 
+    def test_tdt_loss_accepts_int32_targets(self):
+        # ParakeetForTDTLoss casts the targets to int32, which torch.gather only started accepting in torch 2.8.
+        from transformers.loss.loss_tdt import ParakeetForTDTLoss
+
+        batch, max_t, max_u, vocab = 2, 6, 4, 8
+        durations = [0, 1, 2]
+        token_logits = torch.randn(batch, max_t, max_u, vocab + 1)
+        duration_logits = torch.randn(batch, max_t, max_u, len(durations))
+        labels = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.int32)
+
+        loss = ParakeetForTDTLoss(
+            token_logits=token_logits,
+            duration_logits=duration_logits,
+            labels=labels,
+            logit_lengths=torch.tensor([max_t, max_t]),
+            label_lengths=torch.tensor([3, 3]),
+            blank_token_id=vocab,
+            durations=durations,
+        )
+        self.assertTrue(torch.isfinite(loss))
+
 
 @require_torch
 @require_torchaudio
