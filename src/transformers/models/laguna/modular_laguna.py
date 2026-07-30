@@ -186,7 +186,7 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
 
 
 class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: LagunaConfig):
+    def __init__(self, config: LagunaConfig, device=None):
         super().__init__(config)
 
     @staticmethod
@@ -216,7 +216,7 @@ class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
 
 class LagunaMLP(Qwen2MoeMLP):

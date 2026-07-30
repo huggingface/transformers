@@ -248,7 +248,7 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
                 inv_freq * width_mask,
             )
         )
-        return inv_freq, 1.0
+        return inv_freq.to(device), 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):

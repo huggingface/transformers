@@ -171,7 +171,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     @deprecate_kwargs("device", version="5.18")
-    def __init__(self, config: SaProtConfig):
+    def __init__(self, config: SaProtConfig, device=None):
         super().__init__()
 
         self.config = config

@@ -75,7 +75,8 @@ class PPDocLayoutV2GlobalPointer(nn.Module):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    def __init__(self, config):
+    @deprecate_kwargs("device", version="5.18")
+    def __init__(self, config, device=None):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -83,7 +84,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
@@ -107,7 +108,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5

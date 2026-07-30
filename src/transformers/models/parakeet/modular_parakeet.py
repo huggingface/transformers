@@ -79,14 +79,15 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config)
+        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig) -> torch.Tensor:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig, device=None) -> torch.Tensor:
         base = 10000.0
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
-        return inv_freq
+        return inv_freq.to(device)
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):

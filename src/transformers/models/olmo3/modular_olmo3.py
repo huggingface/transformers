@@ -186,7 +186,7 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
 
 
 class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: Olmo3Config):
+    def __init__(self, config: Olmo3Config, device=None):
         super().__init__(config)
 
     @staticmethod

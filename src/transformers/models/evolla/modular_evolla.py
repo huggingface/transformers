@@ -108,7 +108,7 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
-    def __init__(self, config: SaProtConfig):
+    def __init__(self, config: SaProtConfig, device=None):
         super().__init__(config)
 
     @staticmethod

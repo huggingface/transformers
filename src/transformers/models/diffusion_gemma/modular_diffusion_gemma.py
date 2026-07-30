@@ -186,7 +186,7 @@ class DiffusionGemmaConfig(Gemma4Config):
 class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
     @staticmethod
     def compute_default_rope_parameters(
-        config: DiffusionGemmaTextConfig, layer_type: str
+        config: DiffusionGemmaTextConfig, layer_type: str, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -210,7 +210,7 @@ class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
 
 class DiffusionGemmaRMSNorm(Gemma4RMSNorm):

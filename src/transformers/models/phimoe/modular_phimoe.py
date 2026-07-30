@@ -38,7 +38,7 @@ from .configuration_phimoe import PhimoeConfig
 
 
 class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
-    def __init__(self, config: PhimoeConfig):
+    def __init__(self, config: PhimoeConfig, device=None):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -48,7 +48,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device=device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)

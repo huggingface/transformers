@@ -45,7 +45,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -245,15 +244,7 @@ class T5Gemma2MLP(Gemma3MLP):
 
 
 class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: T5Gemma2TextConfig):
-        super().__init__(config)
-
-    @staticmethod
-    @deprecate_kwargs("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: T5Gemma2TextConfig, layer_type: str, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        return super().compute_default_rope_parameters(config, layer_type)
+    pass
 
 
 class T5Gemma2SelfAttention(Gemma3Attention):
