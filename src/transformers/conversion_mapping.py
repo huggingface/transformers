@@ -2032,6 +2032,12 @@ def get_model_conversion_mapping(
     # every existing converter so that per-block scales are applied *before* any
     # expert-merge / concat ops flatten the per-expert structure away.
     if hf_quantizer is not None:
+        model_transforms = {id(transform) for transform in weight_conversions}
         weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
+        # Whatever the quantizer added, or rebuilt to graft a dequantize op onto, handles raw quantized data.
+        # Flag it: those tensors keep their checkpoint dtype, while model renames respect the requested dtype.
+        for transform in weight_conversions:
+            if id(transform) not in model_transforms:
+                transform.from_quantizer = True
 
     return weight_conversions
