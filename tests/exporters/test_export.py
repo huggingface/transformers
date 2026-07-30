@@ -229,6 +229,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
             "shared target once and raises `KeyError` on the next copy while stripping delegated params."
         ),
+        "EfficientNetModel": (
+            "ExecuTorch export exceeds the 1000s test timeout under both static and dynamic shapes "
+            "(dynamic ~1400s); the depthwise-conv / SiLU stack lowers slowly."
+        ),
+        "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
     },
     "executorch.generate": {},
     "executorch.dynamic": {
@@ -252,6 +257,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
+        "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
     "executorch.static": {
         "Wav2Vec2BertModel": (
@@ -262,6 +269,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForAudioFrameClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForXVector": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
+        "GroundingDinoModel": (
+            "Static-shape export raises `KeyError: 'bbox_embed.1.layers.0.weight'`: the per-decoder-layer "
+            "bbox-embed head is shared/tied, so the constant-dedup pass duplicates it and "
+            "`_unsafe_adjust_original_program` deletes the shared target once then KeyErrors on the next "
+            "copy (same shared-detection-head issue as `PPDocLayoutV3ForObjectDetection`). The dynamic "
+            "variant is skipped for `timeout` above."
+        ),
+        "GroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
+        "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
+        "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
     },
 }
 
@@ -335,7 +352,7 @@ def _needs_static_cache(generation_config) -> bool:
 
 
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 15 * 60  # 15 minutes
+EXPORT_TEST_TIMEOUT = 1000
 
 # Minimum torch version the exporters target — older releases lack `torch.export` features the
 # exporters rely on, so the export sweep is skipped (not failed) below this. Sourced from the

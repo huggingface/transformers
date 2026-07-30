@@ -514,7 +514,8 @@ def _patch_randint(_original):
     """
 
     def patch(*args, dtype=torch.long, **kwargs):
-        size = args[1] if len(args) >= 3 else args[0] if len(args) == 2 else kwargs["size"]
+        # `size` is always the last positional arg — `randint(high, size)` or `randint(low, high, size)`.
+        size = kwargs["size"] if "size" in kwargs else args[-1]
         return torch.zeros(size, dtype=dtype)
 
     return patch
@@ -673,7 +674,7 @@ def _patch_expand(original):
     return patch
 
 
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape")
+@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
 def _patch_reshape(original):
     """Materialise a non-contiguous input before ``reshape``.
 
@@ -1242,6 +1243,9 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
     decomposition pass cannot proxy (``... is not tracked with proxy``). The range facts these
     asserts encode survive on ``exported_program.range_constraints`` (further capped by
     ``_fix_range_constraints``), so dropping the nodes (and the now-dead symint feeders) is safe.
+    ``_assert_tensor_metadata`` (input dtype/device/layout) has no ``range_constraints`` equivalent,
+    but ExecuTorch re-validates every input's spec against the method signature at load / ``set_inputs``,
+    so those checks are re-established at runtime rather than lost.
     """
     for module in exported_program.graph_module.modules():
         if not isinstance(module, torch.fx.GraphModule):
