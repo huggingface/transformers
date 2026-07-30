@@ -136,9 +136,6 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
 
 
 config_class_to_model_tester_map = {
-    "Qwen3OmniMoeConfig": None,  # Only has `Qwen3OmniMoeThinkerForConditionalGenerationTester` which returns `Qwen3OmniMoeThinkerConfig`
-    "Qwen2_5OmniConfig": None,  # Only has `Qwen2_5OmniThinkerForConditionalGenerationTester` which returns `Qwen2_5OmniThinkerConfig`
-    "PeAudioVideoConfig": None,  # Only has `PeAudioVideoEncoderTester` which returns `PeAudioVideoEncoderConfig`
     "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
     "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
@@ -174,8 +171,13 @@ config_class_to_model_tester_map = {
 }
 
 
+# TODO: create a separate map `no_proper_tester` for configs where only a sub-config tester exists
+# (e.g. only ThinkerTester exists but not a full OmniTester). Currently placed in no_model_tester_at_all.
 no_model_tester_at_all = {
     "EdgeTamVideoConfig",
+    "PeAudioVideoConfig",  # only PeAudioVideoEncoderTester exists, returns PeAudioVideoEncoderConfig not PeAudioVideoConfig
+    "Qwen2_5OmniConfig",  # only Qwen2_5OmniThinkerForConditionalGenerationTester exists, returns Qwen2_5OmniThinkerConfig
+    "Qwen3OmniMoeConfig",  # only Qwen3OmniMoeThinkerForConditionalGenerationTester exists, returns Qwen3OmniMoeThinkerConfig
     "Gemma4AssistantConfig",
     "Gemma4UnifiedAssistantConfig",
     "GlmgaConfig",  # processor-only variant of glm46v; no modeling_glmga.py exists, model classes are from glm46v
