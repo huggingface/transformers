@@ -231,7 +231,7 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Gemma4UnifiedTextConfig, layer_type: str, device=None, **kwargs
+        config: Gemma4UnifiedTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
