@@ -75,7 +75,8 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return np.random.randn(num_samples).astype(np.float32)
 
     def test_image_expansion_matches_reference_layout(self):
-        """The 2x2 golden string from the reference vLLM implementation: no eof, exactly H-1 row separators."""
+        """The 2x2 golden string from the reference vLLM implementation (vllm_swissai `apertus_integration`
+        commit 40a5516b7): no eof, exactly H-1 row separators."""
         processor = self.get_processor()
         out = processor(text="<|image|> describe", images=[self._image(32, 32)], return_tensors="pt")
         decoded = processor.tokenizer.decode(out["input_ids"][0])
