@@ -43,7 +43,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
@@ -179,7 +179,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     # Ignore copy
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Llama4TextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -197,7 +197,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: Llama4TextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

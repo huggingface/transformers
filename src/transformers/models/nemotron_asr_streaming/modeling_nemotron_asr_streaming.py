@@ -43,7 +43,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -345,7 +345,7 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: NemotronAsrStreamingEncoderConfig, device=None):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
@@ -354,7 +354,7 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_relative_positional_parameters(
         config: NemotronAsrStreamingEncoderConfig, device=None
     ) -> torch.Tensor:

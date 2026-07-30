@@ -12,7 +12,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
@@ -38,7 +38,7 @@ _CONFIG_FOR_DOC = "PhiConfig"
 
 class PhiRotaryEmbedding(LlamaRotaryEmbedding):
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: PhiConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

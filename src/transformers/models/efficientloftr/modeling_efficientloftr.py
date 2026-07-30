@@ -32,7 +32,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_efficientloftr import EfficientLoFTRConfig
@@ -90,7 +90,7 @@ def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: i
 class EfficientLoFTRRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
         self.config = config
@@ -105,7 +105,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: EfficientLoFTRConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

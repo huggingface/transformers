@@ -31,7 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TensorType
 from ..auto import AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
@@ -382,7 +382,7 @@ class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
         super().__init__()
         self.config = config
@@ -395,7 +395,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: PPDocLayoutV2Config, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

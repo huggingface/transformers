@@ -28,7 +28,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -151,7 +151,7 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EomtDinov3Config, device=None):
         nn.Module.__init__(self)
         self.config = config
@@ -166,7 +166,7 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation

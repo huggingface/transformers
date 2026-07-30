@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
 
@@ -57,7 +57,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -75,7 +75,7 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: GPTNeoXJapaneseConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

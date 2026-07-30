@@ -35,7 +35,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..esm.modeling_esm import (
@@ -112,7 +112,7 @@ class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
         super().__init__(config)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config)
 

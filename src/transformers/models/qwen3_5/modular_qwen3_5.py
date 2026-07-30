@@ -31,7 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -181,12 +181,12 @@ class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
 
 
 class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3_5TextConfig, device=None):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3_5TextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

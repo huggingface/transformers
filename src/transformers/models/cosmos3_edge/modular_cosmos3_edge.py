@@ -46,7 +46,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -227,7 +227,7 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Cosmos3EdgeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

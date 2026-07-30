@@ -49,7 +49,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
@@ -784,7 +784,7 @@ def apply_multidimensional_rope(
 
 class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

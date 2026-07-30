@@ -28,7 +28,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -142,7 +142,7 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HunYuanDenseV1Config, device=None):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings

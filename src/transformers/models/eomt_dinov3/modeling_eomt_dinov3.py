@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
@@ -391,7 +391,7 @@ def augment_patches_center_coordinates(
 class EomtDinov3RotaryEmbedding(nn.Module):
     inv_freq: Tensor
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EomtDinov3Config, device=None):
         super().__init__()
         self.config = config
@@ -440,7 +440,7 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation

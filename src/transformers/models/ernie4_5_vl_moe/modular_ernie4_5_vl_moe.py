@@ -49,7 +49,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwargs
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     maybe_autocast,
@@ -231,7 +231,7 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -250,7 +250,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
 
     @staticmethod
-    @deprecate_kwargs("device", version="5.18")
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Ernie4_5_VLMoeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
