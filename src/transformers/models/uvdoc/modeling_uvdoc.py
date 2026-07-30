@@ -292,6 +292,7 @@ class UVDocBridge(UVDocPreTrainedModel):
     """
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    config: UVDocBackboneConfig
     has_attentions = False
     base_model_prefix = "backbone"
 
