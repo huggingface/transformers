@@ -2571,6 +2571,8 @@ class PreTrainedModel(
         # (e.g. `encoder.embed_tokens` and `shared` in T5) are structural, and must be tied in all cases.
         if not getattr(self.config, "tie_word_embeddings", False):
             modules = dict(self.named_modules(remove_duplicate=False))
+            # Regex/module-form entries do not resolve to a module here, so they are treated as head-tying and
+            # dropped. This is intended: no model currently combines them with `tie_word_embeddings=False`.
             tied_mapping = {
                 target: source
                 for target, source in tied_mapping.items()

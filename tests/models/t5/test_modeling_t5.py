@@ -570,6 +570,27 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_ensure_weights_are_shared(self):
+        config, *_ = self.model_tester.prepare_config_and_inputs()
+
+        def distinct_storages(model):
+            return len(
+                {
+                    model.shared.weight.data_ptr(),
+                    model.encoder.embed_tokens.weight.data_ptr(),
+                    model.decoder.embed_tokens.weight.data_ptr(),
+                    model.lm_head.weight.data_ptr(),
+                }
+            )
+
+        config.tie_word_embeddings = True
+        self.assertEqual(distinct_storages(T5ForConditionalGeneration(config)), 1)
+
+        config.tie_word_embeddings = False
+        # Only `lm_head` is untied: both `embed_tokens` are structural aliases of `shared` and stay tied, even
+        # though the dropped and the kept entries all point at the same source.
+        self.assertEqual(distinct_storages(T5ForConditionalGeneration(config)), 2)
+
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
