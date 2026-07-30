@@ -207,6 +207,7 @@ def mamba2_selective_state_update(
     D: torch.Tensor | None = None,
     dt_bias: torch.Tensor | None = None,
     dt_softplus: bool = False,
+    z: torch.Tensor | None = None,
     **kwargs,
 ):
     batch_size, num_heads, head_dim = hidden_states.shape
@@ -250,6 +251,9 @@ def mamba2_selective_state_update(
     # D skip connection
     if D is not None:
         out = (out + hidden_states * D).to(out.dtype)
+
+    if z is not None:
+        out = out * F.silu(z)
 
     return out.to(hidden_states.dtype)
 
@@ -565,6 +569,7 @@ class Mamba2Mixer(nn.Module):
                 **kwargs,
             )
             scan_output = scan_output.view(batch_size, 1, -1)
+
         # Chunk form
         else:
             output_final_state = cache_params is not None
