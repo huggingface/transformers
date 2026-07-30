@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -1662,8 +1662,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
-        super().__init__(config, device)
+    pass
 
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
@@ -1835,17 +1834,17 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
         else:
@@ -2347,20 +2346,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
-        super().__init__(config, device=device)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(
-            config,
-            device=device,
-            seq_len=seq_len,
-        )
+    pass
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:

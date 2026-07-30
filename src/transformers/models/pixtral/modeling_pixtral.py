@@ -14,7 +14,6 @@
 """PyTorch Pixtral model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
@@ -26,6 +25,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pixtral import PixtralVisionConfig
@@ -59,11 +59,11 @@ class PixtralRotaryEmbedding(nn.Module):
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: PixtralVisionConfig, device=None):
         super().__init__()
 
         self.config = config
-
         self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
@@ -71,25 +71,20 @@ class PixtralRotaryEmbedding(nn.Module):
                 f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
             )
 
-        inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, attention_scaling = rope_init_fn(self.config, device=device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: PixtralVisionConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: PixtralVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -118,7 +113,7 @@ class PixtralRotaryEmbedding(nn.Module):
 
         # TODO maybe make it torch compatible later on. We can also just slice
         inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

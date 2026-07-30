@@ -28,6 +28,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -141,13 +142,13 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HunYuanDenseV1Config, device=None):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-
         self.rope_type = self.config.rope_parameters["rope_type"]
 
         # Diff from Llama - DynamicNTKAlphaRotary
@@ -156,13 +157,15 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
             base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.config.head_dim))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim)).to(
+                device
+            )
             self.attention_scaling = 1.0
         else:
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+            inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)

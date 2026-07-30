@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     maybe_autocast,
@@ -361,6 +362,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
@@ -826,11 +828,11 @@ class Glm4vModel(Qwen2VLModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1118,19 +1120,19 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
