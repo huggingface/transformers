@@ -12,21 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-End-to-end parity of the Apertus 1.5 processor stack against the reference vLLM implementation
-(vllm_swissai, branch `apertus_integration`, `vllm/model_executor/models/apertus.py`).
+End-to-end parity of the Apertus 1.5 processor stack against the original reference vLLM implementation
+(vllm_swissai, `vllm/model_executor/models/apertus.py` at `apertus_integration` commit 40a5516b7; all
+`apertus.py:NNN` references below resolve at that pinned commit).
 
-Checks (PASS/FAIL):
-  1. Structural token-stream parity: the processor's placeholder expansion must equal the reference
+Note on the reference: newer vllm_swissai branches (`apertus-1-5`, design v2) deleted this independent
+implementation and instead consume the transformers processor directly via `get_hf_processor()` in
+`apertus_mm.py`. The verbatim reimplementations below are therefore the surviving executable record of
+the original token layout, and this script guards it against regressions on the transformers side.
+
+Checks (PASS/FAIL), in run order:
+  1. smart_resize parity: target sizes must match the reference math exactly for fixed, random, and
+     degenerate input sizes. The one documented deviation: for extreme aspect ratios the reference rounds
+     a side to 0 (and would crash PIL); our implementation floors each side at the 16-pixel factor.
+  2. Structural token-stream parity: the processor's placeholder expansion must equal the reference
      `build_apertus_image_prompt` / `encode_audios` layout (reimplemented here verbatim as the ground truth,
-     matching the golden test in vllm_swissai/tests/models/multimodal/processing/test_apertus.py).
-  2. Spliced-stream parity (needs vision tokenizer weights): processor output + real VQ codes, spliced into the placeholder
-     positions, must reproduce the reference prompt string byte-for-byte for the same codes.
-  3. smart_resize parity: target sizes must match the reference math exactly for a sweep of input sizes.
+     matching the golden test in vllm_swissai/tests/models/multimodal/processing/test_apertus.py, which also
+     exists only at the pinned commit).
+  3. Spliced-stream parity (needs `--vision_tokenizer_checkpoint`): processor output + real VQ codes, spliced
+     into the placeholder positions, must reproduce the reference prompt string byte-for-byte for the same codes.
 
 Informational (INFO, non-failing):
-  4. torchvision-vs-PIL resize drift: the image processor resizes with torchvision BICUBIC while the reference
-     uses PIL BICUBIC; target sizes and token counts are identical, but resampled pixel values differ slightly,
-     which can flip a small fraction of VQ codes. Measured and reported here.
+  4. torchvision-vs-PIL resize drift (needs `--vision_tokenizer_checkpoint`): the image processor resizes
+     with torchvision BICUBIC while the reference uses PIL BICUBIC; target sizes and token counts are
+     identical, but resampled pixel values differ slightly, which can flip a small fraction of VQ codes.
+     Measured and reported here.
+
+Without `--vision_tokenizer_checkpoint`, the weight-based checks 3 and 4 are skipped. Any FAIL makes the
+script exit non-zero.
 
 Example:
     python scripts/check_apertus1p5_processor_parity.py \
@@ -48,15 +61,17 @@ RESULTS = []
 
 
 def report(name, passed, detail="", informational=False):
+    """Print one [PASS]/[FAIL]/[INFO] line and record the tag for the final summary."""
     tag = "INFO" if informational else ("PASS" if passed else "FAIL")
     RESULTS.append((name, tag))
     print(f"[{tag}] {name}: {detail}")
 
 
-# --- reference implementations, kept verbatim from vllm_swissai apertus.py ---------------------------------
+# --- reference implementations, kept verbatim from vllm_swissai apertus.py @ apertus_integration 40a5516b7 --
 
 
 def reference_smart_resize(height, width, ds_factor=16, min_pixels=256 * 256, max_pixels=1400 * 1400):
+    """`ApertusImageTokenizer.smart_resize` (apertus.py:184-191) plus its call-site area clamp (apertus.py:291)."""
     target_area = max(min(max_pixels, height * width), min_pixels)
     aspect_ratio = width / height
     new_height = int((target_area / aspect_ratio) ** 0.5)
@@ -92,6 +107,12 @@ def reference_preprocess(pil_image: Image.Image) -> torch.Tensor:
 
 
 def check_smart_resize_parity():
+    """Our `smart_resize` must match the reference target sizes exactly across a size sweep.
+
+    Covers fixed edge cases, 200 random sizes, and degenerate aspect ratios. The degenerate cases are the
+    documented deviation: where the reference computes a 0-sized side, ours must return that side floored
+    at the 16-pixel factor while still matching the reference on the other side.
+    """
     rng = np.random.default_rng(0)
     sizes = [(256, 256), (250, 230), (2000, 2000), (720, 1280), (33, 47), (1400, 1400), (100, 1600)]
     sizes += [tuple(rng.integers(17, 2500, 2)) for _ in range(200)]
@@ -119,6 +140,12 @@ def check_smart_resize_parity():
 
 
 def check_structural_parity(processor):
+    """The processor's placeholder expansions must equal the reference prompt builders.
+
+    Purely structural, no weights involved: compares `replace_image_token` / `replace_audio_token` output
+    for several grid shapes and code counts against the reference builders, with every code token replaced
+    by the generic placeholder.
+    """
     # image: the vLLM golden layout with code tokens replaced by the placeholder token
     for grid_height, grid_width in [(2, 2), (16, 16), (2, 4), (7, 3)]:
         codes = torch.zeros(grid_height, grid_width, dtype=torch.long)
@@ -169,11 +196,17 @@ def check_spliced_stream_parity(processor, vision_tokenizer, device):
 
 
 def processor_image_offset(processor):
-    # the visual-token block is contiguous; derive the offset from the vocabulary itself
+    """Vocabulary id of `<|visual token 0|>`: the start of the contiguous visual-token block."""
     return processor.tokenizer.convert_tokens_to_ids("<|visual token 0|>")
 
 
 def check_backend_drift(processor, vision_tokenizer, device):
+    """Measure VQ-code agreement between PIL (reference) and torchvision (ours) preprocessing.
+
+    Informational by design: the resize backends differ in the last bits of the resampled pixels, which
+    flips a small fraction of near-tied codes. Target sizes and token counts must still be identical
+    (a shape mismatch is the only FAIL); the per-image agreement ratio is reported, not asserted.
+    """
     rng = np.random.default_rng(2)
     agreements = []
     for height, width in [(300, 200), (513, 289), (1024, 768)]:
