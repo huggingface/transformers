@@ -29,7 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer, StaticSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer, StaticSlidingWindowLayer
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import (
     use_experts_implementation,
@@ -1305,6 +1305,9 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
     def __init__(self, sliding_window: int | None = None, **kwargs):
         super().__init__(sliding_window=sliding_window, **kwargs)
         self.prefill_length: int | None = None
+        self.prefill_cumulative_length: int = 0
+        self.prefill_keys: torch.Tensor | None = None
+        self.prefill_values: torch.Tensor | None = None
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -1313,63 +1316,46 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        kv_length = key_states.shape[-2]
-        self.cumulative_length += kv_length
+        # Prefill
+        if self.prefill_length is None or self.prefill_cumulative_length < self.prefill_length:
+            kv_length = key_states.shape[-2]
+            self.prefill_cumulative_length += kv_length
 
-        # Compute the full states
-        full_key_states = torch.cat([self.keys, key_states], dim=-2)
-        full_value_states = torch.cat([self.values, value_states], dim=-2)
-
-        # Cache growing
-        if (
-            self.record_past
-            or self.prefill_length is None
-            or self.cumulative_length <= self.prefill_length + self.sliding_window - 1
-        ):
-            self.keys = full_key_states
-            self.values = full_value_states
             if self.prefill_length is None:
-                self.prefill_length = self.cumulative_length
-        # Cache full
-        elif self.keys.shape[-2] == self.prefill_length + self.sliding_window - 1:
-            self.keys[:, :, -self.sliding_window + 1 :].copy_(full_key_states[:, :, -self.sliding_window + 1 :, :])
-            self.values[:, :, -self.sliding_window + 1 :].copy_(full_value_states[:, :, -self.sliding_window + 1 :, :])
-        # Cache full after this update and full_key_states > cache size
-        else:
-            self.keys = torch.cat(
-                [
-                    full_key_states[:, :, : self.prefill_length, :],
-                    full_key_states[:, :, -self.sliding_window + 1 :, :],
-                ],
-                dim=-2,
-            )
-            self.values = torch.cat(
-                [
-                    full_value_states[:, :, : self.prefill_length, :],
-                    full_value_states[:, :, -self.sliding_window + 1 :, :],
-                ],
-                dim=-2,
-            )
+                self.prefill_length = self.prefill_cumulative_length
 
-        # Return full states to avoid losing context in case we added multiple tokens at once
+            self.prefill_keys = torch.cat([self.prefill_keys, key_states], dim=-2)
+            self.prefill_values = torch.cat([self.prefill_values, value_states], dim=-2)
+
+            return self.prefill_keys, self.prefill_values
+
+        sliding_key_states, sliding_value_states = super().update(key_states=key_states, value_states=value_states)
+        full_key_states = torch.cat([self.prefill_keys, sliding_key_states], dim=-2)
+        full_value_states = torch.cat([self.prefill_values, sliding_value_states], dim=-2)
         return full_key_states, full_value_states
+
+    def lazy_initialization(self, key_states, value_states):
+        super().lazy_initialization(key_states, value_states)
+        self.prefill_keys = self.keys.clone()
+        self.prefill_values = self.values.clone()
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
-        is_full = (
-            self.prefill_length is not None and self.cumulative_length >= self.prefill_length + self.sliding_window
-        )
-
-        kv_offset = 0
-        if is_full:
-            kv_offset = max(self.cumulative_length - self.prefill_length - self.sliding_window + 1, 0)
-            kv_length = self.prefill_length + self.sliding_window - 1 + query_length
+        # Prefill
+        if self.prefill_length is None or self.prefill_cumulative_length < self.prefill_length:
+            kv_offset = 0
+            kv_length = self.prefill_cumulative_length + query_length
         else:
-            kv_length = self.cumulative_length + query_length
+            kv_length, kv_offset = super().get_mask_sizes(query_length)
+            kv_length += self.prefill_length
+            kv_offset += self.prefill_length
 
         # Returned kv_offset is with respect to sliding window keys.
         # Remove kv_offset from kv_idx to retrieve the prefill indices.
         return kv_length, kv_offset
+
+    def get_seq_length(self):
+        return self.prefill_cumulative_length + super().get_seq_length()
 
     def get_max_length(self) -> int:
         """Return the maximum cache shape of the cache"""
@@ -1384,34 +1370,33 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
 
     def reset(self) -> None:
         super().reset()
+        if self.is_initialized:
+            self.prefill_keys.zero_()
+            self.prefill_values.zero_()
         self.prefill_length = None
+        self.prefill_cumulative_length = 0
 
     def crop(self, max_length: int) -> None:
         """
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
-        # If we are beyond the sliding window, we need to be more careful
-        if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length + self.sliding_window:
-            if not self.record_past:
-                raise RuntimeError(
-                    "`crop` was called, but the current layer does not track past states, and the sliding window size was already "
-                    "reached. Call `activate_past_recording` before `crop` to be able to rollback the cache."
-                )
-            if max_length > 0:
-                raise RuntimeError(
-                    "Once the sliding window size has been reached, `UnlimitedOcrDynamicReferenceSlidingWindowLayer` can only "
-                    "be cropped by passing a negative int, to specify how many tokens to remove"
-                )
-            tokens_to_remove = abs(max_length)
-            # We crop, and restrict the size back to the sliding window if still larger
-            self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
-            self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
-            self.cumulative_length = self.cumulative_length - tokens_to_remove
-        # If we did not reach the sliding window, we can do the same as for a full attention layer
-        else:
-            DynamicLayer.crop(self, max_length)
-            self.cumulative_length = self.keys.shape[-2]
+        # Sliding window
+        if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length:
+            sliding_max_length = max(max_length, -self.cumulative_length)
+            max_length = abs(max_length - sliding_max_length)
+            super().crop(sliding_max_length)
+
+        # Prefill
+        if max_length <= 0:
+            max_length = self.prefill_cumulative_length - abs(max_length)
+
+        if self.prefill_cumulative_length <= max_length:
+            return
+
+        self.prefill_keys = self.prefill_keys[..., :max_length, :]
+        self.prefill_values = self.prefill_values[..., :max_length, :]
+        self.prefill_cumulative_length = max_length
 
 
 class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
