@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub_with_fallback
+from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -163,7 +163,6 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-# TODO: layer references for mamba2
 @use_kernel_func_from_hub_with_fallback(
     "mamba_split_conv1d_scan_combined",
     "mamba_ssm",
@@ -360,6 +359,15 @@ def mamba2_chunk_scan(
     return output
 
 
+@use_kernelized_func(
+    [
+        causal_conv1d_fn,
+        causal_conv1d_update,
+        mamba2_split_conv1d_scan_combined,
+        mamba2_selective_state_update,
+        mamba2_chunk_scan,
+    ]
+)
 class Mamba2Mixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -460,7 +468,9 @@ class Mamba2Mixer(nn.Module):
         projected_states = self.in_proj(hidden_states)
 
         A = -torch.exp(self.A_log.float())
-        dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+        fused_kwargs = (
+            kwargs | {} if self.time_step_limit == (0.0, float("inf")) else kwargs | {"dt_limit": self.time_step_limit}
+        )
         if self.training and cache_params is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
@@ -470,7 +480,6 @@ class Mamba2Mixer(nn.Module):
                 A,
                 D=self.D,
                 chunk_size=self.chunk_size,
-                seq_idx=kwargs.get("seq_idx"),  # TODO: kwargs
                 activation=self.activation,
                 rmsnorm_weight=self.norm.weight,
                 rmsnorm_eps=self.norm.variance_epsilon,
@@ -480,7 +489,7 @@ class Mamba2Mixer(nn.Module):
                 ngroups=self.n_groups,
                 norm_before_gate=False,
                 return_final_states=False,
-                **dt_limit_kwargs,
+                **fused_kwargs,
             )
 
             # Only kernels can use this shortcircuit, fallback to normal torch otherwise
