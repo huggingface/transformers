@@ -740,7 +740,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         finally:
             implementation = torch_function if implementation is None else implementation
 
-        applicable_params = inspect.signature(implementation).parameters
+        applicable_params = tuple(inspect.signature(implementation).parameters)
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
