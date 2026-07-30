@@ -150,9 +150,9 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
             return
 
-        # Super method assumes that there is only layer.keys/values but reference sliding window layers
-        # can have layer.prefill_keys/prefill_values as well which results in wrong assertions in the
-        # super method.
+        # Super method assumes that there is only layer.keys/values but reference sliding window layers
+        # can have layer.prefill_keys/prefill_values as well which results in wrong assertions in the
+        # super method.
         def seq_len(tensor):
             return tensor.shape[-2] if tensor.dim() > 1 else 0
 
