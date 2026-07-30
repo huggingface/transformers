@@ -186,7 +186,6 @@ no_model_tester_at_all = {
     "Sam3VideoConfig",
     "ShieldGemma2Config",
     "PPChart2TableConfig",
-    "UVDocBackboneConfig",  # UVDocBackbone.config_class = UVDocConfig (parent), tester only gives UVDocBackboneConfig
 }
 
 deprecated_models = {
