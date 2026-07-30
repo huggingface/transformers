@@ -396,10 +396,10 @@ Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` t
 
 ### Typing tool-call arguments
 
-A JSON tool-call body carries types in the syntax itself (`7` vs `"7"`, `true` vs `"true"`), so the
-`json` parser recovers them for free. An `xml-inline` or `kv-lines` body does not: everything between
-the tags is plain text, so argument values start out as strings (`{"hour": "7", "enabled": "true"}`).
-Pass the request's `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+Sometimes, the response parser may parse model outputs with the wrong type. For example,
+it might parse the float `1.5` as "1.50". This can cause problems with tool calling, if tools expect
+an argument in one type but receive it in another. To avoid this,
+you can pass the request's `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
 [`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`.
 Tools are accepted in the same format as [`~PreTrainedTokenizerBase.apply_chat_template`]: JSON
 schemas, or Python functions with type hints and docstrings that are auto-converted to schemas.
