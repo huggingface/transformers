@@ -719,7 +719,7 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -1121,7 +1121,7 @@ class Gemma4TextRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Gemma4TextConfig, layer_type: str, device=None, **kwargs
+        config: Gemma4TextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -2608,54 +2608,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             shared_kv_states=outputs.shared_kv_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
-            # Don't pass to not apply bidirectional mask on top
-            model_inputs["mm_token_type_ids"] = None
-
-        # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
-        if not is_first_iteration:
-            _ = model_inputs.pop("per_layer_inputs", None)
-
-        return model_inputs
-
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
 
@@ -2692,6 +2644,19 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             )
 
         return create_masks_for_generate(**mask_kwargs)
+
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
+        )
+        if not (is_first_iteration or not use_cache):
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
+        # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
+        if not is_first_iteration:
+            _ = model_inputs.pop("per_layer_inputs", None)
+
+        return model_inputs
 
 
 __all__ = [

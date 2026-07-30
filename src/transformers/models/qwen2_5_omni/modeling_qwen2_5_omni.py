@@ -1344,7 +1344,7 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -2043,51 +2043,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_features=None,
-        feature_attention_mask=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
-            use_audio_in_video=use_audio_in_video,
-            video_second_per_grid=video_second_per_grid,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         model_inputs["position_ids"] = None
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-            model_inputs["input_features"] = None
-
         return model_inputs
 
 
@@ -2394,45 +2352,9 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         )
 
     # prepare inputs for talker lm generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        input_text_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        thinker_reply_part=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_audio_features=None,
-        audio_feature_attention_mask=None,
-        audio_feature_lengths=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            thinker_reply_part=thinker_reply_part,
-            input_text_ids=input_text_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_audio_in_video=use_audio_in_video,
-            audio_feature_lengths=audio_feature_lengths,
-            video_second_per_grid=video_second_per_grid,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         model_inputs["position_ids"] = None
-
         return model_inputs
 
     def _update_model_kwargs_for_generation(
@@ -2467,7 +2389,7 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
