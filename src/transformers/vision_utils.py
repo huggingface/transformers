@@ -188,30 +188,6 @@ def get_vision_window_index(
     return window_index, cu_window_seqlens
 
 
-def _linspace_coord(index: torch.Tensor, size: torch.Tensor, side: int) -> torch.Tensor:
-    """Per-element ``torch.linspace(0, side - 1, s)[i]`` for ``(i, s)`` in ``zip(index, size)``.
-
-    Uses ``torch.linspace`` (once per distinct ``size``) rather than the closed-form
-    ``index * (side - 1) / (size - 1)``. The two are algebraically equal but not bit-identical — they
-    differ by ~1 ULP on some sizes — and we couldn't find a formula that reproduces ``torch.linspace``
-    exactly (plain arithmetic, computing in float64 then casting, and a symmetric two-ended variant all
-    still drift on some sizes). Calling ``torch.linspace`` matches it exactly.
-
-    Bit-exactness matters because these are precomputed position-embedding coordinates: a ~1-ULP
-    difference shifts the interpolation weights, and downstream the logits, enough for greedy ``argmax`` to
-    pick a different token and change generated text — which is what surfaced as the VLM integration-test
-    regressions (their expected outputs were snapshotted with the original ``linspace``-based code). The
-    loop is over distinct sizes only and runs host-side at precompute time (the original looped per image).
-    """
-    src = torch.zeros(index.shape, dtype=torch.float32, device=index.device)
-    for s in torch.unique(size).tolist():
-        s = int(s)
-        coords = torch.linspace(0, side - 1, s, device=index.device)
-        mask = size == s
-        src[mask] = coords[index[mask].long()]
-    return src
-
-
 def _interpolation_axis_taps_weights(
     index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -220,8 +196,9 @@ def _interpolation_axis_taps_weights(
     (`"bilinear"`) or 4 taps (`"bicubic"`, Keys convolution kernel with `a=-0.75`). `size` may be a
     scalar or a per-element tensor (ragged batches)."""
     if align_corners:
-        # `torch.linspace(0, side-1, size)[index]`, bit-exact — endpoints map to 0 and side-1.
-        src = _linspace_coord(index, size, side)
+        # Closed form of `torch.linspace(0, side-1, size)[index]` — endpoints map to 0 and side-1.
+        # `clamp(min=1)` guards size==1 (only index 0 exists → coord 0), matching `linspace`.
+        src = index.to(torch.float32) * (side - 1) / (size - 1).clamp(min=1)
     else:
         src = (index.to(torch.float32) + 0.5) * side / size - 0.5  # half-pixel centres (align_corners=False)
     floor = torch.floor(src)

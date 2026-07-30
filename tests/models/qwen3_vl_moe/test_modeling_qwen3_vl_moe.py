@@ -344,6 +344,8 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class Qwen3VLMoeIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 

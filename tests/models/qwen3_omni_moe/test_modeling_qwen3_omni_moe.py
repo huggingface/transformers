@@ -688,6 +688,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
     @classmethod
     def setUpClass(cls):
         cls.model = None
