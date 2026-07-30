@@ -103,9 +103,16 @@ def _params_to_local(module):
         module._parameters.update(originals)
 
 
-def _activation_to_local(args):
+def _activation_to_local(args, grad_placements=None):
+    """Swap a DTensor activation for its local shard.
+
+    ``grad_placements`` declares the placement of the *gradient* of that local tensor.
+    It matters whenever the gradient's placement differs from the forward's: without it
+    ``to_local`` assumes the forward placement, so a replicated input whose gradient is
+    really ``Partial`` never gets its per-rank contributions summed.
+    """
     if args and isinstance(args[0], DTensor):
-        args = (args[0].to_local(),) + args[1:]
+        args = (args[0].to_local(grad_placements=grad_placements),) + args[1:]
     return args
 
 
@@ -119,7 +126,14 @@ class TensorParallelLayer:
     3. ``transform_output_post_forward``: re-wrap the plain kernel output with the placement the
        local math produced (e.g. ``Shard(-1)`` for colwise, ``Partial`` for rowwise) and
        redistribute it to ``output_layouts``.
+
+    Step 2 drops out of the autograd graph's view of the mesh, so a style whose input
+    gradient is not in the same placement as its input must say so via
+    ``input_grad_placements``.
     """
+
+    # Placement of the gradient of the localized input activation; None = same as the forward.
+    input_grad_placements = None
 
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
@@ -130,7 +144,7 @@ class TensorParallelLayer:
 
     @contextlib.contextmanager
     def unwrap_for_kernel(self, module, args, kwargs, mesh):
-        args = _activation_to_local(args)
+        args = _activation_to_local(args, self.input_grad_placements)
         with _params_to_local(module):
             yield args, kwargs
 
@@ -158,6 +172,9 @@ class ColwiseParallel(TensorParallelLayer):
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
+        # The input is replicated but each rank only owns a shard of the output features, so its
+        # input gradient (dY_r @ W_r) is one term of a sum and has to be reduced across ranks.
+        self.input_grad_placements = [Partial()]
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -206,8 +223,8 @@ class RowwiseParallel(TensorParallelLayer):
         if isinstance(module, torch.nn.Embedding):
             placement = Shard(0)
         else:
-            # bias is replicated (added after the row-reduce); weight shards on input dim
-            placement = Replicate() if param == "bias" else Shard(1)
+            # bias is replicated (added after the row-reduce); weight shards on input dim (-1)
+            placement = Replicate() if param == "bias" else Shard(-1)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -249,6 +266,28 @@ class RowwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+class ReplicatedWithGradAllReduce(TensorParallelLayer):
+    """Replicated parameter whose gradient is partial.
+
+    For norms that sit between a colwise and a rowwise layer and normalize along a sharded
+    axis — e.g. Qwen3's per-head ``q_norm``/``k_norm``, which only see this rank's heads. The
+    forward needs no collective (the param is replicated and the activation is already local),
+    but each rank's parameter gradient only covers its own heads, so the gradients have to be
+    summed across the mesh.
+    """
+
+    def install_forward(self, module, mesh):
+        # A module hook rather than `param.register_hook`: params are replaced during weight
+        # loading, which happens after TP is applied, and would drop a param-level hook.
+        def _all_reduce_grads(mod, grad_input, grad_output):
+            for param in mod.parameters(recurse=False):
+                if param.grad is not None:
+                    dist.all_reduce(param.grad, group=mesh.get_group())
+
+        module.register_full_backward_hook(_all_reduce_grads)
+        return module
+
+
 class SequenceParallel(TensorParallelLayer):
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
         self.sequence_dim = sequence_dim
@@ -282,6 +321,13 @@ class SequenceParallel(TensorParallelLayer):
 # =============================================================================
 
 
+def _packed_output_shard_dim(param_ndim: int) -> int:
+    """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
+    if param_ndim == 1:
+        return -1
+    return param_ndim - 2
+
+
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
@@ -295,15 +341,20 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.input_layouts = (input_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.split_factor = split_factor
+        # Same as ColwiseParallel: replicated input, output-dim sharded weight, so the input
+        # gradient is partial.
+        self.input_grad_placements = [Partial()]
 
     def shard_param(self, module, param, mesh):
-        if not isinstance(module, torch.nn.Linear):
-            raise NotImplementedError("PackedColwiseParallel currently only supports nn.Linear!")
         meta = module._parameters.get(param)
         if meta is None:
             return
+        shard_dim = _packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
-        placement = _StridedShard(dim=0, split_factor=self.split_factor)
+        if meta.ndim == 1:
+            placement = Shard(shard_dim)
+        else:
+            placement = _StridedShard(dim=shard_dim, split_factor=self.split_factor)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -494,6 +545,7 @@ class ParallelInterface(GeneralInterface):
             "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
             "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "sequence_parallel": SequenceParallel(use_local_output=True),
+            "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "moe_tp_experts": MoEExpertsParallel(output_layouts=Replicate()),
             "moe_identity_expert": MoeIdentityParallel(),
