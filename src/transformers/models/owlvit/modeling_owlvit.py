@@ -1484,6 +1484,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids).
+        labels (`list[dict]`, *optional*):
+            Ground-truth labels for computing the detection loss. Each element is a dict with:
+            - `class_labels` (`torch.LongTensor` of shape `(num_targets,)`): Query indices of the target objects,
+              matching columns of the logits tensor (i.e. text query index for each GT box).
+            - `boxes` (`torch.FloatTensor` of shape `(num_targets, 4)`): GT bounding boxes in `(cx, cy, w, h)`
+              format, normalized to `[0, 1]`. When provided, the model returns `loss` and `loss_dict` in addition
+              to the normal detection outputs.
 
         Examples:
         ```python
