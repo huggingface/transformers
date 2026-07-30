@@ -748,6 +748,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechCTCEncoder):
 class GraniteSpeechNarModel(GraniteSpeechModel):
     def __init__(self, config: GraniteSpeechNarConfig):
         super().__init__(config)
+        self.language_model = GraniteSpeechNarTextModel(config.text_config)
         self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.vocabulary_size, bias=True)
         self.post_init()
 
@@ -1041,7 +1042,6 @@ __all__ = [
     "GraniteSpeechNarTextConfig",
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForCTC",
-    "GraniteSpeechNarTextModel",
     "GraniteSpeechNarModel",
     "GraniteSpeechNarPreTrainedModel",
 ]

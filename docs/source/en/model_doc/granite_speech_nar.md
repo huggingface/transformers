@@ -114,11 +114,6 @@ print(processor.decode(two_steps.sequences[0], skip_special_tokens=True))
 [[autodoc]] GraniteSpeechNarModel
     - forward
 
-## GraniteSpeechNarTextModel
-
-[[autodoc]] GraniteSpeechNarTextModel
-    - forward
-
 ## GraniteSpeechNarForCTC
 
 [[autodoc]] GraniteSpeechNarForCTC

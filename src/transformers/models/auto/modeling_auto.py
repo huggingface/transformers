@@ -227,7 +227,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("granite4_vision", "Granite4VisionModel"),
         ("granite_speech", "GraniteSpeechModel"),
         ("granite_speech_nar", "GraniteSpeechNarModel"),
-        ("granite_speech_nar_text", "GraniteSpeechNarTextModel"),
         ("granite_speech_plus", "GraniteSpeechPlusModel"),
         ("granitemoe", "GraniteMoeModel"),
         ("granitemoehybrid", "GraniteMoeHybridModel"),

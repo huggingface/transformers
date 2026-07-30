@@ -40,7 +40,6 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel
 from .configuration_granite_speech_nar import (
     GraniteSpeechNarConfig,
     GraniteSpeechNarEncoderConfig,
@@ -1025,7 +1024,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         super().__init__(config)
         self.encoder = GraniteSpeechNarCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechNarEncoderProjector(config)
-        self.language_model = AutoModel.from_config(config.text_config)
+        self.language_model = GraniteSpeechNarTextModel(config.text_config)
         self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.vocabulary_size, bias=True)
         self.post_init()
 
@@ -1330,7 +1329,6 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 __all__ = [
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForCTC",
-    "GraniteSpeechNarTextModel",
     "GraniteSpeechNarModel",
     "GraniteSpeechNarPreTrainedModel",
 ]
