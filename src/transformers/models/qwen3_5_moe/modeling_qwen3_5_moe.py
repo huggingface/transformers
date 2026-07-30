@@ -114,6 +114,7 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
+    @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3_5MoeTextConfig, device=None, **kwargs

@@ -40,7 +40,6 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -258,7 +257,7 @@ class Gemma3RMSNorm(Gemma2RMSNorm):
         super().__init__(dim=dim, eps=eps)
 
 
-class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding, nn.Module):
+class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
     def __init__(self, config: Gemma3TextConfig, device=None):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
@@ -280,8 +279,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding, nn.Module):
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
-    @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma3TextConfig, layer_type: str, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

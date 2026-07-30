@@ -30,7 +30,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..jamba.modeling_jamba import JambaAttentionDecoderLayer
@@ -77,7 +76,6 @@ class BambaFlashAttentionKwargs(TypedDict, total=False):
 
 
 class BambaRotaryEmbedding(LlamaRotaryEmbedding):
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: BambaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
