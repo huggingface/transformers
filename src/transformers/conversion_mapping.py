@@ -53,6 +53,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
+    "hy_v4": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
