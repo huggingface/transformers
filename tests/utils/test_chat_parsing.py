@@ -22,6 +22,7 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer
+from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 
 
@@ -238,10 +239,38 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         # A single-item batch returns a one-element list, not a bare dict.
         self.assertEqual(tokenizer.parse_response([out_a], prefix=""), [single_a])
 
-    def test_explicit_template_schema_detection(self):
-        """An explicit new-style template passed as `schema=` is routed to the response-template
-        parser, not the legacy `response_schema` parser. New-style is identified by a top-level
-        `version` key (the canonical marker) or a `fields` key for templates that omit it."""
+    def test_numpy_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.response_template = cohere_template
+        model_out = (
+            "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
+            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
+            '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        parsed = tokenizer.parse_response(model_out, prefix="")
+        tokenized = tokenizer(model_out, return_tensors="np").input_ids
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts.
+        self.assertEqual(tokenizer.parse_response(tokenized[0], prefix=""), parsed)
+        self.assertEqual(tokenizer.parse_response(tokenized, prefix=""), [parsed])
+
+    @require_torch
+    def test_tensor_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.response_template = cohere_template
+        model_out = (
+            "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
+            '<|START_ACTION|>[\n    {"tool_call_id": "0", "tool_name": "simple_tool", '
+            '"parameters": {"temperature_format": "Celsius"}}\n]<|END_ACTION|><|END_OF_TURN_TOKEN|>'
+        )
+        parsed = tokenizer.parse_response(model_out, prefix="")
+        tokenized = tokenizer(model_out, return_tensors="pt").input_ids
+        # A single (1D) sequence works; 2D (batched) input returns a list of parsed dicts.
+        self.assertEqual(tokenizer.parse_response(tokenized[0], prefix=""), parsed)
+        self.assertEqual(tokenizer.parse_response(tokenized, prefix=""), [parsed])
+
+    def test_explicit_template_schema(self):
+        """An explicit template passed as `schema=` is honored (with or without an explicit
+        top-level `version` key), overriding the tokenizer's own attribute."""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model_out = (
             "<|START_THINKING|>I should call a tool.<|END_THINKING|>"

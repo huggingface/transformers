@@ -64,7 +64,6 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 
 
@@ -1092,8 +1091,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
-        self.response_schema = kwargs.pop("response_schema", None)
         self.response_template = kwargs.pop("response_template", None)
+        kwargs.pop("response_schema", None)  # Silently drop the legacy response parser if present
 
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
@@ -1692,7 +1691,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
-        if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+        if "tokenizer_file" in vocab_files and vocab_files["tokenizer_file"] not in "\n".join(remote_files):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
@@ -2070,8 +2069,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
 
-        if getattr(self, "response_schema", None) is not None:
-            tokenizer_config["response_schema"] = self.response_schema
         if getattr(self, "response_template", None) is not None:
             tokenizer_config["response_template"] = self.response_template
 
@@ -3350,15 +3347,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def parse_response(
         self,
         response: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor,
-        schema: list | dict | None = None,
+        schema: dict | None = None,
         *,
         prefix: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
-        This method is intended for use with chat models, and will read the tokenizer's `response_template` attribute
-        (preferred) or the legacy `response_schema` attribute to control parsing. Either can be overridden by
-        passing a `schema` argument directly.
+        This method is intended for use with chat models, and will read the tokenizer's `response_template`
+        attribute to control parsing, unless a `schema` argument is passed directly.
 
         Accepts either a single sequence or a batch. A single sequence (a string, or a 1D sequence of token
         ids) returns a single parsed message `dict`; a batch (a list of strings, a list of token-id sequences,
@@ -3370,10 +3366,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (`str` / `list[int]` / 1D array / 1D tensor) or a batch (`list[str]` / `list[list[int]]` /
                 2D array / 2D tensor). Note that this should contain only model output, not any preceding
                 prompt text (that goes in `prefix`).
-            schema (`Union[list, dict]`, *optional*):
-                A response template (preferred, new-style) or legacy response schema dict that indicates the
-                expected output format and how parsing should be performed. If not provided, the tokenizer's
-                `response_template` or `response_schema` attribute will be used (in that order).
+            schema (`dict`, *optional*):
+                A response template that indicates the expected output format and how parsing should be
+                performed. If not provided, the tokenizer's `response_template` attribute will be used.
             prefix (`str`, token ids, 1D/2D tensor, or a list of these):
                 The prompt that came before generation. This is necessary because many chat templates
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
@@ -3383,34 +3378,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.
         """
 
-        use_new_template = False
         if schema is None:
-            if getattr(self, "response_template", None) is not None:
-                schema = self.response_template
-                use_new_template = True
-            elif getattr(self, "response_schema", None) is not None:
-                schema = self.response_schema
-            else:
-                raise AttributeError(
-                    "This tokenizer does not have a `response_template` (or legacy `response_schema`) "
-                    "for parsing chat responses!"
-                )
-        else:
-            # Explicit schema argument: new-style response templates are identified by a top-level
-            # `version` key (the canonical marker), falling back to `fields` for templates that omit
-            # it. Legacy `response_schema` dicts have neither.
-            use_new_template = isinstance(schema, dict) and ("version" in schema or "fields" in schema)
+            schema = getattr(self, "response_template", None)
+            if schema is None:
+                raise AttributeError("This tokenizer does not have a `response_template` for parsing chat responses!")
 
-        if prefix is not None and not use_new_template:
+        if prefix is None:
             raise ValueError(
-                "`prefix=` is only supported with new-style `response_template` specs, not legacy `response_schema`."
-            )
-        if prefix is None and use_new_template:
-            raise ValueError(
-                "`parse_response` requires `prefix=` (the prompt that came before generation) when parsing with a "
-                "new-style `response_template`, because chat templates often pre-write part of the assistant message "
-                "(e.g. an opening `<think>` tag) that the parser must see to parse correctly. If you're sure you "
-                "don't need the prefix, you can pass an empty string or list."
+                "`parse_response` requires `prefix=` (the prompt that came before generation), because chat "
+                "templates often pre-write part of the assistant message (e.g. an opening `<think>` tag) that the "
+                "parser must see to parse correctly. If you're sure you don't need the prefix, you can pass an "
+                "empty string or list."
             )
 
         if isinstance(response, str):
@@ -3421,35 +3399,27 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             decoded = self.decode(response)
             responses, batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
 
-        if prefix is None:
-            # Reachable only on the legacy path (new-style + None already raised above); `prefixes` is
-            # unused by `recursive_parse`, so the placeholder is harmless.
-            prefixes: list[str | None] = [None] * len(responses)
+        if isinstance(prefix, str):
+            prefix_texts, prefix_batched = [prefix], False
+        elif isinstance(prefix, (list, tuple)) and not prefix:
+            # An empty list is the explicit opt-out (no prefix context); broadcast "" to every response.
+            prefix_texts, prefix_batched = [""], False
+        elif isinstance(prefix, (list, tuple)) and isinstance(prefix[0], str):
+            prefix_texts, prefix_batched = list(prefix), True
         else:
-            if isinstance(prefix, str):
-                prefix_texts, prefix_batched = [prefix], False
-            elif isinstance(prefix, (list, tuple)) and not prefix:
-                # An empty list is the explicit opt-out (no prefix context); broadcast "" to every response.
-                prefix_texts, prefix_batched = [""], False
-            elif isinstance(prefix, (list, tuple)) and isinstance(prefix[0], str):
-                prefix_texts, prefix_batched = list(prefix), True
-            else:
-                decoded = self.decode(prefix)
-                prefix_texts, prefix_batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
-            if not prefix_batched:
-                prefixes = prefix_texts * len(responses)  # broadcast the single prefix to every response
-            elif len(prefix_texts) != len(responses):
-                raise ValueError(
-                    f"Got {len(responses)} response(s) but {len(prefix_texts)} prefix(es); `prefix` must be "
-                    "`None`, a single sequence (broadcast to every response), or one prefix per response."
-                )
-            else:
-                prefixes = prefix_texts
+            decoded = self.decode(prefix)
+            prefix_texts, prefix_batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
+        if not prefix_batched:
+            prefixes = prefix_texts * len(responses)  # broadcast the single prefix to every response
+        elif len(prefix_texts) != len(responses):
+            raise ValueError(
+                f"Got {len(responses)} response(s) but {len(prefix_texts)} prefix(es); `prefix` must be "
+                "a single sequence (broadcast to every response), or one prefix per response."
+            )
+        else:
+            prefixes = prefix_texts
 
-        if use_new_template:
-            parsed = [_template_parse_response(text, schema, prefix=pfx) for text, pfx in zip(responses, prefixes)]
-        else:
-            parsed = [recursive_parse(text, schema) for text in responses]
+        parsed = [_template_parse_response(text, schema, prefix=pfx) for text, pfx in zip(responses, prefixes)]
         return parsed if batched else parsed[0]
 
     def get_response_parser(

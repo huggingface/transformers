@@ -305,6 +305,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [1.42317, 1.39722, 1.40640],
                     [1.40630, 1.39262, 1.41095],
                 ],
+                ("xpu", None): [
+                    [1.49565, 1.45554, 1.42735],
+                    [1.42317, 1.39722, 1.40640],
+                    [1.40630, 1.39262, 1.41095],
+                ],
             }
         )
 
@@ -323,6 +328,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [0.06383, 0.11129, 0.11132],
                     [0.07500, 0.11867, 0.12064],
                 ],
+                ("xpu", None): [
+                    [0.04218, 0.06954, 0.07597],
+                    [0.06383, 0.11129, 0.11132],
+                    [0.07500, 0.11867, 0.12064],
+                ],
             }
         )
 
@@ -337,6 +347,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [4.52674, 6.87327, 7.22704],
                 ],
                 ("cpu", None): [
+                    [2.76751, 4.06145, 4.27854],
+                    [4.27288, 6.39123, 6.67878],
+                    [4.52674, 6.87327, 7.22704],
+                ],
+                ("xpu", None): [
                     [2.76751, 4.06145, 4.27854],
                     [4.27288, 6.39123, 6.67878],
                     [4.52674, 6.87327, 7.22704],
@@ -364,6 +379,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [1.46976, 1.45724, 1.43721],
                     [1.42834, 1.41871, 1.40331],
                 ],
+                ("xpu", None): [
+                    [1.49565, 1.48132, 1.45840],
+                    [1.46976, 1.45724, 1.43721],
+                    [1.42834, 1.41871, 1.40331],
+                ],
             }
         )
         expected_post_depth = torch.tensor(EXPECTED_POST_DEPTH.get_expectation(), device=torch_device)
@@ -382,6 +402,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [0.11787, 0.13472, 0.16168],
                     [0.13436, 0.15146, 0.17882],
                 ],
+                ("xpu", None): [
+                    [0.10756, 0.12426, 0.15097],
+                    [0.11787, 0.13472, 0.16168],
+                    [0.13436, 0.15146, 0.17882],
+                ],
             }
         )
         expected_post_normals = torch.tensor(EXPECTED_POST_NORMALS.get_expectation(), device=torch_device)
@@ -392,6 +417,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
                 ("cpu", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
+                ("xpu", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
             }
         )
         expected_post_seg_labels = torch.tensor(EXPECTED_POST_SEG_LABELS.get_expectation(), device=torch_device)
@@ -424,6 +450,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [1.42317, 1.39722, 1.40640],
                     [1.40630, 1.39262, 1.41095],
                 ],
+                ("xpu", None): [
+                    [1.49565, 1.45554, 1.42735],
+                    [1.42317, 1.39722, 1.40640],
+                    [1.40630, 1.39262, 1.41095],
+                ],
             }
         )
 
@@ -442,6 +473,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [1.42834, 1.41871, 1.40331],
                 ],
                 ("cpu", None): [
+                    [1.49565, 1.48132, 1.45840],
+                    [1.46976, 1.45724, 1.43721],
+                    [1.42834, 1.41871, 1.40331],
+                ],
+                ("xpu", None): [
                     [1.49565, 1.48132, 1.45840],
                     [1.46976, 1.45724, 1.43721],
                     [1.42834, 1.41871, 1.40331],
@@ -478,6 +514,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [0.06383, 0.11129, 0.11132],
                     [0.07500, 0.11867, 0.12064],
                 ],
+                ("xpu", None): [
+                    [0.04218, 0.06954, 0.07597],
+                    [0.06383, 0.11129, 0.11132],
+                    [0.07500, 0.11867, 0.12064],
+                ],
             }
         )
 
@@ -496,6 +537,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [0.13436, 0.15146, 0.17882],
                 ],
                 ("cpu", None): [
+                    [0.10756, 0.12426, 0.15097],
+                    [0.11787, 0.13472, 0.16168],
+                    [0.13436, 0.15146, 0.17882],
+                ],
+                ("xpu", None): [
                     [0.10756, 0.12426, 0.15097],
                     [0.11787, 0.13472, 0.16168],
                     [0.13436, 0.15146, 0.17882],
@@ -534,6 +580,11 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
                     [4.27288, 6.39123, 6.67878],
                     [4.52674, 6.87327, 7.22704],
                 ],
+                ("xpu", None): [
+                    [2.76751, 4.06145, 4.27854],
+                    [4.27288, 6.39123, 6.67878],
+                    [4.52674, 6.87327, 7.22704],
+                ],
             }
         )
 
@@ -548,6 +599,7 @@ class Tipsv2DptForDensePredictionIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
                 ("cpu", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
+                ("xpu", None): [[23, 23, 23], [23, 23, 23], [23, 23, 23]],
             }
         )
         expected_post_seg_labels = torch.tensor(EXPECTED_POST_SEG_LABELS.get_expectation(), device=torch_device)
