@@ -281,9 +281,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
 
         tokens = []
+        word_delimiter_id = self.word_delimiter_token_id
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if skip_special_tokens and index in self.all_special_ids and index != word_delimiter_id:
                 continue
             if index in self.decoder:
                 tokens.append(self.decoder[index])
@@ -292,6 +293,22 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             else:
                 tokens.append(self.unk_token)
         return tokens
+
+    def get_special_tokens_mask(
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
+        if already_has_special_tokens:
+            mask = super().get_special_tokens_mask(token_ids_0, token_ids_1, already_has_special_tokens=True)
+            word_delimiter_id = self.word_delimiter_token_id
+            if word_delimiter_id is not None:
+                mask = [
+                    0 if int(token_id) == word_delimiter_id else value for token_id, value in zip(token_ids_0, mask)
+                ]
+            return mask
+
+        if token_ids_1 is None:
+            return [0] * len(token_ids_0)
+        return [0] * (len(token_ids_0) + len(token_ids_1))
 
     def convert_tokens_to_string(
         self,
