@@ -424,15 +424,6 @@ message = parse_response(model_out, template, prefix="", tools=tools)
 # {"hour": 7, "enabled": True, "label": "wake up"}
 ```
 
-Each region is parsed as usual, and any value that parsed into a call to one of the `tools` gets its
-string arguments cast as the region closes (`"7"` → `7`, `"true"` → `True`, `"007"` → `7`); anything
-else is left alone. Already-typed values, arguments the schema does not describe, and casts that fail
-are all untouched, so `tools=` only ever adds type information, and it is a no-op for templates that
-already recover types.
-
-Because coercion only reworks strings, it cannot undo typing the template itself applied: if the
-template's own parsing reads `1.50` as the number `1.5`, it stays a number even when the parameter's
-schema says `string`.
 
 ### Transform
 
