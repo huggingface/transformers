@@ -1319,15 +1319,21 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         # Prefill
         if self.prefill_length is None or self.prefill_cumulative_length < self.prefill_length:
             kv_length = key_states.shape[-2]
-            self.prefill_cumulative_length += kv_length
 
             if self.prefill_length is None:
-                self.prefill_length = self.prefill_cumulative_length
+                self.prefill_length = self.prefill_cumulative_length + kv_length
 
-            self.prefill_keys = torch.cat([self.prefill_keys, key_states], dim=-2)
-            self.prefill_values = torch.cat([self.prefill_values, value_states], dim=-2)
+            prefill_kv_length = min(kv_length, self.prefill_length - self.prefill_cumulative_length)
+            self.prefill_cumulative_length += prefill_kv_length
 
-            return self.prefill_keys, self.prefill_values
+            self.prefill_keys = torch.cat([self.prefill_keys, key_states[..., :prefill_kv_length, :]], dim=-2)
+            self.prefill_values = torch.cat([self.prefill_values, value_states[..., :prefill_kv_length, :]], dim=-2)
+
+            if prefill_kv_length == kv_length:
+                return self.prefill_keys, self.prefill_values
+
+            key_states = key_states[..., prefill_kv_length:, :]
+            value_states = value_states[..., prefill_kv_length:, :]
 
         sliding_key_states, sliding_value_states = super().update(key_states=key_states, value_states=value_states)
         full_key_states = torch.cat([self.prefill_keys, sliding_key_states], dim=-2)
