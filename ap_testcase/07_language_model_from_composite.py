@@ -1,93 +1,157 @@
-"""Text-only classes loaded directly from the joint composite checkpoint.
+"""Validate text-only classes loaded from the composite checkpoint.
 
-Covers all three public text-only classes:
-  1) `Apertus1p5TextConfig.from_pretrained(composite)` extracts the nested `text_config` via
-     `base_config_key` (including the pruned-head marker `output_vocab_size`);
-  2) `Apertus1p5TextForCausalLM` loads straight from the composite: the `model.language_model.*` weight keys
-     are remapped by the `PrefixChange` entry in the conversion mapping, and the vision/audio tokenizer
-     weights surface as ignorable "unexpected" keys. Checks: clean load, pruned head size, raw-text and
-     chat generation (greedy and beam search), and that generated ids always stay below the pruned cutoff,
-     since the multimodal rows are removed from the output layer;
-  3) the bare `Apertus1p5TextModel` backbone (no head) loads the same way and returns hidden states.
+Covers config extraction, pruned-head loading, the padded-logits contract, generation, and the bare
+text backbone.
 """
 
-import os
 import warnings
 
 import torch
+from _common import bootstrap, finish, run_case, setup_failure
 
-from transformers import Apertus1p5TextConfig, Apertus1p5TextForCausalLM, Apertus1p5TextModel, AutoTokenizer
+
+def setup():
+    """SETUP
+
+    Load the text config, tokenizer, and causal LM.
+    """
+    required = (
+        "Apertus1p5TextConfig",
+        "Apertus1p5TextForCausalLM",
+        "Apertus1p5TextModel",
+        "AutoTokenizer",
+    )
+    transformers, checkpoint = bootstrap(required)
+    config = transformers.Apertus1p5TextConfig.from_pretrained(checkpoint)
+    print("SETUP: loading text causal LM (bf16, CPU) ...")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model, info = transformers.Apertus1p5TextForCausalLM.from_pretrained(
+            checkpoint, dtype=torch.bfloat16, output_loading_info=True
+        )
+    tokenizer = transformers.AutoTokenizer.from_pretrained(checkpoint)
+    return transformers, checkpoint, config, model.eval(), tokenizer, info
 
 
-# local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
-if not os.path.isdir(CHECKPOINT):
-    from huggingface_hub import snapshot_download
+def case_1_config(config):
+    """CASE 1: CONFIG
 
-    repo_id, _, revision = CHECKPOINT.partition("@")
-    CHECKPOINT = snapshot_download(repo_id, revision=revision or None)
+    Extract the nested text configuration.
+    """
+    assert type(config).__name__ == "Apertus1p5TextConfig", f"unexpected config type {type(config).__name__}"
+    assert config.output_vocab_size, "missing pruned output_vocab_size"
+    return f"vocab {config.vocab_size}; output vocab {config.output_vocab_size}; hidden size {config.hidden_size}"
 
-# --- 1) config extraction from the composite ---------------------------------------------------------
-config = Apertus1p5TextConfig.from_pretrained(CHECKPOINT)
-assert type(config).__name__ == "Apertus1p5TextConfig"
-print(
-    f"[OK] config extracted from the composite: vocab_size {config.vocab_size}, "
-    f"output_vocab_size {config.output_vocab_size}, hidden_size {config.hidden_size}"
-)
 
-print("loading text backbone from the composite (bf16, CPU) ...")
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")  # the load report lists the composite's tokenizer weights as unexpected
-    model, info = Apertus1p5TextForCausalLM.from_pretrained(CHECKPOINT, dtype=torch.bfloat16, output_loading_info=True)
-model = model.eval()
-tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT)
+def case_2_clean_load(model, info):
+    """CASE 2: CLEAN LOAD
 
-# --- clean load: nothing missing, only the vision/audio tokenizer weights are unexpected ------------
-assert not info["missing_keys"] and not info["mismatched_keys"]
-assert all(key.startswith(("model.vision_tokenizer.", "model.audio_tokenizer.")) for key in info["unexpected_keys"])
-print(f"[OK] clean load: 0 missing, {len(info['unexpected_keys'])} unexpected (all vision/audio tokenizer keys)")
+    Validate remapped weights and the pruned head.
+    """
+    assert not info["missing_keys"], f"missing keys: {info['missing_keys']}"
+    assert not info["mismatched_keys"], f"mismatched keys: {info['mismatched_keys']}"
+    assert all(
+        key.startswith(("model.vision_tokenizer.", "model.audio_tokenizer.")) for key in info["unexpected_keys"]
+    ), f"unexpected non-tokenizer keys: {info['unexpected_keys']}"
+    config = model.config
+    head_rows = model.lm_head.out_features
+    assert head_rows == (config.output_vocab_size or config.vocab_size), "lm_head has the wrong width"
+    return f"0 missing; {len(info['unexpected_keys'])} expected extras; head width {head_rows}"
 
-# --- pruned output layer -----------------------------------------------------------------------------
-config = model.config
-head_rows = model.lm_head.out_features
-assert head_rows == (config.output_vocab_size or config.vocab_size)
-print(
-    f"[OK] pruned head: {head_rows} rows (vocab_size {config.vocab_size}, "
-    f"output_vocab_size {config.output_vocab_size}); the model cannot emit multimodal ids"
-)
 
-# --- raw-text continuation (base-model style) --------------------------------------------------------
-inputs = tokenizer("The capital of Switzerland is", return_tensors="pt")
-with torch.no_grad():
-    out = model.generate(**inputs, max_new_tokens=8, do_sample=False)
-completion = tokenizer.decode(out[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-assert "Bern" in completion, completion
-print(f"[OK] raw-text continuation: {completion!r}")
+def case_3_padded_logits(model, tokenizer):
+    """CASE 3: PADDED LOGITS
 
-# --- chat generation, greedy and beam search ---------------------------------------------------------
-messages = [{"role": "user", "content": "Name three Swiss cities, comma separated."}]
-inputs = tokenizer.apply_chat_template(
-    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-)
-for label, generate_kwargs in (("greedy", {"do_sample": False}), ("beam-2", {"num_beams": 2, "do_sample": False})):
+    Keep logits finite with a zero-probability padded tail.
+    """
+    config = model.config
+    inputs = tokenizer("The capital of Switzerland is", return_tensors="pt")
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=16, **generate_kwargs)
-    new_ids = out[0, inputs["input_ids"].shape[1] :]
-    completion = tokenizer.decode(new_ids, skip_special_tokens=True)
-    assert int(new_ids.max()) < head_rows, "generated ids must stay below the pruned cutoff"
-    print(f"[OK] chat {label} (all ids < {head_rows}): {completion!r}")
+        logits = model(**inputs).logits
+    assert logits.shape[-1] == config.vocab_size, f"expected logits padded to {config.vocab_size}, got {logits.shape}"
+    assert bool(torch.isfinite(logits).all()), "padded logits contain non-finite values"
+    tail = logits[..., config.output_vocab_size :]
+    assert (tail == torch.finfo(logits.dtype).min).all(), "padded tail must be finfo.min everywhere"
 
-# --- 3) bare backbone: Apertus1p5TextModel (no head) returns hidden states ---------------------------
-del model  # free the CausalLM before loading the backbone again
-print("loading bare Apertus1p5TextModel from the composite ...")
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")  # lm_head and the tokenizer weights are unexpected for the bare model
-    backbone = Apertus1p5TextModel.from_pretrained(CHECKPOINT, dtype=torch.bfloat16).eval()
-token_ids = tokenizer("The Alps are", return_tensors="pt")
-with torch.no_grad():
-    hidden_states = backbone(**token_ids).last_hidden_state
-assert hidden_states.shape == (1, token_ids["input_ids"].shape[1], config.hidden_size)
-assert bool(torch.isfinite(hidden_states.float()).all())
-print(f"[OK] bare backbone forward: last_hidden_state {tuple(hidden_states.shape)}, finite")
+    probabilities = logits.float().softmax(-1)
+    assert (probabilities[..., config.output_vocab_size :] == 0).all(), "padded tail leaks probability mass"
+    head_mass = float(probabilities[..., : config.output_vocab_size].sum(-1).min())
+    assert abs(head_mass - 1.0) < 1e-4, f"head probabilities do not sum to 1: {head_mass}"
+    return f"logits {logits.shape[-1]} wide, finite; tail softmaxes to exactly 0; head mass {head_mass:.6f}"
 
-print("\nALL TEXT-FROM-COMPOSITE CHECKS PASSED")
+
+def case_4_raw_generation(model, tokenizer):
+    """CASE 4: RAW GENERATION
+
+    Generate a raw-text continuation.
+    """
+    inputs = tokenizer("The capital of Switzerland is", return_tensors="pt")
+    with torch.no_grad():
+        output = model.generate(**inputs, max_new_tokens=8, do_sample=False)
+    completion = tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    assert "Bern" in completion, f"expected 'Bern', got {completion!r}"
+    return f"completion {completion!r}"
+
+
+def case_5_chat_generation(model, tokenizer):
+    """CASE 5: CHAT GENERATION
+
+    Keep greedy and beam outputs below the pruned cutoff.
+    """
+    messages = [{"role": "user", "content": "Name three Swiss cities, comma separated."}]
+    inputs = tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+    )
+    completions = {}
+    head_rows = model.lm_head.out_features
+    for label, kwargs in (
+        ("greedy", {"do_sample": False}),
+        ("beam-2", {"num_beams": 2, "do_sample": False}),
+    ):
+        with torch.no_grad():
+            output = model.generate(**inputs, max_new_tokens=16, **kwargs)
+        new_ids = output[0, inputs["input_ids"].shape[1] :]
+        assert new_ids.numel(), f"{label} generation produced no new tokens"
+        assert int(new_ids.max()) < head_rows, f"{label} generated an id above the pruned cutoff"
+        completions[label] = tokenizer.decode(new_ids, skip_special_tokens=True)
+    return f"greedy {completions['greedy']!r}; beam-2 {completions['beam-2']!r}"
+
+
+def case_6_bare_backbone(transformers, checkpoint, tokenizer, config):
+    """CASE 6: BARE BACKBONE
+
+    Load the bare model and return finite hidden states.
+    """
+    print("CASE 6: loading bare text model (bf16, CPU) ...")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        backbone = transformers.Apertus1p5TextModel.from_pretrained(checkpoint, dtype=torch.bfloat16).eval()
+    token_ids = tokenizer("The Alps are", return_tensors="pt")
+    with torch.no_grad():
+        hidden_states = backbone(**token_ids).last_hidden_state
+    expected = (1, token_ids["input_ids"].shape[1], config.hidden_size)
+    assert hidden_states.shape == expected, f"expected hidden-state shape {expected}, got {hidden_states.shape}"
+    assert bool(torch.isfinite(hidden_states.float()).all()), "hidden states contain non-finite values"
+    return f"last_hidden_state {tuple(hidden_states.shape)}; finite"
+
+
+def main():
+    try:
+        transformers, checkpoint, config, model, tokenizer, info = setup()
+    except Exception as error:
+        results = [setup_failure(error)]
+    else:
+        results = [
+            run_case(case_1_config, config),
+            run_case(case_2_clean_load, model, info),
+            run_case(case_3_padded_logits, model, tokenizer),
+            run_case(case_4_raw_generation, model, tokenizer),
+            run_case(case_5_chat_generation, model, tokenizer),
+        ]
+        del model
+        results.append(run_case(case_6_bare_backbone, transformers, checkpoint, tokenizer, config))
+    return finish(results)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
