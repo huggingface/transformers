@@ -710,6 +710,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             model_tester, config = _build_model_tester_and_get_config(
                 new_model_tester_class, model_tester_kwargs, model_type
             )
+            config = _get_exact_config(config, config_class)
 
         # TODO: Disabled as this causes issues due to much larger models
         # # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
