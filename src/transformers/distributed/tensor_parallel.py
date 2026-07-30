@@ -93,7 +93,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 
 
 @contextlib.contextmanager
-def _params_to_local(module):
+def _remaining_dtensor_params_to_local(module):
     originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
     for name, param in originals.items():
         module._parameters[name] = param.to_local()
@@ -103,38 +103,7 @@ def _params_to_local(module):
         module._parameters.update(originals)
 
 
-def _activation_to_local(args, grad_placements=None):
-    """Swap a DTensor activation for its local shard.
-
-    ``grad_placements`` declares the placement of the *gradient* of that local tensor.
-    It matters whenever the gradient's placement differs from the forward's: without it
-    ``to_local`` assumes the forward placement, so a replicated input whose gradient is
-    really ``Partial`` never gets its per-rank contributions summed.
-    """
-    if args and isinstance(args[0], DTensor):
-        args = (args[0].to_local(grad_placements=grad_placements),) + args[1:]
-    return args
-
-
 class TensorParallelLayer:
-    """Base TP style. DTensor lives only at module boundaries:
-
-    1. ``transform_inputs_pre_forward``: wrap/redistribute the input to the layout the kernel needs.
-    2. ``unwrap_for_kernel``: swap the input activation and any DTensor params for their local
-       shards, so the kernel always runs on plain tensors (quantized weights are plain local
-       shards already and would not compose with DTensor inputs).
-    3. ``transform_output_post_forward``: re-wrap the plain kernel output with the placement the
-       local math produced (e.g. ``Shard(-1)`` for colwise, ``Partial`` for rowwise) and
-       redistribute it to ``output_layouts``.
-
-    Step 2 drops out of the autograd graph's view of the mesh, so a style whose input
-    gradient is not in the same placement as its input must say so via
-    ``input_grad_placements``.
-    """
-
-    # Placement of the gradient of the localized input activation; None = same as the forward.
-    input_grad_placements = None
-
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
@@ -142,11 +111,8 @@ class TensorParallelLayer:
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
 
-    @contextlib.contextmanager
-    def unwrap_for_kernel(self, module, args, kwargs, mesh):
-        args = _activation_to_local(args, self.input_grad_placements)
-        with _params_to_local(module):
-            yield args, kwargs
+    def context_around_forward(self, module, mesh):
+        return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
         return output
@@ -157,7 +123,7 @@ class TensorParallelLayer:
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
+            with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
@@ -172,9 +138,6 @@ class ColwiseParallel(TensorParallelLayer):
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
-        # The input is replicated but each rank only owns a shard of the output features, so its
-        # input gradient (dY_r @ W_r) is one term of a sum and has to be reduced across ranks.
-        self.input_grad_placements = [Partial()]
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -192,7 +155,14 @@ class ColwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
+        if getattr(module, "_hf_tp_requires_local_input", False):
+            x = x.to_local()
         return (x,) + args[1:], kwargs
+
+    def context_around_forward(self, module, mesh):
+        if getattr(module, "_hf_tp_requires_local_input", False):
+            return _remaining_dtensor_params_to_local(module)
+        return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local kernel produced this rank's shard of the output features (last dim).
@@ -238,21 +208,22 @@ class RowwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired], async_op=True)
+        if getattr(module, "_hf_tp_requires_local_input", False):
+            x = x.to_local()
         return (x,) + args[1:], kwargs
 
     @contextlib.contextmanager
-    def unwrap_for_kernel(self, module, args, kwargs, mesh):
-        if isinstance(module, torch.nn.Embedding):
-            # A vocab-sharded lookup needs DTensor's masked embedding kernel; keep everything distributed.
-            yield args, kwargs
+    def context_around_forward(self, module, mesh):
+        if not getattr(module, "_hf_tp_requires_local_input", False):
+            yield
             return
         # Each rank computes a partial sum, so the replicated bias must be added exactly once.
         bias = module._parameters.get("bias")
         if bias is not None and mesh.get_local_rank() != 0:
             module._parameters["bias"] = None
         try:
-            with super().unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
-                yield args, kwargs
+            with _remaining_dtensor_params_to_local(module):
+                yield
         finally:
             if bias is not None:
                 module._parameters["bias"] = bias
@@ -341,9 +312,6 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.input_layouts = (input_layouts or Replicate(),)
         self.use_local_output = use_local_output
         self.split_factor = split_factor
-        # Same as ColwiseParallel: replicated input, output-dim sharded weight, so the input
-        # gradient is partial.
-        self.input_grad_placements = [Partial()]
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -366,7 +334,11 @@ class PackedColwiseParallel(TensorParallelLayer):
             input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
+        input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
+
+    def context_around_forward(self, module, mesh):
+        return _remaining_dtensor_params_to_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -448,12 +420,15 @@ class MoEExpertsParallel(TensorParallelLayer):
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
-            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
+            with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
         module.forward = tp_forward
         return module
+
+    def context_around_forward(self, module, mesh):
+        return _remaining_dtensor_params_to_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
