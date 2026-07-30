@@ -734,7 +734,9 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
     position_ids = position_ids.reshape(-1)
-    indices_q = (position_ids == 0).nonzero().view(-1)
+    # Packed sequences all restart from the same first position id, but it is not always 0
+    # (RoBERTa-like models start at padding_idx + 1)
+    indices_q = (position_ids == position_ids.min()).nonzero().view(-1)
 
     cu_seq_lens_q = torch.cat(
         (
