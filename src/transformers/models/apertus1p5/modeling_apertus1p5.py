@@ -154,7 +154,6 @@ class Apertus1p5VisionTokenizerEncoder(nn.Module):
 
         self.conv_in = nn.Conv2d(config.in_channels, config.base_channels, kernel_size=3, stride=1, padding=1)
 
-        # attention placement is decided statically from the reference `resolution`, as in the original
         current_resolution = config.resolution
         in_channel_multiplier = (1,) + tuple(config.channel_multiplier)
         self.down = nn.ModuleList()
@@ -232,8 +231,11 @@ class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
     The port is inference-only: Apertus 1.5 generates text only, so it omits IBQ's differentiable training path,
     tokenizer losses, and decoder, and `encode` returns hard argmax indices that stop gradients (calling
     `train()` does not restore the omitted components). Run the tokenizer in `float32`: code assignment is an
-    argmax over codebook logits, and half precision flips ~8% of codes (bf16); the weights are kept fp32
+    argmax over codebook logits, and half precision flips ~10% of codes (bf16); the weights are kept fp32
     on half-precision `from_pretrained` loads via `_keep_in_fp32_modules_strict`.
+
+    Inputs are expected preprocessed by `Apertus1p5ImageProcessor`; `encode` assumes that contract and does
+    not validate it.
     """
 )
 class Apertus1p5VisionTokenizerModel(PreTrainedModel):
@@ -242,7 +244,7 @@ class Apertus1p5VisionTokenizerModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
-    # code assignment is an argmax over codebook logits: half precision flips ~8% of codes (bf16, 131k codebook),
+    # code assignment is an argmax over codebook logits: half precision flips ~10% of codes (bf16, 131k codebook),
     # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
     _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
 
@@ -280,7 +282,9 @@ class Apertus1p5VisionTokenizerModel(PreTrainedModel):
 
         Args:
             pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                Input images, normalized to `[-1, 1]` with sides that are multiples of the spatial factor (16).
+                Input images, RGB, normalized to `[-1, 1]` (`pixel / 127.5 - 1`), with sides that are multiples
+                of the spatial factor (16), as produced by `Apertus1p5ImageProcessor`. This contract is assumed,
+                not validated
 
         Returns:
             `torch.LongTensor` of shape `(batch_size, height // factor, width // factor)` with values in
@@ -295,7 +299,7 @@ class Apertus1p5VisionTokenizerModel(PreTrainedModel):
 
 
 def _pruned_output_vocab_size(config: PreTrainedConfig) -> int | None:
-    """Return the physical LM-head width when it is pruned below the vocabulary, else `None`."""
+    """Return the physical LM-head width when it is pruned else `None`."""
     text_config = config.get_text_config()
     output_vocab_size = getattr(text_config, "output_vocab_size", None)
     if output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
@@ -332,7 +336,7 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    # per-image / per-clip tokenizer loops are data-dependent control flow
+    # per-image / per-audio-clip tokenizer loops are data-dependent control flow
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -349,15 +353,13 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        # the no-op getter call (no arguments) stays allowed
+        """Allow noop-getter-only calls, but reject resizing pruned LM heads because the generic path restores full width."""
         if new_num_tokens is not None or pad_to_multiple_of is not None:
             _check_pruned_head_resize(self.config)
         return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
     def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        # the config forbids constructing a tied pruned head, but `tie_word_embeddings` can be flipped on the
-        # live config afterwards, and the generic tying would then silently install the full-width input
-        # embeddings as `lm_head.weight`
+        """Reject tying a pruned LM head because the generic path would install full-width input embeddings."""
         _check_pruned_head_tie(self.config)
         return super().tie_weights(missing_keys, recompute_mapping)
 
@@ -607,16 +609,13 @@ class Apertus1p5TextPreTrainedModel(PreTrainedModel):
         pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        # the no-op getter call (no arguments) stays allowed
+        """Mirror the resize guard via a converter-safe direct call while preserving getter-only calls."""
         if new_num_tokens is not None or pad_to_multiple_of is not None:
             _check_pruned_head_resize(self.config)
         return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
     def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        # Mirrors Apertus1p5PreTrainedModel: post-hoc `tie_word_embeddings` flips must not tie a pruned head.
-        # The duplication is forced: sharing the guards via a mixin or dual inheritance is not converter-safe
-        # (the modular converter reorders the generated bases, which either breaks the MRO or silently shadows
-        # the mixin methods).
+        """Mirror the tie guard via a converter-safe direct call to prevent installing full-width embeddings."""
         _check_pruned_head_tie(self.config)
         return super().tie_weights(missing_keys, recompute_mapping)
 
@@ -772,29 +771,29 @@ def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Te
     return F.pad(logits, (0, padding), value=torch.finfo(logits.dtype).min)
 
 
-def _check_pruned_head_labels(labels: torch.Tensor, out_features: int, vocab_size: int) -> None:
-    """Reject labels beyond a pruned head: cross entropy would fail with a bare index error otherwise."""
-    if out_features < vocab_size:
+def _check_pruned_head_labels(labels: torch.Tensor, out_vocab_size: int, vocab_size: int) -> None:
+    """Reject labels outside a pruned head's valid range before cross entropy."""
+    if out_vocab_size < vocab_size:
+        valid_labels = (labels == -100) | ((labels >= 0) & (labels < out_vocab_size))
         torch_compilable_check(
-            (labels < out_features).all(),
-            f"`labels` must be smaller than `output_vocab_size` ({out_features}) or equal to -100; with a pruned "
-            "LM head, positions holding multimodal or other input-only ids must be masked with -100.",
+            valid_labels.all(),
+            f"`labels` must be -100 or in `[0, output_vocab_size)` (output_vocab_size is {out_vocab_size}); "
+            "with a pruned LM head, positions holding multimodal or other input-only ids must be masked with -100.",
         )
 
 
 @auto_docstring
-class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
+class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Apertus1p5TextConfig
-    # the second base only contributes the pruned-head resize/tie guards; override its composite metadata
     input_modalities = ("text",)
     _can_compile_fullgraph = True
     _no_split_modules = ["Apertus1p5TextDecoderLayer"]
 
-    def __init__(self, config):
+    def __init__(self, config: Apertus1p5TextConfig):
         super().__init__(config)
         self.model = Apertus1p5TextModel(config)
         self.vocab_size = config.vocab_size
@@ -806,7 +805,13 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+        With `labels`, computes the standard causal language modeling loss and returns logits at the physical
+        LM-head width. Without `labels`, returns no loss; for a pruned head, it pads logits to `config.vocab_size`
+        with `torch.finfo(dtype).min` scores for the input-only tail, as required by generic generation.
+        """
+    )
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -821,12 +826,18 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.output_vocab_size or config.vocab_size)` or -100; tokens with indices set to `-100` are
-            ignored (masked). With a pruned head, positions holding multimodal ids (`>= output_vocab_size`)
-            must be masked with `-100`, exactly like any other id outside the output range. Calls with `labels`
-            return logits of the physical head width; calls without `labels` return logits padded to
-            `config.vocab_size`, with `torch.finfo(dtype).min` scores for the input-only tail.
+            Target token ids. `-100` ignores a position; other values must be within the physical LM-head range.
+            With a pruned head, mask multimodal/input-only ids with `-100`.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            Sequence positions for which to compute logits. Keep the default of `0` when using full-sequence
+            `labels`; a reduced selection requires correspondingly aligned `shift_labels`.
+
+        Returns:
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
+                Standard causal language-model outputs. The logits shape is
+                `(batch_size, kept_sequence_length, output_width)`, where `kept_sequence_length` is selected by
+                `logits_to_keep`. With `labels`, `output_width` is the physical LM-head width; otherwise it is
+                `config.vocab_size`, with any pruned input-only tail filled by the dtype's minimum value.
         """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -835,6 +846,7 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
 
@@ -871,15 +883,16 @@ class Apertus1p5TextForCausalLM(Apertus1p5PreTrainedModel, GenerationMixin):
 
 @auto_docstring(
     custom_intro="""
-    The Apertus 1.5 model: an Apertus language backbone whose input embeddings are shared by text tokens and
-    the discrete image/audio codes produced by the bundled vision tokenizer and audio codec.
+    The Apertus 1.5 multimodal base model combines an Apertus language backbone, an encode-only port of the EMU3.5
+    Vision Tokenizer, and WavTokenizer (encoding path only). It maps discrete media codes into the shared
+    vocabulary, substitutes their embeddings at expanded media placeholders, and runs the unified sequence
+    through the language backbone. It returns hidden states and cache; [`Apertus1p5ForConditionalGeneration`]
+    adds the text-generation head.
 
-    Media tensors are flattened over all prompts, independently for images and audio, in batch-sample order and
-    then left-to-right placeholder order within each sample. The model encodes tensor rows in that order and
-    scatters their concatenated features into the corresponding placeholder positions in row-major order. Images
-    and audio may be interleaved arbitrarily because each modality uses its own placeholder mask. The model checks
-    the total feature/placeholder count for each modality, but cannot infer per-sample ownership; callers that
-    bypass `Apertus1p5Processor` must preserve this ordering themselves.
+    Modality inputs are assumed to follow the [`Apertus1p5Processor`] contract for preprocessing, padding,
+    placeholder expansion, and row ordering. The model validates companion tensors and aggregate
+    feature/placeholder counts, but not per-sample ownership. Placeholders without modality inputs remain
+    unchanged.
     """
 )
 class Apertus1p5Model(Apertus1p5PreTrainedModel):
@@ -932,6 +945,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         Tokenizes images into discrete codes and maps them into the shared text vocabulary via
         `config.image_token_offset`. Each image is cropped to its true size and encoded individually: the encoder
         contains global attention, so batch padding would perturb the codes.
+
+        Only the `pixel_values`/`image_sizes` bookkeeping is validated; the pixel content is assumed to follow
+        the `Apertus1p5ImageProcessor` contract (see `Apertus1p5VisionTokenizerModel.encode`).
 
         Args:
             pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
@@ -1078,7 +1094,18 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         return special_image_mask, special_audio_mask
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+        The forward pass:
+
+        1. Requires exactly one of `input_ids` or `inputs_embeds`, embedding token ids when needed.
+        2. Encodes supplied images and audio into discrete vocabulary ids and looks up their language embeddings.
+        3. Replaces expanded media placeholders with those embeddings, locating placeholders by token id for
+           `input_ids` or by exact placeholder-embedding equality for `inputs_embeds`.
+        4. Passes the unified embeddings, attention inputs, and cache to the language backbone and returns its
+           hidden states and cache.
+        """
+    )
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1094,18 +1121,21 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token ids prepared by `Apertus1p5Processor`, or an equivalent expanded media-placeholder layout.
         pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
-            Images from all prompts, padded to a common size. Rows must follow image-placeholder order across the
-            text batch: batch-sample order, then left-to-right within each sample.
+            Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
+            rows must follow expanded image-placeholder order.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            The true `(height, width)` of each image in `pixel_values`, in the same row order, used to crop away
-            batch padding.
+            True `(height, width)` per image, required with `pixel_values` to remove batch padding.
         input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
-            Mono 24 kHz audio waveforms from all prompts, padded to a common length. Rows must independently follow
-            audio-placeholder order across the text batch: batch-sample order, then left-to-right within each
-            sample.
+            Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
+            `feature_attention_mask`; rows must follow expanded audio-placeholder order.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
-            Mask with 1 for valid samples and 0 for padding, in the same row order as `input_features`.
+            Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
+            their exact token embeddings so the model can detect them.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
@@ -1117,11 +1147,13 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_sizes).pooler_output
+            image_features = self.get_image_features(pixel_values, image_sizes, return_dict=True).pooler_output
             image_features = torch.cat(image_features, dim=0)
         audio_features = None
         if input_features is not None:
-            audio_features = self.get_audio_features(input_features, feature_attention_mask).pooler_output
+            audio_features = self.get_audio_features(
+                input_features, feature_attention_mask, return_dict=True
+            ).pooler_output
             audio_features = torch.cat(audio_features, dim=0)
 
         if image_features is not None or audio_features is not None:
@@ -1139,6 +1171,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1147,8 +1180,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Apertus 1.5 model with a language-modeling head, for text generation conditioned on interleaved
-    image, audio and text inputs.
+    The Apertus 1.5 conditional-generation model adds a text-generation head to [`Apertus1p5Model`], which combines
+    an Apertus language backbone, an encode-only EMU3.5 Vision Tokenizer port, and WavTokenizer's encoding path. It
+    generates text from interleaved image, audio, and text inputs. Modality inputs are assumed to follow the
+    [`Apertus1p5Processor`] contract for preprocessing, padding, placeholder expansion, and row ordering.
     """
 )
 class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
@@ -1157,7 +1192,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
     _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
-    def __init__(self, config):
+    def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.model = Apertus1p5Model(config)
         # the LM head may be pruned to the text-only prefix of the vocabulary (see Apertus1p5TextConfig)
@@ -1178,7 +1213,14 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         return self.lm_head
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+        Runs the composite base model to encode media and replace expanded placeholders, then projects its hidden
+        states through the LM head. With `labels`, computes the standard causal language modeling loss and returns
+        logits at the physical head width. Without `labels`, returns no loss; for a pruned head, it pads logits to
+        `config.text_config.vocab_size` with `torch.finfo(dtype).min` scores for generic generation.
+        """
+    )
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1196,20 +1238,34 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Token ids prepared by `Apertus1p5Processor`, or an equivalent expanded media-placeholder layout.
+        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
+            Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
+            rows must follow expanded image-placeholder order.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            The true size of each image, being (height, width), used to crop away batch padding.
+            True `(height, width)` per image, required with `pixel_values` to remove batch padding.
         input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
-            Mono 24 kHz audio waveforms, padded to a common length.
+            Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
+            `feature_attention_mask`; rows must follow expanded audio-placeholder order.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
-            Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
+            Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
+            their exact token embeddings so the model can detect them.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            text_config.output_vocab_size or text_config.vocab_size)` or -100; tokens with indices set to
-            `-100` are ignored (masked). With a pruned head, positions holding multimodal ids
-            (`>= output_vocab_size`) must be masked with `-100`, exactly like any other id outside the
-            output range. Calls with `labels` return logits of the physical head width; calls without `labels`
-            return logits padded to `text_config.vocab_size`, with `torch.finfo(dtype).min` scores for the
-            input-only tail.
+            Target token ids. `-100` ignores a position; other values must be within the physical LM-head range.
+            With a pruned head, mask multimodal/input-only ids with `-100`.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            Sequence positions for which to compute logits. Keep the default of `0` when using full-sequence
+            `labels`; a reduced selection requires correspondingly aligned `shift_labels`.
+
+        Returns:
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
+                Standard causal language-model outputs. The logits shape is
+                `(batch_size, kept_sequence_length, output_width)`, where `kept_sequence_length` is selected by
+                `logits_to_keep`. With `labels`, `output_width` is the physical LM-head width; otherwise it is
+                `config.text_config.vocab_size`, with any pruned input-only tail filled by the dtype's minimum value.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1222,6 +1278,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1257,21 +1314,26 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
     def prepare_inputs_for_generation(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        input_features=None,
-        is_first_iteration=False,
+        input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        use_cache: bool = True,
+        pixel_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
-    ):
-        # Overwritten -- multimodal inputs should only be forwarded on the first generation step
+    ) -> dict[str, Any]:
+        """Prepare a generation step, forwarding media only on the first step when cached decoding is enabled.
+
+        With `use_cache=False`, the full sequence is recomputed and media must be re-encoded on every step.
+        """
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1295,15 +1357,20 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+    ) -> tuple[torch.LongTensor | None, dict[str, Any]]:
         """
-        Overwritten -- the media tensors (`pixel_values`/`image_sizes`, `input_features`/`feature_attention_mask`)
-        are flattened over all media items in the batch, so the default row-wise `repeat_interleave` would separate
-        the items belonging to one prompt. Placeholder counts per sample are instead matched against per-item token
-        counts to split the flattened tensors into per-prompt groups, and each complete group is repeated: with two
-        beams and a prompt containing `[img0, img1]`, row-wise expansion would produce `[img0, img0, img1, img1]`,
-        grouped expansion produces `[img0, img1, img0, img1]`, so every beam receives the complete media group of
-        its source prompt in original order. All batch-shaped tensors keep the ordinary `repeat_interleave`.
+        Expand generation inputs without breaking flattened image or audio groups.
+
+        This extends `GenerationMixin._expand_inputs_for_generation` and follows the grouped-expansion pattern used
+        by `Qwen3VLForConditionalGeneration` for packed visual tensors:
+
+        1. Match each prompt's placeholder count to the token counts of its media items.
+        2. Split flattened modality tensors into per-prompt groups and repeat each complete group for every beam or
+           returned sequence.
+        3. Expand ordinary batch-shaped tensors with the default row-wise `repeat_interleave`.
+
+        For two beams, `[img0, img1]` becomes `[img0, img1, img0, img1]`, not
+        `[img0, img0, img1, img1]`.
         """
         if expand_size == 1:
             return input_ids, model_kwargs
