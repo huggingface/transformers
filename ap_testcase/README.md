@@ -2,7 +2,8 @@
 
 Standalone scripts to exercise the transformers integration against the composite checkpoint
 (the official hub release by default, or a locally assembled copy).
-Each script is self-contained and prints `[OK]`-style checks.
+The scripts share bootstrap and result-reporting helpers from `_common.py`, but each remains directly
+executable and keeps its model-specific setup local.
 
 ## Setup (from scratch)
 
@@ -29,6 +30,9 @@ Sanity checks:
 python -c "import transformers, torch; print(transformers.__version__)"   # 5.x.dev0, served from src/
 python -c "import torchvision, librosa; print('media deps OK')"
 ```
+
+The shared bootstrap enforces that `transformers` is imported from this checkout's `src/transformers`
+directory and reports a setup failure if another installation takes precedence.
 
 All referenced hub repos are currently public, so no `hf auth login` is needed.
 
@@ -86,6 +90,10 @@ source .my-env/bin/activate
 python ap_testcase/01_processor_single_inputs.py
 ```
 
+Each script runs numbered case functions and prints one final `PASS` / `FAIL` / `SKIP` table. Independent
+cases continue after a failure. Missing optional network, CUDA, or `torchrun` capabilities are skipped;
+setup or case failures produce a nonzero exit code.
+
 ## Scripts
 
 | Script | What it tests | Loads the 8B model? |
@@ -94,12 +102,12 @@ python ap_testcase/01_processor_single_inputs.py
 | `02_processor_batched_inputs.py` | Batched processing: flat + nested media, uneven counts, empty samples, strict errors | no (fast) |
 | `03_image_tokenization.py` | Image tokenization from processor output vs. fully manual preprocessing | yes |
 | `04_audio_tokenization.py` | Audio tokenization from processor output vs. fully manual preprocessing | yes |
-| `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading) | yes |
-| `06_generation_raw_text.py` | Full generation from raw text with placeholders (base-model style), incl. a batch | yes |
-| `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
-| `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, padded-logits contract, generation parity vs single device) and `tp_plan="auto"` tensor parallelism over the text backbone via torchrun | yes |
+| `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading), thinking activation via `enable_thinking`, seeded sampling parameters | yes |
+| `06_generation_raw_text.py` | Full generation from raw text with image and audio placeholders (base-model style), incl. a batch | yes |
+| `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, padded-logits contract with finite logits and a zero-probability tail, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
+| `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, padded-logits contract, generation parity vs single device) and `DistributedConfig(tp_size=2)` tensor parallelism over the text backbone via torchrun | yes |
 | `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, `-100` masking enforced), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |
 
 The model-loading scripts 03-07 run on CPU and take a few minutes each (bf16 8B load is about
-1 minute); 08 and 09 need CUDA devices and skip themselves otherwise. The URL-fetching section in 01
-and the media auto-loading in 05 need network access.
+1 minute); 08 and 09 need CUDA devices and skip themselves otherwise. The URL-fetching case in 01
+needs network access (the media auto-loading in 05 works from a local temporary file).
