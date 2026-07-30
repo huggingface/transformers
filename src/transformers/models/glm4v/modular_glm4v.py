@@ -1061,6 +1061,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             rope_deltas=outputs.rope_deltas,
         )
 
+
 class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
