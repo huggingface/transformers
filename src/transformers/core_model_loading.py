@@ -41,6 +41,9 @@ from .utils.logging import get_logger, tqdm
 
 if _torch_distributed_available:
     from torch.distributed.tensor import DTensor
+else:
+    # torch built with `USE_DISTRIBUTED=0`: `isinstance(x, ())` is always False, so the DTensor branches are skipped
+    DTensor = ()
 
 if TYPE_CHECKING:
     from .integrations.tensor_parallel import TensorParallelLayer

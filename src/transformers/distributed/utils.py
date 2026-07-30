@@ -29,7 +29,7 @@ if is_torch_available():
 else:
     _torch_distributed_available = False
 
-if is_torch_available() and is_torch_greater_or_equal("2.7"):
+if _torch_distributed_available and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import (
