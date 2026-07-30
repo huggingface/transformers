@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -183,26 +181,21 @@ class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
 
 class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
     def __init__(self, config: Qwen3_5TextConfig, device=None):
-        super().__init__()
+        super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
     def compute_default_rope_parameters(
-        config: Qwen3_5TextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Qwen3_5TextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         base = config.rope_parameters["rope_theta"]
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")

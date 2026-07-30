@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
@@ -359,6 +360,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
@@ -1058,45 +1060,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
 
 class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {

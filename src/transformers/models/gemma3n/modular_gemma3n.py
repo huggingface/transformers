@@ -2446,49 +2446,11 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # If we're in cached decoding stage, multimodal inputs should be None because input ids do not contain special
-        # tokens anymore. Otherwise multimodal inputs should be passed to model.
-        # NOTE: use_cache=False always needs pixel_values, input_features, and input_features_mask
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
+    def prepare_inputs_for_generation(self, **super_kwargs):
+        raise NotImplementedError("Do not inherit prepare_inputs_for_generation from PaliGemma")
 
     def create_masks_for_generate(self, **super_kwargs):
-        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
+        raise NotImplementedError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [

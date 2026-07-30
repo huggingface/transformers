@@ -15,7 +15,6 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 import torch
@@ -49,6 +48,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
@@ -229,11 +229,11 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
@@ -248,20 +248,15 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Ernie4_5_VLMoeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Ernie4_5_VLMoeTextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -272,9 +267,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
         # Special to ernie, we prerotate on the hw dim
         mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
@@ -286,19 +279,21 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq_3d, attention_factor
+        return inv_freq_3d.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+            self.inv_freq[None, None, :, None]
+            .expand(3, position_ids.shape[1], -1, 1)
+            .to(dtype=torch.float, device=x.device)
         )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
@@ -1097,32 +1092,18 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        inputs_embeds=None,
-        attention_mask=None,
-        past_key_values=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
         use_cache=True,
         is_first_iteration=False,
-        position_ids=None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
-            position_ids=position_ids,
             **kwargs,
         )
 
         if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
             model_inputs["mm_token_type_ids"] = None
             model_inputs["moe_mm_token_type_ids"] = None
 
