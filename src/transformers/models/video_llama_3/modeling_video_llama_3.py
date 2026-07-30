@@ -840,50 +840,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values: torch.Tensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        image_merge_sizes: torch.LongTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        video_merge_sizes: torch.LongTensor | None = None,
-        video_compression_mask: torch.BoolTensor | None = None,
-        is_first_iteration: bool | None = False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            image_merge_sizes=image_merge_sizes,
-            pixel_values_videos=pixel_values_videos,
-            video_grid_thw=video_grid_thw,
-            video_merge_sizes=video_merge_sizes,
-            video_compression_mask=video_compression_mask,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,

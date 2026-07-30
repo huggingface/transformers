@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -173,15 +173,9 @@ _import_structure["tensor_parallel"] = [
     "ALL_PARALLEL_STYLES",
     "translate_to_torch_parallel_style",
 ]
-try:
-    if not is_torch_greater_or_equal("2.5"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["flex_attention"] = [
-        "make_flex_block_causal_mask",
-    ]
+_import_structure["flex_attention"] = [
+    "make_flex_block_causal_mask",
+]
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
@@ -321,19 +315,12 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
+    from .flex_attention import make_flex_block_causal_mask
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
         shard_and_distribute_module,
         translate_to_torch_parallel_style,
     )
-
-    try:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .flex_attention import make_flex_block_causal_mask
 else:
     import sys
 

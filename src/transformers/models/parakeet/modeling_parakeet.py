@@ -28,12 +28,13 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin, GenerationMode
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -67,27 +68,20 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
+        inv_freq = self.compute_default_relative_positional_parameters(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: ParakeetEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig, device=None) -> torch.Tensor:
         base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
-        return inv_freq
+        inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
+        return inv_freq.to(device)
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
@@ -208,7 +202,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 

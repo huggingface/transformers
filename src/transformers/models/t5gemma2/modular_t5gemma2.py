@@ -14,7 +14,7 @@
 # limitations under the License.
 import copy
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -244,17 +244,7 @@ class T5Gemma2MLP(Gemma3MLP):
 
 
 class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: T5Gemma2TextConfig, device=None):
-        super().__init__(config, device)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: T5Gemma2TextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+    pass
 
 
 class T5Gemma2SelfAttention(Gemma3Attention):
