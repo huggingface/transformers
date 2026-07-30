@@ -1,72 +1,86 @@
-"""Image tokenization: processor-driven vs. fully manual.
+"""Validate processor-driven and manual image tokenization.
 
-Loads the full composite model (CPU, bf16 backbone with the fp32-guarded vision tokenizer) and turns
-one image into discrete codes two ways:
-  1) from PROCESSOR OUTPUT: `processor(...)` -> `model.model.get_image_tokens(pixel_values, image_sizes)`
-     (vocabulary ids, offset into the `<|visual token i|>` range), verifying the count matches the
-     number of `<|image|>` placeholders the processor emitted;
-  2) fully MANUAL: PIL resize to a multiple of 16 + `/127.5 - 1` normalization ->
-     `model.model.vision_tokenizer.encode(...)` (raw codebook indices) -> manual offset into vocabulary ids.
-Both paths must yield the same grid geometry; code values may differ slightly because the manual path
-uses PIL's bicubic kernel while the processor uses torchvision's (agreement is reported).
+Checks vocabulary offsets, grid geometry, and code agreement across the two preprocessing paths.
 """
-
-import os
 
 import numpy as np
 import torch
+from _common import bootstrap, finish, run_case, setup_failure
 from PIL import Image
 
-from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
+
+def setup():
+    """SETUP
+
+    Load the processor, model, and synthetic image.
+    """
+    transformers, checkpoint = bootstrap(("Apertus1p5ForConditionalGeneration", "AutoProcessor"))
+    processor = transformers.AutoProcessor.from_pretrained(checkpoint)
+    print("SETUP: loading model (bf16, CPU) ...")
+    model = transformers.Apertus1p5ForConditionalGeneration.from_pretrained(checkpoint, dtype=torch.bfloat16).eval()
+    image = Image.fromarray(np.random.default_rng(0).integers(0, 255, (300, 200, 3), dtype=np.uint8))
+    return processor, model, image
 
 
-# local dir, or hub repo id (optionally `repo_id@revision`); default: the published composite
-CHECKPOINT = os.environ.get("APERTUS1P5_CHECKPOINT", "swiss-ai/Apertus-v1.5-8B")
-if not os.path.isdir(CHECKPOINT):
-    from huggingface_hub import snapshot_download
+def processor_tokens(processor, model, image):
+    inputs = processor(text="<|image|>", images=[image], return_tensors="pt")
+    with torch.no_grad():
+        vocab_ids = model.model.get_image_tokens(inputs["pixel_values"], inputs["image_sizes"])
+    return inputs, vocab_ids
 
-    repo_id, _, revision = CHECKPOINT.partition("@")
-    CHECKPOINT = snapshot_download(repo_id, revision=revision or None)
 
-processor = AutoProcessor.from_pretrained(CHECKPOINT)
-tokenizer = processor.tokenizer
-print("loading model (bf16, CPU) ...")
-model = Apertus1p5ForConditionalGeneration.from_pretrained(CHECKPOINT, dtype=torch.bfloat16).eval()
-config = model.config
+def case_1_processor_path(processor, model, image):
+    """CASE 1: PROCESSOR PATH
 
-pil_image = Image.fromarray(np.random.default_rng(0).integers(0, 255, (300, 200, 3), dtype=np.uint8))
+    Convert processor output into image tokens.
+    """
+    inputs, vocab_ids = processor_tokens(processor, model, image)
+    config = model.config
+    placeholders = processor.tokenizer.decode(inputs["input_ids"][0]).count("<|image|>")
+    assert vocab_ids.numel() == placeholders, "expected one code per placeholder"
+    assert int(vocab_ids.min()) >= config.image_token_offset, "image token below the configured offset"
+    assert int(vocab_ids.max()) < config.image_token_offset + config.vision_tokenizer_config.codebook_size, (
+        "image token exceeds the configured codebook"
+    )
+    first = int(vocab_ids[0])
+    expected = f"<|visual token {first - config.image_token_offset}|>"
+    assert processor.tokenizer.convert_ids_to_tokens(first) == expected, "incorrect vocabulary token mapping"
+    return f"{vocab_ids.numel()} codes; first token {expected}"
 
-# --- 1) processor output -> model tokenizer --------------------------------------------------------
-inputs = processor(text="<|image|>", images=[pil_image], return_tensors="pt")
-with torch.no_grad():
-    vocab_ids = model.model.get_image_tokens(inputs["pixel_values"], inputs["image_sizes"])
 
-num_placeholders = tokenizer.decode(inputs["input_ids"][0]).count("<|image|>")
-assert vocab_ids.numel() == num_placeholders, "one code per placeholder"
-assert int(vocab_ids.min()) >= config.image_token_offset
-assert int(vocab_ids.max()) < config.image_token_offset + config.vision_tokenizer_config.codebook_size
-first = int(vocab_ids[0])
-assert tokenizer.convert_ids_to_tokens(first) == f"<|visual token {first - config.image_token_offset}|>"
-print(
-    f"[OK] processor path: {vocab_ids.numel()} codes, first id {first} -> {tokenizer.convert_ids_to_tokens(first)!r}"
-)
+def case_2_manual_path(processor, model, image):
+    """CASE 2: MANUAL PATH
 
-# --- 2) fully manual preprocessing -> vision tokenizer ---------------------------------------------
-# resize to the same target the processor chose (multiples of 16), PIL BICUBIC like the reference pipeline
-target_h, target_w = (int(side) for side in inputs["image_sizes"][0])
-resized = pil_image.convert("RGB").resize((target_w, target_h), Image.BICUBIC)
-pixels = torch.tensor(np.asarray(resized) / 127.5 - 1.0, dtype=torch.float32).permute(2, 0, 1)[None]
+    Compare manual preprocessing with processor tokens.
+    """
+    inputs, vocab_ids = processor_tokens(processor, model, image)
+    target_h, target_w = (int(side) for side in inputs["image_sizes"][0])
+    resized = image.convert("RGB").resize((target_w, target_h), Image.BICUBIC)
+    pixels = torch.tensor(np.asarray(resized) / 127.5 - 1.0, dtype=torch.float32).permute(2, 0, 1)[None]
 
-with torch.no_grad():
-    code_grid = model.model.vision_tokenizer.encode(pixels)[0]  # (H/16, W/16) raw codebook indices
+    with torch.no_grad():
+        code_grid = model.model.vision_tokenizer.encode(pixels)[0]
 
-assert code_grid.shape == (target_h // 16, target_w // 16)
-manual_vocab_ids = code_grid.flatten() + config.image_token_offset
-agreement = (manual_vocab_ids == vocab_ids).float().mean().item()
-print(
-    f"[OK] manual path: grid {tuple(code_grid.shape)}, same geometry; "
-    f"code agreement vs processor path {agreement:.1%} (PIL vs torchvision resize kernels)"
-)
-assert agreement > 0.9, "the two resize kernels should only flip a small fraction of codes"
+    expected_shape = (target_h // 16, target_w // 16)
+    assert code_grid.shape == expected_shape, f"expected grid {expected_shape}, got {tuple(code_grid.shape)}"
+    manual_vocab_ids = code_grid.flatten() + model.config.image_token_offset
+    agreement = (manual_vocab_ids == vocab_ids).float().mean().item()
+    assert agreement > 0.9, "the PIL and torchvision resize kernels changed too many codes"
+    return f"grid {tuple(code_grid.shape)}; code agreement {agreement:.1%}"
 
-print("\nALL IMAGE TOKENIZATION CHECKS PASSED")
+
+def main():
+    try:
+        processor, model, image = setup()
+    except Exception as error:
+        results = [setup_failure(error)]
+    else:
+        results = [
+            run_case(case_1_processor_path, processor, model, image),
+            run_case(case_2_manual_path, processor, model, image),
+        ]
+    return finish(results)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
