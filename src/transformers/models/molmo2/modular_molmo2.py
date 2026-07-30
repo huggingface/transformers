@@ -1328,7 +1328,7 @@ class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
         if not scaled:
             # `rope_type = "default"` also keeps the generic `_init_weights` rotary re-init on the unscaled table.
             self.rope_type = "default"
-            inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
+            inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
             self.inv_freq = inv_freq
             self.original_inv_freq = inv_freq.clone()
 
