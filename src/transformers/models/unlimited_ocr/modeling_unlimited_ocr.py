@@ -1397,22 +1397,25 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens.
         """
-        # Sliding window
-        if self.cumulative_length > 0:
-            sliding_max_length = max(max_length, -self.cumulative_length)
-            max_length = abs(max_length - sliding_max_length)
-            super().crop(sliding_max_length)
-
-        # Prefill
+        total_length = self.get_seq_length()
         if max_length <= 0:
-            max_length = self.prefill_cumulative_length - abs(max_length)
+            max_length = total_length - abs(max_length)
 
-        if self.prefill_cumulative_length <= max_length:
+        if total_length <= max_length:
             return
 
-        self.prefill_keys = self.prefill_keys[..., :max_length, :]
-        self.prefill_values = self.prefill_values[..., :max_length, :]
-        self.prefill_cumulative_length = max_length
+        # Prefill tokens are only evicted once the target length drops below how many are currently cached;
+        # whatever remains of the budget after keeping them is what the sliding window buffer gets to keep.
+        new_prefill_length = min(self.prefill_cumulative_length, max_length)
+        new_sliding_length = max_length - new_prefill_length
+
+        if self.cumulative_length > new_sliding_length:
+            super().crop(-(self.cumulative_length - new_sliding_length))
+
+        if new_prefill_length < self.prefill_cumulative_length:
+            self.prefill_keys = self.prefill_keys[..., :new_prefill_length, :]
+            self.prefill_values = self.prefill_values[..., :new_prefill_length, :]
+            self.prefill_cumulative_length = new_prefill_length
 
 
 class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
