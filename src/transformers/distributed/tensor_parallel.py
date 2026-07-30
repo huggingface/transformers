@@ -292,18 +292,16 @@ class SequenceParallel(TensorParallelLayer):
 # =============================================================================
 
 
-
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
     def __init__(
         self,
         *,
-        input_layouts=None,
         use_local_output: bool = True,
         split_factor: int = 2,
     ):
-        self.input_layouts = (input_layouts or Replicate(),)
+        self.input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
         self.split_factor = split_factor
 
@@ -312,7 +310,7 @@ class PackedColwiseParallel(TensorParallelLayer):
         if param_ndim == 1:
             return -1
         return param_ndim - 2
-        
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -330,10 +328,15 @@ class PackedColwiseParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
+        # Ensure the input is a Replicate DTensor on the TP mesh.
         if not isinstance(input_tensor, DTensor):
             input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
+        
+        # The packed kernels runs on local tensors, so Dtensor cannot infer the layout of the
+        # gradient produced by the kernel. The kernel sees replicated input + partial weights 
+        # which means input gradient will be partial as well
         input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
 
@@ -517,7 +520,7 @@ class ParallelInterface(GeneralInterface):
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-            "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
+            "packed_colwise": PackedColwiseParallel(),
             "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
