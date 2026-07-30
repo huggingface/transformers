@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
+    is_scipy_available,
     is_vision_available,
     logging,
     torch_int,
@@ -38,7 +39,12 @@ from ...utils import (
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
+from ...loss.loss_for_object_detection import sigmoid_focal_loss
 
+
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
@@ -1049,6 +1055,92 @@ class OwlViTClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
+class OwlViTHungarianMatcher(nn.Module):
+    def __init__(self, cost_class=1.0, cost_bbox=5.0, cost_giou=2.0):
+        super().__init__()
+        self.cost_class = cost_class
+        self.cost_bbox = cost_bbox
+        self.cost_giou = cost_giou
+
+    @torch.no_grad()
+    def forward(self, pred_logits, pred_boxes, labels):
+        indices = []
+        for i in range(len(labels)):
+            tgt_ids  = labels[i]["class_labels"]
+            tgt_bbox = labels[i]["boxes"]
+            out_prob = pred_logits[i].sigmoid()
+            out_bbox = pred_boxes[i]
+
+            cost_class = -out_prob[:,tgt_ids]
+
+            cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
+
+            cost_giou = -generalized_box_iou(
+                center_to_corners_format(out_bbox),
+                center_to_corners_format(tgt_bbox)
+            )
+
+            C = (
+                self.cost_class * cost_class
+                + self.cost_bbox * cost_bbox
+                + self.cost_giou * cost_giou
+            )
+            row_ind, col_ind = linear_sum_assignment(C.cpu())
+            indices.append((row_ind, col_ind))
+
+        return indices
+
+
+class OwlViTLoss(nn.Module):
+    def __init__(self, matcher, focal_alpha=0.3, focal_gamma=2.0):
+        super().__init__()
+        self.matcher = matcher
+        self.focal_alpha = focal_alpha
+        self.focal_gamma = focal_gamma
+
+    def forward(self, pred_logits, pred_boxes, labels):
+        # pred_logits: (batch, num_patches, num_queries)
+        # pred_boxes:  (batch, num_patches, 4)
+        # labels: list of dicts with "class_labels" and "boxes"
+
+        indices = self.matcher(pred_logits, pred_boxes, labels)
+
+        batch_size, num_patches, num_queries = pred_logits.shape
+
+        # num_boxes is used to normalize losses across the batch
+        num_boxes = sum(len(labels[i]["class_labels"]) for i in range(batch_size))
+        num_boxes = max(num_boxes, 1)
+
+        
+        target = torch.zeros(batch_size, num_patches, num_queries, device=pred_logits.device)
+        for i, (row_ind,col_ind) in enumerate(indices):
+            tgt_ids = labels[i]["class_labels"]
+            target[i, row_ind, tgt_ids[col_ind]] = 1.0
+        loss_class = sigmoid_focal_loss(pred_logits, target, num_boxes, alpha=self.focal_alpha, gamma=self.focal_gamma)
+
+        # --- Box L1 loss (matched patches only) ---
+        # YOUR CODE:
+        loss_bbox = 0.0
+        loss_giou = 0.0
+        # 1. Loop over batch
+        for i, (row_ind,col_ind) in enumerate(indices):
+            matched_pred = pred_boxes[i][row_ind]
+            matched_tgt = labels[i]["boxes"][col_ind]
+            
+            loss_giou += -generalized_box_iou(
+                center_to_corners_format(matched_pred),
+                center_to_corners_format(matched_tgt)
+            ).diag().sum()
+            loss_bbox += nn.functional.l1_loss(matched_pred, matched_tgt, reduction="sum")
+            
+        loss_giou = loss_giou/num_boxes
+        loss_bbox = loss_bbox/num_boxes    
+
+        loss = loss_class + loss_bbox + loss_giou
+        loss_dict = {"loss_class": loss_class, "loss_bbox": loss_bbox, "loss_giou": loss_giou}
+        return loss, loss_dict
+
+
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config: OwlViTConfig
 
@@ -1061,6 +1153,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
+        self.matcher = OwlViTHungarianMatcher()
+        self.criterion = OwlViTLoss(self.matcher)
         self.config = config
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -1382,6 +1476,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
+        labels: list | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> OwlViTObjectDetectionOutput:
         r"""
@@ -1453,8 +1548,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map, interpolate_pos_encoding)
-
+        
+        loss, loss_dict = None, None
+        if labels is not None:
+            loss, loss_dict = self.criterion(pred_logits, pred_boxes, labels)    
+        
         return OwlViTObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
             image_embeds=feature_map,
             text_embeds=query_embeds,
             pred_boxes=pred_boxes,
@@ -1465,4 +1566,4 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
 
 
-__all__ = ["OwlViTModel", "OwlViTPreTrainedModel", "OwlViTTextModel", "OwlViTVisionModel", "OwlViTForObjectDetection"]
+__all__ = ["OwlViTModel", "OwlViTPreTrainedModel", "OwlViTTextModel", "OwlViTVisionModel", "OwlViTForObjectDetection", "OwlViTHungarianMatcher", "OwlViTLoss"]
