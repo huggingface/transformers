@@ -757,6 +757,17 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         self.prefill_length = None
         self.prefill_cumulative_length = 0
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders this layer's cache for beam search."""
+        # Sliding window
+        if self.cumulative_length > 0:
+            super().reorder_cache(beam_idx)
+
+        # Prefill
+        if self.prefill_cumulative_length > 0:
+            self.prefill_keys = self.prefill_keys.index_select(0, beam_idx.to(self.prefill_keys.device))
+            self.prefill_values = self.prefill_values.index_select(0, beam_idx.to(self.prefill_values.device))
+
     def crop(self, max_length: int) -> None:
         """
         Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
