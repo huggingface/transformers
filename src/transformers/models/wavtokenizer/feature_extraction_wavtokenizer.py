@@ -79,35 +79,34 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s).
+        Featurize and prepare one or several audio sequence(s) for the model.
 
         Args:
             audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
-                The sequence or batch of sequences to be processed. Each sequence must be a numpy array of shape
-                `(num_samples,)` containing mono audio already sampled at this feature extractor's `sampling_rate`.
-                Audio is not resampled or downmixed.
+                The sequence or batch of sequences to be processed. Each sequence must be mono audio of shape
+                `(num_samples,)`, already sampled at this feature extractor's `sampling_rate`. Audio is not resampled
+                or downmixed.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different
-                  lengths).
+                Padding strategy: `True` or `'longest'` pads a batch to its longest sequence (single inputs stay
+                unpadded), `'max_length'` pads to `max_length`, `False` or `'do_not_pad'` disables padding.
             truncation (`bool`, *optional*, defaults to `False`):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+                Whether to truncate sequences longer than `max_length` to `max_length`.
             max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
+                Target length for `'max_length'` padding and for `truncation`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
+                If set, return tensors instead of a list of numpy arrays: `'pt'` for PyTorch `torch.Tensor`, `'np'`
+                for NumPy `np.ndarray`.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
+                Sampling rate of the `audio` input; pass it so a mismatch with the configured `sampling_rate` raises
+                an error instead of failing silently.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_values** -- Audio waveforms to be fed to the model, as a list of arrays of shape
+              `(1, num_samples)`, or a tensor of shape `(batch_size, 1, num_samples)` when `return_tensors` is set.
+            - **padding_mask** -- Mask indicating valid audio samples (1) versus padding (0), of shape
+              `(batch_size, num_samples)`. Only returned when `padding` is enabled (the default).
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
