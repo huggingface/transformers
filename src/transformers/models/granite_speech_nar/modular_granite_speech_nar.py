@@ -671,10 +671,9 @@ class GraniteSpeechNarTextModel(GraniteModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
+        for layer in self.layers:
+            hidden_states = layer(
                 hidden_states,
-                position_ids=position_ids,
                 position_embeddings=position_embeddings,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
