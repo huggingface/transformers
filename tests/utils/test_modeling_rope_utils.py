@@ -16,6 +16,7 @@
 import logging as stdlib_logging
 import math
 import unittest
+import warnings
 
 from parameterized import parameterized
 
@@ -231,6 +232,24 @@ class RopeTest(unittest.TestCase):
         config_none.ignore_keys_at_rope_validation = None
         config_none.convert_rope_params_to_dict(partial_rotary_factor=0.25)
         self.assertEqual(config_none.ignore_keys_at_rope_validation, {"partial_rotary_factor"})
+
+    def test_rope_init_does_not_warn_about_device(self):
+        # Instantiating a rotary module without `device` must not emit the `device` deprecation warning of the
+        # rope init functions it calls internally
+        for config, rope_class in (
+            (LlamaConfig(), LlamaRotaryEmbedding),
+            (Gemma3TextConfig(), Gemma3RotaryEmbedding),
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                rope_class(config)
+            self.assertEqual([str(warning.message) for warning in caught], [])
+
+        # ... but it is still emitted when the user passes `device`
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            LlamaRotaryEmbedding(LlamaConfig(), device=torch_device)
+        self.assertTrue(any("`device` is deprecated" in str(warning.message) for warning in caught))
 
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then

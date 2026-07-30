@@ -725,7 +725,6 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4VisionConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -1119,7 +1118,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4TextConfig, layer_type: str, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

@@ -229,7 +229,6 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Gemma4UnifiedTextConfig, layer_type: str, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

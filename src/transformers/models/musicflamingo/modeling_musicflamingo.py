@@ -74,7 +74,6 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.register_buffer("position_angles", position_angles, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: MusicFlamingoConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

@@ -860,7 +860,6 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Glm4vMoeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

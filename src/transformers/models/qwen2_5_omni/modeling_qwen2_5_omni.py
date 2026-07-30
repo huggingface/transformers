@@ -1350,7 +1350,6 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen2_5OmniConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -2395,7 +2394,6 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen2_5OmniDiTConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

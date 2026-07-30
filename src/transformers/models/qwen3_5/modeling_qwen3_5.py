@@ -118,7 +118,6 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3_5TextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

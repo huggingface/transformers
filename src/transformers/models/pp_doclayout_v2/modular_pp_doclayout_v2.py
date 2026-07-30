@@ -395,7 +395,6 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: PPDocLayoutV2Config, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

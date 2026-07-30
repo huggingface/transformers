@@ -1234,7 +1234,6 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3OmniMoeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -2413,7 +2412,6 @@ class Qwen3OmniMoeRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Qwen3OmniMoeConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:

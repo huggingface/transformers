@@ -440,7 +440,6 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation

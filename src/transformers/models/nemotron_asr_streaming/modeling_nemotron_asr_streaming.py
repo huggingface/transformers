@@ -354,7 +354,6 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_relative_positional_parameters(
         config: NemotronAsrStreamingEncoderConfig, device=None
     ) -> torch.Tensor:

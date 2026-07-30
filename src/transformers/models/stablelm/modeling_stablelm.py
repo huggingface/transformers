@@ -75,7 +75,6 @@ class StableLmRotaryEmbedding(nn.Module):
 
     @staticmethod
     # Ignore copy
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: StableLmConfig, device=None, **kwargs) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
