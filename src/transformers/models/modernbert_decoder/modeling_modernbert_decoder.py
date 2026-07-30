@@ -116,7 +116,7 @@ class ModernBertDecoderRotaryEmbedding(nn.Module):
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: ModernBertDecoderConfig, layer_type: str, device=None, **kwargs
+        config: ModernBertDecoderConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
