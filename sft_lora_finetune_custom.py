@@ -317,40 +317,36 @@ def main():
             total_tokens = 0
 
             # Gradient accumulation loop
-            for micro in range(args.gradient_accumulation_steps):
-                idx = i + micro * args.per_device_train_batch_size
-                if idx >= rows_per_dp:
-                    break
+            step_ctx = record_function("training_step") if prof is not None else contextlib.nullcontext()
+            with step_ctx:
+                for micro in range(args.gradient_accumulation_steps):
+                    idx = i + micro * args.per_device_train_batch_size
+                    if idx >= rows_per_dp:
+                        break
 
-                # Get batch and split into inputs/labels
-                batch = local_data[idx : idx + args.per_device_train_batch_size]
-                inputs = batch[:, :-1].to(device)
-                labels = batch[:, 1:].to(device)
+                    # Get batch and split into inputs/labels
+                    batch = local_data[idx : idx + args.per_device_train_batch_size]
+                    inputs = batch[:, :-1].to(device)
+                    labels = batch[:, 1:].to(device)
 
-                if inputs.shape != _last_shape:
-                    print(f"inputs: {inputs.shape}, labels: {labels.shape}")
-                    _last_shape = inputs.shape
+                    if inputs.shape != _last_shape:
+                        print(f"inputs: {inputs.shape}, labels: {labels.shape}")
+                        _last_shape = inputs.shape
 
-                step_ctx = (
-                    record_function("training_step")
-                    if prof is not None and micro == args.gradient_accumulation_steps - 1
-                    else contextlib.nullcontext()
-                )
-                with step_ctx:
                     # Forward and backward
                     loss = model(inputs, labels=labels).loss
                     (loss / args.gradient_accumulation_steps).backward()
 
-                total_loss += loss.item()
-                total_tokens += inputs.numel()
+                    total_loss += loss.item()
+                    total_tokens += inputs.numel()
 
-            # Gradient clipping
-            if args.max_grad_norm > 0:
-                clip_grad_norm(model, args.max_grad_norm, tp_mesh)
+                # Gradient clipping
+                if args.max_grad_norm > 0:
+                    clip_grad_norm(model, args.max_grad_norm, tp_mesh)
 
-            # Update weights
-            optimizer.step()
-            scheduler.step()
+                # Update weights
+                optimizer.step()
+                scheduler.step()
             step += 1
 
             if prof is not None:

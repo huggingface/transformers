@@ -7,16 +7,15 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Parallelism
 # ---------------------------------------------------------------------------
-export TP_SIZE=${TP_SIZE:-1}
-NUM_PROC=${NUM_PROC:-1}
+export TP_SIZE=${TP_SIZE:-2}
+NUM_PROC=${NUM_PROC:-2}
 
 # ---------------------------------------------------------------------------
 # Neuron runtime environment
 # ---------------------------------------------------------------------------
 # export TORCH_NEURONX_ENABLE_STABLEHLO=0
 export ON_NEURON_EAGER=1
-# export TORCH_NEURONX_MLIR_ATEN_OPS=1
-export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
+# export TORCH_NEURONX_FALLBACK_ONLY_FOR_UNIMPLEMENTED_OPS=1
 export NEURON_EAGER_MODEL_CACHE_SIZE=10000
 export OMP_NUM_THREADS=128
 export HF_DEACTIVATE_ASYNC_LOAD=1
@@ -26,8 +25,9 @@ export TORCH_NEURONX_ENABLE_ASYNC_NRT=1
 export NEURON_RT_NUM_CORES=1
 # export NEURON_LOGICAL_NC_CONFIG=2
 # export NEURON_RT_VIRTUAL_CORE_SIZE=2
+PROFILE_OUTPUT_DIR=${NEURON_PROFILER_OUTPUT_DIR:-./profile-hf-nll-no-metrics}
 TIMESTAMP=$(date +%H:%M-%d-%m)
-export NEURON_PROFILER_OUTPUT_DIR="./profile-hf-nll-no-metrics-$TIMESTAMP"
+export NEURON_PROFILER_OUTPUT_DIR="${PROFILE_OUTPUT_DIR}-$TIMESTAMP"
 export TORCH_NEURONX_NEFF_CACHE_DIR=$NEURON_PROFILER_OUTPUT_DIR
 export XLA_IR_DEBUG=1
 export XLA_HLO_DEBUG=1
@@ -82,6 +82,7 @@ $LAUNCHER \
     --packing false \
     --bf16 true \
     --loss-type nll \
+    --compute_token_metrics false \
     --max_length $MAX_SEQ_LENGTH \
     --pad_to_multiple_of $MAX_SEQ_LENGTH \
     --per_device_train_batch_size $BATCH_SIZE \

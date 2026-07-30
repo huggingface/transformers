@@ -461,6 +461,8 @@ def _split_along_last_dim(x, world_size):
 #   └────────────────────┴─────────────────────┴─────────────────────┘
 # ===================
 
+import torch_neuronx
+
 
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
