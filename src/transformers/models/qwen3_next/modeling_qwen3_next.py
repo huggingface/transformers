@@ -390,23 +390,11 @@ def forward_substitution_inverse(tril: torch.Tensor, chunk_size: int) -> torch.T
     return tril + torch.eye(chunk_size, dtype=tril.dtype, device=tril.device)
 
 
-def decayed_matmul(a: torch.Tensor, b: torch.Tensor, decay: torch.Tensor) -> torch.Tensor:
-    """Computes out[..., i, j] = sum_d a[..., i, d] * b[..., j, d] * decay[..., i, j, d], the dot products of `a`
-    and `b` weighted by the pairwise decays. Supports both per-token and per-channel decays: `decay` last dim can either
-    be size 1 (per-token) or the same size as `a` and `b` (per-channel).
-    """
-    # Per-token decays: decay is factored out of the dot product, and applied pointwise to the result of a matmul
-    if decay.shape[-1] == 1:
-        return (a @ b.transpose(-1, -2)) * decay.squeeze(-1)
-    # Per-channel decays: decay is folded into `b`, then the remaining reduction is batched one matmul per row of `a``
-    return ((b.unsqueeze(-3) * decay) @ a.unsqueeze(-1)).squeeze(-1)
-
-
 def torch_chunk_gated_delta_rule(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    g: torch.Tensor,  # decays (named that way to align with the flash_linear_attention library API)
+    g: torch.Tensor,
     beta: torch.Tensor,
     chunk_size: int = 64,
     initial_state: torch.Tensor | None = None,
@@ -420,8 +408,7 @@ def torch_chunk_gated_delta_rule(
         key: Key tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
         value: Value tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
         g: Log-decay tensor of shape [batch_size, sequence_length, num_heads]: the recurrent state is multiplied
-            by exp(g) at each step, so entries must be <= 0. Also supports per-channel decay, where g has an added
-            trailing dimension of size k_head_dim.
+            by exp(g) at each step, so entries must be <= 0.
         beta: Beta tensor of shape [batch_size, sequence_length, num_heads]
         chunk_size: Size of the chunks along the sequence dimension.
         initial_state: The recurrent state, an optional tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
@@ -434,8 +421,7 @@ def torch_chunk_gated_delta_rule(
     initial_dtype = query.dtype
     batch_size, sequence_length, num_heads, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
-    # Force log_decay to have 4 dims whether this is per-token decay (g is 3D) or per-channel decay (g is 4D)
-    log_decay = g.unsqueeze(-1) if g.dim() == 3 else g
+    log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
@@ -453,8 +439,8 @@ def torch_chunk_gated_delta_rule(
     query = F.pad(query, (0, 0, 0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -2
     key = F.pad(key, (0, 0, 0, pad_size))
     value = F.pad(value, (0, 0, 0, pad_size))
-    beta = F.pad(beta, (0, pad_size))
-    log_decay = F.pad(log_decay, (0, 0, 0, pad_size))
+    beta = F.pad(beta, (0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -1
+    log_decay = F.pad(log_decay, (0, pad_size))
 
     total_sequence_length = sequence_length + pad_size
     num_chunks = total_sequence_length // chunk_size
@@ -468,47 +454,34 @@ def torch_chunk_gated_delta_rule(
     query, key, value, k_beta, v_beta = [
         x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
     ]
-    log_decay = log_decay.reshape(log_decay.shape[0], log_decay.shape[1], -1, chunk_size, log_decay.shape[-1])
+    log_decay = log_decay.reshape(log_decay.shape[0], log_decay.shape[1], -1, chunk_size)
 
     # Create a chunked-sized causal mask (with and without the diagonal)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
     strictly_upper_mask = mask.triu(1)
 
-    # Cumulative log-decay within each chunk (dim 3 is the position inside the chunk): cum_log_decay[..., t, :] is
+    # Cumulative log-decay within each chunk (dim 3 is the position inside the chunk): cum_log_decay[..., t] is
     # the log of the total decay accumulated between the start of the chunk and position t
     cum_log_decay = log_decay.cumsum(dim=3)
     cum_decay = cum_log_decay.exp()  # cumulative in the sense of the product: decay is never summed
 
-    # First phase: compute intra-chunk quantities, vectorized over groups of chunks that are "not too big": this strikes
-    # a balance between vectorization (speed) and memory footprint
-    pairwise_decay_numel = batch_size * num_heads * chunk_size * chunk_size * cum_log_decay.shape[-1]
-    numel_bound = 2**26  # heuristic-based bound: a fp32 tensor with this many elements weights 256 MB
-    chunks_per_group = max(1, min(num_chunks, numel_bound // pairwise_decay_numel))
+    # First phase: compute intra-chunk quantities.
+    # The pairwise decays: pairwise_decay[..., i, j] = exp(cum_log_decay_i - cum_log_decay_j) is the decay
+    # accumulated between positions j and i of a chunk
+    pairwise_log_decay = cum_log_decay.unsqueeze(4) - cum_log_decay.unsqueeze(3)
+    pairwise_log_decay = pairwise_log_decay.masked_fill(strictly_upper_mask, float("-inf"))
+    pairwise_decay = pairwise_log_decay.exp()  # no overflow because positive pairwise_log_decay are masked to -inf
 
-    vectorized_shape = (batch_size, num_heads, num_chunks, chunk_size, chunk_size)
-    ut_attn = torch.empty(vectorized_shape, dtype=value.dtype, device=value.device)
-    qk_attn = torch.empty(vectorized_shape, dtype=value.dtype, device=value.device)
-
-    # Loop over groups of chunks
-    for s in range(0, num_chunks, chunks_per_group):
-        # Compute the pairwise decays: pairwise_decay[..., i, j] = exp(cum_log_decay_i - cum_log_decay_j) is the
-        # decay accumulated between positions j and i of a chunk
-        chunks = slice(s, s + chunks_per_group)
-        group_cum_log_decay = cum_log_decay[:, :, chunks]
-        pairwise_log_decay = group_cum_log_decay.unsqueeze(4) - group_cum_log_decay.unsqueeze(3)
-        pairwise_log_decay = pairwise_log_decay.masked_fill(strictly_upper_mask.unsqueeze(-1), float("-inf"))
-        pairwise_decay = pairwise_log_decay.exp()  # no overflow because positive pairwise_log_decay are masked to -inf
-
-        # Compute auxiliary tensors: UT transform (ut_attn) and QK dot product (qk_attn)
-        ut_attn[:, :, chunks] = -decayed_matmul(k_beta[:, :, chunks], key[:, :, chunks], pairwise_decay)
-        ut_attn[:, :, chunks] = ut_attn[:, :, chunks].masked_fill(mask, 0)
-        qk_attn[:, :, chunks] = decayed_matmul(query[:, :, chunks], key[:, :, chunks], pairwise_decay)
+    # Compute auxiliary tensors: UT transform (ut_attn) and QK dot product (qk_attn)
+    ut_attn = -(k_beta @ key.transpose(-1, -2)) * pairwise_decay
+    ut_attn = ut_attn.masked_fill(mask, 0)
+    qk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
 
     # The UT transform turns the within-chunk k/v pairs into the pseudo-values actually written to the recurrent
     # state (value), and prepares the decayed keys reading the old state (k_cumdecay)
     ut_attn = forward_substitution_inverse(ut_attn, chunk_size)
     value = ut_attn @ v_beta
-    k_cumdecay = ut_attn @ (k_beta * cum_decay)
+    k_cumdecay = ut_attn @ (k_beta * cum_decay.unsqueeze(-1))
 
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
@@ -524,12 +497,12 @@ def torch_chunk_gated_delta_rule(
     for i in range(num_chunks):
         q_i, k_i, cum_log_decay_i = query[:, :, i], key[:, :, i], cum_log_decay[:, :, i]
         v_new = value[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
-        inter_chunk_attn = (q_i * cum_decay[:, :, i]) @ last_recurrent_state
+        inter_chunk_attn = (q_i * cum_decay[:, :, i].unsqueeze(-1)) @ last_recurrent_state
         core_attn_out[:, :, i] = inter_chunk_attn + qk_attn[:, :, i] @ v_new
         # chunk_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
         chunk_log_decay = cum_log_decay_i[:, :, -1]
-        state_decay = chunk_log_decay.exp().unsqueeze(-1)
-        key_decay = (chunk_log_decay.unsqueeze(2) - cum_log_decay_i).exp()
+        state_decay = chunk_log_decay.exp()[..., None, None]
+        key_decay = (chunk_log_decay.unsqueeze(-1) - cum_log_decay_i).exp().unsqueeze(-1)
         last_recurrent_state = last_recurrent_state * state_decay + (k_i * key_decay).transpose(-1, -2) @ v_new
 
     # Discard the final state if not requested
@@ -559,8 +532,7 @@ def torch_recurrent_gated_delta_rule(
     initial_dtype = query.dtype
     batch_size, sequence_length, num_heads, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
-    # Force log_decay to have 4 dims whether this is per-token decay (g is 3D) or per-channel decay (g is 4D)
-    log_decay = g.unsqueeze(-1) if g.dim() == 3 else g
+    log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
     # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
@@ -586,8 +558,8 @@ def torch_recurrent_gated_delta_rule(
     # Loop over each token and update the recurrent state
     for i in range(sequence_length):
         q_t, k_t, v_t = query[:, :, i], key[:, :, i], value[:, :, i]
-        # Decays the key dim of the recurrent state
-        decay_t = log_decay[:, :, i].exp().unsqueeze(-1)
+        # Decay the recurrent state
+        decay_t = log_decay[:, :, i].exp()[..., None, None]
         last_recurrent_state = last_recurrent_state * decay_t
         # Update the recurent state
         beta_t = beta[:, :, i].unsqueeze(-1)
