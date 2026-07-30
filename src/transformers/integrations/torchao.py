@@ -76,7 +76,7 @@ class TorchAoQuantize(ConversionOps):
         else:
             quantize_(module, config, *args, **kwargs)
         # NOTE(3outeille): Tensor parallel use this marker to knwow when to call to_local() (useful for quantization and kernels)
-        module._hf_tp_requires_local_input = True
+        module._hf_tp_uses_local_kernel = True
 
     def convert(
         self,
@@ -203,7 +203,7 @@ class TorchAoDeserialize(ConversionOps):
         is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
         module, _ = get_module_from_name(model, full_layer_name)
         # NOTE(3outeille): Tensor parallel use this marker to knwow when to call to_local() (useful for quantization and kernels)
-        module._hf_tp_requires_local_input = True
+        module._hf_tp_uses_local_kernel = True
 
         param_data = {}
         layer_name = ".".join(full_layer_name.split(".")[:-1])

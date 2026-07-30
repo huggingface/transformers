@@ -29,23 +29,6 @@ if is_torch_available():
 else:
     _torch_distributed_available = False
 
-if is_torch_available() and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
-
-
-#TODO(3outeille): should remove later to favor of _local_params_for_forward() context manager in tensor_parallel.py
-def to_local(t):
-    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
-
-    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
-    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
-    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
-    path: backward rewraps the gradient as a DTensor matching each parameter's
-    placements.
-    """
-    if _torch_distributed_available and isinstance(t, DTensor):
-        return t.to_local()
-    return t
 
 if is_torch_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
@@ -136,7 +119,7 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-#TODO(3outeille): unify initialization across parallelism
+# TODO(3outeille): unify initialization across parallelism
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -179,6 +162,7 @@ def initialize_tensor_parallelism(
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
     return device_map, device_mesh
+
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     if not is_torch_greater_or_equal("2.5"):

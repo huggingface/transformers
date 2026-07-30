@@ -104,6 +104,10 @@ def _remaining_dtensor_params_to_local(module):
 
 
 class TensorParallelLayer:
+    def uses_local_kernel(self, module):
+        """Whether this module's kernel requires local inputs and parameters."""
+        return False
+
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
@@ -112,6 +116,8 @@ class TensorParallelLayer:
         return args, kwargs
 
     def context_around_forward(self, module, mesh):
+        if self.uses_local_kernel(module):
+            return _remaining_dtensor_params_to_local(module)
         return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -139,6 +145,9 @@ class ColwiseParallel(TensorParallelLayer):
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
 
+    def uses_local_kernel(self, module):
+        return getattr(module, "_hf_tp_uses_local_kernel", False)
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -155,14 +164,9 @@ class ColwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
-        if getattr(module, "_hf_tp_requires_local_input", False):
+        if self.uses_local_kernel(module):
             x = x.to_local()
         return (x,) + args[1:], kwargs
-
-    def context_around_forward(self, module, mesh):
-        if getattr(module, "_hf_tp_requires_local_input", False):
-            return _remaining_dtensor_params_to_local(module)
-        return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local kernel produced this rank's shard of the output features (last dim).
@@ -186,6 +190,9 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = output_layouts or Replicate()
         self.use_local_output = use_local_output
 
+    def uses_local_kernel(self, module):
+        return getattr(module, "_hf_tp_uses_local_kernel", False)
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -208,13 +215,13 @@ class RowwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired], async_op=True)
-        if getattr(module, "_hf_tp_requires_local_input", False):
+        if self.uses_local_kernel(module):
             x = x.to_local()
         return (x,) + args[1:], kwargs
 
     @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
-        if not getattr(module, "_hf_tp_requires_local_input", False):
+        if not self.uses_local_kernel(module):
             yield
             return
         # Each rank computes a partial sum, so the replicated bias must be added exactly once.
@@ -305,6 +312,9 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.split_factor = split_factor
 
+    def uses_local_kernel(self, module):
+        return True
+
     def _packed_output_shard_dim(self, param_ndim: int) -> int:
         """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
         if param_ndim == 1:
@@ -333,15 +343,12 @@ class PackedColwiseParallel(TensorParallelLayer):
             input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
-        
+
         # The packed kernels runs on local tensors, so Dtensor cannot infer the layout of the
-        # gradient produced by the kernel. The kernel sees replicated input + partial weights 
+        # gradient produced by the kernel. The kernel sees replicated input + partial weights
         # which means input gradient will be partial as well
         input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
-
-    def context_around_forward(self, module, mesh):
-        return _remaining_dtensor_params_to_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None or self.use_local_output:
@@ -400,6 +407,9 @@ class MoEExpertsParallel(TensorParallelLayer):
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
 
+    def uses_local_kernel(self, module):
+        return True
+
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
         hidden_states, top_k_index, top_k_weights = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
@@ -429,9 +439,6 @@ class MoEExpertsParallel(TensorParallelLayer):
 
         module.forward = tp_forward
         return module
-
-    def context_around_forward(self, module, mesh):
-        return _remaining_dtensor_params_to_local(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:

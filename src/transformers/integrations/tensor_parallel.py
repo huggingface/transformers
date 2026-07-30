@@ -31,25 +31,7 @@ if is_torch_available():
     import torch.distributed as dist
     from torch import nn
 
-if _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
-
-
 logger = logging.get_logger(__name__)
-
-
-def to_local(t):
-    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
-
-    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
-    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
-    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
-    path: backward rewraps the gradient as a DTensor matching each parameter's
-    placements.
-    """
-    if _torch_distributed_available and isinstance(t, DTensor):
-        return t.to_local()
-    return t
 
 
 def initialize_tensor_parallelism(
