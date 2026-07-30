@@ -31,7 +31,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
@@ -45,7 +44,6 @@ from ...processing_utils import (
     ProcessorMixin,
     Unpack,
 )
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -54,7 +52,6 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -300,35 +297,29 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
             patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                patches = patches.unsqueeze(1)
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
+            batch_size, channel = patches.shape[:2]
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
+            patches = patches.reshape(batch_size, channel, grid_h, patch_size, grid_w, patch_size)
+            patches = patches.permute(0, 2, 4, 1, 3, 5)
+            flatten_patches = (
+                patches.unsqueeze(4)
+                .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
+                .reshape(
+                    batch_size,
+                    grid_h * grid_w,
+                    channel * temporal_patch_size,
+                    patch_size,
+                    patch_size,
+                )
             )
-            patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
-            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
 
             processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
-        pixel_values = torch.cat(processed_images, dim=0)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
         image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
@@ -386,87 +377,17 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
+    valid_processor_kwargs = PaddleOCRVLProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[PaddleOCRVLProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            PaddleOCRVLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-
-        else:
-            image_inputs = {}
-            image_grid_thw = None
-
-        if not isinstance(text, list):
-            text = [text]
-
-        text = text.copy()
-
-        if image_grid_thw is not None:
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|placeholder|>"
-                        * (
-                            image_grid_thw[index].prod()
-                            // self.image_processor.merge_size
-                            // self.image_processor.merge_size
-                        ),
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        merge_size = self.image_processor.merge_size
+        num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
+        return self.image_token * num_tokens
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -725,7 +646,6 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         )
         return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -785,7 +705,6 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
@@ -854,7 +773,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -901,7 +819,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -974,7 +891,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:

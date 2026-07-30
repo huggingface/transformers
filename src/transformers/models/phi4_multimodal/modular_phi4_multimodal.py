@@ -351,7 +351,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             width = (
                 self.config.hidden_size
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
-                else self.config.hidden_size
+                else self.config.vision_config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):

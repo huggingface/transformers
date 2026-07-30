@@ -34,6 +34,7 @@ from ..cache_utils import (
     StaticCache,
 )
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -144,6 +145,23 @@ GENERATION_MODES_MAPPING = {
     GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
     GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
 }
+
+MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "pixel_values",
+    "pixel_mask",
+    "input_features",
+    "input_features_mask",
+    "pixel_values_videos",
+    "num_local_patches",
+    "high_res_pixel_values",
+    "image_patches_indices",
+    "image_patches",
+    "image_sizes",
+    "image_sizes_videos",
+    "pixel_attention_mask",
+    "pixel_values_images",
+    "num_local_patches",
+)
 
 
 @dataclass
@@ -589,7 +607,16 @@ class GenerationMixin(ContinuousMixin):
         # 5. Forward ALL kwargs that are uninitialized, e.g. `use_cache` (except a few exceptions)
         kwargs_to_avoid_forwarding = ("labels", "next_sequence_length")
         for key, value in kwargs.items():
-            if key not in model_inputs and key not in kwargs_to_avoid_forwarding:
+            # Those keys are never forwarded
+            if key in kwargs_to_avoid_forwarding:
+                continue
+            # Those keys are forwarded only during prefill (or the first forward of a new batch of inputs, such as with cache
+            # continuation), or without a cache
+            elif key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL and (
+                not is_first_iteration and kwargs.get("use_cache", True)
+            ):
+                continue
+            elif key not in model_inputs:
                 model_inputs[key] = value
 
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
@@ -2224,7 +2251,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
+        world_size = _get_torch_distributed_world_size()
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
