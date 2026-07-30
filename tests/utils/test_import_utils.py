@@ -272,16 +272,19 @@ def test_import_without_torch_distributed():
         if name.startswith("transformers"):
             del sys.modules[name]
 
-    # We emulate a USE_DISTRIBUTED=0 build by faking torch.distributed availability to False, and by setting
-    # the distributed submodules to None in sys.modules, which makes importing them raise ModuleNotFoundError.
+    # Emulate USE_DISTRIBUTED=0 by faking torch.distributed availability to False and deleting the distributed submodules in sys.modules.
     torch.distributed.is_available = lambda: False
-    for name in (
-        "torch.distributed.tensor",
-        "torch.distributed.checkpoint",
-        "torch.distributed.fsdp",
-        "torch.distributed._composable",
-    ):
-        sys.modules[name] = None
+    sys.modules["torch._C._distributed_c10d"] = None
+    for name in list(sys.modules):
+        if name.startswith(
+            (
+                "torch.distributed.tensor",
+                "torch.distributed.checkpoint",
+                "torch.distributed.fsdp",
+                "torch.distributed._composable",
+            )
+        ):
+            del sys.modules[name]
 
     # If transformers import errors out, it means that the distributed guarding is not working correctly.
     from transformers import AutoImageProcessor  # noqa: F401
