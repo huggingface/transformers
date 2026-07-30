@@ -1622,7 +1622,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         position_ids=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         user_delay_pattern_mask=None,
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,

@@ -1532,7 +1532,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
-        logits_to_keep=None,
+        logits_to_keep=0,
         is_first_iteration=False,
         **kwargs,
     ):

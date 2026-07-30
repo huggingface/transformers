@@ -298,36 +298,5 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        image_patches=None,
-        image_patches_indices=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            image_patches=image_patches,
-            image_patches_indices=image_patches_indices,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and kwargs.get("use_cache", True):
-            # set image_patches and image_patches_indices to `None` for decoding stage
-            model_inputs["image_patches_indices"] = None
-            model_inputs["image_patches"] = None
-
-        return model_inputs
-
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]
