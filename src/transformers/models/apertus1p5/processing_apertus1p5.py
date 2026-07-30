@@ -51,20 +51,24 @@ def _is_all_empty(media) -> bool:
     tokenizer into a single processor: each `<|image|>` / `<|audio|>` placeholder in the text is expanded into
     the model's structured token run, and the media are prepared into the model's tensor inputs.
 
-    Media may be passed as loaded objects or as URL / local path strings, which are fetched automatically
-    (fetched audio files are decoded and resampled to 24 kHz). Both modalities accept flat lists, consumed in
-    batch-sample order and then left-to-right placeholder order, or nested lists with one sub-list per batch
-    sample (empty sub-lists allowed) for explicit ownership. Image and audio ordering are tracked independently,
-    so they may be interleaved arbitrarily in each sample. Nested inputs validate counts per sample; flat inputs
-    validate only the total count, so their items must already follow this batch-major order. Different image
-    sizes and different numbers of images/audio clips per sample are supported.
+    Media handling:
 
-    Input expectations and validation: images are expected UNSCALED (PIL images or uint8-range pixel values;
-    per the standard `do_rescale` convention, float images already scaled to `[0, 1]` would be rescaled
-    again) and are converted to RGB, resized and normalized to `[-1, 1]` by the image processor. Bare
-    waveform arrays are assumed to be 24 kHz mono; their absolute scale is irrelevant because every clip is
-    peak-normalized to -3 dBFS before feature extraction. Stereo or empty clips are rejected, as is a
-    declared `sampling_rate` other than 24000.
+    - Media items may be loaded objects or URL / local path strings, which are fetched automatically
+      (fetched audio is decoded and resampled to 24 kHz).
+    - Flat lists are consumed in batch-sample order, then left-to-right placeholder order, and validate only
+      the total count, so items must already follow that order. Nested lists (one sub-list per batch sample,
+      empty sub-lists allowed) give explicit ownership and validate counts per sample.
+    - Images and audio are tracked independently and may be interleaved arbitrarily; image sizes and
+      per-sample media counts may vary freely.
+
+    Input expectations:
+
+    - Images: expected UNSCALED (PIL images or uint8-range pixel values; per the standard `do_rescale`
+      convention, float images already in `[0, 1]` would be rescaled again). The image processor converts to
+      RGB, resizes, and normalizes to `[-1, 1]`.
+    - Audio: bare waveform arrays are assumed to be 24 kHz mono; their absolute scale is irrelevant because
+      every clip is peak-normalized to -3 dBFS before feature extraction. Stereo or empty clips are rejected,
+      as is a declared `sampling_rate` other than 24000.
     """
 )
 class Apertus1p5Processor(ProcessorMixin):
@@ -127,6 +131,7 @@ class Apertus1p5Processor(ProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs,
     ):
+        """Run the base validation, then match placeholder and media counts for images and audio."""
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         if text is None:
             if images is not None or audio is not None:
@@ -177,6 +182,7 @@ class Apertus1p5Processor(ProcessorMixin):
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
 
     def _process_audio(self, audio: AudioInput, **kwargs):
+        """Peak-normalize the clips, extract features under the model's input names, and build the replacements."""
         if _is_nested_media(audio):
             audio = [clip for sublist in audio for clip in sublist]
         # peak-normalize each clip to -3 dBFS in float32, as in the reference Apertus 1.5 pipeline
@@ -253,7 +259,7 @@ class Apertus1p5Processor(ProcessorMixin):
 
     @property
     def unused_input_names(self) -> list[str]:
-        "Input names returned always by subprocessors but not used in the model's `forward`"
+        """Input names returned always by subprocessors but not used in the model's `forward`"""
         return ["image_grids", "num_audio_codes"]
 
 

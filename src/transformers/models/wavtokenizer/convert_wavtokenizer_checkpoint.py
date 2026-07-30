@@ -13,6 +13,11 @@
 # limitations under the License.
 """Convert original-author WavTokenizer checkpoints to Transformers format.
 
+The transformers WavTokenizer implementation is an inference-only port. The original checkpoints are full Lightning
+training checkpoints that additionally contain GAN discriminators, loss modules and the original SEANet decoder
+(which is bypassed at inference in favor of the Vocos backbone + ISTFT head). All of these training-only components
+are dropped during conversion; only the inference path (encoder, quantizer, decoder backbone, ISTFT head) is kept.
+
 The converter supports the currently available 24 kHz releases and infers their 40- or 75-token architecture from
 checkpoint tensor shapes:
 
@@ -79,7 +84,13 @@ def _require_tensor(state_dict: dict[str, torch.Tensor], key: str) -> torch.Tens
 
 
 def infer_wavtokenizer_config(state_dict: dict[str, torch.Tensor]) -> WavTokenizerConfig:
-    """Infer the inference architecture shared by the released original WavTokenizer checkpoints."""
+    """Infer the inference architecture of a released original WavTokenizer checkpoint.
+
+    The original releases ship as bare ``.ckpt`` files without a config and differ in architecture (40-token models:
+    hop length 600, ratios ``[6, 5, 5, 4]``; 75-token models: hop length 320, ratios ``[8, 5, 4, 2]``), so the config
+    is inferred from checkpoint tensor shapes. Cross-checks between the shapes validate that the checkpoint is a
+    supported WavTokenizer release and raise otherwise.
+    """
     downsampling_layers = []
     for key, value in state_dict.items():
         match = _DOWNSAMPLING_WEIGHT_RE.match(key)

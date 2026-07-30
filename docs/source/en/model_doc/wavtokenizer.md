@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-07-28.*
+*This model was published in HF papers on 2024-08-29 and contributed to Hugging Face Transformers on 2026-07-30.*
 
 # WavTokenizer
 
@@ -38,7 +38,9 @@ The abstract from the paper is the following:
 
 This port was contributed as part of the Apertus 1.5 integration by the
 [SwissAI initiative](https://huggingface.co/swiss-ai). The original code (MIT license) can be found
-[here](https://github.com/jishengpeng/WavTokenizer). The released raw
+[here](https://github.com/jishengpeng/WavTokenizer). The implementation is inference-only: it covers encoding audio
+into discrete codes and decoding codes back to audio, while the original training stack (GAN discriminators, loss
+modules, differentiable quantization) is not ported. The released raw
 PyTorch Lightning checkpoints use one of two temporal configurations:
 
 |  Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
