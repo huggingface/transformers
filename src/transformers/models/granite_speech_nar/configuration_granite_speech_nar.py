@@ -97,9 +97,6 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
 @strict
 class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
     r"""
-    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar. It reduces each
-    `window_size`-frame window of encoder features to `window_size // downsample_rate` query tokens.
-
     hidden_size (`int`, *optional*, defaults to 2048):
         Dimension of the Q-Former (and of its output, which is fed to the language model).
     intermediate_size (`int`, *optional*, defaults to 4096):
@@ -158,10 +155,18 @@ class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
 @strict
 class GraniteSpeechNarTextConfig(PreTrainedConfig):
     r"""
-    Configuration for the bidirectional Granite language-model backbone of GraniteSpeechNar.
+    ```python
+    >>> from transformers import GraniteSpeechNarTextModel, GraniteSpeechNarTextConfig
 
-    A copy of [`GraniteConfig`] with a dedicated `model_type`, so that `AutoModel.from_config`
-    resolves it to the non-causal [`GraniteSpeechNarTextModel`] rather than the causal `GraniteModel`.
+    >>> # Initializing a GraniteSpeechNarText granite_speech_nar_text-3b style configuration
+    >>> configuration = GraniteSpeechNarTextConfig()
+
+    >>> # Initializing a model from the granite_speech_nar_text-7b style configuration
+    >>> model = GraniteSpeechNarTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "granite_speech_nar_text"
@@ -241,7 +246,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     >>> configuration = GraniteSpeechNarConfig()
     >>> model = GraniteSpeechNarForCTC(configuration)
     >>> print(configuration.model_type)
-    granite_speech_nar
     ```"""
 
     model_type = "granite_speech_nar"

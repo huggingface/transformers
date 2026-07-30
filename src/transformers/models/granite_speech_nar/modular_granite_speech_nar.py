@@ -109,9 +109,6 @@ class GraniteSpeechNarEncoderConfig(GraniteSpeechPlusEncoderConfig):
 @strict
 class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
     r"""
-    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar. It reduces each
-    `window_size`-frame window of encoder features to `window_size // downsample_rate` query tokens.
-
     hidden_size (`int`, *optional*, defaults to 2048):
         Dimension of the Q-Former (and of its output, which is fed to the language model).
     intermediate_size (`int`, *optional*, defaults to 4096):
@@ -169,13 +166,6 @@ class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
 class GraniteSpeechNarTextConfig(GraniteConfig):
-    r"""
-    Configuration for the bidirectional Granite language-model backbone of GraniteSpeechNar.
-
-    A copy of [`GraniteConfig`] with a dedicated `model_type`, so that `AutoModel.from_config`
-    resolves it to the non-causal [`GraniteSpeechNarTextModel`] rather than the causal `GraniteModel`.
-    """
-
     model_type = "granite_speech_nar_text"
 
 
@@ -207,7 +197,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     >>> configuration = GraniteSpeechNarConfig()
     >>> model = GraniteSpeechNarForCTC(configuration)
     >>> print(configuration.model_type)
-    granite_speech_nar
     ```"""
 
     model_type = "granite_speech_nar"
@@ -675,14 +664,13 @@ class GraniteSpeechNarTextModel(GraniteModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        # Samples are packed along the sequence dim; derive the ragged-attention 
-        # metadata from the (per-sample-resetting) position ids 
+        # Samples are packed along the sequence dim; derive the ragged-attention
+        # metadata from the (per-sample-resetting) position ids
         cu_seqlens, max_seqlen = get_packed_attention_seqlens(position_ids, self.config, kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        kwargs["use_cache"] = False
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,

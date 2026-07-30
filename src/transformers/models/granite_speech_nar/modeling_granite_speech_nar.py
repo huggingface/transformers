@@ -306,7 +306,6 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
     _no_split_modules = [
         "GraniteSpeechNarCTCEncoder",
@@ -868,11 +867,7 @@ def get_packed_attention_seqlens(
     config: PreTrainedConfig,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, int | None]:
-    """
-    Cumulative and maximum sequence lengths for the packed bidirectional attention (mirrors
-    `get_vision_attention_seqlens`). This is the ragged-attention metadata that keeps packed samples from
-    attending to each other without materializing a mask.
-    """
+    """Get cumulative and maximum sequence lengths for the packed bidirectional attention."""
     cu_seqlens = get_packed_cu_seqlens(position_ids, kwargs=kwargs)
     max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
     return cu_seqlens, max_seqlen
@@ -917,14 +912,13 @@ class GraniteSpeechNarTextModel(GraniteSpeechNarPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        # Samples are packed along the sequence dim; derive the ragged-attention metadata from the
-        # (per-sample-resetting) position ids and drive bidirectional attention without a mask.
+        # Samples are packed along the sequence dim; derive the ragged-attention
+        # metadata from the (per-sample-resetting) position ids
         cu_seqlens, max_seqlen = get_packed_attention_seqlens(position_ids, self.config, kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        kwargs["use_cache"] = False
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
