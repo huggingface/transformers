@@ -34,6 +34,7 @@ from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     maybe_autocast,
@@ -274,9 +275,9 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3VLTextConfig, device=None):
-        super().__init__(config, device=device)
-
+        super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     def apply_interleaved_mrope(self, freqs, mrope_section):

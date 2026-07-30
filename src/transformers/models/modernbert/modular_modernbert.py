@@ -15,7 +15,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -233,16 +233,12 @@ class ModernBertMLP(nn.Module):
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: ModernBertConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: ModernBertConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+        config: ModernBertConfig, layer_type: str, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, layer_type)
 
 
 @use_kernel_forward_from_hub("rotary_pos_emb")
