@@ -503,6 +503,8 @@ def _patch_bernoulli(_original):
     consistent-dropout), so ``to_executorch`` fails with ``Missing out variants: {'aten::bernoulli'}``.
     ``rand_like`` *does* have a portable kernel (it's in the core-aten exception list), so
     ``(rand_like(input) < probs)`` is a faithful Bernoulli sample — the real randomness is preserved.
+    ``generator`` is ignored (``rand_like`` seeds from the default generator; export doesn't carry a
+    per-call generator anyway).
     """
 
     def patch(input, *args, p=None, generator=None, out=None):
@@ -511,7 +513,8 @@ def _patch_bernoulli(_original):
         if p is None and len(args) == 1:
             p = args[0]
         probs = input if p is None else p
-        return (torch.rand_like(input) < probs).to(input.dtype)
+        result = (torch.rand_like(input) < probs).to(input.dtype)
+        return out.copy_(result) if out is not None else result
 
     return patch
 
@@ -1122,11 +1125,15 @@ def _patch_squeeze_node_visitors(original):
 # legitimate trace-time shapes (e.g. VLM image-token counts). Each dim's cap is `max(lower, trace) *
 # multiplier`, floored so a dim traced small still gets a usable range.
 _MAX_DIM_MULTIPLIER = 4
+# 1024 covers the largest single unbounded dim we see in practice (VLM image-token counts, seq lens)
+# without over-allocating; 64 keeps a dim usable even when several are unbounded (see `_dim_floor`).
 _MAX_DIM_FLOOR = 1024  # cap floor for a single unbounded dim
 _MIN_DIM_FLOOR = 64  # cap floor never drops below this, so dims stay usable at runtime
 # The planner's arena grows with the *product* of the unbounded dims, so a fixed floor lets several
 # small-traced dims multiply into a huge arena. `_dim_floor` instead splits this product budget
-# across the N unbounded dims, keeping that product bounded.
+# across the N unbounded dims, keeping that product bounded. 2**24 (~16M elements) is the largest
+# element-count product we allow across all unbounded dims — a few hundred MB at fp32, the ceiling
+# before XNNPACK's memory planner starts overflowing/thrashing on the CI runners.
 _MAX_UNBOUNDED_PRODUCT = 2**24
 
 
