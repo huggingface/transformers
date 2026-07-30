@@ -610,7 +610,8 @@ class TrainingArguments:
             2 means there will be a total of 2 * num_workers batches prefetched across all workers.
         dataloader_multiprocessing_context (`str`, *optional*):
             The multiprocessing start method to use for data loading workers (`"fork"`, `"spawn"`, or
-            `"forkserver"`). Defaults to PyTorch's default start method. Use `"spawn"` when streaming from sources
+            `"forkserver"`). Defaults to PyTorch's default start method, except on MPS with
+            `dataloader_num_workers > 1`, where it defaults to `"fork"`. Use `"spawn"` when streaming from sources
             whose objects are not fork-safe (e.g. HDFS via `pyarrow`). Under `"spawn"`, any custom `collate_fn` or
             dataset code must be importable at module level (no lambdas/closures).
         dataloader_in_order (`bool`, *optional*, defaults to `True`):
@@ -1319,9 +1320,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "The multiprocessing start method to use for data loading workers ('fork', 'spawn', or "
-                "'forkserver'). Defaults to PyTorch's default. Use 'spawn' when streaming from sources whose "
-                "objects are not fork-safe (e.g. HDFS via pyarrow). Under 'spawn', any custom collate_fn / "
-                "dataset code must be importable at module level (no lambdas/closures)."
+                "'forkserver'). Defaults to PyTorch's default, except on MPS with dataloader_num_workers > 1, where "
+                "it defaults to 'fork'. Use 'spawn' when streaming from sources whose objects are not fork-safe "
+                "(e.g. HDFS via pyarrow). Under 'spawn', any custom collate_fn / dataset code must be importable at "
+                "module level (no lambdas/closures)."
             ),
             "choices": ["fork", "spawn", "forkserver"],
         },
@@ -1640,6 +1642,14 @@ class TrainingArguments:
         # ── 10. Hardware Overrides ──
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        # MPS requires forking if multiple workers are specified; a user-specified start method takes precedence.
+        if (
+            self.dataloader_multiprocessing_context is None
+            and self.dataloader_num_workers > 1
+            and is_torch_mps_available()
+        ):
+            self.dataloader_multiprocessing_context = "fork"
 
         # ── 11. FSDP ──
         # Store args only (not the plugin itself) to avoid pickle issues
