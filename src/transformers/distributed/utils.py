@@ -43,7 +43,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.7"):
 def _is_torch_distributed_initialized() -> bool:
     if not _torch_distributed_available:
         return False
-    return hasattr(torch.distributed, "is_initialized") and torch.distributed.is_initialized()
+    return torch.distributed.is_initialized()
 
 
 def _get_torch_distributed_rank() -> int:
@@ -53,7 +53,7 @@ def _get_torch_distributed_rank() -> int:
 
 
 def _get_torch_distributed_world_size() -> int:
-    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
+    if not _is_torch_distributed_initialized():
         return 1
     return torch.distributed.get_world_size()
 
@@ -62,9 +62,14 @@ def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
 
-def _ensure_torch_distributed(device_type: str):
-    """Initialize torch.distributed if not already initialized."""
+def _ensure_torch_distributed(device_type: str | None = None):
+    """Initialize torch.distributed if not already initialized.
+
+    If `device_type` is not given, it is detected from the current accelerator.
+    """
     if not torch.distributed.is_initialized():
+        if device_type is None:
+            device_type = torch._C._get_accelerator().type
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
@@ -114,16 +119,13 @@ def _distributed_barrier():
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
-
+    # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
+    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7`.")
+        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
 
     device_type = torch._C._get_accelerator().type
-    _ensure_torch_distributed(device_type)
 
-    world_size = torch.distributed.get_world_size()
     if device_type != "cpu":
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
         getattr(torch, device_type).set_device(local_rank)
@@ -132,8 +134,6 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
-
-    assert world_size == fsdp_size, f"world_size ({world_size}) must be equal to fsdp_size ({fsdp_size})"
 
     dims, names = [], []
     if fsdp_size > 1:

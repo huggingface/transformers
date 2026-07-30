@@ -1022,7 +1022,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
         image_attention_mask = torch.where(
             image_attention_mask[:, None, :, :].bool(),
-            torch.tensor(0.0, device=device, dtype=image_hidden_states.dtype),
+            torch.full((), 0.0, device=device, dtype=image_hidden_states.dtype),
             torch.finfo(image_hidden_states.dtype).min,
         )
 
