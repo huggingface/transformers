@@ -39,7 +39,7 @@ limitations under the License.
 
 Apertus 1.5 is a multimodal model (image + audio + text → text) by the
 [Swiss AI Initiative](https://huggingface.co/swiss-ai) that extends the [Apertus](./apertus) language model
-([Apertus: Democratizing Open and Compliant LLMs for Global Language Environments](https://huggingface.co/papers/2509.14233))
+([Apertus: Democratizing Open and Compliant LLMs for Global Language Environments](https://huggingface.co/papers/2509.14233)) by continued pretraining
 with discrete-token early fusion: frozen tokenizers turn images and audio into discrete codes that are mapped
 into an enlarged text vocabulary by fixed offsets, so all modalities share the backbone's embedding table and
 are modeled as a single token stream.
@@ -72,7 +72,8 @@ The model composes three parts:
 > checkpoints.
 
 Images are always encoded one at a time, even in batched inputs, because the vision tokenizer contains global
-attention, so batch padding would change the codes. Each image contributes `(height / 16) · (width / 16)` codes
+attention, so batch padding would change the codes. Same for the audio tokenizer and audio samples.
+Each image contributes `(height / 16) · (width / 16)` codes
 of its *resized* dimensions (the processor resizes to multiples of 16 within a pixel-area budget), and each
 audio clip contributes `ceil(samples / 600)` codes.
 
@@ -114,7 +115,7 @@ containing one `<|image|>` / `<|audio|>` placeholder per media item. Media entri
 (PIL images, numpy waveforms) or URL / local-path strings: the processor fetches files itself and resamples
 fetched audio to 24 kHz (bare waveform arrays are assumed to already be 24 kHz mono). Flat lists are
 consumed left-to-right by placeholder order; nested lists (one sub-list per batch sample) give explicit
-per-sample ownership with arbitrary counts:
+per-sample ownership with arbitrary counts (in this case the numbers of media in each list must mathc the placeholder number):
 
 ```python
 # `model` and `processor` as in the quick start above; batched generation requires left padding
@@ -154,9 +155,14 @@ print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_
   # or through the chat template:
   processor.apply_chat_template(messages, processor_kwargs={"images_kwargs": {"max_pixels": 512 * 512}}, ...)
   ```
-- **Audio** arrays are assumed to be 24 kHz mono; file or URL inputs are resampled automatically. The
-  absolute scale does not matter, since every clip is peak-normalized to -3 dBFS before encoding. Stereo or
-  empty clips raise an error, as does declaring a `sampling_rate` other than 24000.
+- **Audio** accepts raw numpy arrays, file paths, and URLs. A raw array is validated where possible:
+  stereo or empty clips are rejected with a `ValueError`, any dtype is converted to float32, and the
+  absolute scale does not matter because every clip is peak-normalized to -3 dBFS before encoding. The
+  one thing that cannot be checked is the actual sample rate: a bare array carries no rate, so it is
+  trusted to be 24 kHz mono, and audio recorded at another rate is accepted silently and simply
+  tokenizes wrong (time-stretched). To make a rate mismatch fail loudly instead, declare it: passing
+  `sampling_rate` with any value other than 24000 raises a `ValueError`. Only file and URL inputs go
+  through the audio loader and are resampled to 24 kHz automatically.
 - **Placeholder counts** are validated strictly in both directions: per sample for nested media lists, as
   totals for flat lists, with a `ValueError` on any mismatch.
 
