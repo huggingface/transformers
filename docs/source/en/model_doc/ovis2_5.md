@@ -158,7 +158,7 @@ Transformers generation API.
 ## Ovis2_5Processor
 
 [[autodoc]] Ovis2_5Processor
-    - **call**
+    - __call__
 
 ## Ovis2_5ImageProcessor
 
