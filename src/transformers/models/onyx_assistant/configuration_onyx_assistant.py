@@ -72,19 +72,21 @@ class OnyxAssistantConfig(PreTrainedConfig):
     max_position_embeddings: int = 131072
     sliding_window: int = 2048
     layer_types: list[str] | None = None
-    block_size: int = 16
-    has_dspark_head: bool = False
-    mask_token_id: int = 201818
+    attention_dropout: float | int = 0
+    hidden_act: str = "silu"
     bos_token_id: int | None = 200000
     eos_token_id: int | None = 200001
     pad_token_id: int | None = 200018
-    target_layer_id: list[int] | None = None
+
+    block_size: int = 16
+    mask_token_id: int = 201818
+    target_layer_ids: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            self.layer_types = ["slidinga_attention"] * self.num_hidden_layers
-        if self.target_layer_id is None:
-            self.target_layer_id = [2, 14, 26, 38, 50]
+            self.layer_types = ["sliding_attention"] * self.num_hidden_layers
+        if self.target_layer_ids is None:
+            self.target_layer_ids = [2, 14, 26, 38, 50]
         super().__post_init__(**kwargs)
 
 

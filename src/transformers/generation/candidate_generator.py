@@ -1422,7 +1422,7 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         return candidate_ids, candidate_logits
 
 
-class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
+class DFlashTokenCandidateGenerator(CandidateGenerator):
     """Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
     This capability is enabled by three concrete requirements for assistant models:
 
@@ -1461,12 +1461,14 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
         inputs_tensor: torch.Tensor | None = None,
         **kwargs,
     ):
-        super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor)
+        self.assistant_model = assistant_model
+        self.main_model_max_length = generation_config.max_length
+
         self.target_model_input_embeddings = target_model_input_embeddings
         self.target_model_output_embeddings = target_model_output_embeddings
         self.target_layer_ids = assistant_model.config.target_layer_ids
         self.block_size = assistant_model.config.block_size
-        self.mask_token_id = self.generation_config.mask_token_id
+        self.mask_token_id = assistant_model.config.mask_token_id
 
         # Prepare the kwargs for the assistant model
         self.assistant_kwargs = {}
@@ -1478,12 +1480,30 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
                     else copy.deepcopy(value)
                 )
 
+    def _update_past_and_masks(
+        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
+    ) -> bool:
+        """Update past key values and attention masks for subsequent generation rounds."""
+        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
+        if has_past_key_values:
+            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
+            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_position_ids(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
+        return has_past_key_values
+
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
         model_kwargs: dict[str, Any],
         model_outputs: ModelOutput,
         is_first_iteration: bool,
+        n_last_matches: int,
         **kwargs,
     ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """Generate draft token candidates using the drafter."""
@@ -1494,7 +1514,7 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
             return input_ids, None
 
         # Early exit if we cannot generate new tokens.
-        max_new_tokens = min(int(self.num_assistant_tokens), self.main_model_max_length - input_ids.shape[1] - 1)
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
         if max_new_tokens <= 0:
             return input_ids, None
 
@@ -1502,27 +1522,24 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
+        # This is actually cache so we need the new matches only and cat it to cache
         target_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i] for i in self.target_layer_ids], dim=-1
+            [model_outputs.hidden_states[i][:, -n_last_matches:] for i in self.target_layer_ids], dim=-1
         )
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated token
         block_mask = torch.tensor([self.mask_token_id] * self.block_size, device=input_ids.device)[None, ...]
         input_mask_ids = torch.cat([input_ids[:, -1:], block_mask], dim=-1)
-        position_ids = torch.tensor(
-            [[input_ids.shape[1], input_ids.shape[1] + self.block_size]],
-            dtype=torch.long,
-            device=self.assistant_model.device,
-        )
         mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
         self._update_past_and_masks(input_ids)
+        print(n_last_matches, target_hidden_states.shape, self.assistant_kwargs["position_ids"])
         self.assistant_kwargs["past_key_values"] = self.assistant_model.update_cache_with_target_states(
-            hidden_states=target_hidden_states,
+            target_hidden_states,
             position_ids=self.assistant_kwargs["position_ids"],
-            past_key_values=self.assistant_kwargs["past_key_values"],
+            past_key_values=self.assistant_kwargs.get("past_key_values"),
         )
 
         with torch.no_grad():
@@ -1530,7 +1547,6 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
                 inputs_embeds=mask_token_embedding,
                 # Must be block bidirectional mask prepared in model!
                 attention_mask=model_kwargs.get("attention_mask"),
-                position_ids=position_ids,
                 use_cache=True,
                 past_key_values=self.assistant_kwargs["past_key_values"],
             )
@@ -1539,6 +1555,10 @@ class DFlashTokenCandidateGenerator(AssistedCandidateGenerator):
         candidate_ids = candidate_logits.argmax(dim=-1)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=1)
         return candidate_ids, candidate_logits
+
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+        # not used but has to be overriden from an abstract parent
+        return
 
 
 class MTPCandidateGenerator(AssistedCandidateGenerator):

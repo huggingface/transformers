@@ -73,30 +73,29 @@ class Exaone4DecoderLayer(Exaone4DecoderLayer):
 
 class OnyxTargetEncoder(nn.Module):
     def __init__(self, config: OnyxAssistantConfig):
+        super().__init__()
         # fuse concatenated target hidden states -> hidden_size
+        self.target_layer_ids = config.target_layer_ids
         encoder_input_size = len(config.target_layer_ids) * config.hidden_size
         self.fc = nn.Linear(encoder_input_size, config.hidden_size, bias=False)
         self.output_norm_enc = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, target_hidden_states: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, target_hidden_states: torch.Tensor) -> torch.Tensor:
         """
         target_hidden_states (`torch.Tensor` of shape `[batch, seq_len, target_hidden_size]`):
-            list of tensors, one per `config.target_layer_ids` entry in that order
+            concatenated list of tensors, one per `config.target_layer_ids` entry in that order
         """
-        if len(target_hidden_states) != len(self.config.target_layer_ids):
-            raise ValueError(
-                f"expected {len(self.config.target_layer_ids)} target hidden states, got {len(target_hidden_states)}"
-            )
-        fused = torch.cat(target_hidden_states, dim=-1)
-        fused = self.fc(fused)
-        fused = self.output_norm_enc(fused)
-        return fused
+        target_hidden_states = self.fc(target_hidden_states)
+        target_hidden_states = self.output_norm_enc(target_hidden_states)
+        return target_hidden_states
 
 
-class Exaone4Model(Exaone4Model):
+class OnyxAssistantModel(Exaone4Model):
     def __init__(self, config: OnyxAssistantConfig):
         super().__init__(config)
         del self.embed_tokens
+        del self.padding_idx
+        del self.vocab_size
         self.encoder = OnyxTargetEncoder(config)
 
     def update_cache_with_target_states(
@@ -167,3 +166,6 @@ class Exaone4Model(Exaone4Model):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
+
+
+__all__ = ["OnyxAssistantModel"]

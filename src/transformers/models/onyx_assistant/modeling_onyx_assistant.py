@@ -37,7 +37,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_onyx_assistant import OnyxAssistantConfig, OnyxAssistantExaone4Config
+from .configuration_onyx_assistant import OnyxAssistantConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -153,7 +153,7 @@ def eager_attention_forward(
 
 
 class OnyxAssistantExaone4Attention(nn.Module):
-    def __init__(self, config: OnyxAssistantExaone4Config, layer_idx: int):
+    def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -166,7 +166,6 @@ class OnyxAssistantExaone4Attention(nn.Module):
         self.is_causal = True
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
-        self.sliding_window_pattern = config.sliding_window_pattern
         layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.is_sliding = layer_type == "sliding_attention"
 
@@ -284,30 +283,27 @@ class Exaone4DecoderLayer(GradientCheckpointingLayer):
 
 class OnyxTargetEncoder(nn.Module):
     def __init__(self, config: OnyxAssistantConfig):
+        super().__init__()
         # fuse concatenated target hidden states -> hidden_size
+        self.target_layer_ids = config.target_layer_ids
         encoder_input_size = len(config.target_layer_ids) * config.hidden_size
         self.fc = nn.Linear(encoder_input_size, config.hidden_size, bias=False)
         self.output_norm_enc = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, target_hidden_states: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, target_hidden_states: torch.Tensor) -> torch.Tensor:
         """
         target_hidden_states (`torch.Tensor` of shape `[batch, seq_len, target_hidden_size]`):
-            list of tensors, one per `config.target_layer_ids` entry in that order
+            concatenated list of tensors, one per `config.target_layer_ids` entry in that order
         """
-        if len(target_hidden_states) != len(self.config.target_layer_ids):
-            raise ValueError(
-                f"expected {len(self.config.target_layer_ids)} target hidden states, got {len(target_hidden_states)}"
-            )
-        fused = torch.cat(target_hidden_states, dim=-1)
-        fused = self.fc(fused)
-        fused = self.output_norm_enc(fused)
-        return fused
+        target_hidden_states = self.fc(target_hidden_states)
+        target_hidden_states = self.output_norm_enc(target_hidden_states)
+        return target_hidden_states
 
 
 class OnyxAssistantExaone4RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: OnyxAssistantExaone4Config, device=None):
+    def __init__(self, config: OnyxAssistantConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -325,7 +321,7 @@ class OnyxAssistantExaone4RotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: OnyxAssistantExaone4Config | None = None,
+        config: OnyxAssistantConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -370,7 +366,7 @@ class OnyxAssistantExaone4RotaryEmbedding(nn.Module):
 
 
 class OnyxAssistantExaone4DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: OnyxAssistantExaone4Config, layer_idx: int):
+    def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = OnyxAssistantExaone4Attention(config=config, layer_idx=layer_idx)
@@ -412,7 +408,7 @@ class OnyxAssistantExaone4DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class OnyxAssistantExaone4PreTrainedModel(PreTrainedModel):
-    config: OnyxAssistantExaone4Config
+    config: OnyxAssistantConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OnyxAssistantExaone4DecoderLayer"]
@@ -427,15 +423,13 @@ class OnyxAssistantExaone4PreTrainedModel(PreTrainedModel):
         "hidden_states": OnyxAssistantExaone4DecoderLayer,
         "attentions": OnyxAssistantExaone4Attention,
     }
-    config_class = OnyxAssistantExaone4Config
+    config_class = OnyxAssistantConfig
 
 
 @auto_docstring
-class Exaone4Model(OnyxAssistantExaone4PreTrainedModel):
+class OnyxAssistantModel(OnyxAssistantExaone4PreTrainedModel):
     def __init__(self, config: OnyxAssistantConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
         self.layers = nn.ModuleList(
             [OnyxAssistantExaone4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -517,3 +511,6 @@ class Exaone4Model(OnyxAssistantExaone4PreTrainedModel):
             )
 
         return past_key_values
+
+
+__all__ = ["OnyxAssistantModel"]
