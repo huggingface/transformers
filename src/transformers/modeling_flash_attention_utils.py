@@ -531,7 +531,7 @@ def _prepare_from_posids(query, key, value, position_ids):
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 
-def _is_packed_sequence(position_ids, batch_size, query_length):
+def _is_packed_sequence(position_ids, batch_size, query_length=None):
     """
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
