@@ -25,7 +25,7 @@ The model consists of:
 
 1. **Conformer Encoder**: A conformer encoder trained with CTC on BPE targets, using block-attention and self-conditioned CTC from the middle layer.
 
-2. **QFormer Projector**: A windowed query-transformer that maps multi-layer encoder features to the LLM embedding space with temporal downsampling.
+2. **QFormer Projector**: A windowed query-transformer that maps multi-layer encoder features to the LLM embedding space while performing 5× temporal downsampling (15-frame windows → 3 queries). Compared to the BLIP-2 Q-Former ([Li et al., 2023](https://huggingface.co/papers/2301.12597)), the implementation differs in several undocumented ways: no query self-attention, pre-norm non-affine `LayerNorm`s, and queries initialized from learned embeddings plus mean-pooled 5-frame features.
 
 3. **Bidirectional Granite LLM**: A Granite language model with bidirectional (non-causal) attention that refines CTC predictions in a single forward pass.
 
@@ -92,9 +92,9 @@ print(processor.decode(two_steps.sequences[0], skip_special_tokens=True))
 
 [[autodoc]] GraniteSpeechNarEncoderConfig
 
-## GraniteSpeechNarProjectorConfig
+## GraniteSpeechNarEncoderProjectorConfig
 
-[[autodoc]] GraniteSpeechNarProjectorConfig
+[[autodoc]] GraniteSpeechNarEncoderProjectorConfig
 
 ## GraniteSpeechNarTextConfig
 
