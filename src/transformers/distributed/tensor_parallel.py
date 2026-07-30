@@ -292,12 +292,6 @@ class SequenceParallel(TensorParallelLayer):
 # =============================================================================
 
 
-def _packed_output_shard_dim(param_ndim: int) -> int:
-    """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
-    if param_ndim == 1:
-        return -1
-    return param_ndim - 2
-
 
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
@@ -313,11 +307,17 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.split_factor = split_factor
 
+    def _packed_output_shard_dim(self, param_ndim: int) -> int:
+        """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
+        if param_ndim == 1:
+            return -1
+        return param_ndim - 2
+        
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        shard_dim = _packed_output_shard_dim(meta.ndim)
+        shard_dim = self._packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
         if meta.ndim == 1:
             placement = Shard(shard_dim)
