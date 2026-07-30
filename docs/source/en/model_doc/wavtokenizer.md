@@ -41,10 +41,10 @@ This port was contributed as part of the Apertus 1.5 integration by the
 [here](https://github.com/jishengpeng/WavTokenizer). The released raw
 PyTorch Lightning checkpoints use one of two temporal configurations:
 
-| Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
-|---:|:---:|---:|---:|
-| 40 tokens/s | `[6, 5, 5, 4]` | 600 | 2400 |
-| 75 tokens/s | `[8, 5, 4, 2]` | 320 | 1280 |
+|  Token rate | `upsampling_ratios` | Hop length | ISTFT FFT size |
+|------------:|:-------------------:|-----------:|---------------:|
+| 40 tokens/s |   `[6, 5, 5, 4]`    |        600 |           2400 |
+| 75 tokens/s |   `[8, 5, 4, 2]`    |        320 |           1280 |
 
 The small, medium, large, domain-specific, and v2 releases share the remaining inference architecture.
 
@@ -53,16 +53,16 @@ The small, medium, large, domain-specific, and v2 releases share the remaining i
 All released checkpoints are available on the Hub already converted to the Transformers format and can be loaded
 directly with `from_pretrained`:
 
-| Checkpoint | Domain | Token rate | Converted from |
-|---|---|---:|---|
-| [swiss-ai/wavtokenizer-small-speech-40token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-40token) | speech | 40/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer) |
-| [swiss-ai/wavtokenizer-small-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-75token) | speech | 75/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer) |
-| [swiss-ai/wavtokenizer-medium-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token) | speech | 75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token) |
-| [swiss-ai/wavtokenizer-medium-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token-v2) | speech | 75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token) |
-| [swiss-ai/wavtokenizer-medium-music-audio-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token) | music/audio | 75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
-| [swiss-ai/wavtokenizer-medium-music-audio-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token-v2) | music/audio | 75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
-| [swiss-ai/wavtokenizer-large-unify-40token](https://huggingface.co/swiss-ai/wavtokenizer-large-unify-40token) | unified | 40/s | [novateur/WavTokenizer-large-unify-40token](https://huggingface.co/novateur/WavTokenizer-large-unify-40token) |
-| [swiss-ai/wavtokenizer-large-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-large-speech-75token-v2) | speech | 75/s | [novateur/WavTokenizer-large-speech-75token](https://huggingface.co/novateur/WavTokenizer-large-speech-75token) |
+| Checkpoint                                                                                                                        | Domain      | Token rate | Converted from                                                                                                              |
+|-----------------------------------------------------------------------------------------------------------------------------------|-------------|-----------:|-----------------------------------------------------------------------------------------------------------------------------|
+| [swiss-ai/wavtokenizer-small-speech-40token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-40token)                   | speech      |       40/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer)                                                       |
+| [swiss-ai/wavtokenizer-small-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-small-speech-75token)                   | speech      |       75/s | [novateur/WavTokenizer](https://huggingface.co/novateur/WavTokenizer)                                                       |
+| [swiss-ai/wavtokenizer-medium-speech-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token)                 | speech      |       75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token)           |
+| [swiss-ai/wavtokenizer-medium-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-speech-75token-v2)           | speech      |       75/s | [novateur/WavTokenizer-medium-speech-75token](https://huggingface.co/novateur/WavTokenizer-medium-speech-75token)           |
+| [swiss-ai/wavtokenizer-medium-music-audio-75token](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token)       | music/audio |       75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
+| [swiss-ai/wavtokenizer-medium-music-audio-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-medium-music-audio-75token-v2) | music/audio |       75/s | [novateur/WavTokenizer-medium-music-audio-75token](https://huggingface.co/novateur/WavTokenizer-medium-music-audio-75token) |
+| [swiss-ai/wavtokenizer-large-unify-40token](https://huggingface.co/swiss-ai/wavtokenizer-large-unify-40token)                     | unified     |       40/s | [novateur/WavTokenizer-large-unify-40token](https://huggingface.co/novateur/WavTokenizer-large-unify-40token)               |
+| [swiss-ai/wavtokenizer-large-speech-75token-v2](https://huggingface.co/swiss-ai/wavtokenizer-large-speech-75token-v2)             | speech      |       75/s | [novateur/WavTokenizer-large-speech-75token](https://huggingface.co/novateur/WavTokenizer-large-speech-75token)             |
 
 ## Converting custom checkpoints
 
