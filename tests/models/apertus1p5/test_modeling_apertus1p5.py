@@ -46,6 +46,7 @@ if is_torch_available():
         Apertus1p5TextConfig,
         Apertus1p5TextForCausalLM,
         Apertus1p5TextModel,
+        Apertus1p5TextPreTrainedModel,
         Apertus1p5VisionTokenizerConfig,
         Apertus1p5VisionTokenizerModel,
         WatermarkingConfig,
@@ -378,6 +379,25 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             logits_b = model(**{**inputs_dict, "input_features": loud_noise}).logits
         self.assertFalse(torch.allclose(logits_a, logits_b), "different audio must yield different logits")
 
+    def test_config_return_dict_false_with_multimodal_inputs(self):
+        """Internal model calls stay structured while the public output follows config-level tuple mode."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = False
+        config.text_config.return_dict = False
+        model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
+        inputs_dict = {key: value[:2] for key, value in inputs_dict.items()}
+
+        with torch.no_grad():
+            base_outputs = model.model(**inputs_dict, use_cache=False)
+            outputs = model(**inputs_dict, use_cache=False)
+            structured_outputs = model(**inputs_dict, use_cache=False, return_dict=True)
+
+        self.assertIsInstance(base_outputs, tuple)
+        self.assertEqual(base_outputs[0].shape[:2], inputs_dict["input_ids"].shape)
+        self.assertIsInstance(outputs, tuple)
+        self.assertEqual(outputs[0].shape[:2], inputs_dict["input_ids"].shape)
+        self.assertEqual(structured_outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
+
     def test_expand_inputs_for_generation_preserves_media_groups(self):
         config = self.model_tester.get_config()
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
@@ -624,8 +644,32 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
         labels[0, 2] = 60  # a valid input id beyond the pruned head
         with self.assertRaisesRegex(ValueError, "masked with -100"):
             model(input_ids=input_ids, labels=labels)
+        labels[0, 2] = -1
+        with self.assertRaisesRegex(ValueError, "must be -100"):
+            model(input_ids=input_ids, labels=labels)
         labels[0, 2] = -100
         self.assertTrue(bool(torch.isfinite(model(input_ids=input_ids, labels=labels).loss)))
+
+    def test_config_return_dict_false(self):
+        config = self._tiny_config()
+        config.return_dict = False
+        model = Apertus1p5TextForCausalLM(config).to(torch_device).eval()
+        input_ids = ids_tensor([2, 5], config.vocab_size)
+
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, use_cache=False)
+            structured_outputs = model(input_ids=input_ids, use_cache=False, return_dict=True)
+
+        self.assertIsInstance(outputs, tuple)
+        self.assertEqual(outputs[0].shape[:2], input_ids.shape)
+        self.assertEqual(structured_outputs.logits.shape[:2], input_ids.shape)
+
+    def test_uses_text_pretrained_base(self):
+        self.assertTrue(issubclass(Apertus1p5TextForCausalLM, Apertus1p5TextPreTrainedModel))
+        self.assertEqual(
+            set(Apertus1p5TextForCausalLM._can_record_outputs or {}),
+            {"hidden_states", "attentions"},
+        )
 
     def test_pruned_head_guards(self):
         with self.assertRaisesRegex(ValueError, "cannot be tied"):

@@ -81,6 +81,14 @@ class Apertus1p5ConversionTest(unittest.TestCase):
         # the backbone's own entrypoint must not leak into the text sub-config
         self.assertIsNone(getattr(config.text_config, "architectures", None))
 
+    def test_convert_rejects_output_dir_equal_to_source(self):
+        # writing the composite into a source directory would overwrite its config and delete its weights
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaisesRegex(ValueError, "same directory"):
+                conversion.convert("apertus", "vision", tmp_dir, tmp_dir)
+            with self.assertRaisesRegex(ValueError, "same directory"):
+                conversion.write_processor(tmp_dir, "audio", tmp_dir)
+
     def test_convert_removes_stale_canonical_weight_files(self):
         config = Mock(tie_word_embeddings=False)
         converted_weights = {"lm_head.weight": torch.ones(2, 2)}
