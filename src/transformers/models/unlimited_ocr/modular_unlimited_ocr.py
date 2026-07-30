@@ -764,7 +764,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         negative to remove `max_length` tokens.
         """
         # Sliding window
-        if self.prefill_length is not None and self.get_seq_length() >= self.prefill_length:
+        if self.cumulative_length > 0:
             sliding_max_length = max(max_length, -self.cumulative_length)
             max_length = abs(max_length - sliding_max_length)
             super().crop(sliding_max_length)
