@@ -35,6 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
@@ -390,7 +391,8 @@ def augment_patches_center_coordinates(
 class EomtDinov3RotaryEmbedding(nn.Module):
     inv_freq: Tensor
 
-    def __init__(self, config: EomtDinov3Config):
+    @deprecate_kwargs("device", version="5.18")
+    def __init__(self, config: EomtDinov3Config, device=None):
         super().__init__()
         self.config = config
 
@@ -398,7 +400,7 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -438,7 +440,8 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
     @staticmethod
-    def compute_default_rope_parameters(config: EomtDinov3Config) -> torch.Tensor:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -454,7 +457,7 @@ class EomtDinov3RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py

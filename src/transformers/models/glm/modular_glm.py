@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -40,7 +41,8 @@ class GlmMLP(Phi3MLP):
 
 class GlmRotaryEmbedding(LlamaRotaryEmbedding):
     @staticmethod
-    def compute_default_rope_parameters(config: GlmConfig) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(config: GlmConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

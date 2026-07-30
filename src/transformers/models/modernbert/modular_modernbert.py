@@ -40,6 +40,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import eager_attention_forward
@@ -236,7 +237,10 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     @staticmethod
-    def compute_default_rope_parameters(config: ModernBertConfig, layer_type: str) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: ModernBertConfig, layer_type: str, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, layer_type)
 
 

@@ -25,6 +25,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
@@ -142,7 +143,10 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     @staticmethod
-    def compute_default_rope_parameters(config: MiMoV2FlashConfig, layer_type: str) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: MiMoV2FlashConfig, layer_type: str, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

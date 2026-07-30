@@ -28,6 +28,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
 )
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -150,7 +151,8 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    def __init__(self, config: EomtDinov3Config):
+    @deprecate_kwargs("device", version="5.18")
+    def __init__(self, config: EomtDinov3Config, device=None):
         nn.Module.__init__(self)
         self.config = config
 
@@ -158,13 +160,14 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: EomtDinov3Config) -> torch.Tensor:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(config: EomtDinov3Config, device=None, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -180,7 +183,7 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
-        return inv_freq, attention_factor
+        return inv_freq.to(device), attention_factor
 
 
 class EomtDinov3Loss(EomtLoss):

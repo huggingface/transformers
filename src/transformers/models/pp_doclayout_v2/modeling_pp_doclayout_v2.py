@@ -46,6 +46,7 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
@@ -86,7 +87,10 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: PPDocLayoutV2Config) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: PPDocLayoutV2Config, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

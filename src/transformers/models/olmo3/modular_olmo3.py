@@ -26,6 +26,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import TransformersKwargs, maybe_autocast
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..olmo2.configuration_olmo2 import Olmo2Config
@@ -189,7 +190,10 @@ class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     @staticmethod
-    def compute_default_rope_parameters(config: Olmo3Config, layer_type: str) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: Olmo3Config, layer_type: str, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, layer_type)
 
     def forward(self, x, position_ids, layer_type):

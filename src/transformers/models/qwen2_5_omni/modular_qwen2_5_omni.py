@@ -1662,8 +1662,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig):
-        super().__init__(config)
+    pass
 
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
@@ -2347,12 +2346,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniDiTConfig):
-        super().__init__(config)
-
-    @staticmethod
-    def compute_default_rope_parameters(config: Qwen2_5OmniDiTConfig) -> tuple[torch.Tensor, float]:
-        return super().compute_default_rope_parameters(config)
+    pass
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:

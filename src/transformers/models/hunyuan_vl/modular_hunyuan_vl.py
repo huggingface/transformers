@@ -592,7 +592,7 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 
 
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
-    def __init__(self, config: HunYuanVLTextConfig):
+    def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__(config)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")

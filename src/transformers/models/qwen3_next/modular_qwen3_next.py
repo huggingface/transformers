@@ -29,6 +29,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwargs
 from ...utils.generic import maybe_replace_from_package, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -82,7 +83,8 @@ class Qwen3NextRMSNormGated(nn.Module):
 
 class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
     @staticmethod
-    def compute_default_rope_parameters(config: Qwen3NextConfig) -> tuple[torch.Tensor, float]:
+    @deprecate_kwargs("device", version="5.18")
+    def compute_default_rope_parameters(config: Qwen3NextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
