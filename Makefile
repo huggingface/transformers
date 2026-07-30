@@ -20,6 +20,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	import_complexity, \
 	copies, \
 	modular_conversion, \
+	model_inits, \
 	doc_toc, \
 	modeling_rules_doc, \
 	docstrings, \
