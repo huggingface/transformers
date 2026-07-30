@@ -12,48 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Assemble an Apertus 1.5 composite checkpoint from its three weight sources:
+Assemble a self-contained Apertus 1.5 checkpoint from three converted sources:
 
-  1. the Apertus 1.5 language backbone (a flat causal-LM checkpoint with the enlarged vocabulary). Backbones
-     are expected to ship a PRUNED output layer: the multimodal rows are removed from `lm_head.weight`, and
-     `output_vocab_size` in their config records the retained row count (131072 for the released checkpoints;
-     input embeddings keep the full `vocab_size`). Unpruned backbones still convert, with a warning during
-     `--verify`,
-  2. the converted encode-only EMU3.5 vision tokenizer (output of `scripts/check_apertus1p5_vision_tokenizer_parity.py
-     --save_converted`, keys already in the `Apertus1p5VisionTokenizerModel` layout),
-  3. the converted WavTokenizer audio codec (output of
-     `src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py`).
+1. An Apertus 1.5 causal-LM backbone with the enlarged input vocabulary. Released checkpoints use a pruned,
+   text-only LM head whose physical width is recorded by `output_vocab_size`.
+2. The encode-only EMU3.5 vision tokenizer in `Apertus1p5VisionTokenizerModel` format, as produced by
+   `scripts/check_apertus1p5_vision_tokenizer_parity.py --save_converted`.
+3. A WavTokenizer checkpoint produced by `convert_wavtokenizer_checkpoint.py`.
 
-Key mapping into the composite `Apertus1p5ForConditionalGeneration` namespace:
-  - apertus `model.X`  -> `model.language_model.X`; `lm_head.weight` stays `lm_head.weight` (for backbones with tied
-    word embeddings, which ship no `lm_head.weight` tensor, the tie flag is propagated to the composite config
-    so the head is tied at load time)
-  - vision  `X`        -> `model.vision_tokenizer.X`
-  - audio   `X`        -> `model.audio_tokenizer.X`
+Weights are mapped into `Apertus1p5ForConditionalGeneration` as follows:
 
-Checkpoint layout: the composite is ONE self-contained checkpoint holding all three weight sets:
-`from_pretrained` loads exactly one state dict, and `sub_configs` carry configs only, never weight locations,
-so the tokenizer weights must be bundled even where standalone hub repos exist (same pattern as Emu3, whose
-converter merges `BAAI/Emu3-VisionTokenizer` + `BAAI/Emu3-Chat` into the single `BAAI/Emu3-Chat-hf`; the
-standalone repos remain for standalone users and as inputs to this script). Shards are grouped by source
-(`model-<source>-...`) purely as a physical layout choice; it keeps conversion streaming and the shards
-inspectable; `from_pretrained` only follows the index's key -> file map, and a `save_pretrained`/`push_to_hub`
-round trip would re-shard by size with identical behavior.
+- backbone `model.X` -> `model.language_model.X`; `lm_head.weight` remains at the top level
+- vision `X` -> `model.vision_tokenizer.X`
+- audio `X` -> `model.audio_tokenizer.X`
 
-With `--output_dir`, writes a self-contained composite checkpoint: config, sharded safetensors, and the full
-processor stack (tokenizer taken as-is from the backbone, incl. its named media special-token attributes and
-chat template, image processor, audio feature extractor, unified processor config). The converter never
-modifies the tokenizer; it only warns when the backbone predates the apertus-omni-tokenizer updates (named
-special tokens, list-of-content-blocks template branch, left padding). `--processor_only` rewrites just the
-processor stack without re-sharding the weights.
-With `--verify`, loads the written composite via `from_pretrained` (asserting a clean load with no missing or
-unexpected keys) and runs smoke checks: per-submodule dtypes (the tokenizers must stay fp32 in a bf16 load),
-AutoProcessor round trip with structure-token id cross-checks, offset cross-checks against the tokenizer
-vocabulary, a short greedy text generation, and processor-driven image and audio forwards. Any failed check
-raises.
+For a tied backbone without `lm_head.weight`, the tie setting is copied to the composite config. The output
+contains all three weight sets in source-grouped safetensor shards, the merged config, and the processor stack
+derived from the backbone tokenizer. `--processor_only` refreshes only that stack, while `--verify` checks loading,
+dtypes, token mappings, text generation, and processor-driven image/audio forwards.
 
-Each weight source may be a local directory or a hub repo id (`repo_id` or `repo_id@revision`); hub sources
-are downloaded as full snapshots into the local hub cache before conversion.
+Sources may be local directories or Hub identifiers in `repo_id` or `repo_id@revision` form.
 
 Example:
     python src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py \
@@ -119,7 +97,20 @@ def _has_valid_logits_layout(logits: torch.Tensor, output_vocab_size: int, vocab
     )
 
 
+def _check_output_is_not_a_source(output_dir: str, *source_dirs: str) -> None:
+    """Reject an output directory aliasing a source: the conversion overwrites `config.json` and deletes
+    canonical weight files in `output_dir`, which would destroy the source checkpoint."""
+    output_real = os.path.realpath(output_dir)
+    for source in source_dirs:
+        if os.path.realpath(source) == output_real:
+            raise ValueError(
+                f"`--output_dir` resolves to the same directory as the source checkpoint {source!r}; "
+                "choose a separate output directory."
+            )
+
+
 def build_processor(apertus_checkpoint: str, audio_tokenizer_config: dict) -> Apertus1p5Processor:
+    """Build the composite processor, warning when the backbone tokenizer lacks expected multimodal metadata."""
     tokenizer = AutoTokenizer.from_pretrained(apertus_checkpoint)
     missing = [name for name in NAMED_SPECIAL_TOKEN_ATTRIBUTES if getattr(tokenizer, name, None) is None]
     if missing:
@@ -157,6 +148,7 @@ def build_processor(apertus_checkpoint: str, audio_tokenizer_config: dict) -> Ap
 def build_config(
     apertus_checkpoint: str, vision_tokenizer_checkpoint: str, audio_tokenizer_checkpoint: str
 ) -> Apertus1p5Config:
+    """Merge the three source configurations into an Apertus 1.5 composite configuration."""
     with open(os.path.join(apertus_checkpoint, "config.json")) as f:
         text_config = json.load(f)
     text_config.pop("architectures", None)
@@ -164,11 +156,6 @@ def build_config(
     # the 1.5 backbone supersedes plain apertus; its config understands `output_vocab_size` (pruned LM head)
     if text_config.get("model_type", "apertus") == "apertus":
         text_config["model_type"] = "apertus1p5_text"
-    if text_config.get("output_vocab_size") is not None and text_config.get("tie_word_embeddings", False):
-        raise ValueError(
-            "The backbone checkpoint declares a pruned LM head (`output_vocab_size`) together with tied "
-            "word embeddings; a pruned head cannot be tied."
-        )
     with open(os.path.join(vision_tokenizer_checkpoint, "config.json")) as f:
         vision_tokenizer_config = json.load(f)
     with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
@@ -189,9 +176,7 @@ def build_config(
 
 
 def resolve_checkpoint_dir(path_or_repo_id: str) -> str:
-    """Returns a local checkpoint directory: existing local paths pass through, anything else is treated as a
-    hub repo id (`repo_id` or `repo_id@revision`, e.g. `apertus-ai/Apertus-v1.5-8B-integration@refs/pr/1`) and
-    downloaded as a full snapshot into the local hub cache."""
+    """Resolve a local directory or download a Hub checkpoint (`repo_id` or `repo_id@revision`) to the cache."""
     if os.path.isdir(path_or_repo_id):
         return path_or_repo_id
     repo_id, _, revision = path_or_repo_id.partition("@")
@@ -243,6 +228,7 @@ def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, 
 
 
 def verify(composite_dir: str, max_new_tokens: int = 12):
+    """Load a composite checkpoint and run configuration, dtype, processor, generation, and modality smoke checks."""
     failed_checks = []
 
     model, loading_info = Apertus1p5ForConditionalGeneration.from_pretrained(
@@ -413,6 +399,10 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
 def convert(
     apertus_checkpoint: str, vision_tokenizer_checkpoint: str, audio_tokenizer_checkpoint: str, output_dir: str
 ):
+    """Remap and write all three weight sources together with their composite config and processor."""
+    _check_output_is_not_a_source(
+        output_dir, apertus_checkpoint, vision_tokenizer_checkpoint, audio_tokenizer_checkpoint
+    )
     os.makedirs(output_dir, exist_ok=True)
     config = build_config(apertus_checkpoint, vision_tokenizer_checkpoint, audio_tokenizer_checkpoint)
     config.save_pretrained(output_dir)
@@ -451,45 +441,60 @@ def convert(
 
 
 def write_processor(apertus_checkpoint: str, audio_tokenizer_checkpoint: str, output_dir: str):
-    """Writes the processor stack (tokenizer incl. special-token attributes and chat template, image
-    processor, feature extractor, unified processor config) into the composite."""
+    """Write the tokenizer, image processor, audio feature extractor, and unified processor configuration."""
+    _check_output_is_not_a_source(output_dir, apertus_checkpoint, audio_tokenizer_checkpoint)
     os.makedirs(output_dir, exist_ok=True)
     with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
         audio_tokenizer_config = json.load(f)
     processor = build_processor(apertus_checkpoint, audio_tokenizer_config)
     processor.save_pretrained(output_dir)
     generation_config = os.path.join(apertus_checkpoint, "generation_config.json")
+    output_generation_config = os.path.join(output_dir, "generation_config.json")
     if os.path.exists(generation_config):
-        shutil.copy(generation_config, os.path.join(output_dir, "generation_config.json"))
+        shutil.copy(generation_config, output_generation_config)
+    elif os.path.isfile(output_generation_config):
+        # an earlier conversion may have copied one from a different backbone source
+        os.remove(output_generation_config)
+        logger.info("removed stale generation_config.json (the backbone source ships none)")
     logger.info(f"processor, tokenizer and chat template written to {output_dir}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Assemble and optionally verify an Apertus 1.5 composite checkpoint.")
     parser.add_argument(
         "--apertus_checkpoint",
-        required=True,
-        help="Flat apertus backbone checkpoint: local dir or hub repo id (optionally `repo_id@revision`)",
+        help="Apertus 1.5 causal-LM backbone: local directory or Hub `repo_id[@revision]` "
+        "(not read with --skip_convert)",
     )
     parser.add_argument(
         "--vision_tokenizer_checkpoint",
-        help="Converted Apertus1p5VisionTokenizerModel checkpoint: local dir or hub repo id "
-        "(not needed with --processor_only)",
+        help="Converted Apertus1p5VisionTokenizerModel: local directory or Hub `repo_id[@revision]` "
+        "(not read with --processor_only or --skip_convert)",
     )
     parser.add_argument(
         "--audio_tokenizer_checkpoint",
-        required=True,
-        help="Converted WavTokenizerModel checkpoint: local dir or hub repo id",
+        help="Converted WavTokenizerModel: local directory or Hub `repo_id[@revision]` (not read with --skip_convert)",
     )
-    parser.add_argument("--output_dir", required=True, help="Where to write the composite checkpoint")
-    parser.add_argument("--verify", action="store_true", help="Load the written composite and run smoke checks")
-    parser.add_argument("--skip_convert", action="store_true", help="Reuse an existing composite at --output_dir")
+    parser.add_argument("--output_dir", required=True, help="Directory in which to write or find the composite")
+    parser.add_argument(
+        "--verify", action="store_true", help="Load the composite from --output_dir and run smoke checks"
+    )
+    parser.add_argument(
+        "--skip_convert", action="store_true", help="Skip weight conversion and reuse the composite in --output_dir"
+    )
     parser.add_argument(
         "--processor_only",
         action="store_true",
         help="Only (re)write the processor stack into --output_dir, without re-sharding the weights",
     )
     args = parser.parse_args()
+
+    if args.skip_convert and not args.processor_only and not args.verify:
+        parser.error("--skip_convert without --verify does nothing; pass --verify or drop --skip_convert")
+    if (args.processor_only or not args.skip_convert) and (
+        args.apertus_checkpoint is None or args.audio_tokenizer_checkpoint is None
+    ):
+        parser.error("--apertus_checkpoint and --audio_tokenizer_checkpoint are required unless --skip_convert is set")
 
     # resolve only the sources the selected mode actually reads, so e.g. --skip_convert --verify downloads nothing
     if args.processor_only:
