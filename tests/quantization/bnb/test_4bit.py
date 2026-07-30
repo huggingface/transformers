@@ -836,6 +836,7 @@ class Bnb4BitTestBasicConfigTest(unittest.TestCase):
 
     def test_bnb_4bit_compute_dtype_override(self):
         from transformers.quantizers.auto import AutoHfQuantizer
+
         saved_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_compute_dtype=torch.bfloat16,
@@ -844,10 +845,35 @@ class Bnb4BitTestBasicConfigTest(unittest.TestCase):
             load_in_4bit=True,
             bnb_4bit_compute_dtype=torch.float16,
         )
-        merged = AutoHfQuantizer.merge_quantization_configs(
-            saved_config, requested_config
-        )
+        merged = AutoHfQuantizer.merge_quantization_configs(saved_config, requested_config)
         self.assertEqual(merged.bnb_4bit_compute_dtype, torch.float16)
+
+    def test_bnb_4bit_compute_dtype_override_on_module(self):
+        import bitsandbytes as bnb
+        import torch.nn as nn
+
+        from transformers.integrations.bitsandbytes import replace_with_bnb_linear
+
+        class TinyModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc = nn.Linear(16, 16)
+
+        saved_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+        requested_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
+
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        merged_config = AutoHfQuantizer.merge_quantization_configs(saved_config, requested_config)
+
+        model = TinyModel()
+        model = replace_with_bnb_linear(model, quantization_config=merged_config)
+
+        linear4bit_modules = [m for m in model.modules() if isinstance(m, bnb.nn.Linear4bit)]
+        self.assertTrue(len(linear4bit_modules) > 0)
+        for m in linear4bit_modules:
+            self.assertEqual(m.compute_dtype, torch.float16)
+
 
 @require_bitsandbytes
 @require_accelerate
