@@ -168,7 +168,7 @@ _hf_api_to_flash_mapping = {
 }
 # alternative names within the different flash attention APIs, e.g. for attention sinks
 _flash_api_alternative_names = {
-    "s_aux": ["learnable_sink"],
+    "s_aux": ["learnable_sink", "sink"],
     "cu_seqlens_q": ["cu_seq_q"],
     "cu_seqlens_k": ["cu_seq_k"],
     "max_seqlen_q": ["max_q"],
