@@ -462,6 +462,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
         self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
+        self.speculation_type = kwargs.pop("speculation_type", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
