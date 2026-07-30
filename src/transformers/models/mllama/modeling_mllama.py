@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -707,6 +706,7 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
 class MllamaRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -724,20 +724,13 @@ class MllamaRotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: MllamaTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: MllamaTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -746,12 +739,9 @@ class MllamaRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     # Ignore copy
     @torch.no_grad()
@@ -1542,7 +1532,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
-        logits_to_keep=None,
+        logits_to_keep=0,
         is_first_iteration=False,
         **kwargs,
     ):

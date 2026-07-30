@@ -547,7 +547,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -859,44 +859,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_attention_mask=None,
-        image_hidden_states=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        use_cache=False,
-        **kwargs,
-    ):
-        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
-        # precedence is moved to the model, we can remove this fn)
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        if image_hidden_states is not None or (use_cache and not is_first_iteration):
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_attention_mask"] = None
-
-        return model_inputs
 
 
 __all__ = ["Idefics3ForConditionalGeneration", "Idefics3PreTrainedModel", "Idefics3Model", "Idefics3VisionTransformer"]
