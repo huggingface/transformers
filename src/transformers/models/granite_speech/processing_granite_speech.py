@@ -13,23 +13,28 @@
 # limitations under the License.
 """Processor class for Granite Speech."""
 
-from typing import Union
-
+from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available, logging
-from ...utils.import_utils import requires_backends
+from ...utils import auto_docstring
 
 
-if is_torch_available():
-    import torch
-
-logger = logging.get_logger(__name__)
+class GraniteSpeechProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+        },
+        "audio_kwargs": {
+            "device": "cpu",
+        },
+    }
 
 
 @auto_docstring
 class GraniteSpeechProcessor(ProcessorMixin):
+    valid_processor_kwargs = GraniteSpeechProcessorKwargs
+
     def __init__(
         self,
         audio_processor,
@@ -50,49 +55,13 @@ class GraniteSpeechProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
-        audio: Union["torch.Tensor", list["torch.Tensor"]] = None,
+        audio: AudioInput | None = None,
         device: str = "cpu",
-        **kwargs,
+        **kwargs: Unpack[GraniteSpeechProcessorKwargs],
     ) -> BatchFeature:
-        requires_backends(self, ["torch"])
-
         text = self._get_validated_text(text)
-        prompt_strings = text
-
-        if audio is not None:
-            # NOTE - we intentionally avoid throwing for potentially misaligned
-            # text / audio inputs here because some inference engines will
-            # trigger the conditions due to the way they call multimodal
-            # processors, e.g., vLLM.
-            audio_inputs = self.audio_processor(audio, device=device)
-
-            # TODO (@alex-jw-brooks); we should add a util to get_num_audio_tokens
-            # from feature lengths and call it here, rather than returning it
-            # from the feature extractor.
-            audio_embed_sizes = audio_inputs.pop("audio_embed_sizes")
-
-            # Expand the audio placeholders to match the feature dims; this
-            # is similar to how many VLMs handle image tokens, e.g., llava next
-            prompt_strings = []
-            num_replaced = 0
-            for sample in text:
-                while self.audio_token in sample:
-                    sample = sample.replace(
-                        self.audio_token,
-                        "<placeholder>" * audio_embed_sizes[num_replaced],
-                        1,
-                    )
-                    num_replaced += 1
-                prompt_strings.append(sample)
-
-            prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
-        else:
-            audio_inputs = {}
-
-        if "padding" not in kwargs:
-            kwargs["padding"] = True
-        text_inputs = self.tokenizer(prompt_strings, **kwargs)
-        return BatchFeature(data={**text_inputs, **audio_inputs})
+        kwargs.setdefault("audio_kwargs", {}).setdefault("device", device)
+        return super().__call__(text=text, audio=audio, **kwargs)
 
     def _get_validated_text(self, text: str | list) -> list[str]:
         if isinstance(text, str):
@@ -100,6 +69,24 @@ class GraniteSpeechProcessor(ProcessorMixin):
         elif isinstance(text, list) and isinstance(text[0], str):
             return text
         raise TypeError("Invalid text provided! Text should be a string or list of strings.")
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        # Audio samples are already collated
+        if len(audio) == 1 and audio[0].ndim == 2:
+            audio = audio[0]
+        audio_inputs = self.audio_processor(audio, device=kwargs["device"])
+
+        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_audio_tokens = audio_inputs["audio_embed_sizes"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["audio_embed_sizes"]
 
 
 __all__ = ["GraniteSpeechProcessor"]

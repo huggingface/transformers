@@ -673,7 +673,7 @@ class ProcessorMixin(PushToHubMixin):
             processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None and hasattr(self, "video_processor"):
             processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
-        if audio is not None and hasattr(self, "feature_extractor"):
+        if audio is not None and self._audio_processor is not None:
             processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
 
         text_inputs = {}
@@ -728,9 +728,9 @@ class ProcessorMixin(PushToHubMixin):
             # avoid in-place updates on text
             text = list(text).copy()
 
-        if audio is not None and hasattr(self, "feature_extractor"):
-            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
-            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+        if audio is not None and self._audio_processor is not None:
+            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
+            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -785,8 +785,13 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_videos, video_replacements
 
+    @property
+    def _audio_processor(self):
+        # TODO: To be replaced with `audio_processor`
+        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+
     def _process_audio(self, audio: AudioInput, **kwargs):
-        processed_audio = self.feature_extractor(audio, **kwargs)
+        processed_audio = self._audio_processor(audio, **kwargs)
 
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
@@ -2074,8 +2079,8 @@ class ProcessorMixin(PushToHubMixin):
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
         sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
         if sampling_rate is None:
-            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                sampling_rate = self.feature_extractor.sampling_rate
+            if hasattr(self._audio_processor, "sampling_rate"):
+                sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
