@@ -3350,6 +3350,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         schema: dict | None = None,
         *,
         prefix: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -3373,6 +3374,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 The prompt that came before generation. This is necessary because many chat templates
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                When passed, tool-call arguments are cast using the calling tool's JSON schema:
+                `"7"` becomes `7` for an integer parameter but stays `"7"` for a string one.
 
         Returns:
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.
@@ -3419,7 +3424,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             prefixes = prefix_texts
 
-        parsed = [_template_parse_response(text, schema, prefix=pfx) for text, pfx in zip(responses, prefixes)]
+        parsed = [
+            _template_parse_response(text, schema, prefix=pfx, tools=tools) for text, pfx in zip(responses, prefixes)
+        ]
         return parsed if batched else parsed[0]
 
     def get_response_parser(
@@ -3427,6 +3434,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         response_template: dict | None = None,
         *,
         prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """Return a stateful [`~utils.chat_parsing.ResponseParser`] for incrementally
         parsing a streamed response. Uses the tokenizer's `response_template` attribute unless
@@ -3436,7 +3444,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         the state implied by the chat-prompt context (right-truncated past the spec's `start_anchor`), so
         generated chunks fed via `stream.feed()` are classified correctly even when the chat template
         emitted assistant-turn content (e.g., `<think>\\n`) that the model continues from. Omitting it
-        raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out."""
+        raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out.
+
+        `tools` (`list[Union[Dict, Callable]]`, *optional*): tools available to the model, in the
+        same format as `apply_chat_template` accepts. When set, tool-call arguments are cast using
+        the calling tool's JSON schema as each region closes, so streaming `region_close` events
+        carry typed arguments.
+        """
         template = response_template if response_template is not None else getattr(self, "response_template", None)
         if template is None:
             raise AttributeError(
@@ -3448,7 +3462,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError(
                     "`prefix=` must be a single sequence (str, list[int], or 1D tensor) for `get_response_parser`."
                 )
-        return ResponseParser(template, prefix=prefix)
+        return ResponseParser(template, prefix=prefix, tools=tools)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:
