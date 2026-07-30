@@ -93,6 +93,9 @@ class Aimv2TextConfig(SiglipTextConfig):
     qkv_bias: bool = False
     mlp_bias: bool = False
     initializer_range: float = 0.02
+    # AIMv2 uses the CLIP tokenizer, whose EOS token id is 49407. Set explicitly since the
+    # SigLIP default is different.
+    eos_token_id: int | list[int] | None = 49407
     bos_token_id = AttributeError()
     pad_token_id = AttributeError()
     layer_norm_eps = AttributeError()
