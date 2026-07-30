@@ -559,7 +559,7 @@ class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
         return self.linear(hidden_states)
 
 
-class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
+class GraniteSpeechNarEncoderProjector(nn.Module):
     """
     Differences with [`GraniteSpeechEncoderProjector`]:
     - takes the concatenated encoder layers as input (hidden_dim * num concatenated layers)
@@ -567,7 +567,8 @@ class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
     """
 
     def __init__(self, config: GraniteSpeechNarConfig):
-        super().__init__(config)
+        super().__init__()
+        self.encoder_hidden_dim = config.encoder_config.hidden_dim
         # the encoder concatenates `len(cat_hidden_layers) + 1` layers along hidden dim
         num_encoder_layers = len(config.encoder_config.cat_hidden_layers) + 1
         self.proj = nn.Linear(
@@ -580,11 +581,9 @@ class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
         self.act = nn.GELU()
         self.qformer = GraniteSpeechNarQFormerModel(config.projector_config)
 
-        self.post_init()
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # normalize each concatenated encoder layer independently, then fuse them into `hidden_size`
-        hidden_states = self.norm(hidden_states.unflatten(-1, (-1, self.norm.normalized_shape[0])))
+        hidden_states = self.norm(hidden_states.unflatten(-1, (-1, self.encoder_hidden_dim)))
         hidden_states = self.act(self.proj(hidden_states.flatten(-2)))
         return self.qformer(hidden_states)
 

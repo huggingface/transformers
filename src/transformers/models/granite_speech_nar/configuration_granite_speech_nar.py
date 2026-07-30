@@ -40,6 +40,9 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
         Maximum relative positional embedding index (Shaw's relative positional encoding).
     conv_expansion_factor (`int`, *optional*, defaults to 2):
         Expansion factor for the conformer convolution module.
+    cat_hidden_layers (`list[int]`, *optional*, defaults to `[4, 8, 12]`):
+        Indices of intermediate encoder layers whose outputs are concatenated (with the always-appended
+        final layer) to form the projector input.
     self_conditioning_layer (`int`, *optional*):
         Layer index at which self-conditioning (mid-layer CTC feedback) is applied.
         Defaults to `num_layers // 2`.
@@ -47,9 +50,6 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
         Vocabulary size for the BPE CTC head.
     pooling_window (`int`, *optional*, defaults to 4):
         Window size for posterior-weighted pooling before the BPE CTC head.
-    cat_hidden_layers (`list[int]`, *optional*, defaults to `[4, 8, 12]`):
-        Indices of intermediate encoder layers whose outputs are concatenated (with the always-appended
-        final layer) to form the projector input.
 
     Example:
 
@@ -222,11 +222,6 @@ class GraniteSpeechNarTextConfig(PreTrainedConfig):
 @strict
 class GraniteSpeechNarConfig(PreTrainedConfig):
     r"""
-    Configuration for the GraniteSpeechNar non-autoregressive ASR model.
-
-    This model uses a conformer encoder with BPE CTC head, a windowed Q-Former projector,
-    and a bidirectional Granite LLM backbone for non-autoregressive speech recognition.
-
     encoder_config (`GraniteSpeechNarEncoderConfig` or `dict`, *optional*):
         Configuration for the conformer encoder.
     projector_config (`GraniteSpeechNarEncoderProjectorConfig` or `dict`, *optional*):

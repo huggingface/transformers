@@ -75,7 +75,6 @@ PATH_TO_DOC = "docs/source/en"
 
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
-    "GraniteSpeechNarQFormerModel",
     "AltRobertaModel",
     "DPRSpanPredictor",
     "UdopStack",
@@ -132,6 +131,8 @@ PRIVATE_MODELS = [
     "PeAudioPreTrainedModel",
     "PeAudioVideoPreTrainedModel",
     "PeVideoPreTrainedModel",
+    "GraniteSpeechNarQFormerModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
+    "GraniteSpeechNarTextModel",  # Building part of bigger (tested) model. Tested implicitly through GraniteSpeechNarForCTC.
     # the following models should have been PreTrainedModels
     "Owlv2TextTransformer",
     "Owlv2VisionTransformer",
