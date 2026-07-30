@@ -263,7 +263,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("granite_speech_encoder", "GraniteSpeechEncoderConfig"),
         ("granite_speech_nar", "GraniteSpeechNarConfig"),
         ("granite_speech_nar_encoder", "GraniteSpeechNarEncoderConfig"),
-        ("granite_speech_nar_projector", "GraniteSpeechNarProjectorConfig"),
+        ("granite_speech_nar_projector", "GraniteSpeechNarEncoderProjectorConfig"),
         ("granite_speech_nar_text", "GraniteSpeechNarTextConfig"),
         ("granite_speech_plus", "GraniteSpeechPlusConfig"),
         ("granite_speech_plus_encoder", "GraniteSpeechPlusEncoderConfig"),

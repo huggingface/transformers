@@ -19,14 +19,14 @@ pointing at `GraniteSpeechNarForASR`) and stores its weights under the pre-refac
   * the language model lives under `language_model.model.*` / `language_model.lm_head.*`,
   * the conformer encoder, projector and BPE CTC head are flat top-level `encoder.*` /
     `projector.*` (with `encoder.out_bpe.*` for the BPE head), and
-  * the projector's Q-Former uses a fused `cross_attention.{q,k,v,o}_proj` attention.
+  * the projector holds `layer_projector`, `out_linear`, `query`, `window_positions`, and a Q-Former
+    whose layers use `cross_attention.{q,k,v,o}_proj` + `mlp` with affine `*_norm` LayerNorms.
 
-The native model nests everything under `base_model_prefix = "model"` and reuses Blip2's
-multi-head attention in the Q-Former, so the cross-attention projections become
-`cross_attention.{query,key,value}` with the output projection lifted to the layer (`o_proj`).
-These are exactly the renamings that used to live in `conversion_mapping.py` under the
-`granite_speech_nar` / `GraniteSpeechNarModel` entries; applying them here at conversion time lets
-us drop that runtime mapping entirely (mirroring `convert_nemotron_asr_streaming_to_hf.py`).
+The native model nests everything under `base_model_prefix = "model"`. Its projector renames the input
+fusion to `proj` and moves the query tokens (`queries`), window positions (`pos_emb`) and output head
+(`linear`) onto the Q-Former submodule. The Q-Former cross-attention is a `LlamaAttention` (so it keeps
+`cross_attn.{q,k,v,o}_proj`), and every projector/Q-Former LayerNorm is affine-free (its checkpoint
+affine params are identity, so they are dropped at conversion time).
 """
 
 import argparse
@@ -47,27 +47,24 @@ from transformers.utils.hub import cached_file, get_checkpoint_shard_files
 
 
 # Ordered regex renamings from the original checkpoint namespace to the native HF layout. Order
-# matters: `encoder.out_bpe` must precede the generic `encoder` prefix so the BPE head is lifted to
-# the model level instead of being buried under `model.encoder`, and the Q-Former cross-attention
-# renames run last, after `projector` has already been prefixed with `model.`.
+# matters: `encoder.out_bpe` must precede the generic `encoder` prefix (so the BPE head is lifted to
+# the model level rather than buried under `model.encoder`), the specific `projector.*` renames must
+# precede the generic `projector` prefix, and the Q-Former cross-attention rename runs last.
 ORIGINAL_TO_HF_WEIGHT_MAPPING = {
     r"^language_model\.model": "model.language_model",
     r"^language_model\.lm_head": "lm_head",
     r"^encoder\.out_bpe": "model.out_bpe",
     r"^encoder": "model.encoder",
+    # The multi-layer input fusion is renamed `layer_projector` -> `proj`.
+    r"^projector\.layer_projector": "model.projector.proj",
+    # The query tokens, window positions and output head now live on the `qformer` submodule.
+    r"^projector\.out_linear": "model.projector.qformer.linear",
+    r"^projector\.query": "model.projector.qformer.queries",
+    r"^projector\.window_positions": "model.projector.qformer.pos_emb",
     r"^projector": "model.projector",
-    # `window_positions` lives on the Q-Former (it is applied inside its forward), so it moves under
-    # the `qformer` submodule rather than sitting directly on the projector.
-    r"projector\.window_positions": "projector.qformer.window_positions",
-    # The projector reuses the parent `GraniteSpeechEncoderProjector.linear` as its output head.
-    r"projector\.out_linear": "projector.linear",
-    # The projector's Q-Former reuses Blip2's multi-head attention (`query`/`key`/`value`) instead
-    # of the fused `q_proj`/`k_proj`/`v_proj`, and applies the output projection at the layer level
-    # (`o_proj`) rather than inside `cross_attention`.
-    r"qformer\.layers\.(\d+)\.cross_attention\.q_proj": r"qformer.layers.\1.cross_attention.query",
-    r"qformer\.layers\.(\d+)\.cross_attention\.k_proj": r"qformer.layers.\1.cross_attention.key",
-    r"qformer\.layers\.(\d+)\.cross_attention\.v_proj": r"qformer.layers.\1.cross_attention.value",
-    r"qformer\.layers\.(\d+)\.cross_attention\.o_proj": r"qformer.layers.\1.o_proj",
+    # The Q-Former cross-attention is a `LlamaAttention` (`q_proj`/`k_proj`/`v_proj`/`o_proj` kept as
+    # is); only the module name changes from `cross_attention` to `cross_attn`.
+    r"qformer\.layers\.(\d+)\.cross_attention": r"qformer.layers.\1.cross_attn",
 }
 
 
@@ -127,7 +124,7 @@ def write_processor(hf_repo_id, output_dir, revision=None):
 STALE_CONFIG_KEYS = {
     "": ["min_edit_sequence_length", "scale_projected_embeddings", "audio_token_id", "encoder_layer_indices"],
     "encoder_config": ["pred_dropout", "blank_token_id"],
-    "projector_config": ["llm_dim", "mlp_bias", "mlp_ratio", "num_heads"],
+    "projector_config": ["llm_dim", "mlp_bias", "encoder_dim", "num_encoder_layers", "dropout_prob"],
 }
 
 
@@ -156,6 +153,21 @@ def write_model(hf_repo_id, output_dir, revision=None):
             encoder_config["vocabulary_size"] = encoder_config.pop("bpe_output_dim")
         if "bpe_pooling_window" in encoder_config:
             encoder_config["pooling_window"] = encoder_config.pop("bpe_pooling_window")
+    # The native projector config uses standard library field names; rename the original shorthands.
+    projector_config = config_dict.get("projector_config")
+    if isinstance(projector_config, dict):
+        _renames = {
+            "num_heads": "num_attention_heads",
+            "num_layers": "num_hidden_layers",
+            "block_size": "window_size",
+            "layernorm_eps": "layer_norm_eps",
+            "attn_bias": "attention_bias",
+        }
+        for old, new in _renames.items():
+            if old in projector_config:
+                projector_config[new] = projector_config.pop(old)
+        if "mlp_ratio" in projector_config:
+            projector_config["intermediate_size"] = projector_config["hidden_size"] * projector_config.pop("mlp_ratio")
     config = GraniteSpeechNarConfig.from_dict(config_dict)
     # Drop remote-code pointers and any stale checkpoint path so the output is a pure native model.
     config.auto_map = {}

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -29,23 +30,22 @@ from ...masking_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING
-from ..blip_2.modeling_blip_2 import Blip2QFormerMultiHeadAttention
 from ..glmasr.modeling_glmasr import GlmAsrMLP
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, repeat_kv
 from ..granite_speech.modeling_granite_speech import (
     GraniteSpeechConformerBlock,
     GraniteSpeechCTCEncoder,
-    GraniteSpeechEncoderProjector,
     GraniteSpeechModel,
 )
 from ..granite_speech_plus.configuration_granite_speech_plus import GraniteSpeechPlusEncoderConfig
+from ..llama.modeling_llama import LlamaAttention
 
 
 logger = logging.get_logger(__name__)
@@ -106,58 +106,63 @@ class GraniteSpeechNarEncoderConfig(GraniteSpeechPlusEncoderConfig):
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
-class GraniteSpeechNarProjectorConfig(PreTrainedConfig):
+class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
     r"""
-    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar.
+    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar. It reduces each
+    `window_size`-frame window of encoder features to `window_size // downsample_rate` query tokens.
 
-    encoder_dim (`int`, *optional*, defaults to 1024):
-        Hidden dimension of each concatenated encoder layer fed to the projector.
-    downsample_rate (`int`, *optional*, defaults to 5):
-        Temporal downsampling rate within each window block.
-    num_encoder_layers (`int`, *optional*, defaults to 4):
-        Number of encoder layers concatenated as projector input.
-    num_layers (`int`, *optional*, defaults to 2):
+    hidden_size (`int`, *optional*, defaults to 2048):
+        Dimension of the Q-Former (and of its output, which is fed to the language model).
+    intermediate_size (`int`, *optional*, defaults to 4096):
+        Dimension of the Q-Former MLP.
+    num_hidden_layers (`int`, *optional*, defaults to 2):
         Number of Q-Former layers.
-    block_size (`int`, *optional*, defaults to 15):
-        Window size for blocked cross-attention in the projector.
-    layernorm_eps (`float`, *optional*, defaults to 1e-6):
-        Epsilon for layer normalization.
-    attn_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in the Q-Former output projection.
-    encoder_hidden_size (`int`, *optional*):
-        Hidden size of the cross-attention key/value inputs. Defaults to `hidden_size`.
+    num_attention_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads in the Q-Former cross-attention.
+    num_key_value_heads (`int`, *optional*):
+        Number of key/value heads in the Q-Former cross-attention. Defaults to `num_attention_heads` (MHA).
+    hidden_act (`str`, *optional*, defaults to `"silu"`):
+        Activation function of the Q-Former MLP.
+    window_size (`int`, *optional*, defaults to 15):
+        Number of encoder frames per Q-Former window.
+    downsample_rate (`int`, *optional*, defaults to 5):
+        Temporal downsampling rate: each window yields `window_size // downsample_rate` query tokens.
+    attention_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use a bias in the Q-Former cross-attention projections.
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability applied to the Q-Former cross-attention weights.
+    layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        Epsilon for the Q-Former layer normalizations.
 
     Example:
 
     ```python
-    >>> from transformers import GraniteSpeechNarProjectorConfig
+    >>> from transformers import GraniteSpeechNarEncoderProjectorConfig
 
-    >>> configuration = GraniteSpeechNarProjectorConfig()
+    >>> configuration = GraniteSpeechNarEncoderProjectorConfig()
     >>> print(configuration.hidden_size)
     2048
     ```"""
 
     model_type = "granite_speech_nar_projector"
 
-    encoder_dim: int = 1024
-    downsample_rate: int = 5
-    num_encoder_layers: int = 4
     hidden_size: int = 2048
-    num_attention_heads: int = 32
-    num_layers: int = 2
-    dropout_prob: float = 0.1
-    block_size: int = 15
-    layernorm_eps: float = 1e-6
-    attn_bias: bool = True
-    attention_probs_dropout_prob: float = 0.0
-    encoder_hidden_size: int | None = None
-    hidden_act: str = "silu"
     intermediate_size: int = 4096
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    window_size: int = 15
+    downsample_rate: int = 5
+    attention_bias: bool = True
+    attention_dropout: float = 0.0
+    layer_norm_eps: float = 1e-6
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
-        if self.encoder_hidden_size is None:
-            self.encoder_hidden_size = self.hidden_size
+        # MHA cross-attention: default the number of key/value heads to the number of attention heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
@@ -184,7 +189,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
 
     encoder_config (`GraniteSpeechNarEncoderConfig` or `dict`, *optional*):
         Configuration for the conformer encoder.
-    projector_config (`GraniteSpeechNarProjectorConfig` or `dict`, *optional*):
+    projector_config (`GraniteSpeechNarEncoderProjectorConfig` or `dict`, *optional*):
         Configuration for the windowed Q-Former audio projector.
     blank_token_id (`int`, *optional*, defaults to 100257):
         Token ID used as the CTC blank symbol (the checkpoint reuses the EOS token).
@@ -192,11 +197,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
         Weight for the auxiliary cross-entropy loss on the LLM output.
     encoder_ctc_loss_lambda (`float`, *optional*, defaults to 0.0):
         Weight for the auxiliary encoder BPE CTC loss.
-    downsample_rate (`int`, *optional*, defaults to 5):
-        Temporal downsampling rate of the windowed projector: each `window_size`-frame window is
-        reduced to `window_size // downsample_rate` query tokens.
-    window_size (`int`, *optional*, defaults to 15):
-        Number of encoder frames per projector window.
 
     Example:
 
@@ -212,7 +212,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     model_type = "granite_speech_nar"
     sub_configs = {
         "encoder_config": GraniteSpeechNarEncoderConfig,
-        "projector_config": GraniteSpeechNarProjectorConfig,
+        "projector_config": GraniteSpeechNarEncoderProjectorConfig,
         "text_config": GraniteSpeechNarTextConfig,
     }
 
@@ -223,8 +223,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     blank_token_id: int = 100257
     ce_loss_lambda: float = 0.0
     encoder_ctc_loss_lambda: float = 0.0
-    downsample_rate: int = 5
-    window_size: int = 15
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -382,101 +380,179 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _no_split_modules = ["GraniteSpeechNarCTCEncoder", "GraniteSpeechNarProjector", "GraniteSpeechNarDecoderLayer"]
+    _no_split_modules = [
+        "GraniteSpeechNarCTCEncoder",
+        "GraniteSpeechNarEncoderProjector",
+        "GraniteSpeechNarDecoderLayer",
+    ]
     input_modalities = ("audio",)
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteSpeechNarProjector):
-            init.normal_(module.query, mean=0.0, std=module.hidden_size**-0.5)
-        elif isinstance(module, GraniteSpeechNarQFormerModel):
-            init.normal_(module.window_positions, mean=0.0, std=module.config.hidden_size**-0.5)
+        if isinstance(module, GraniteSpeechNarQFormerModel):
+            init.normal_(module.queries, mean=0.0, std=module.config.hidden_size**-0.5)
+            init.normal_(module.pos_emb, mean=0.0, std=module.config.hidden_size**-0.5)
         elif isinstance(module, GraniteSpeechNarCTCEncoder):
             init.copy_(module.attention_dists, module.compute_attention_dists())
 
 
-class GraniteSpeechNarQFormerCrossAttention(Blip2QFormerMultiHeadAttention): ...
+class GraniteSpeechNarQFormerCrossAttention(LlamaAttention):
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig, layer_idx: int):
+        super().__init__(config, layer_idx=layer_idx)
+        self.is_causal = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        query_shape = (*input_shape, -1, self.head_dim)
+        kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(query_shape).transpose(1, 2)
+        key_states = self.k_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class GraniteSpeechNarQFormerMLP(GlmAsrMLP): ...
 
 
-class GraniteSpeechNarQFormerLayer(nn.Module):
-    def __init__(self, config: GraniteSpeechNarProjectorConfig):
+class GraniteSpeechNarQFormerLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig, layer_idx: int):
         super().__init__()
-        self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_eps, elementwise_affine=False)
-        self.cross_attention = GraniteSpeechNarQFormerCrossAttention(config, is_cross_attention=True)
-        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attn_bias)
-        self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_eps, elementwise_affine=False)
-        self.mlp = GraniteSpeechNarQFormerMLP(config)
+        self.hidden_size = config.hidden_size
 
-    def forward(self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
-        attn_output, _ = self.cross_attention(
-            self.attn_norm(hidden_states), encoder_hidden_states=encoder_hidden_states
+        self.cross_attn = GraniteSpeechNarQFormerCrossAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GraniteSpeechNarQFormerMLP(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False
         )
-        hidden_states = hidden_states + self.o_proj(attn_output)
-        hidden_states = hidden_states + self.mlp(self.mlp_norm(hidden_states))
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Cross Attention
+        hidden_states, _ = self.cross_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
         return hidden_states
 
 
 class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
-    config: GraniteSpeechNarProjectorConfig
-
-    def __init__(self, config: GraniteSpeechNarProjectorConfig):
+    """
+    Differences with [`GraniteSpeechEncoderProjector`]'s Q-Former:
+    - no query self-attention
+    - mean-pooled window is added to the queries
+    - not the same ffn
+    """
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig):
         super().__init__(config)
-        self.dropout = nn.Dropout(config.dropout_prob)
-        self.window_positions = nn.Parameter(torch.zeros(1, config.block_size, config.hidden_size))
-        self.layers = nn.ModuleList([GraniteSpeechNarQFormerLayer(config) for _ in range(config.num_layers)])
+        self.window_size = config.window_size
+        self.hidden_size = config.hidden_size
+        self.num_queries = config.window_size // config.downsample_rate
+
+        self.layers = nn.ModuleList(
+            [GraniteSpeechNarQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.queries = nn.Parameter(torch.zeros(1, self.num_queries, config.hidden_size))
+        self.pos_emb = nn.Parameter(torch.zeros(1, config.window_size, config.hidden_size))
+
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.gradient_checkpointing = False
+
         self.post_init()
 
-    def forward(
-        self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
-        mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
-        hidden_states = self.dropout(query_embeds + mean_pool)
-        encoder_hidden_states = self.dropout(encoder_hidden_states + self.window_positions)
-
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, encoder_hidden_states)
-        return hidden_states
-
-
-class GraniteSpeechNarProjector(GraniteSpeechEncoderProjector):
-    def __init__(self, config: GraniteSpeechNarConfig):
-        super().__init__(config)
-        self.qformer = GraniteSpeechNarQFormerModel(config.projector_config)
-        self.layer_norm = nn.LayerNorm(
-            config.projector_config.encoder_dim, eps=config.projector_config.layernorm_eps, elementwise_affine=False
-        )
-        self.layer_projector = nn.Linear(
-            config.projector_config.encoder_dim * config.projector_config.num_encoder_layers,
-            config.projector_config.hidden_size,
-        )
-        self.projector_act = nn.GELU()
-        self.dropout = nn.Dropout(config.projector_config.dropout_prob)
-        self.out_norm = nn.LayerNorm(
-            config.projector_config.hidden_size, eps=config.projector_config.layernorm_eps, elementwise_affine=False
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
 
-        # Normalize each concatenated encoder layer independently
-        hidden_states = self.layer_norm(hidden_states.unflatten(-1, (-1, self.layer_norm.normalized_shape[0])))
-        hidden_states = self.projector_act(self.layer_projector(hidden_states.flatten(-2)))
-
+        # (batch_size, seq_len, hidden_size) -> (batch_size * nblocks, window_size, hidden_size)
         nblocks = math.ceil(seq_len / self.window_size)
-        pad = nblocks * self.window_size - seq_len
-        if pad > 0:
+        if (pad := nblocks * self.window_size - seq_len) > 0:
             hidden_states = F.pad(hidden_states, (0, 0, 0, pad))
-        hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, self.hidden_size)
+        encoder_hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, self.hidden_size)
 
-        hidden_states = self.qformer(query_embeds=self.query, encoder_hidden_states=hidden_states)
+        # seed each query with the mean of its `downsample_rate`-frame segment; bias the window with `pos_emb`
+        mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
+        hidden_states = self.queries + mean_pool
+        encoder_hidden_states = encoder_hidden_states + self.pos_emb
 
-        hidden_states = hidden_states.view(batch_size, nblocks * self.query.shape[1], -1)
-        hidden_states = self.dropout(self.out_norm(hidden_states))
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, encoder_hidden_states, **kwargs)
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.view(batch_size, nblocks * self.num_queries, self.hidden_size)
         return self.linear(hidden_states)
+
+
+class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
+    """
+    Differences with [`GraniteSpeechEncoderProjector`]:
+    - takes the concatenated encoder layers as input (hidden_dim * num concatenated layers)
+    - normalizes each concatenated encoder layer independently, then fuses them into `hidden_size`
+    """
+    def __init__(self, config: GraniteSpeechNarConfig):
+        super().__init__(config)
+        # the encoder concatenates `len(cat_hidden_layers) + 1` layers along hidden dim
+        num_encoder_layers = len(config.encoder_config.cat_hidden_layers) + 1
+        self.proj = nn.Linear(
+            config.encoder_config.hidden_dim * num_encoder_layers,
+            config.projector_config.hidden_size,
+        )
+        self.norm = nn.LayerNorm(
+            config.encoder_config.hidden_dim, eps=config.projector_config.layer_norm_eps, elementwise_affine=False
+        )
+        self.act = nn.GELU()
+        self.qformer = GraniteSpeechNarQFormerModel(config.projector_config)
+
+        self.post_init()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # normalize each concatenated encoder layer independently, then fuse them into `hidden_size`
+        hidden_states = self.norm(hidden_states.unflatten(-1, (-1, self.norm.normalized_shape[0])))
+        hidden_states = self.act(self.proj(hidden_states.flatten(-2)))
+        return self.qformer(hidden_states)
 
 
 class GraniteSpeechNarAttention(GraniteAttention):
@@ -596,7 +672,6 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechCTCEncoder):
 class GraniteSpeechNarModel(GraniteSpeechModel):
     def __init__(self, config: GraniteSpeechNarConfig):
         super().__init__(config)
-        self.projector = GraniteSpeechNarProjector(config)
         self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.vocabulary_size, bias=True)
         self.post_init()
 
@@ -886,7 +961,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
 __all__ = [
     "GraniteSpeechNarConfig",
     "GraniteSpeechNarEncoderConfig",
-    "GraniteSpeechNarProjectorConfig",
+    "GraniteSpeechNarEncoderProjectorConfig",
     "GraniteSpeechNarTextConfig",
     "GraniteSpeechNarCTCEncoder",
     "GraniteSpeechNarForCTC",

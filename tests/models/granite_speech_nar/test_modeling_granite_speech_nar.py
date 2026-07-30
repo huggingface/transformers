@@ -40,7 +40,7 @@ if is_torch_available():
     from transformers.audio_utils import load_audio
     from transformers.models.granite_speech_nar.configuration_granite_speech_nar import (
         GraniteSpeechNarEncoderConfig,
-        GraniteSpeechNarProjectorConfig,
+        GraniteSpeechNarEncoderProjectorConfig,
         GraniteSpeechNarTextConfig,
     )
     from transformers.models.granite_speech_nar.modeling_granite_speech_nar import (
@@ -153,15 +153,13 @@ class GraniteSpeechNarForCTCModelTester:
 
     def get_config(self):
         encoder_config = self.encoder_model_tester.get_config()
-        projector_config = GraniteSpeechNarProjectorConfig(
-            encoder_dim=self.encoder_model_tester.hidden_dim,
+        projector_config = GraniteSpeechNarEncoderProjectorConfig(
             downsample_rate=5,
-            num_encoder_layers=2,
             hidden_size=128,
             num_attention_heads=4,
-            num_layers=1,
+            num_hidden_layers=1,
             intermediate_size=256,
-            block_size=15,
+            window_size=15,
         )
         text_config = GraniteSpeechNarTextConfig(
             vocab_size=self.vocab_size,
@@ -289,6 +287,10 @@ class GraniteSpeechNarForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
     has_attentions = False
     _is_composite = True
+    # `out_bpe` (the encoder BPE CTC head) is an optional auxiliary head: it only receives gradients when
+    # `encoder_ctc_loss_lambda > 0`, which is disabled in the default config. Its training is covered by
+    # `test_loss` and `test_encoder_ctc_loss_is_additive_and_trains_out_bpe`.
+    test_all_params_have_gradient = False
 
     @unittest.skip(reason="GraniteSpeechNarForCTC takes audio input_features, not input_ids/inputs_embeds")
     def test_inputs_embeds(self):

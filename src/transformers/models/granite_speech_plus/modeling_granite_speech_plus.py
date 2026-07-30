@@ -100,11 +100,7 @@ class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
         if isinstance(module, GraniteSpeechPlusEncoderProjector):
             init.normal_(module.query)
         elif isinstance(module, GraniteSpeechPlusCTCEncoder):
-            context_size = module.config.context_size
-            seq = torch.arange(context_size)
-            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
-            init.copy_(module.attention_dists, attention_dists)
+            init.copy_(module.attention_dists, module.compute_attention_dists())
 
 
 @auto_docstring(
@@ -425,6 +421,7 @@ class GraniteSpeechPlusConformerBlock(nn.Module):
 
 
 class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
+    attention_dists: torch.Tensor  # fix linting for `register_buffer`
     config: GraniteSpeechPlusEncoderConfig
     input_modalities = "audio"
     _can_record_outputs = {
@@ -435,11 +432,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
     def __init__(self, config: GraniteSpeechPlusEncoderConfig):
         super().__init__(config)
 
-        # Precompute clamped relative positional encoding distances
-        seq = torch.arange(config.context_size)
-        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-        attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
-        self.register_buffer("attention_dists", attention_dists, persistent=False)
+        self.register_buffer("attention_dists", self.compute_attention_dists(), persistent=False)
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechPlusConformerBlock(config) for _ in range(config.num_layers)])
 
@@ -447,6 +440,13 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.num_layers = config.num_layers
         self.post_init()
+
+    def compute_attention_dists(self) -> torch.Tensor:
+        """Clamped relative positional distances used by Shaw's relative positional embeddings."""
+        context_size = self.config.context_size
+        seq = torch.arange(context_size)
+        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+        return torch.clamp(relpos_dist, -context_size, context_size) + self.config.max_pos_emb
 
     @merge_with_config_defaults
     @capture_outputs

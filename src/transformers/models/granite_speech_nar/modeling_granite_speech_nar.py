@@ -44,7 +44,7 @@ from ..auto import AutoModel
 from .configuration_granite_speech_nar import (
     GraniteSpeechNarConfig,
     GraniteSpeechNarEncoderConfig,
-    GraniteSpeechNarProjectorConfig,
+    GraniteSpeechNarEncoderProjectorConfig,
     GraniteSpeechNarTextConfig,
 )
 
@@ -308,222 +308,21 @@ class GraniteSpeechNarPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _no_split_modules = ["GraniteSpeechNarCTCEncoder", "GraniteSpeechNarProjector", "GraniteSpeechNarDecoderLayer"]
+    _no_split_modules = [
+        "GraniteSpeechNarCTCEncoder",
+        "GraniteSpeechNarEncoderProjector",
+        "GraniteSpeechNarDecoderLayer",
+    ]
     input_modalities = ("audio",)
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GraniteSpeechNarProjector):
-            init.normal_(module.query, mean=0.0, std=module.hidden_size**-0.5)
-        elif isinstance(module, GraniteSpeechNarQFormerModel):
-            init.normal_(module.window_positions, mean=0.0, std=module.config.hidden_size**-0.5)
+        if isinstance(module, GraniteSpeechNarQFormerModel):
+            init.normal_(module.queries, mean=0.0, std=module.config.hidden_size**-0.5)
+            init.normal_(module.pos_emb, mean=0.0, std=module.config.hidden_size**-0.5)
         elif isinstance(module, GraniteSpeechNarCTCEncoder):
-            context_size = module.config.context_size
-            seq = torch.arange(context_size)
-            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
-            init.copy_(module.attention_dists, attention_dists)
-
-
-# A single module-level `eager_attention_forward` is shared by both attention modules:
-# GQA language-model attention and MHA Q-Former cross-attention.
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    num_key_value_groups = getattr(module, "num_key_value_groups", 1)
-    key_states = repeat_kv(key, num_key_value_groups)
-    value_states = repeat_kv(value, num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask[..., : key_states.shape[-2]]
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-class GraniteSpeechNarQFormerCrossAttention(nn.Module):
-    def __init__(self, config, is_cross_attention=False):
-        super().__init__()
-        self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention heads (%d)"
-                % (config.hidden_size, config.num_attention_heads)
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.scaling = self.attention_head_size**-0.5
-        self.is_causal = False
-        self.attention_dropout = config.attention_probs_dropout_prob
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        if is_cross_attention:
-            self.key = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.encoder_hidden_size, self.all_head_size)
-        else:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size)
-            self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.attention_head_size)
-
-        if is_cross_attention:
-            current_states = encoder_hidden_states
-            attention_mask = encoder_attention_mask
-        else:
-            current_states = hidden_states
-
-        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
-        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
-        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        # NOTE: KV has a different bsz than Q so we take the broadcasted shapes instead of the input shape
-        attn_output = attn_output.reshape(*attn_output.shape[:2], -1).contiguous()
-        return attn_output, attn_weights
-
-
-class GraniteSpeechNarQFormerMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class GraniteSpeechNarQFormerLayer(nn.Module):
-    def __init__(self, config: GraniteSpeechNarProjectorConfig):
-        super().__init__()
-        self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_eps, elementwise_affine=False)
-        self.cross_attention = GraniteSpeechNarQFormerCrossAttention(config, is_cross_attention=True)
-        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attn_bias)
-        self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.layernorm_eps, elementwise_affine=False)
-        self.mlp = GraniteSpeechNarQFormerMLP(config)
-
-    def forward(self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
-        attn_output, _ = self.cross_attention(
-            self.attn_norm(hidden_states), encoder_hidden_states=encoder_hidden_states
-        )
-        hidden_states = hidden_states + self.o_proj(attn_output)
-        hidden_states = hidden_states + self.mlp(self.mlp_norm(hidden_states))
-        return hidden_states
-
-
-class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
-    config: GraniteSpeechNarProjectorConfig
-
-    def __init__(self, config: GraniteSpeechNarProjectorConfig):
-        super().__init__(config)
-        self.dropout = nn.Dropout(config.dropout_prob)
-        self.window_positions = nn.Parameter(torch.zeros(1, config.block_size, config.hidden_size))
-        self.layers = nn.ModuleList([GraniteSpeechNarQFormerLayer(config) for _ in range(config.num_layers)])
-        self.post_init()
-
-    def forward(
-        self, query_embeds: torch.Tensor, encoder_hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
-        mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
-        hidden_states = self.dropout(query_embeds + mean_pool)
-        encoder_hidden_states = self.dropout(encoder_hidden_states + self.window_positions)
-
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, encoder_hidden_states)
-        return hidden_states
-
-
-### Projector
-class GraniteSpeechNarProjector(nn.Module):
-    def __init__(self, config: GraniteSpeechNarConfig):
-        super().__init__()
-        self.hidden_size = config.projector_config.hidden_size
-        self.downsample_rate = config.downsample_rate
-        self.window_size = config.window_size
-        self.num_queries = config.window_size // config.downsample_rate
-
-        self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.projector_config.hidden_size))
-        self.query.data.normal_(mean=0.0, std=1.0)
-        self.qformer = GraniteSpeechNarQFormerModel(config.projector_config)
-        self.linear = nn.Linear(config.projector_config.hidden_size, config.text_config.hidden_size)
-        self.layer_norm = nn.LayerNorm(
-            config.projector_config.encoder_dim, eps=config.projector_config.layernorm_eps, elementwise_affine=False
-        )
-        self.layer_projector = nn.Linear(
-            config.projector_config.encoder_dim * config.projector_config.num_encoder_layers,
-            config.projector_config.hidden_size,
-        )
-        self.projector_act = nn.GELU()
-        self.dropout = nn.Dropout(config.projector_config.dropout_prob)
-        self.out_norm = nn.LayerNorm(
-            config.projector_config.hidden_size, eps=config.projector_config.layernorm_eps, elementwise_affine=False
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, _ = hidden_states.shape
-
-        # Normalize each concatenated encoder layer independently
-        hidden_states = self.layer_norm(hidden_states.unflatten(-1, (-1, self.layer_norm.normalized_shape[0])))
-        hidden_states = self.projector_act(self.layer_projector(hidden_states.flatten(-2)))
-
-        nblocks = math.ceil(seq_len / self.window_size)
-        pad = nblocks * self.window_size - seq_len
-        if pad > 0:
-            hidden_states = F.pad(hidden_states, (0, 0, 0, pad))
-        hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, self.hidden_size)
-
-        hidden_states = self.qformer(query_embeds=self.query, encoder_hidden_states=hidden_states)
-
-        hidden_states = hidden_states.view(batch_size, nblocks * self.query.shape[1], -1)
-        hidden_states = self.dropout(self.out_norm(hidden_states))
-        return self.linear(hidden_states)
+            init.copy_(module.attention_dists, module.compute_attention_dists())
 
 
 def rotate_half(x):
@@ -569,6 +368,227 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+# A single module-level `eager_attention_forward` is shared by both attention modules:
+# GQA language-model attention and MHA Q-Former cross-attention.
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    num_key_value_groups = getattr(module, "num_key_value_groups", 1)
+    key_states = repeat_kv(key, num_key_value_groups)
+    value_states = repeat_kv(value, num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask[..., : key_states.shape[-2]]
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class GraniteSpeechNarQFormerCrossAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        query_shape = (*input_shape, -1, self.head_dim)
+        kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(query_shape).transpose(1, 2)
+        key_states = self.k_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class GraniteSpeechNarQFormerMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class GraniteSpeechNarQFormerLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.cross_attn = GraniteSpeechNarQFormerCrossAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GraniteSpeechNarQFormerMLP(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.post_attention_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        # Cross Attention
+        hidden_states, _ = self.cross_attn(
+            hidden_states=hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class GraniteSpeechNarQFormerModel(GraniteSpeechNarPreTrainedModel):
+    """
+    Differences with [`GraniteSpeechEncoderProjector`]'s Q-Former:
+    - no query self-attention
+    - mean-pooled window is added to the queries
+    - not the same ffn
+    """
+
+    def __init__(self, config: GraniteSpeechNarEncoderProjectorConfig):
+        super().__init__(config)
+        self.window_size = config.window_size
+        self.hidden_size = config.hidden_size
+        self.num_queries = config.window_size // config.downsample_rate
+
+        self.layers = nn.ModuleList(
+            [GraniteSpeechNarQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.queries = nn.Parameter(torch.zeros(1, self.num_queries, config.hidden_size))
+        self.pos_emb = nn.Parameter(torch.zeros(1, config.window_size, config.hidden_size))
+
+        self.linear = nn.Linear(config.hidden_size, config.hidden_size)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.gradient_checkpointing = False
+
+        self.post_init()
+
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
+
+        # (batch_size, seq_len, hidden_size) -> (batch_size * nblocks, window_size, hidden_size)
+        nblocks = math.ceil(seq_len / self.window_size)
+        if (pad := nblocks * self.window_size - seq_len) > 0:
+            hidden_states = F.pad(hidden_states, (0, 0, 0, pad))
+        encoder_hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, self.hidden_size)
+
+        # seed each query with the mean of its `downsample_rate`-frame segment; bias the window with `pos_emb`
+        mean_pool = encoder_hidden_states.unflatten(1, (-1, self.config.downsample_rate)).mean(-2)
+        hidden_states = self.queries + mean_pool
+        encoder_hidden_states = encoder_hidden_states + self.pos_emb
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, encoder_hidden_states, **kwargs)
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.view(batch_size, nblocks * self.num_queries, self.hidden_size)
+        return self.linear(hidden_states)
+
+
+class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
+    """
+    Differences with [`GraniteSpeechEncoderProjector`]:
+    - takes the concatenated encoder layers as input (hidden_dim * num concatenated layers)
+    - normalizes each concatenated encoder layer independently, then fuses them into `hidden_size`
+    """
+
+    def __init__(self, config: GraniteSpeechNarConfig):
+        super().__init__(config)
+        # the encoder concatenates `len(cat_hidden_layers) + 1` layers along hidden dim
+        num_encoder_layers = len(config.encoder_config.cat_hidden_layers) + 1
+        self.proj = nn.Linear(
+            config.encoder_config.hidden_dim * num_encoder_layers,
+            config.projector_config.hidden_size,
+        )
+        self.norm = nn.LayerNorm(
+            config.encoder_config.hidden_dim, eps=config.projector_config.layer_norm_eps, elementwise_affine=False
+        )
+        self.act = nn.GELU()
+        self.qformer = GraniteSpeechNarQFormerModel(config.projector_config)
+
+        self.post_init()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # normalize each concatenated encoder layer independently, then fuse them into `hidden_size`
+        hidden_states = self.norm(hidden_states.unflatten(-1, (-1, self.norm.normalized_shape[0])))
+        hidden_states = self.act(self.proj(hidden_states.flatten(-2)))
+        return self.qformer(hidden_states)
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -872,6 +892,7 @@ class GraniteSpeechNarTextModel(GraniteSpeechNarPreTrainedModel):
 
 
 class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
+    attention_dists: torch.Tensor  # fix linting for `register_buffer`
     config: GraniteSpeechNarEncoderConfig
     input_modalities = "audio"
     _can_record_outputs = {
@@ -882,11 +903,7 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
     def __init__(self, config: GraniteSpeechNarEncoderConfig):
         super().__init__(config)
 
-        # Precompute clamped relative positional encoding distances
-        seq = torch.arange(config.context_size)
-        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-        attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
-        self.register_buffer("attention_dists", attention_dists, persistent=False)
+        self.register_buffer("attention_dists", self.compute_attention_dists(), persistent=False)
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechNarConformerBlock(config) for _ in range(config.num_layers)])
 
@@ -894,6 +911,13 @@ class GraniteSpeechNarCTCEncoder(GraniteSpeechNarPreTrainedModel):
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.num_layers = config.num_layers
         self.post_init()
+
+    def compute_attention_dists(self) -> torch.Tensor:
+        """Clamped relative positional distances used by Shaw's relative positional embeddings."""
+        context_size = self.config.context_size
+        seq = torch.arange(context_size)
+        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+        return torch.clamp(relpos_dist, -context_size, context_size) + self.config.max_pos_emb
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -958,7 +982,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
     def __init__(self, config: GraniteSpeechNarConfig):
         super().__init__(config)
         self.encoder = GraniteSpeechNarCTCEncoder(config.encoder_config)
-        self.projector = GraniteSpeechNarProjector(config)
+        self.projector = GraniteSpeechNarEncoderProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.out_bpe = nn.Linear(config.encoder_config.hidden_dim, config.encoder_config.vocabulary_size, bias=True)
         self.post_init()
@@ -1179,7 +1203,10 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
             }
 
             log_probs = torch.log_softmax(logits.squeeze(0).float(), dim=-1)
-            log_probs_padded = nn.utils.rnn.pad_sequence(log_probs.split(seq_lengths))
+            max_len = max(seq_lengths)
+            log_probs_padded = torch.stack(
+                [F.pad(chunk, (0, 0, 0, max_len - chunk.shape[0])) for chunk in log_probs.split(seq_lengths)], dim=1
+            )
             input_lengths = torch.tensor(seq_lengths, device=logits.device)
 
             loss = (

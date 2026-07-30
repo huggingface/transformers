@@ -95,58 +95,63 @@ class GraniteSpeechNarEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
 @strict
-class GraniteSpeechNarProjectorConfig(PreTrainedConfig):
+class GraniteSpeechNarEncoderProjectorConfig(PreTrainedConfig):
     r"""
-    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar.
+    Configuration for the windowed Q-Former audio projector in GraniteSpeechNar. It reduces each
+    `window_size`-frame window of encoder features to `window_size // downsample_rate` query tokens.
 
-    encoder_dim (`int`, *optional*, defaults to 1024):
-        Hidden dimension of each concatenated encoder layer fed to the projector.
-    downsample_rate (`int`, *optional*, defaults to 5):
-        Temporal downsampling rate within each window block.
-    num_encoder_layers (`int`, *optional*, defaults to 4):
-        Number of encoder layers concatenated as projector input.
-    num_layers (`int`, *optional*, defaults to 2):
+    hidden_size (`int`, *optional*, defaults to 2048):
+        Dimension of the Q-Former (and of its output, which is fed to the language model).
+    intermediate_size (`int`, *optional*, defaults to 4096):
+        Dimension of the Q-Former MLP.
+    num_hidden_layers (`int`, *optional*, defaults to 2):
         Number of Q-Former layers.
-    block_size (`int`, *optional*, defaults to 15):
-        Window size for blocked cross-attention in the projector.
-    layernorm_eps (`float`, *optional*, defaults to 1e-6):
-        Epsilon for layer normalization.
-    attn_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in the Q-Former output projection.
-    encoder_hidden_size (`int`, *optional*):
-        Hidden size of the cross-attention key/value inputs. Defaults to `hidden_size`.
+    num_attention_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads in the Q-Former cross-attention.
+    num_key_value_heads (`int`, *optional*):
+        Number of key/value heads in the Q-Former cross-attention. Defaults to `num_attention_heads` (MHA).
+    hidden_act (`str`, *optional*, defaults to `"silu"`):
+        Activation function of the Q-Former MLP.
+    window_size (`int`, *optional*, defaults to 15):
+        Number of encoder frames per Q-Former window.
+    downsample_rate (`int`, *optional*, defaults to 5):
+        Temporal downsampling rate: each window yields `window_size // downsample_rate` query tokens.
+    attention_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use a bias in the Q-Former cross-attention projections.
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability applied to the Q-Former cross-attention weights.
+    layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        Epsilon for the Q-Former layer normalizations.
 
     Example:
 
     ```python
-    >>> from transformers import GraniteSpeechNarProjectorConfig
+    >>> from transformers import GraniteSpeechNarEncoderProjectorConfig
 
-    >>> configuration = GraniteSpeechNarProjectorConfig()
+    >>> configuration = GraniteSpeechNarEncoderProjectorConfig()
     >>> print(configuration.hidden_size)
     2048
     ```"""
 
     model_type = "granite_speech_nar_projector"
 
-    encoder_dim: int = 1024
-    downsample_rate: int = 5
-    num_encoder_layers: int = 4
     hidden_size: int = 2048
-    num_attention_heads: int = 32
-    num_layers: int = 2
-    dropout_prob: float = 0.1
-    block_size: int = 15
-    layernorm_eps: float = 1e-6
-    attn_bias: bool = True
-    attention_probs_dropout_prob: float = 0.0
-    encoder_hidden_size: int | None = None
-    hidden_act: str = "silu"
     intermediate_size: int = 4096
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    window_size: int = 15
+    downsample_rate: int = 5
+    attention_bias: bool = True
+    attention_dropout: float = 0.0
+    layer_norm_eps: float = 1e-6
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
-        if self.encoder_hidden_size is None:
-            self.encoder_hidden_size = self.hidden_size
+        # MHA cross-attention: default the number of key/value heads to the number of attention heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
@@ -219,7 +224,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
 
     encoder_config (`GraniteSpeechNarEncoderConfig` or `dict`, *optional*):
         Configuration for the conformer encoder.
-    projector_config (`GraniteSpeechNarProjectorConfig` or `dict`, *optional*):
+    projector_config (`GraniteSpeechNarEncoderProjectorConfig` or `dict`, *optional*):
         Configuration for the windowed Q-Former audio projector.
     blank_token_id (`int`, *optional*, defaults to 100257):
         Token ID used as the CTC blank symbol (the checkpoint reuses the EOS token).
@@ -227,11 +232,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
         Weight for the auxiliary cross-entropy loss on the LLM output.
     encoder_ctc_loss_lambda (`float`, *optional*, defaults to 0.0):
         Weight for the auxiliary encoder BPE CTC loss.
-    downsample_rate (`int`, *optional*, defaults to 5):
-        Temporal downsampling rate of the windowed projector: each `window_size`-frame window is
-        reduced to `window_size // downsample_rate` query tokens.
-    window_size (`int`, *optional*, defaults to 15):
-        Number of encoder frames per projector window.
 
     Example:
 
@@ -247,7 +247,7 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     model_type = "granite_speech_nar"
     sub_configs = {
         "encoder_config": GraniteSpeechNarEncoderConfig,
-        "projector_config": GraniteSpeechNarProjectorConfig,
+        "projector_config": GraniteSpeechNarEncoderProjectorConfig,
         "text_config": GraniteSpeechNarTextConfig,
     }
 
@@ -258,8 +258,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
     blank_token_id: int = 100257
     ce_loss_lambda: float = 0.0
     encoder_ctc_loss_lambda: float = 0.0
-    downsample_rate: int = 5
-    window_size: int = 15
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -288,6 +286,6 @@ class GraniteSpeechNarConfig(PreTrainedConfig):
 __all__ = [
     "GraniteSpeechNarConfig",
     "GraniteSpeechNarEncoderConfig",
-    "GraniteSpeechNarProjectorConfig",
+    "GraniteSpeechNarEncoderProjectorConfig",
     "GraniteSpeechNarTextConfig",
 ]
