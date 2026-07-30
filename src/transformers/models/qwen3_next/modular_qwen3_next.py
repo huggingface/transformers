@@ -212,18 +212,6 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
-def forward_substitution_inverse(tril: torch.Tensor, chunk_size: int) -> torch.Tensor:
-    """Computes (I + L)^-1 by forward substitution, where `tril` holds -L, a strictly lower triangular matrix, in
-    its last two dimensions. This is the "T" matrix of the chunked delta rule (UT transform), which turns the
-    within-chunk k/v pairs into the pseudo-values actually written to the recurrent state. Input is modified in place.
-    """
-    for i in range(1, chunk_size):
-        row = tril[..., i, :i].clone()
-        sub = tril[..., :i, :i].clone()
-        tril[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
-    return tril + torch.eye(chunk_size, dtype=tril.dtype, device=tril.device)
-
-
 def torch_chunk_gated_delta_rule(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -311,26 +299,33 @@ def torch_chunk_gated_delta_rule(
     ut_attn = ut_attn.masked_fill(mask, 0)
     qk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
 
-    # The UT transform turns the within-chunk k/v pairs into the pseudo-values actually written to the recurrent
-    # state (value), and prepares the decayed keys reading the old state (k_cumdecay)
-    ut_attn = forward_substitution_inverse(ut_attn, chunk_size)
-    value = ut_attn @ v_beta
+    # Apply the UT transform to the within-chunk k/v pairs. The transform computes (I + L)^-1 by forward substitution,
+    # where -L is the strictly lower triangular ut_attn built above.
+    for i in range(1, chunk_size):
+        row = ut_attn[..., i, :i].clone()
+        sub = ut_attn[..., :i, :i].clone()
+        ut_attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+    ut_attn = ut_attn + torch.eye(chunk_size, dtype=ut_attn.dtype, device=ut_attn.device)
+    # The UT-transformed k/v pairs are used to create the new_values (called "u" in the DeltaNet paper) and the decayed
+    # keys reading the old state (k_cumdecay). In the update, the part of new_values that the old state already predicts
+    # is subtracted out, so that only the correction is written to the recurrent state: this is the delta rule.
+    new_values = ut_attn @ v_beta
     k_cumdecay = ut_attn @ (k_beta * cum_decay.unsqueeze(-1))
 
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
         recurrent_state_shape = (batch_size, num_heads, k_head_dim, v_head_dim)
-        last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=value.dtype, device=value.device)
+        last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=new_values.dtype, device=new_values.device)
     else:
-        last_recurrent_state = initial_state.to(value)
-    core_attn_out = torch.zeros_like(value)
+        last_recurrent_state = initial_state.to(new_values)
+    core_attn_out = torch.zeros_like(new_values)
 
     # Second phase: the sequential scan over chunks. Combine the read of the previous recurrent state (attn_inter)
     # with the within-chunk attention (qk_attn), then decay + update the recurrent state
     for i in range(num_chunks):
         q_i, k_i, cum_log_decay_i = query[:, :, i], key[:, :, i], cum_log_decay[:, :, i]
-        v_new = value[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
+        v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
         inter_chunk_attn = (q_i * cum_decay[:, :, i].unsqueeze(-1)) @ last_recurrent_state
         core_attn_out[:, :, i] = inter_chunk_attn + qk_attn[:, :, i] @ v_new
         # chunk_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
