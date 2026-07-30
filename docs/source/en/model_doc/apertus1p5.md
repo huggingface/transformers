@@ -16,14 +16,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-28.*
+*This model was contributed to Hugging Face Transformers on 2026-07-30.*
 
 
 # Apertus 1.5
 
 > [!WARNING]
 > Both bundled tokenizers must run in `float32`: their code assignment is an argmax over codebook scores, and
-> half precision flips a significant fraction of codes (~8% for the vision tokenizer in bf16). They are kept in
+> half precision flips a significant fraction of codes (~10% for the vision tokenizer in bf16). They are kept in
 > `float32` automatically when the model is loaded with `dtype=torch.float16`/`bfloat16`
 > (`_keep_in_fp32_modules_strict`). The keep applies to `from_pretrained` only: manually casting the loaded
 > model (`.half()`, `.to(dtype)`) or running the tokenizers under `torch.autocast` re-introduces the flips.
@@ -59,11 +59,12 @@ The model composes three parts:
   40 codes per second of 24 kHz mono audio.
 
 > [!NOTE]
-> Consequences of the pruned output layer: logits returned without `labels` are padded to the full vocabulary
-> width, with `torch.finfo(dtype).min` scores for the input-only multimodal tail, so unconstrained generation
-> (sampling, beam search, classifier-free guidance, ...) works generically and never selects a multimodal id;
-> loss-only calls with `labels` return logits of the physical head width instead. Generation constraints that
-> target input-only ids (`prefix_allowed_tokens_fn`, `force_words_ids`, forced tokens) are unsupported and
+> Consequences of the pruned output layer: with `labels`, the model computes the standard causal language
+> modeling loss and returns logits at the physical head width. Without `labels`, no loss is computed and logits
+> are padded to the full vocabulary width with `torch.finfo(dtype).min` scores for the input-only multimodal
+> tail, so unconstrained generation (sampling, beam search, classifier-free guidance, ...) works generically
+> and never selects a multimodal id. Generation constraints that target input-only ids
+> (`prefix_allowed_tokens_fn`, `force_words_ids`, forced tokens) are unsupported and
 > silently emit ids the head has no learned distribution for. DoLa decoding (`dola_layers`) is also unsupported:
 > it applies the physical LM head directly to intermediate hidden states, whose logits do not have the padded
 > logical vocabulary width. Label positions holding input-only ids must be masked with `-100` (the model raises
@@ -115,7 +116,8 @@ containing one `<|image|>` / `<|audio|>` placeholder per media item. Media entri
 (PIL images, numpy waveforms) or URL / local-path strings: the processor fetches files itself and resamples
 fetched audio to 24 kHz (bare waveform arrays are assumed to already be 24 kHz mono). Flat lists are
 consumed left-to-right by placeholder order; nested lists (one sub-list per batch sample) give explicit
-per-sample ownership with arbitrary counts (in this case the numbers of media in each list must mathc the placeholder number):
+per-sample ownership with arbitrary counts (the number of media items in each sub-list must match the number
+of placeholders in that sample):
 
 ```python
 # `model` and `processor` as in the quick start above; batched generation requires left padding
@@ -147,7 +149,7 @@ print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_
 - **The image token budget is controlled by `min_pixels` / `max_pixels`**: one token per 16×16 patch of
   the resized image means `max_pixels` caps the tokens an image can contribute (the default `1400²`
   allows up to ~7,700). Lower it to trade visual detail for shorter sequences and cheaper prefill, e.g.
-  `max_pixels=512 * 512` for at most 1,024 tokens per image — either persistently on the image processor
+  `max_pixels=512 * 512` for at most 1,024 tokens per image, either persistently on the image processor
   (`processor.image_processor.max_pixels = 512 * 512`) or per call:
 
   ```python

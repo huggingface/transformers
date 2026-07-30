@@ -47,8 +47,9 @@ def smart_resize(
     Computes the output size for an image: the pixel area is clamped to `[min_pixels, max_pixels]` preserving
     the aspect ratio, and both sides are rounded half-up to multiples of `factor`.
 
-    This reproduces the reference Apertus 1.5 pipeline exactly (including the `int()` truncations); the only
-    deviation is flooring each side at `factor` so extreme aspect ratios cannot round a side down to zero.
+    This reproduces the reference Apertus 1.5 / EMU3.5 vision tokenizer pipeline exactly (including the
+    `int()` truncations); the only deviation is flooring each side at `factor` so extreme aspect ratios
+    cannot round a side down to zero.
     """
     target_area = max(min(max_pixels, height * width), min_pixels)
     aspect_ratio = width / height
@@ -61,11 +62,15 @@ def smart_resize(
 
 @auto_docstring(
     custom_intro="""
-    Constructs the Apertus 1.5 image processor. Input images are expected UNSCALED (PIL images or uint8-range
+    Constructs the Apertus 1.5 image processor. It prepares images for `Apertus1p5VisionTokenizerModel`, the
+    bundled encode-only port of the EMU3.5 Vision Tokenizer, and applies the same image preprocessing as the
+    original EMU3.5 vision tokenizer pipeline.
+
+    Input images are expected UNSCALED (PIL images or uint8-range
     pixel values; per the standard `do_rescale` convention, float images already scaled to `[0, 1]` would be
     rescaled again). Images are converted to RGB, resized preserving the aspect ratio to multiples of
     `spatial_factor` within the `[min_pixels, max_pixels]` area budget, and normalized to `[-1, 1]`
-    (`pixel / 127.5 - 1`) in float32, reproducing the reference Apertus 1.5 pipeline.
+    (`pixel / 127.5 - 1`) in float32.
     """
 )
 class Apertus1p5ImageProcessor(TorchvisionBackend):
@@ -154,9 +159,6 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns the number of discrete image codes (placeholder tokens) for a given image size.
-
-        Note: Do not remove this method! It is used by vLLM to infer the number of placeholders
-        without an image input.
 
         Args:
             height (`int`):
