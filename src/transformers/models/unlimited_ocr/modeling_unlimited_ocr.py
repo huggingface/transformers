@@ -1348,7 +1348,6 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
         else:
             kv_length, kv_offset = super().get_mask_sizes(query_length)
             kv_length += self.prefill_length
-            kv_offset += self.prefill_length
 
         # Returned kv_offset is with respect to sliding window keys.
         # Remove kv_offset from kv_idx to retrieve the prefill indices.
