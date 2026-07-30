@@ -30,15 +30,15 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_bidirectional_mask, find_packed_sequence_indices, packed_sequence_mask_function
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_granite_speech_nar import (
@@ -593,7 +593,12 @@ class GraniteSpeechNarEncoderProjector(GraniteSpeechNarPreTrainedModel):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class GraniteSpeechNarAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """
+    Bidirectional self-attention over the packed batch. Samples are concatenated along the sequence dim and
+    are kept from attending to each other through variable-length attention (`cu_seqlens`) rather than an
+    explicit mask: Flash Attention runs `varlen` natively, while the other backends fall back to a per-sample
+    split forward. This avoids materializing the (slower, memory-hungry) full bidirectional mask.
+    """
 
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -621,11 +626,12 @@ class GraniteSpeechNarAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -636,23 +642,43 @@ class GraniteSpeechNarAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+        attn_kwargs = {
+            "scaling": self.scaling,
+            "dropout": 0.0 if not self.training else self.attention_dropout,
+            "is_causal": False,
+        }
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: variable-length attention driven by `cu_seqlens`, no mask materialized
+            # (`cu_seqlens` / `max_seqlen` are precomputed by `GraniteSpeechNarModel`).
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                **attn_kwargs,
+                **kwargs,
+            )
+        else:
+            # Other backends: split the packed batch and attend within each sample independently.
+            lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(t, lengths, dim=2) for t in (query_states, key_states, value_states)]
+            attn_output = torch.cat(
+                [
+                    attention_interface(self, q, k, v, attention_mask=None, **attn_kwargs, **kwargs)[0]
+                    for q, k, v in zip(*splits)
+                ],
+                dim=1,
+            )
+            attn_weights = None
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -825,6 +851,33 @@ class GraniteSpeechNarRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def get_packed_cu_seqlens(position_ids: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """
+    Cumulative sequence lengths `(num_samples + 1,)` for the packed batch, or popped from `kwargs` if
+    precomputed. Derived from the position ids, which restart at 0 for every packed sample.
+    """
+    if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
+        return cu_seqlens
+    starts = (position_ids[0] == 0).nonzero().flatten()
+    total_length = position_ids.new_tensor([position_ids.shape[1]])
+    return torch.cat([starts, total_length]).to(torch.int32)
+
+
+def get_packed_attention_seqlens(
+    position_ids: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, int | None]:
+    """
+    Cumulative and maximum sequence lengths for the packed bidirectional attention (mirrors
+    `get_vision_attention_seqlens`). This is the ragged-attention metadata that keeps packed samples from
+    attending to each other without materializing a mask.
+    """
+    cu_seqlens = get_packed_cu_seqlens(position_ids, kwargs=kwargs)
+    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+    return cu_seqlens, max_seqlen
+
+
 @auto_docstring
 class GraniteSpeechNarTextModel(GraniteSpeechNarPreTrainedModel):
     config_class = GraniteSpeechNarTextConfig
@@ -864,14 +917,9 @@ class GraniteSpeechNarTextModel(GraniteSpeechNarPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        packed_seq_mask = find_packed_sequence_indices(position_ids)
-        and_mask_fn = packed_sequence_mask_function(packed_seq_mask) if packed_seq_mask is not None else None
-        bidirectional_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            and_mask_function=and_mask_fn,
-            attention_mask=None,
-        )
+        # Samples are packed along the sequence dim; derive the ragged-attention metadata from the
+        # (per-sample-resetting) position ids and drive bidirectional attention without a mask.
+        cu_seqlens, max_seqlen = get_packed_attention_seqlens(position_ids, self.config, kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -880,9 +928,10 @@ class GraniteSpeechNarTextModel(GraniteSpeechNarPreTrainedModel):
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=bidirectional_mask,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 **kwargs,
             )
 
@@ -1014,7 +1063,7 @@ class GraniteSpeechNarModel(GraniteSpeechNarPreTrainedModel):
         audio_lengths: torch.Tensor,
     ) -> torch.Tensor:
         """"""
-        audio_lengths = audio_lengths // self.projector.downsample_rate
+        audio_lengths = audio_lengths // self.config.projector_config.downsample_rate
         text_lengths = [toks.shape[0] for toks in inserted_ctc_token_ids]
         inputs_embeds = [self.language_model.embed_tokens(toks) for toks in inserted_ctc_token_ids]
         audio_embeds = [audio_embeds[i, :length].to(inputs_embeds[0].device) for i, length in enumerate(audio_lengths)]
