@@ -168,6 +168,7 @@ config_class_to_model_tester_map = {
     "UVDocConfig": "UVDocModelTester",
     "Cosmos3EdgeVisionConfig": "Cosmos3EdgeVisionText2TextModelTester",
     "Gemma4AudioConfig": "Gemma4Audio2TextModelTester",
+    "Gemma4VisionConfig": "Gemma4Vision2TextModelTester",
     "Qwen3_5VisionConfig": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeVisionConfig": "Qwen3_5MoeVisionText2TextModelTester",
 }
