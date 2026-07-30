@@ -1750,27 +1750,6 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 0."
             )
 
-        if self.dataloader_multiprocessing_context is not None:
-            if self.dataloader_multiprocessing_context not in ("fork", "spawn", "forkserver"):
-                raise ValueError(
-                    "--dataloader_multiprocessing_context must be one of 'fork', 'spawn', or 'forkserver', but got"
-                    f" {self.dataloader_multiprocessing_context}."
-                )
-            if self.dataloader_num_workers == 0:
-                raise ValueError(
-                    "--dataloader_multiprocessing_context can only be set when data is loaded in a different"
-                    " process, i.e. when --dataloader_num_workers > 0."
-                )
-
-        if not self.dataloader_in_order and is_torch_available():
-            from .pytorch_utils import is_torch_greater_or_equal_than_2_6
-
-            if not is_torch_greater_or_equal_than_2_6:
-                raise ValueError(
-                    "--dataloader_in_order=False requires PyTorch >= 2.6. Please upgrade PyTorch or leave"
-                    " --dataloader_in_order set to its default (True)."
-                )
-
     def __str__(self):
         self_as_dict = asdict(self)
 

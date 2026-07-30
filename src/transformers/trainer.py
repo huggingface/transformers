@@ -986,21 +986,13 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
-        # A user-specified start method takes precedence over the MPS fork workaround.
-        multiprocessing_context = self.args.dataloader_multiprocessing_context
-        if multiprocessing_context is None and should_fork:
-            multiprocessing_context = "fork"
-
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": multiprocessing_context,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
             "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
         # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
