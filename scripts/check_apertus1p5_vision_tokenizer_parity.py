@@ -33,8 +33,10 @@ What it verifies (per test image: gradients, checkerboards, noise, solid, mixed;
 
 How the ORIGINAL inference works, dtype-wise: strictly fp32. The checkpoint ships `torch_dtype: float32`, the
 BAAI remote code does no dtype handling (it runs at whatever dtype the weights are, fp32 by default), and the
-vLLM integration hardcodes `vision_dtype = torch.float32` for both the tokenizer weights and the input tensor
-(`apertus.py:221,301`). There is no half-precision reference: fp32/fp32 is the only cell with a ground truth;
+vLLM integration keeps the tokenizer fp32 in both generations: the original implementation hardcoded
+`vision_dtype = torch.float32` for weights and inputs (`apertus.py:221,301` at `apertus_integration`
+commit 40a5516b7), and the current design-v2 loads it under `set_default_torch_dtype(torch.float32)`
+(`apertus_mm.py:482`). There is no half-precision reference: fp32/fp32 is the only cell with a ground truth;
 all other cells are measured against our fp32/fp32 baseline.
 
 Inputs are preprocessed exactly like the vLLM/Apertus pipeline feeds the encoder: RGB, float32, `x/127.5 - 1`.
