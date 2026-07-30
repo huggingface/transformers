@@ -189,7 +189,7 @@ class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: LagunaConfig,, device=None, layer_type: str | None = None, **kwargs
+        config: LagunaConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
