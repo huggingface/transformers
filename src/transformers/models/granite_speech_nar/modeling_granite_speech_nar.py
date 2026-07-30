@@ -1214,7 +1214,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         >>> url = "https://huggingface.co/buckets/huggingface/audio-samples/resolve/mister-quilter.mp3"
         >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
-        >>> inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+        >>> inputs = processor(audio=audio, sampling_rate=processor.feature_extractor.sampling_rate)
         >>> inputs.to(model.device, dtype=model.dtype)
         >>> output = model.generate(**inputs, return_dict_in_generate=True)
         >>> processor.batch_decode(output.sequences, skip_special_tokens=True)

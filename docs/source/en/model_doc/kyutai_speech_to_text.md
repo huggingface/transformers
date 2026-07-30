@@ -52,7 +52,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
 # 3. prepare the model inputs
 inputs = processor(
-    ds[0]["audio"]["array"],
+    audio=ds[0]["audio"]["array"],
 )
 inputs.to(model.device)
 
@@ -85,7 +85,7 @@ ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
 # 3. prepare the model inputs
 audio_arrays = [ds[i]["audio"]["array"] for i in range(4)]
-inputs = processor(audio_arrays, return_tensors="pt", padding=True).to(model.device)
+inputs = processor(audio=audio_arrays, return_tensors="pt", padding=True).to(model.device)
 inputs = inputs.to(model.device)
 
 # 4. infer the model

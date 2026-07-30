@@ -47,7 +47,7 @@ model = AutoModelForCTC.from_pretrained(model_id, revision=revision, device_map=
 url = "https://huggingface.co/buckets/huggingface/audio-samples/resolve/mister-quilter.mp3"
 audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
-inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=audio, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.batch_decode(output.sequences, skip_special_tokens=True))
@@ -72,7 +72,7 @@ model = AutoModelForCTC.from_pretrained(model_id, revision=revision, device_map=
 url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/monte_cristo.flac"
 audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
-inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=audio, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 
 one_step = model.generate(**inputs, num_editing_steps=1, return_dict_in_generate=True)

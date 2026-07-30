@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -46,10 +46,20 @@ from ..granite_speech.modeling_granite_speech import (
     GraniteSpeechModel,
 )
 from ..granite_speech_plus.configuration_granite_speech_plus import GraniteSpeechPlusEncoderConfig
+from ..kyutai_speech_to_text.processing_kyutai_speech_to_text import KyutaiSpeechToTextProcessor
 from ..llama.modeling_llama import LlamaAttention
 
 
 logger = logging.get_logger(__name__)
+
+
+class GraniteSpeechNarProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
+
+
+@auto_docstring
+class GraniteSpeechNarProcessor(KyutaiSpeechToTextProcessor):
+    valid_processor_kwargs = GraniteSpeechNarProcessorKwargs
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-nar")
@@ -923,7 +933,7 @@ class GraniteSpeechNarForCTC(GraniteSpeechNarPreTrainedModel):
         >>> url = "https://huggingface.co/buckets/huggingface/audio-samples/resolve/mister-quilter.mp3"
         >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
 
-        >>> inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate)
+        >>> inputs = processor(audio=audio, sampling_rate=processor.feature_extractor.sampling_rate)
         >>> inputs.to(model.device, dtype=model.dtype)
         >>> output = model.generate(**inputs, return_dict_in_generate=True)
         >>> processor.batch_decode(output.sequences, skip_special_tokens=True)
@@ -1044,4 +1054,5 @@ __all__ = [
     "GraniteSpeechNarForCTC",
     "GraniteSpeechNarModel",
     "GraniteSpeechNarPreTrainedModel",
+    "GraniteSpeechNarProcessor",
 ]

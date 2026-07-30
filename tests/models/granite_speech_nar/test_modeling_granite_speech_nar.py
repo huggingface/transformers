@@ -494,7 +494,7 @@ class GraniteSpeechNarForCTCIntegrationTest(unittest.TestCase):
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
-        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs = self.processor(audio=samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
@@ -523,7 +523,7 @@ class GraniteSpeechNarForCTCIntegrationTest(unittest.TestCase):
         )
         model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
-        inputs = self.processor(audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs = self.processor(audio=audio, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
 
         one_step = model.generate(**inputs, num_editing_steps=1, return_dict_in_generate=True)
@@ -548,7 +548,7 @@ class GraniteSpeechNarForCTCIntegrationTest(unittest.TestCase):
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
         model = GraniteSpeechNarForCTC.from_pretrained(self.checkpoint_name, revision=self.revision, device_map="auto")
 
-        inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
+        inputs = self.processor(audio=samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
         predicted_transcripts = self.processor.batch_decode(output.sequences, skip_special_tokens=True)
