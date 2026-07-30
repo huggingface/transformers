@@ -439,7 +439,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         for i, indices in enumerate(codes):
             layer = self.layers[i]
             quantized = layer.decode(indices)
