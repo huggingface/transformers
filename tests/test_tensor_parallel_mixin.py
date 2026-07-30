@@ -31,10 +31,12 @@ if is_torchao_available():
     from torchao.quantization import Float8WeightOnlyConfig
 
 
+#TODO(3outeille): better guarding
 if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.tensor import DTensor
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
@@ -254,6 +256,11 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad
             grad_tp = param_tp.grad
+
+            # A sharded param's grad is a DTensor: take this rank's local shard, since a DTensor
+            # reports the *global* shape and can't be compared against a plain tensor.
+            if isinstance(grad_tp, DTensor):
+                grad_tp = grad_tp.to_local()
 
             # Slice reference gradient to match local shard if parameter is sharded
             if grad.shape != grad_tp.shape:
