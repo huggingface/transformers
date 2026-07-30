@@ -235,6 +235,34 @@ if is_kernels_available():
                     ),
                 },
             },
+            "mamba_inner_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="mamba_inner_fn",
+                        version=1,
+                    ),
+                },
+            },
+            "selective_scan_fn": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="selective_scan_fn",
+                        version=1,
+                    ),
+                },
+            },
             "selective_state_update": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
@@ -740,6 +768,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         finally:
             implementation = torch_function if implementation is None else implementation
 
+        # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
 
         @functools.wraps(torch_function)
