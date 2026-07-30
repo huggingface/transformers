@@ -894,7 +894,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # with tokenize
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=False, reasoning_effort=None),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
 
         # Test 2:
@@ -919,7 +919,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
@@ -1015,7 +1015,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tools=tools, tokenize=False),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
 
     def test_apply_chat_template_with_image(self):
@@ -1262,7 +1262,9 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(len(text_outputs), len(token_outputs))
         self.assertEqual(len(text_outputs), len(expected_tokenized))
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
-            self.assertEqual(text, expected.text)
+            self.assertEqual(
+                text, self.ref_tokenizer.decode(tokens=expected.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+            )
             self.assertEqual(token, expected.tokens)
 
     def test_batch_apply_chat_template_images(self):
@@ -1569,7 +1571,13 @@ class TestMistralCommonBackend(unittest.TestCase):
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True, return_dict=False
         )
-        self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
+        self.assertEqual(
+            token_outputs,
+            [
+                self.ref_tokenizer.decode(tokens=t.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+                for t in self.tokenized_fixture_conversations
+            ],
+        )
 
     def test_batch_apply_chat_template_return_dict(self):
         # Test 1:
@@ -1588,7 +1596,13 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.fixture_conversations, tokenize=False, return_dict=True
         )
         self.assertNotIsInstance(token_outputs, dict)
-        self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
+        self.assertEqual(
+            token_outputs,
+            [
+                self.ref_tokenizer.decode(tokens=t.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+                for t in self.tokenized_fixture_conversations
+            ],
+        )
 
     def test_call(self):
         # Test 1:
