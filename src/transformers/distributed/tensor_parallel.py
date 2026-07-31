@@ -104,8 +104,8 @@ def _remaining_dtensor_params_to_local(module):
 
 
 class TensorParallelLayer:
-    def uses_local_kernel(self, module):
-        """Whether this module's kernel requires local inputs and parameters."""
+    def requires_local_tensors(self, module):
+        """Whether this module's forward requires local inputs and parameters."""
         return False
 
     def shard_param(self, module, param, mesh):
@@ -116,7 +116,7 @@ class TensorParallelLayer:
         return args, kwargs
 
     def context_around_forward(self, module, mesh):
-        if self.uses_local_kernel(module):
+        if self.requires_local_tensors(module):
             return _remaining_dtensor_params_to_local(module)
         return contextlib.nullcontext()
 
@@ -145,8 +145,8 @@ class ColwiseParallel(TensorParallelLayer):
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
 
-    def uses_local_kernel(self, module):
-        return getattr(module, "_hf_tp_uses_local_kernel", False)
+    def requires_local_tensors(self, module):
+        return getattr(module, "_hf_tp_requires_local_tensors", False)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -164,12 +164,15 @@ class ColwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
-        if self.uses_local_kernel(module):
-            x = x.to_local()
+        if self.requires_local_tensors(module):
+            # After a DTensor becomes a local tensor, DTensor can no longer infer how
+            # the local gradients are distributed. The forward() sees replicated input + partial weights
+            # which means input gradient will be partial as well.
+            x = x.to_local(grad_placements=[Partial()])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
-        # The local kernel produced this rank's shard of the output features (last dim).
+        # The local forward produced this rank's shard of the output features (last dim).
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
@@ -190,8 +193,8 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = output_layouts or Replicate()
         self.use_local_output = use_local_output
 
-    def uses_local_kernel(self, module):
-        return getattr(module, "_hf_tp_uses_local_kernel", False)
+    def requires_local_tensors(self, module):
+        return getattr(module, "_hf_tp_requires_local_tensors", False)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -215,16 +218,16 @@ class RowwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired], async_op=True)
-        if self.uses_local_kernel(module):
+        if self.requires_local_tensors(module):
             x = x.to_local()
         return (x,) + args[1:], kwargs
 
     @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
-        if not self.uses_local_kernel(module):
+        if not self.requires_local_tensors(module):
             yield
         else:
-            # A rowwise local kernel must produce only its partial matmul. If we don't hide 
+            # A rowwise local forward must produce only its partial matmul. If we don't hide
             # the bias, we will be adding the bias x world_size times which is not correct.
             # We should add it once after the all_reduce (redistribute).
             bias = module._parameters.get("bias")
@@ -238,12 +241,12 @@ class RowwiseParallel(TensorParallelLayer):
                     module._parameters["bias"] = bias
 
     def transform_output_post_forward(self, module, output, mesh):
-        # The local kernel produced partial sums (weight is sharded along the input dim).
+        # The local forward produced partial sums (weight is sharded along the input dim).
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts], async_op=True)
-        if self.uses_local_kernel(module) and (bias := module._parameters.get("bias")) is not None:
+        if self.requires_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
             output = output + bias
         return output.to_local() if self.use_local_output else output
 
@@ -316,7 +319,7 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
         self.split_factor = split_factor
 
-    def uses_local_kernel(self, module):
+    def requires_local_tensors(self, module):
         return True
 
     def _packed_output_shard_dim(self, param_ndim: int) -> int:
@@ -411,7 +414,7 @@ class MoEExpertsParallel(TensorParallelLayer):
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
 
-    def uses_local_kernel(self, module):
+    def requires_local_tensors(self, module):
         return True
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):

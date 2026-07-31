@@ -862,8 +862,8 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                 )
             if new_module is not None:
-                # NOTE(3outeille): Tensor parallel use this marker to knwow when to call to_local() (useful for quantization and kernels)
-                new_module._hf_tp_uses_local_kernel = True
+                # Tensor parallelism uses this marker to determine when inputs and parameters must be local tensors.
+                new_module._hf_tp_requires_local_tensors = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 
