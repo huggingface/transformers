@@ -1486,15 +1486,18 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
+            # cache cannot go beyind block size, i.e. we can image that this is small sliding window cache
+            # FIXME evistion might be incorrect, we evict the oldest token when beyond block size
+            input_shape = min(input_ids.shape[-1], self.block_size + 1)
+            new_cache_size = min(input_shape - 1 - remove_from_pkv, self.block_size)
             self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
             self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+                self.assistant_kwargs, input_shape, self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_position_ids(
-                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+                self.assistant_kwargs, input_shape, self.assistant_model.config.is_encoder_decoder
             )
-            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
+            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_shape)
         return has_past_key_values
 
     def get_candidates(
@@ -1523,8 +1526,12 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
         # This is actually cache so we need the new matches only and cat it to cache
+        self._update_past_and_masks(input_ids)
+        dummy_tgt_length = self.assistant_kwargs["position_ids"].shape[
+            1
+        ]  # FIXME: we can infer it from input/n-matches no?
         target_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i][:, -n_last_matches:] for i in self.target_layer_ids], dim=-1
+            [model_outputs.hidden_states[i][:, :dummy_tgt_length] for i in self.target_layer_ids], dim=-1
         )
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
@@ -1534,8 +1541,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
-        self._update_past_and_masks(input_ids)
-        print(n_last_matches, target_hidden_states.shape, self.assistant_kwargs["position_ids"])
         self.assistant_kwargs["past_key_values"] = self.assistant_model.update_cache_with_target_states(
             target_hidden_states,
             position_ids=self.assistant_kwargs["position_ids"],
@@ -1554,7 +1559,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         candidate_logits = self.target_model_output_embeddings(outputs.last_hidden_state)
         candidate_ids = candidate_logits.argmax(dim=-1)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=1)
-        return candidate_ids, candidate_logits
+        return candidate_ids[:, 1:], candidate_logits[:, 1:]  # remove the cond `tgt_last_token`
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
         # not used but has to be overriden from an abstract parent
