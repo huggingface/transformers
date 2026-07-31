@@ -538,7 +538,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             }
         ]
 
-        >>> inputs = processor.apply_chat_template(conversation)
+        >>> inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
         >>> inputs = inputs.to(device, dtype=torch.bfloat16)
 
         >>> outputs = model.generate(**inputs, max_new_tokens=30)

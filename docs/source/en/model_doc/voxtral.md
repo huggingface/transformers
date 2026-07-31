@@ -67,7 +67,7 @@ conversation = [
     }
 ]
 
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -107,7 +107,7 @@ conversation = [
     }
 ]
 
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -161,7 +161,7 @@ conversation = [
     },
 ]
 
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -196,7 +196,7 @@ conversation = [
     }
 ]
 
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -231,7 +231,7 @@ conversation = [
     }
 ]
 
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -288,7 +288,7 @@ conversations = [
     ],
 ]
 
-inputs = processor.apply_chat_template(conversations)
+inputs = processor.apply_chat_template(conversations, tokenize=True, return_dict=True)
 inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -316,10 +316,10 @@ processor = AutoProcessor.from_pretrained(repo_id)
 model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 # set the language is already know for better accuracy
-inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
+inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id, tokenize=True, return_dict=True)
 
 # # but you can also let the model detect the language automatically
-# inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
+# inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id, tokenize=True, return_dict=True)
 
 inputs = inputs.to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=500)
@@ -346,6 +346,8 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 
 [[autodoc]] VoxtralProcessor
     - __call__
+    - apply_chat_template
+    - apply_transcription_request
 
 ## VoxtralEncoder
 
