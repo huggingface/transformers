@@ -266,13 +266,13 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
                             init.uniform_(layer.bias, -std, std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
     layer to the pooler_output.
     """
 )
+@dataclass
 class SLANeXtVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):

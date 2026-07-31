@@ -1325,7 +1325,6 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
         split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
         vision_outputs.pooler_output = torch.split(image_features, split_sizes)
-
         return vision_outputs
 
     def get_placeholder_mask(

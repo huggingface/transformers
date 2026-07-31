@@ -1542,40 +1542,42 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        modality: str | None = None,
-        features: torch.FloatTensor | None = None,
-        **kwargs,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
-        if modality is None:
-            modalities = ["image", "video"]
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_video_mask = special_video_mask.all(-1)
         else:
-            modalities = [modality]
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
 
-        masks = []
-        for modality in modalities:
-            modality_token_id = getattr(self.config, f"{modality}_token_id")
-            if input_ids is None:
-                mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.tensor(modality_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                mask = mask.all(-1)
-            else:
-                mask = input_ids == modality_token_id
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
 
-            n_modality_tokens = mask.sum()
-            mask = mask.unsqueeze(-1).to(inputs_embeds.device)
-            if features is not None:
-                torch_compilable_check(
-                    n_modality_tokens * inputs_embeds.shape[-1] == features.numel(),
-                    f"{modality} seq_length and num_tokens do not match, num_tokens: {n_modality_tokens * inputs_embeds.shape[-1]}, seq_length: {features.numel()}",
-                )
-            masks.append(mask)
-
-        return masks[0] if len(masks) == 1 else tuple(masks)
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        if video_features is not None:
+            torch_compilable_check(
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
+        return special_image_mask, special_video_mask
 
     def compute_3d_position_ids(
         self,
@@ -1669,8 +1671,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             image_embeds = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, features=image_embeds, modality="image"
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -1678,8 +1680,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             video_embeds = torch.cat(mm_encoder_outputs["videos"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            video_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, features=video_embeds, modality="video"
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
