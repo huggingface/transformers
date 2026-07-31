@@ -1,3 +1,4 @@
+# Triggered after each PR CI run to post a badge and recap comment on the PR.
 name: Post CI Dashboard Link
 
 on:
