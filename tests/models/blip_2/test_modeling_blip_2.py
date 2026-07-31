@@ -887,6 +887,18 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(
+        reason="BLIP2's T5 language backbone always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="Composite model: the vision and text towers cannot both be scaled to triton's minimum flex head dim (16) while keeping the cross-attention hidden sizes equal, so the flex grad-test harness can't build a valid config (same limitation t5gemma skips for composite models)."
+    )
+    def test_flex_attention_with_grads(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -915,7 +927,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
                 # `None` as it is the requested one which will be assigned to each sub-config
                 # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
-                self.assertTrue(model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model.language_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.vision_model.config._attn_implementation == "sdpa")
                 self.assertTrue(model.qformer.config._attn_implementation == "sdpa")
 
@@ -1673,9 +1685,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
-        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-flan-t5-xl", dtype=torch.float16).to(
-            torch_device
-        )
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-flan-t5-xl", dtype=torch.float16, attn_implementation="eager"
+        ).to(torch_device)
 
         # prepare image
         image = prepare_img()
