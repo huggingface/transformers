@@ -74,12 +74,12 @@ A compressed-tensors checkpoint stores its weights compressed (fp8, or packed in
 
 ## FP8 kernel acceleration
 
-Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in FP8 and run its matmuls through hardware-accelerated FP8 kernels (`torch._scaled_mm`), instead of dequantizing the weights back to BF16. Keeping weights in FP8 throughout inference lowers memory usage and speeds up computation. This is inference only, so leave it off to fine-tune.
+Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in FP8 and run its matmuls through hardware-accelerated FP8 kernels ([torch.nn.functional.scaled_mm](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_mm.html), which dispatches to `torch._scaled_mm_v2`; older torch versions fall back to `torch._scaled_mm`), instead of dequantizing the weights back to BF16. Keeping weights in FP8 throughout inference lowers memory usage and speeds up computation. This is inference only, so leave it off to fine-tune.
 
 | Device | Kernel | Notes |
 |--------|--------|-------|
-| Intel XPU | `torch._scaled_mm` | All XPU devices with FP8 support |
-| NVIDIA CUDA (SM89+) | `torch._scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
+| Intel XPU | `torch.nn.functional.scaled_mm` | All XPU devices with FP8 support |
+| NVIDIA CUDA (SM89+) | `torch.nn.functional.scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
 | CPU / CUDA SM80 (A100) | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
 
 The FP8 kernel path supports these quantization layouts.

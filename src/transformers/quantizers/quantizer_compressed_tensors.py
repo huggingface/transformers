@@ -41,7 +41,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     quantized state with compressed_tensors.
 
     With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through
-    row-wise FP8 kernels (torch._scaled_mm) via `CompressedTensorsFP8Linear`, when FP8 matmul
+    row-wise FP8 kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul
     hardware is available (CUDA SM89+ or XPU). This is opt-in and inference only.
 
     Otherwise the model goes through the regular compressed-tensors route: `dequantize=True`
