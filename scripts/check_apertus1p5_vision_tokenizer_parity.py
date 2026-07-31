@@ -15,21 +15,24 @@
 End-to-end parity check between the transformers `Apertus1p5VisionTokenizerModel` (encode-only IBQ vision tokenizer) and the
 ORIGINAL EMU3.5 Vision Tokenizer implementation (`BAAI/Emu3.5-VisionTokenizer` remote code + weights).
 
+This is the one check that cannot ship, because it needs the original repo's remote code as a reference.
+Everything verifiable without that reference lives in the shipped converter's `--verify`
+(`src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py`): stored precision, the
+derived configuration, code-grid geometry, batched encoding, the save/reload round trip, and the float32 keep
+under a bfloat16 load. This script reuses that converter's conversion functions so the two cannot drift apart.
+
 What it verifies (per test image: gradients, checkerboards, noise, solid, mixed; several sizes):
-  1. convert   - the original state dict loads into the port with `strict=True`
-                 (drop `decoder.*` / `post_quant_conv.*`, keep the remaining 247 tensors 1:1)
-  2. encode    - our code grids are BIT-EXACT equal to the original `encode()[2][2]` codes
-  3. grid      - code count equals (H // 16) * (W // 16) for every size, incl. non-multiples of 16
-  4. batch     - equal-size batched encode is bit-exact vs per-image encode (ours)
-  5. reload    - save_pretrained/from_pretrained round trip is bit-exact
-  6. dtype     - full {fp32, bf16} input x {fp32, bf16-loaded, bf16-forced} model matrix:
-                 * input fp32 -> model fp32: the main suite (bit-exact vs the original)
-                 * input bf16 -> model fp32: agreement vs baseline (input quantization loss only; INFO)
-                 * input fp32 -> model from_pretrained(dtype=bf16): `_keep_in_fp32_modules_strict` keeps the
-                   tokenizer fp32 -> codes must be BIT-EXACT (PASS/FAIL; validates the guard on real weights)
-                 * input bf16 -> model from_pretrained(dtype=bf16): agreement (INFO)
-                 * model force-cast `.to(bf16)` (guard bypassed): true bf16 compute, input dtype irrelevant
-                   (cast to model dtype internally); agreement (INFO)
+  1. convert   - the original state dict loads into the port with `strict=True`, using the shipped converter's
+                 config mapping and key filter (drop `decoder.*` / `post_quant_conv.*`, keep 247 tensors 1:1);
+                 a precondition of the comparison below, and here run against the live remote-code module
+  2. encode    - our code grids are BIT-EXACT equal to the original `encode()[2][2]` codes, for every image
+  3. dtype     - two informational half-precision measurements against our fp32 baseline. They stay here
+                 rather than in the shipped converter because they are agreement percentages, not pass/fail
+                 checks, and they are the source of the "~10% of codes flip in bf16" figure quoted in
+                 `modeling_apertus1p5.py` and in the model documentation:
+                 * input bf16 -> model fp32: input quantization loss only
+                 * model force-cast `.to(bf16)` (the `_keep_in_fp32_modules_strict` guard bypassed, torch
+                   semantics): true bf16 compute; input dtype is irrelevant (cast internally)
 
 How the ORIGINAL inference works, dtype-wise: strictly fp32. The checkpoint ships `torch_dtype: float32`, the
 BAAI remote code does no dtype handling (it runs at whatever dtype the weights are, fp32 by default), and the
@@ -46,14 +49,13 @@ exercised here; sizes are chosen directly.)
 Requirements: downloads the original weights (~1.8 GB, float32) and executes the original repo's remote code
 (`trust_remote_code=True`), the same code this port was reviewed against.
 
-With `--save_converted`, the parity-verified port is written as a standalone HF checkpoint; that directory is
-the `--vision_tokenizer_checkpoint` input of
-`src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py` (the composite assembler).
+This script does not write a checkpoint. To produce one, use the shipped converter:
+`python src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py --checkpoint_path
+BAAI/Emu3.5-VisionTokenizer --output_dir <dir> --verify`.
 
 Example:
     python scripts/check_apertus1p5_vision_tokenizer_parity.py \
         [--original BAAI/Emu3.5-VisionTokenizer]   # or a local snapshot dir \
-        [--save_converted /path/to/apertus1p5-visionvq-hf] \
         [--device cpu]
 """
 
@@ -63,8 +65,6 @@ import sys
 import numpy as np
 import torch
 
-
-DOWNSAMPLE = 16
 
 PASS, FAIL, INFO = "PASS", "FAIL", "INFO"
 
@@ -126,12 +126,6 @@ def main():
         default="BAAI/Emu3.5-VisionTokenizer",
         help="Hub repo id or local snapshot dir of the original tokenizer (remote code + weights)",
     )
-    parser.add_argument(
-        "--save_converted",
-        default=None,
-        help="Optionally save the parity-verified port here (the composite converter's "
-        "--vision_tokenizer_checkpoint input)",
-    )
     parser.add_argument("--device", default="cpu", help="cpu / cuda / mps (fp32 either way)")
     args = parser.parse_args()
 
@@ -143,21 +137,20 @@ def main():
         print(f"[{status}] {name}" + (f" - {detail}" if detail else ""))
 
     from transformers import AutoModel
-    from transformers.models.apertus1p5.modeling_apertus1p5 import (
-        Apertus1p5VisionTokenizerConfig,
-        Apertus1p5VisionTokenizerModel,
+    from transformers.models.apertus1p5.convert_apertus1p5_vision_tokenizer_to_hf import (
+        convert_config,
+        convert_state_dict,
     )
+    from transformers.models.apertus1p5.modeling_apertus1p5 import Apertus1p5VisionTokenizerModel
 
     print(f"Loading ORIGINAL model from {args.original} (trust_remote_code, ~1.8 GB fp32) ...")
     original = AutoModel.from_pretrained(args.original, trust_remote_code=True).to(device).eval()
 
     # ---- 1. convert: original state dict -> port, strict --------------------------------------------------
-    port = Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerConfig())
-    converted = {
-        key: value
-        for key, value in original.state_dict().items()
-        if not key.startswith(("decoder.", "post_quant_conv."))
-    }
+    # the mapping is fed the config object the ORIGINAL remote code built, so a semantic drift between their
+    # config class and the shipped converter's field table surfaces here
+    port = Apertus1p5VisionTokenizerModel(convert_config(original.config.to_dict()))
+    converted = convert_state_dict(original.state_dict())
     try:
         port.load_state_dict(converted, strict=True)
         record(PASS, "convert: strict load of original weights", f"{len(converted)} tensors")
@@ -170,50 +163,25 @@ def main():
     images = make_test_images()
     our_codes: dict[str, torch.Tensor] = {}
 
-    # ---- 2 + 3. encode parity (bit-exact) and grid geometry -----------------------------------------------
+    # ---- 2. encode parity against the original (bit-exact) ------------------------------------------------
+    # the code COUNT is compared against the original's own output rather than a (H // 16) * (W // 16) formula,
+    # which makes this a check against ground truth instead of against our own arithmetic
     for name, image in images.items():
         pixel_values = preprocess(image, device)
-        height, width = image.shape[:2]
         with torch.no_grad():
             ours = port.encode(pixel_values)  # (1, H//16, W//16)
         theirs = original_encode(original, pixel_values)  # flat
         our_codes[name] = ours
 
-        expected_grid = (height // DOWNSAMPLE, width // DOWNSAMPLE)
-        if ours.shape[1:] != torch.Size(expected_grid):
-            record(FAIL, f"grid[{name}]", f"got {tuple(ours.shape[1:])}, expected {expected_grid}")
-            continue
         if ours.numel() != theirs.numel():
             record(FAIL, f"encode[{name}]", f"count ours {ours.numel()} vs original {theirs.numel()}")
         elif not torch.equal(ours.flatten().long().cpu(), theirs.flatten().long().cpu()):
             n_diff = (ours.flatten().long().cpu() != theirs.flatten().long().cpu()).sum().item()
             record(FAIL, f"encode[{name}]", f"{n_diff}/{ours.numel()} codes differ")
         else:
-            record(PASS, f"encode[{name}]", f"{expected_grid[0]}x{expected_grid[1]} codes bit-exact")
+            record(PASS, f"encode[{name}]", f"{ours.shape[1]}x{ours.shape[2]} codes bit-exact")
 
-    # ---- 4. batched vs per-image (ours; same size, real weights) ------------------------------------------
-    batch = torch.cat(
-        [preprocess(images["gradient_256x256"], device), preprocess(images["solid_256x256"], device)], dim=0
-    )
-    with torch.no_grad():
-        batched = port.encode(batch)
-        singles = torch.cat([port.encode(batch[i : i + 1]) for i in range(2)], dim=0)
-    record(PASS if torch.equal(batched, singles) else FAIL, "batch: same-size batched == per-image encode")
-
-    # ---- 5. save/load round trip ----------------------------------------------------------------------------
-    import shutil
-    import tempfile
-
-    target = args.save_converted or tempfile.mkdtemp()
-    port.save_pretrained(target)
-    reloaded = Apertus1p5VisionTokenizerModel.from_pretrained(target).to(device).eval()
-    with torch.no_grad():
-        ok = torch.equal(reloaded.encode(preprocess(images["mixed_512x320"], device)), our_codes["mixed_512x320"])
-    record(PASS if ok else FAIL, "reload: save_pretrained/from_pretrained round trip")
-    if args.save_converted:
-        print(f"Converted model saved to {args.save_converted}")
-
-    # ---- 6. dtype matrix: {fp32, bf16} inputs x {fp32, bf16-loaded, bf16-forced} model -----------------------
+    # ---- 3. dtype measurements (INFO only; see the module docstring) ---------------------------------------
     # The ORIGINAL stack is fp32-only (checkpoint torch_dtype=float32; the BAAI remote code has no dtype
     # handling; vLLM hardcodes vision_dtype=torch.float32 for both weights and inputs), so fp32/fp32 is the only
     # cell with an original reference (checked bit-exact above). The remaining cells are measured against our
@@ -230,43 +198,20 @@ def main():
     agreement = (codes == baseline).float().mean().item()
     record(INFO, "dtype[input bf16 -> model fp32]", f"{agreement:.1%} agreement (input quantization loss only)")
 
-    # (b) input fp32 -> model loaded with dtype=bf16: _keep_in_fp32_modules_strict must keep the tokenizer
-    #     weights in fp32, making codes BIT-EXACT vs the fp32 baseline (the guard, verified with real weights)
-    guarded = Apertus1p5VisionTokenizerModel.from_pretrained(target, dtype=torch.bfloat16).to(device).eval()
-    weights_fp32 = guarded.encoder.conv_in.weight.dtype == torch.float32
+    # (b) model force-cast to bf16 (`.to(torch.bfloat16)` bypasses `_keep_in_fp32_modules_strict`, torch
+    #     semantics): true bf16 compute; input dtype is irrelevant (cast to model dtype internally). The cast
+    #     is in place and lossy, so it runs last: `port` is no longer an fp32 reference afterwards. The
+    #     complementary guard check, that `from_pretrained(dtype=bf16)` KEEPS fp32, is pass/fail and lives in
+    #     the shipped converter's `--verify`.
+    port = port.to(torch.bfloat16)
     with torch.no_grad():
-        codes = guarded.encode(pixels_fp32)
-    ok = weights_fp32 and torch.equal(codes, baseline)
-    record(
-        PASS if ok else FAIL,
-        "dtype[input fp32 -> model from_pretrained(dtype=bf16)]",
-        "weights kept fp32 by _keep_in_fp32_modules_strict, codes bit-exact"
-        if ok
-        else f"weights fp32: {weights_fp32}, codes equal: {torch.equal(codes, baseline)}",
-    )
-
-    # (c) input bf16 -> model loaded with dtype=bf16: guard keeps weights fp32; only the input rounding remains
-    with torch.no_grad():
-        codes = guarded.encode(pixels_bf16)
-    agreement = (codes == baseline).float().mean().item()
-    record(INFO, "dtype[input bf16 -> model from_pretrained(dtype=bf16)]", f"{agreement:.1%} agreement")
-    del guarded
-
-    # (d) model force-cast to bf16 (`.to(torch.bfloat16)` bypasses the guard, torch semantics): true bf16
-    #     compute; input dtype is irrelevant (cast to model dtype internally)
-    forced = Apertus1p5VisionTokenizerModel.from_pretrained(target).to(device).to(torch.bfloat16).eval()
-    with torch.no_grad():
-        codes = forced.encode(pixels_bf16)
+        codes = port.encode(pixels_bf16)
     agreement = (codes == baseline).float().mean().item()
     record(
         INFO,
         "dtype[any input -> model force-cast .to(bf16)]",
         f"{agreement:.1%} agreement; run the tokenizer in fp32",
     )
-    del forced
-
-    if not args.save_converted:
-        shutil.rmtree(target, ignore_errors=True)
 
     _summarize(results)
     sys.exit(1 if any(status == FAIL for status, _, _ in results) else 0)

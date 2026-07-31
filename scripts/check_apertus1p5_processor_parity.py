@@ -39,12 +39,13 @@ Informational (INFO, non-failing):
      Measured and reported here.
 
 Without `--vision_tokenizer_checkpoint`, the weight-based checks 3 and 4 are skipped. Any FAIL makes the
-script exit non-zero.
+script exit non-zero. Produce that directory with
+`src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py`.
 
 Example:
     python scripts/check_apertus1p5_processor_parity.py \
         --checkpoint /path/to/Apertus-1.5-8B-composite-hf \
-        --vision_tokenizer_checkpoint /path/to/apertus1p5-visionvq-hf
+        --vision_tokenizer_checkpoint /path/to/apertus1p5-vision-tokenizer-hf
 """
 
 import argparse
