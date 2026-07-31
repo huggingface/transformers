@@ -80,6 +80,7 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
+from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -986,39 +987,34 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
         dataloader_params = {
+            "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": "fork" if should_fork else None,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
+            "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
+        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
+        if is_torch_greater_or_equal_than_2_6:
+            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         sampler: torch.utils.data.Sampler | None = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             sampler = sampler_fn(dataset) if sampler_fn is not None else None
             if isinstance(sampler, BatchRebalanceSampler):
-                # `BatchRebalanceSampler` yields a full batch of sample indices per iteration (it
-                # implements `BatchSampler` semantics), so it must be passed as `batch_sampler`
-                # rather than `sampler`. `batch_size`/`drop_last` are mutually exclusive with
-                # `batch_sampler` in `DataLoader`.
+                # Pass as `batch_sampler`; it is mutually exclusive with `batch_size`/`sampler`/`drop_last`.
+                dataloader_params.pop("batch_size", None)
                 dataloader_params["batch_sampler"] = sampler
-                dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             else:
-                dataloader_params["batch_size"] = batch_size
                 if sampler is not None:
                     dataloader_params["sampler"] = sampler
                 dataloader_params["drop_last"] = self.args.dataloader_drop_last
-                dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
-        else:
-            dataloader_params["batch_size"] = batch_size
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 

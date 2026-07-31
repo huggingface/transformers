@@ -20,19 +20,16 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..distributed.utils import _torch_distributed_available
-from ..utils import is_torch_greater_or_equal, logging
+from ..distributed.utils import is_dtensor
+from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
     from torch import nn
-
-if _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
 
 
 logger = logging.get_logger(__name__)
@@ -47,7 +44,7 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if _torch_distributed_available and isinstance(t, DTensor):
+    if is_dtensor(t):
         return t.to_local()
     return t
 
@@ -64,9 +61,6 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
@@ -1318,7 +1312,7 @@ class ParallelInterface(GeneralInterface):
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
         }
-        if _torch_distributed_available
+        if is_torch_distributed_available()
         else {}
     )
 

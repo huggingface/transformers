@@ -182,6 +182,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "InstructBlipForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
         "InstructBlipVideoForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
         "InstructBlipVideoModel": "Same `spec` failure as `BarkFineModel`.",
+        "Kimi_K25Model": "Same `spec` failure as `BarkFineModel`, in the DeepseekV3 language model (vision encoder exports fine).",
+        "Kimi_K25ForConditionalGeneration": "Same `spec` failure as `BarkFineModel`, in the DeepseekV3 language model (vision encoder exports fine).",
         "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
         "MiniMaxM3VLModel": ("Serialization rejects an i64 constant (`bad number for type int32`)."),

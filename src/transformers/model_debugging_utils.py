@@ -20,9 +20,9 @@ import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 
-from .distributed.utils import _get_torch_distributed_rank, _torch_distributed_available
+from .distributed.utils import _get_torch_distributed_rank
 from .utils import logging
-from .utils.import_utils import is_torch_available, requires
+from .utils.import_utils import is_torch_available, is_torch_distributed_available, requires
 
 
 if is_torch_available():
@@ -30,7 +30,7 @@ if is_torch_available():
     from safetensors.torch import save_file
 
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if _torch_distributed_available:
+    if is_torch_distributed_available():
         import torch.distributed.tensor
 
 
