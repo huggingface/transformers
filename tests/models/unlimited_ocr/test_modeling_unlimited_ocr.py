@@ -145,31 +145,23 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         # max cache length can be smaller than sequence length
         max_length = past_key_values.get_max_length()
         seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
+        super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
 
-        if not any(hasattr(layer, "prefill_keys") for layer in past_key_values.layers):
-            super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
-            return
-
+    def _check_attention_shapes(self, layer, attention_shape, seq_length):
         # Super method assumes that there is only layer.keys/values but reference sliding window layers
         # can have layer.prefill_keys/prefill_values as well which results in wrong assertions in the
         # super method.
         def seq_len(tensor):
             return tensor.shape[-2] if tensor.dim() > 1 else 0
 
-        config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
-        for layer_idx, layer in enumerate(past_key_values.layers):
-            layer_config = config.per_layer_config[layer_idx]
-            attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
-            combined_keys_length = seq_len(layer.prefill_keys) + seq_len(layer.keys)
-            combined_values_length = seq_len(layer.prefill_values) + seq_len(layer.values)
-            self.assertEqual(
-                (*layer.prefill_keys.shape[:-2], combined_keys_length, layer.prefill_keys.shape[-1]), attention_shape
-            )
-            self.assertEqual(
-                (*layer.prefill_values.shape[:-2], combined_values_length, layer.prefill_values.shape[-1]),
-                attention_shape,
-            )
+        combined_keys_length = seq_len(layer.prefill_keys) + seq_len(layer.keys)
+        combined_values_length = seq_len(layer.prefill_values) + seq_len(layer.values)
+        self.assertEqual(
+            (*layer.prefill_keys.shape[:-2], combined_keys_length, layer.prefill_keys.shape[-1]), attention_shape
+        )
+        self.assertEqual(
+            (*layer.prefill_values.shape[:-2], combined_values_length, layer.prefill_values.shape[-1]), attention_shape
+        )
 
     def _check_generate_cache_sliding_window_too_small(self, cache_implementation: str, prefill_max_new_tokens: int):
         """Test that reference sliding window cache works correctly when decoding more than sliding_window tokens at once."""

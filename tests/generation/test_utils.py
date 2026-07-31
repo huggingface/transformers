@@ -2736,13 +2736,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
-        def check_attention_shapes(layer, attention_shape):
-            # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-            keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-            values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-            self.assertEqual(keys.shape, attention_shape)
-            self.assertEqual(values.shape, attention_shape)
-
         def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
             # assert we have as many conv states as necessary
             self.assertEqual(num_conv_states, layer.number_of_states)
@@ -2768,14 +2761,21 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             attention_shape = self._get_attention_shape(batch_size, seq_length, layer_config)
             # Mamba + Attention layer cache
             if type(layer) in (LinearAttentionAndFullAttentionLayer, LinearAttentionAndSlidingWindowAttentionLayer):
-                check_attention_shapes(layer, attention_shape)
+                self._check_attention_shapes(layer, attention_shape, seq_length)
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Attention only layer type
             else:
-                check_attention_shapes(layer, attention_shape)
+                self._check_attention_shapes(layer, attention_shape, seq_length)
+
+    def _check_attention_shapes(self, layer, attention_shape, seq_length):
+        # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+        keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+        values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+        self.assertEqual(keys.shape, attention_shape)
+        self.assertEqual(values.shape, attention_shape)
 
     def _get_attention_shape(self, batch_size: int, seq_length: int | None, config):
         # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
