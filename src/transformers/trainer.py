@@ -1107,8 +1107,7 @@ class Trainer:
             # #GPUs in this process) and already excludes world_size. Multiplying it by grad_accum
             # and world_size yields the true global effective batch size across all processes and
             # accumulation steps, covering both DDP (world_size > 1, n_gpu == 1) and DP
-            # (world_size == 1, n_gpu > 1). Using `per_device_train_batch_size` directly would drop
-            # the n_gpu factor in the DP case.
+            # (world_size == 1, n_gpu > 1).
             effective_batch_size = self.args.train_batch_size * grad_accum * world_size
 
             return BatchRebalanceSampler(
