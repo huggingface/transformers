@@ -311,6 +311,20 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Pix2StructTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=32)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Pix2Struct stores its head dim in `d_kv` and ties the q/k/v projections to `hidden_size`
+        config.d_kv = max(requested_dim, config.d_kv)
+        config.hidden_size = config.num_heads * config.d_kv
+        return config
+
+    @unittest.skip(
+        reason="Pix2Struct always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -401,6 +415,18 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = Pix2StructModelTester(self)
+
+    @unittest.skip(
+        reason="Pix2Struct always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="Composite model: the vision and text towers cannot both be scaled to triton's minimum flex head dim (16) while keeping the cross-attention hidden sizes equal, so the flex grad-test harness can't build a valid config (same limitation t5gemma skips for composite models)."
+    )
+    def test_flex_attention_with_grads(self):
+        pass
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
