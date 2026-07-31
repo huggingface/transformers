@@ -301,7 +301,15 @@ def generate_udp_gaussian_heatmaps(
     sigma: float,
     device: Union[str, "torch.device"] | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
-    """Generates UDP Gaussian heatmaps and visibility weights from raw keypoint coordinates."""
+    """Generates UDP Gaussian heatmaps and visibility weights from raw keypoint coordinates.
+
+    Returns:
+        tuple:
+        - heatmaps_list (list[torch.Tensor]): The generated heatmaps. Each tensor has shape
+          `(num_persons, num_keypoints, heatmap_height, heatmap_width)`.
+        - weights_list (list[torch.Tensor]): The target weights. Each tensor has shape
+          `(num_persons, num_keypoints)`.
+    """
     heatmap_height = output_size[0] // downscale_factor
     heatmap_width = output_size[1] // downscale_factor
 
@@ -314,6 +322,7 @@ def generate_udp_gaussian_heatmaps(
         indexing="ij",
     )
     heatmap_size = torch.tensor([heatmap_width - 1, heatmap_height - 1], dtype=torch.float32, device=device)
+    radius = sigma * 3
 
     for image_boxes, image_keypoints in zip(boxes, keypoints):
         boxes_tensor = box_xywh_to_cxcywh(torch.tensor(image_boxes, dtype=torch.float32, device=device))
@@ -327,9 +336,7 @@ def generate_udp_gaussian_heatmaps(
                 heatmaps_list.append(
                     torch.zeros((0, heatmap_height, heatmap_width), dtype=torch.float32, device=device)
                 )
-                weights_list.append(
-                    torch.zeros((0, heatmap_height, heatmap_width), dtype=torch.float32, device=device)
-                )
+                weights_list.append(torch.zeros((0,), dtype=torch.float32, device=device))
                 continue
 
             person_keypoints_tensor = torch.tensor(person_keypoints, dtype=torch.float32, device=device)
@@ -343,23 +350,36 @@ def generate_udp_gaussian_heatmaps(
             xs = heatmap_coords[:, 0].view(-1, 1, 1)
             ys = heatmap_coords[:, 1].view(-1, 1, 1)
 
-            dist_sq = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
-            person_heatmaps = torch.exp(-dist_sq / (2 * (sigma**2)))
+            distance_squared = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
+            person_heatmaps = torch.exp(-distance_squared / (2 * (sigma**2)))
 
             if person_keypoints_tensor.shape[1] > 2:
-                visibilities = person_keypoints_tensor[:, 2].view(-1, 1, 1)
+                visibilities = person_keypoints_tensor[:, 2]
                 mask = (visibilities > 0).float()
             else:
-                mask = torch.ones((person_keypoints_tensor.shape[0], 1, 1), dtype=torch.float32, device=device)
+                mask = torch.ones(person_keypoints_tensor.shape[0], dtype=torch.float32, device=device)
 
-            out_of_bounds = (xs < 0) | (xs >= heatmap_width) | (ys < 0) | (ys >= heatmap_height)
+            # 3-sigma bounds check matching original implementation
+            mu = (heatmap_coords + 0.5).to(torch.int64)
+            left = mu[:, 0] - int(radius)
+            top = mu[:, 1] - int(radius)
+            right = mu[:, 0] + int(radius) + 1
+            bottom = mu[:, 1] + int(radius) + 1
 
+            out_of_bounds = (left >= heatmap_width) | (top >= heatmap_height) | (right < 0) | (bottom < 0)
             valid_mask = mask * (~out_of_bounds).float()
-            person_heatmaps = person_heatmaps * valid_mask
-            person_weights = valid_mask.expand_as(person_heatmaps)
+
+            spatial_mask = (
+                (grid_x.unsqueeze(0) >= left.view(-1, 1, 1))
+                & (grid_x.unsqueeze(0) < right.view(-1, 1, 1))
+                & (grid_y.unsqueeze(0) >= top.view(-1, 1, 1))
+                & (grid_y.unsqueeze(0) < bottom.view(-1, 1, 1))
+            )
+
+            person_heatmaps = person_heatmaps * valid_mask.view(-1, 1, 1) * spatial_mask.float()
 
             heatmaps_list.append(person_heatmaps)
-            weights_list.append(person_weights)
+            weights_list.append(valid_mask)
 
     return heatmaps_list, weights_list
 
@@ -382,6 +402,8 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
     do_normalize = True
     do_reduce_labels = False
     do_pad = False  # Set to True for normal, albedo, and pointmap estimation
+    keypoint_heatmap_downscale_factor = 4
+    keypoint_heatmap_sigma = 6.0
 
     def __init__(self, **kwargs: Unpack[Sapiens2ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -393,8 +415,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         segmentation_maps: ImageInput | None = None,
         boxes: list[list[list[float]]] | None = None,
         keypoints: list[list[list[list[float]]]] | None = None,
-        keypoint_heatmap_downscale_factor: int = 4,
-        keypoint_heatmap_sigma: float = 6.0,
         **kwargs: Unpack[Sapiens2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -415,8 +435,6 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
             The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
         """
-        kwargs["keypoint_heatmap_downscale_factor"] = keypoint_heatmap_downscale_factor
-        kwargs["keypoint_heatmap_sigma"] = keypoint_heatmap_sigma
         batch_feature = super().preprocess(images, segmentation_maps, boxes, keypoints, **kwargs)
         return batch_feature
 
@@ -427,7 +445,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         boxes: list[list[list[float]]] | None,
         keypoints: list[list[list[list[float]]]] | None,
         do_convert_rgb: bool,
-        input_data_format: ChannelDimension | None,
+        input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None,
         keypoint_heatmap_downscale_factor: int,
@@ -441,7 +459,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
         data = {}
-        data["pixel_values"] = self._preprocess(images, **images_kwargs)
+        data["pixel_values"] = self._preprocess(images, **images_kwargs, boxes=boxes)
 
         # Prepare segmentation maps if provided
         if segmentation_maps is not None:
@@ -456,7 +474,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             segmentation_maps_kwargs = kwargs.copy()
             segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
             processed_segmentation_maps = self._preprocess(
-                images=processed_segmentation_maps, **segmentation_maps_kwargs
+                images=processed_segmentation_maps, **segmentation_maps_kwargs, boxes=boxes
             )
 
             # Convert to int64 and squeeze channel dimension
