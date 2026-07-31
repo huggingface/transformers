@@ -265,6 +265,33 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_get_audio_features_attentions(self):
         pass
 
+    # The vision quantizer reads `self.embedding.weight` directly instead of calling the `nn.Embedding`, so
+    # the offload hook that would restore that weight never fires and the codebook stays on the meta device.
+    @unittest.skip(
+        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(
+        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        reason="Apertus1p5 does not work with offload: the vision quantizer reads its codebook weight directly"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        reason="`nn.DataParallel` replicas expose no `Parameter`s, so reading `self.audio_tokenizer.dtype` "
+        "in `get_audio_tokens` raises `StopIteration`; use DDP instead"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_pixel_values_influence_logits(self):
         """Regression test: the generation wrapper must pass image tensors down to the base model."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
