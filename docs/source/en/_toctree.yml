@@ -1529,6 +1529,8 @@
     - sections:
       - local: model_doc/autoformer
         title: Autoformer
+      - local: model_doc/chronos2
+        title: Chronos-2
       - local: model_doc/informer
         title: Informer
       - local: model_doc/patchtsmixer

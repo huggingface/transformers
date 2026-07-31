@@ -82,6 +82,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("chinese_clip_text_model", "ChineseCLIPTextConfig"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionConfig"),
         ("chmv2", "CHMv2Config"),
+        ("chronos2", "Chronos2Config"),
         ("clap", "ClapConfig"),
         ("clap_audio_model", "ClapAudioConfig"),
         ("clap_text_model", "ClapTextConfig"),
