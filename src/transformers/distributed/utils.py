@@ -16,24 +16,29 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
     from .configuration_utils import DistributedConfig
 
+
 if is_torch_available():
     import torch
 
-    _torch_distributed_available = torch.distributed.is_available()
-else:
-    _torch_distributed_available = False
-
 
 def _is_torch_distributed_initialized() -> bool:
-    if not _torch_distributed_available:
+    if not is_torch_distributed_available():
         return False
     return torch.distributed.is_initialized()
+
+
+def is_dtensor(obj) -> bool:
+    if not is_torch_distributed_available():
+        return False
+    from torch.distributed.tensor import DTensor
+
+    return isinstance(obj, DTensor)
 
 
 def _get_torch_distributed_rank() -> int:
@@ -147,6 +152,8 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
     from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
 
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
@@ -169,6 +176,8 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
@@ -192,7 +201,8 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
-    # Import here to limit distributed warning only when this function is called and not when the module is imported.
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
@@ -205,6 +215,8 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
 
