@@ -665,25 +665,6 @@ def _patch_reshape(original):
     return patch
 
 
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape")
-def _patch_reshape(original):
-    """Materialise a non-contiguous input before ``reshape``.
-
-    ExecuTorch's edge-lowering reshape reference refuses a non-contiguous input (e.g. the
-    ``transpose(1, 2).reshape(...)`` in the packed vision-attention forward). A plain
-    ``.contiguous()`` gets folded away by functionalization, but a ``.clone()`` survives. Eager
-    ``reshape`` already copies a non-contiguous tensor, so this adds no extra work — it just moves
-    the copy where ExecuTorch's lowering needs it.
-    """
-
-    def patch(input, *shape):
-        if not input.is_contiguous():
-            input = input.clone()
-        return original(input, *shape)
-
-    return patch
-
-
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
 # on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,
@@ -1253,12 +1234,17 @@ def _drop_runtime_asserts(exported_program: ExportedProgram) -> None:
         stack = [feeder for node in asserts for feeder in node.all_input_nodes]
         for node in asserts:
             module.graph.erase_node(node)
+        # A feeder can be reached more than once (shared input / diamond); track erased nodes so we
+        # never call `erase_node` twice on the same one (its `users` is empty after the first erase,
+        # which would otherwise pass the guard below and corrupt the graph).
+        erased = set()
         while stack:
             feeder = stack.pop()
-            if feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
+            if feeder in erased or feeder.op in ("placeholder", "output") or feeder.users or feeder.is_impure():
                 continue
             stack.extend(feeder.all_input_nodes)
             module.graph.erase_node(feeder)
+            erased.add(feeder)
         module.recompile()
 
 

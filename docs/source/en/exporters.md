@@ -694,9 +694,9 @@ auto forward = [&](const TensorPtr& input_ids, const TensorPtr& mask, const Tens
     decode.set_input(EValue(*position_ids), 2);
     for (int i = 0; i < num_cache_tensors; ++i)
         decode.set_input(EValue(*cache_tensor[i]), 3 + i);
-    // bind each mutated-cache output onto its input buffer → the write lands in place, zero copies
+    // bind each mutated-cache output onto that same input tensor's data → the write lands in place, zero copies
     for (int i = 0; i < num_cache_tensors; ++i)
-        decode.set_output_data_ptr(cache_data[i], cache_nbytes[i], cache_out_idx[i]);
+        decode.set_output_data_ptr(cache_tensor[i]->mutable_data_ptr(), cache_nbytes[i], cache_out_idx[i]);
     decode.set_output_data_ptr(logits_data, logits_nbytes, logits_out_idx);
     decode.execute();                 // cache updated in place; logits written to logits_data
     return argmax_last(logits_data);  // greedy pick

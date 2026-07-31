@@ -353,7 +353,10 @@ def _patch_chunk(original):
         if not isinstance(total, torch.SymInt):
             return original(input, chunks, dim)
         # `torch.chunk` splits into `chunks` pieces of `ceil(total / chunks)`, the last taking the
-        # remainder. Emit that as narrows so nothing lowers to `SplitToSequence`.
+        # remainder. Emit that as narrows so nothing lowers to `SplitToSequence`. This assumes the
+        # split axis divides evenly into `chunks` (true for the head-axis splits this targets); an
+        # unevenly-divisible dynamic axis would need a symbolic piece count, which torch.export can't
+        # express here.
         chunk_size = (total + chunks - 1) // chunks
         splits, start = [], 0
         for i in range(chunks):

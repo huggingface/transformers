@@ -26,9 +26,7 @@ Current coverage — the generation `decode` component:
 - **cache mutates in place** — driving the decode against a fixed-size `StaticCache` carries the cache
   across steps in place and matches eager: `torch.export` via `USER_INPUT_MUTATION`, and ONNX Runtime
   via `CudaSession` buffer sharing on the max-performance path (device-resident buffers, in-place input
-  updates, no per-step allocations or host round-trips). The ExecuTorch *Python* runtime can't do the
-  in-place write (it needs `Method::set_output_data_ptr`), so its decode loop carries the cache
-  *functionally* — feeding the updated cache back from the method outputs — and still matches eager.
+  updates, no per-step allocations or host round-trips).
 """
 
 import copy
