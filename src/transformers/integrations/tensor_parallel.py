@@ -20,10 +20,9 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..distributed.utils import is_torch_distributed_available
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():

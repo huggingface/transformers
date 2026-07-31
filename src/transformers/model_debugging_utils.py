@@ -20,9 +20,9 @@ import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 
-from .distributed.utils import _get_torch_distributed_rank, is_torch_distributed_available
+from .distributed.utils import _get_torch_distributed_rank
 from .utils import logging
-from .utils.import_utils import is_torch_available, requires
+from .utils.import_utils import is_torch_available, is_torch_distributed_available, requires
 
 
 if is_torch_available():

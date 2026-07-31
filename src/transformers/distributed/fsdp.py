@@ -18,9 +18,9 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from ..integrations.tensor_parallel import replace_layer_number_by_wildcard
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .utils import _is_torch_distributed_initialized, is_torch_distributed_available
+from .utils import _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:

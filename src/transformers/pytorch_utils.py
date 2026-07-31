@@ -21,8 +21,8 @@ import torch
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .distributed.utils import is_torch_distributed_available
 from .utils import (
+    is_torch_distributed_available,
     is_torch_greater_or_equal,
     is_torch_xla_available,
     is_torchdynamo_compiling,

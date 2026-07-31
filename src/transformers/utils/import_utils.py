@@ -226,6 +226,15 @@ def is_torch_cuda_available() -> bool:
 
 
 @lru_cache
+def is_torch_distributed_available() -> bool:
+    if not is_torch_available():
+        return False
+    import torch
+
+    return torch.distributed.is_available()
+
+
+@lru_cache
 def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
