@@ -61,18 +61,22 @@ MATERIAL=~/apertus-material && mkdir -p $MATERIAL
 # a) Apertus 1.5 text backbone with the PRUNED output layer (config carries `output_vocab_size: 131072`)
 hf download apertus-ai/Apertus-v1.5-8B-integration --revision refs/pr/1 \
   --local-dir $MATERIAL/Apertus-1.5-8B-pruned
-# (alternatively skip this download: the converter in step d also accepts hub ids directly, e.g.
+# (alternatively skip this download: the converter in step c also accepts hub ids directly, e.g.
 #  --apertus_checkpoint apertus-ai/Apertus-v1.5-8B-integration@refs/pr/1, cached in the HF cache)
 
-# b) vision tokenizer: downloads BAAI/Emu3.5-VisionTokenizer, runs the bit-exact parity suite against the
-#    original code, and saves the converted encode-only weights (fp32, ~0.9 GB)
-python scripts/check_apertus1p5_vision_tokenizer_parity.py --save_converted $MATERIAL/apertus1p5-visionvq-hf
+# b) vision tokenizer: downloads BAAI/Emu3.5-VisionTokenizer and saves the converted encode-only weights
+#    (fp32, ~0.9 GB); --verify reloads the result and checks it
+python src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py \
+  --checkpoint_path BAAI/Emu3.5-VisionTokenizer \
+  --output_dir $MATERIAL/apertus1p5-vision-tokenizer-hf --verify
+# (optional, needs the original remote code) bit-exact parity against the BAAI implementation:
+# python scripts/check_apertus1p5_vision_tokenizer_parity.py
 
 # c) assemble the composite (writes weights + tokenizer + processor + chat template) and verify it;
 #    each source may be a local dir or a hub repo id (optionally `repo_id@revision`)
 python src/transformers/models/apertus1p5/convert_apertus1p5_weights_to_hf.py \
   --apertus_checkpoint $MATERIAL/Apertus-1.5-8B-pruned \
-  --vision_tokenizer_checkpoint $MATERIAL/apertus1p5-visionvq-hf \
+  --vision_tokenizer_checkpoint $MATERIAL/apertus1p5-vision-tokenizer-hf \
   --audio_tokenizer_checkpoint swiss-ai/wavtokenizer-large-unify-40token \
   --output_dir $MATERIAL/Apertus-1.5-8B-composite-hf --verify
 
