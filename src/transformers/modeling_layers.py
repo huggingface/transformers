@@ -23,7 +23,7 @@ import torch.nn as nn
 from safetensors import safe_open
 
 from .cache_utils import Cache
-from .conversion_mapping import get_model_conversion_mapping
+from .conversion_mapping import get_mtp_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
@@ -495,10 +495,17 @@ class MtpModel(PreTrainedModel):
         drafted_logits = []
         drafted_tokens = []
         loss = None
+        # MROPE models pack positions as [1 + num_rope_axes, bs, seq]: position_ids[0] holds the text positions
+        # used for the masks and layers, position_ids[1:] the rope positions.
+        # Beware! The number of rope axes is not stored uniformly across models, so probe the usual locations in order and default to
+        # 3 (Glm4v family)
+        mrope_section = getattr(self.rotary_emb, "mrope_section", None)
+        if not mrope_section:
+            mrope_section = (getattr(self.config, "rope_parameters", None) or {}).get("mrope_section")
+        num_rope_axes = len(mrope_section) if mrope_section else 3
+
         for i, mtp_layer in enumerate(self.layers):
-            # MROPE models (e.g. Glm4v family) pack positions as [4, bs, seq]: plane 0 holds the text
-            # positions used for the masks and layers, planes 1: hold the rope positions
-            if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            if position_ids is not None and position_ids.ndim == 3 and position_ids.shape[0] == num_rope_axes + 1:
                 text_position_ids = position_ids[0]
                 rope_position_ids = position_ids[1:]
             else:
@@ -629,7 +636,7 @@ class MtpModel(PreTrainedModel):
             )
             for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers)
         ]
-        weight_conversions.extend(get_model_conversion_mapping(mtp_model, add_legacy=False))
+        weight_conversions.extend(get_mtp_conversion_mapping(mtp_model.config.model_type))
         weight_conversions.extend(main_model._weight_conversions)
 
         # Load the weights

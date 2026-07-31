@@ -1505,8 +1505,9 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             # and prev hidden_states
             self.mtp_cache.crop(-self.num_mtp_layers)
 
-            # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
+            # We need the last invalidated tokens, as well as the new one in a single pass for efficiency
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            # `position_ids` can be 3D for mrope models, so slice on the last dim
             mtp_position_ids = model_kwargs["position_ids"][..., -num_last_main_model_tokens - self.num_mtp_layers :]
             mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
             last_hidden_states = self.full_seq_last_hidden_states[
