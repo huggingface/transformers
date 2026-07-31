@@ -25,6 +25,10 @@ jobs:
             -H "Accept: application/vnd.github.raw" \
             "/repos/${GITHUB_REPOSITORY}/contents/utils/update_pr_ci_dashboard_recap.py?ref=${SCRIPT_REF}" \
             > update_pr_ci_dashboard_recap.py
+          gh api \
+            -H "Accept: application/vnd.github.raw" \
+            "/repos/${GITHUB_REPOSITORY}/contents/utils/github_utils.py?ref=${SCRIPT_REF}" \
+            > github_utils.py
 
       - name: Update PR CI recap
         env:
