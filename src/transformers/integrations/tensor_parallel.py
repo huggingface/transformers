@@ -31,9 +31,6 @@ if is_torch_available():
     import torch.distributed as dist
     from torch import nn
 
-if is_torch_distributed_available():
-    from torch.distributed.tensor import DTensor
-
 
 logger = logging.get_logger(__name__)
 
