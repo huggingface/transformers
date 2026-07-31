@@ -468,7 +468,7 @@ class GenerationConfig(PushToHubMixin):
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
-        # Depreacted in 5.13
+        # Deprecated in 5.13
         self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
         if self.continuous_batching_config is not None:
             msg = (
@@ -1523,7 +1523,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             Size of the sampling table.
         skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
-        debug_mode (`bool`, optional, *optional*, defaults to `False`):
+        debug_mode (`bool`, *optional*, defaults to `False`):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
 

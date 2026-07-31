@@ -129,7 +129,7 @@ class DecompressExperts(ConversionOps):
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
-            # `MergeModulelist` stacks the full list for MoE kernels compatipility, i.e. x2 memory
+            # `MergeModulelist` stacks the full list for MoE kernels compatibility, i.e. x2 memory
             output = None
             for i, (quant, scale) in enumerate(zip(quantized, scales)):
                 # Prefer the checkpoint's stored per-expert `weight_shape`

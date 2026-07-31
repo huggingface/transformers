@@ -396,7 +396,7 @@ if is_kernels_available():
 else:
     _kernels_enabled = False
 
-    # Stub to make decorators int transformers work when `kernels`
+    # Stub to make decorators in transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
         def decorator(cls):
