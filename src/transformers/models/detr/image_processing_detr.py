@@ -1042,7 +1042,7 @@ class DetrImageProcessor(TorchvisionBackend):
         Returns:
             `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized to
+              `None` if no mask is found above `threshold`. If `target_sizes` is specified, segmentation is resized to
               the corresponding `target_sizes` entry.
             - **segments_info** -- A dictionary that contains additional information on each segment.
                 - **id** -- an integer representing the `segment_id`.
