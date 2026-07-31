@@ -78,21 +78,6 @@ python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
     --output_dir /path/to/converted-model
 ```
 
-For development, parity against the original implementation can be checked for one named release or for the full
-released checkpoint matrix:
-
-```bash
-python scripts/check_wavtokenizer_parity.py \
-    --original_repo /path/to/WavTokenizer \
-    --checkpoint medium-speech-75-v2 \
-    --output_dir /tmp/wavtokenizer-medium-speech-75-v2
-
-python scripts/check_wavtokenizer_parity.py \
-    --original_repo /path/to/WavTokenizer \
-    --all-checkpoints \
-    --output_dir /tmp/wavtokenizer-parity-matrix
-```
-
 ## Usage example
 
 ```python
