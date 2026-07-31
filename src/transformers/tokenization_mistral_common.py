@@ -1576,6 +1576,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         save_directory = Path(save_directory)
 
+        if save_directory.is_file():
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
+            return
+
         if save_format == "hf":
             from transformers.integrations.mistral import convert_tekken_tokenizer
 
@@ -1597,6 +1601,13 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if not self._tokenizer_path.is_file():
             raise FileNotFoundError(f"Original tokenizer file {self._tokenizer_path} is no longer accessible.")
 
+        # Snapshot timestamps before the copy below, otherwise the freshly written tekken.json is
+        # already present in the snapshot and `_upload_modified_files` never uploads it.
+        # `save_directory` may not exist yet, hence the empty fallback.
+        files_timestamps = {}
+        if push_to_hub and save_directory.is_dir():
+            files_timestamps = self._get_files_timestamps(save_directory)
+
         save_directory.mkdir(parents=True, exist_ok=True)
         dest = save_directory / self._tokenizer_path.name
         if not (dest.exists() and os.path.samefile(self._tokenizer_path, dest)):
@@ -1605,7 +1616,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
             repo_id = hf_api().create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
-            files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(
                 save_directory,

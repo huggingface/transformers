@@ -279,6 +279,46 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.assertEqual(result, (str(tekken_path),))
             self.assertEqual(tekken_path.read_bytes(), original_bytes)
 
+    def test_save_pretrained_mistral_format_push_to_hub_uploads_copied_tekken_json(self):
+        """The files-timestamps snapshot for push_to_hub must be taken before tekken.json is
+        copied into the (not yet existing) output directory, otherwise `_upload_modified_files`
+        sees it as already-present and never uploads it."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = tmp_path / "does-not-exist-yet"
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            with (
+                patch("transformers.tokenization_mistral_common.hf_api") as mock_hf_api,
+                patch.object(MistralCommonBackend, "_upload_modified_files") as mock_upload,
+            ):
+                mock_hf_api.return_value.create_repo.return_value.repo_id = "fake-repo"
+                backend.save_pretrained(str(out_dir), save_format="mistral", push_to_hub=True)
+
+            mock_upload.assert_called_once()
+            files_timestamps = mock_upload.call_args.args[2]
+            self.assertNotIn("tekken.json", files_timestamps)
+
+    def test_save_pretrained_rejects_file_path_as_save_directory(self):
+        """save_pretrained on a path that is already a file logs an error and returns without
+        writing anything, matching `PreTrainedTokenizerBase.save_pretrained`."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            existing_file = tmp_path / "already-a-file"
+            existing_file.write_text("sentinel", encoding="utf-8")
+
+            result = backend.save_pretrained(str(existing_file), save_format="mistral")
+
+            self.assertIsNone(result)
+            self.assertEqual(existing_file.read_text(encoding="utf-8"), "sentinel")
+
     def test_save_pretrained_unknown_format_raises_value_error(self):
         """save_pretrained rejects any save_format outside 'hf'/'mistral'/None."""
         with tempfile.TemporaryDirectory() as tmp_dir:

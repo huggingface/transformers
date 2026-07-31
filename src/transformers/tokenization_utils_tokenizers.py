@@ -532,31 +532,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         Save the full tokenizer state.
 
 
-        This method make sure the full tokenizer can then be re-loaded using the
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`] class method..
-
-        Warning,None This won't save modifications you may have applied to the tokenizer after the instantiation (for
-        instance, modifying `tokenizer.do_lower_case` after creation).
+        Extends [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] with
+        `save_format` support, for tokenizers converted from a native vocabulary file
+        (e.g. Mistral's `tekken.json`). See the base method for `legacy_format`,
+        `filename_prefix`, and `push_to_hub`.
 
         Args:
-            save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
-            legacy_format (`bool`, *optional*):
-                Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
-                format as well as in legacy format if it exists, i.e. with tokenizer specific vocabulary and a separate
-                added_tokens files.
-
-                If `False`, will only save the tokenizer in the unified JSON format. This format is incompatible with
-                "slow" tokenizers (not powered by the *tokenizers* library), so the tokenizer will not be able to be
-                loaded in the corresponding "slow" tokenizer.
-
-                If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
-                error is raised.
-            filename_prefix (`str`, *optional*):
-                A prefix to add to the names of the files saved by the tokenizer.
-            push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
-                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
-                namespace).
             save_format (`str`, *optional*):
                 `"mistral"` to save as a native `tekken.json` by copying the original
                 file (requires the original tekken vocabulary file to be available). The name is

@@ -446,8 +446,10 @@ def _check_tekken_vocab_unchanged(tokenizer: TokenizersBackend, vocab_file: str)
         raise ValueError(
             "Cannot save in 'mistral' format: the tokenizer reports a vocab size of "
             f"{observed_vocab_size}, but its source tekken.json declares {expected_vocab_size} "
-            "(via default_vocab_size/default_num_special_tokens). The source tekken.json is "
-            "internally inconsistent; regenerate it with matching vocab and config sizes."
+            "(via default_vocab_size/default_num_special_tokens). Either the vocab was resized "
+            "in this session, in which case use save_format='hf' to preserve the change, or the "
+            "source tekken.json is itself inconsistent and should be regenerated with matching "
+            "vocab and config sizes."
         )
 
 

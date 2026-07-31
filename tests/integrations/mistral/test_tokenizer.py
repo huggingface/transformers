@@ -865,15 +865,20 @@ class TestCheckTekkenVocabUnchanged(unittest.TestCase):
         with _converted_tokenizer(keys_to_drop=(("top", "special_tokens"),)) as (tok, tekken_path):
             _check_tekken_vocab_unchanged(tok, str(tekken_path))
 
-    def test_size_only_divergence_raises_internally_inconsistent_error(self):
-        """A tekken.json whose `default_num_special_tokens` is smaller than the number of
-        declared special tokens is internally inconsistent."""
+    def test_size_only_divergence_reports_both_possible_causes(self):
+        """A size-only divergence cannot tell an in-session resize apart from a tekken.json
+        whose `default_num_special_tokens` is smaller than its declared special tokens, so the
+        error reports the observed sizes and names both causes."""
         with _converted_tokenizer(vocab_size=30, num_special_tokens=10) as (tok, tekken_path):
             with self.assertRaises(ValueError) as ctx:
                 _check_tekken_vocab_unchanged(tok, str(tekken_path))
             message = str(ctx.exception)
-            self.assertIn("internally inconsistent", message)
-            self.assertNotIn("save_format='hf'", message)
+            self.assertIn("resized", message)
+            self.assertIn("save_format='hf'", message)
+            self.assertIn("regenerated", message)
+            # The added-token branch must not have fired.
+            self.assertNotIn("Unexpected added tokens", message)
+            self.assertNotIn("Missing expected special tokens", message)
 
     def test_chat_template_change_does_not_trigger_guard(self):
         with _converted_tokenizer() as (tok, tekken_path):
