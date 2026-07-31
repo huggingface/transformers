@@ -1594,7 +1594,7 @@ class ModelTesterMixin(ExportTesterMixin):
         self,
     ):
         """
-        Tests that the model can run forward pass when config is intialized without common attributes.
+        Tests that the model can run forward pass when config is initialized without common attributes.
         We expect that these attributes have a default value and will not cause errors. See #41541
         where the attributes were removed from `PreTrainedConfig` and moved to each model's config
         class.

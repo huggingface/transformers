@@ -1475,7 +1475,7 @@ class Cache:
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
         Returns the maximum length of the cache. If `layer_idx` is not provided (default), this returns the maximum
-        accross all layers. Otherwise, return the maximum supported value for the given layer.
+        across all layers. Otherwise, return the maximum supported value for the given layer.
         A value of `-1` means no maximum, or undefined maximum, e.g. for dynamic attention layers that can grow indefinitely,
         or linear attention layer that do not have a sequence length dimension.
         """
