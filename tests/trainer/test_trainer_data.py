@@ -939,14 +939,17 @@ class TrainerSamplerTest(unittest.TestCase):
         """When drop_last=False and the remainder is smaller than dp_size * grad_accum, the tail
         is padded (repeating samples from the start, like torch DistributedSampler) so every
         (rank, slot) group still has >= 1 sample. Union over all ranks must cover every real
-        sample."""
+        sample, and the tail is padded only up to K (= dp_size * grad_accum) -- NOT the full
+        effective_batch_size -- so duplication stays bounded."""
         ds_size = 20
         eff_bs = 16
         dp_size = 4
         grad_accum = 2  # K = 8 groups, but remainder = 4 < 8 -> padding kicks in
         lengths = list(range(100, 100 + ds_size))
+        K = dp_size * grad_accum
 
         covered = set()
+        total_yielded = 0
         for rank in range(dp_size):
             s = BatchRebalanceSampler(
                 lengths=lengths,
@@ -959,8 +962,13 @@ class TrainerSamplerTest(unittest.TestCase):
             )
             for batch in s:
                 covered.update(batch)
+                total_yielded += len(batch)
         # All real sample indices survive; only padding copies are duplicated.
         self.assertTrue(set(range(ds_size)) <= covered)
+        # num_full_batches = 20 // 16 = 1 (16 samples); remainder = 4 < K=8, padded up to K=8.
+        # So total yielded = full batch (16) + padded tail (K=8) = 24, NOT 16 + eff_bs(16) = 32.
+        self.assertEqual(total_yielded, eff_bs + K)
+        self.assertLess(total_yielded, eff_bs + eff_bs)
 
     @require_accelerate
     def test_batch_rebalance_defeats_double_sharding(self):
@@ -998,34 +1006,47 @@ class TrainerSamplerTest(unittest.TestCase):
 
     def test_batch_rebalance_trainer_effective_batch_size_formula(self):
         """Regression for the effective_batch_size calculation in Trainer._get_train_sampler.
-        `train_batch_size` is the per-process batch (per_device * n_gpu) and already excludes
-        world_size, so the old formula `train_batch_size // world_size` undercounted by the
-        world_size factor. The correct formula is
-        per_device_train_batch_size * grad_accum * world_size. This bug only manifests when
-        world_size > 1, so we simulate a multi-process setup by overriding args."""
+
+        The correct formula is `train_batch_size * grad_accum * world_size`, where
+        `train_batch_size = per_device_train_batch_size * n_gpu` is the per-process batch (it
+        already excludes world_size). This must cover both distributed cases:
+          * DDP: world_size > 1, n_gpu == 1  -> train_batch_size == per_device
+          * DP : world_size == 1, n_gpu > 1  -> train_batch_size == per_device * n_gpu
+
+        Using `per_device_train_batch_size * grad_accum * world_size` (the previous fix) is
+        correct for DDP but drops the n_gpu factor in the DP case. We simulate both setups by
+        overriding args."""
         from unittest.mock import MagicMock
 
-        n = 32
-        fake_trainer = MagicMock()
-        fake_trainer.args.train_sampling_strategy = "batch_rebalance"
-        fake_trainer.args.world_size = 2  # simulate DDP with 2 processes
-        fake_trainer.args.process_index = 0
-        fake_trainer.args.per_device_train_batch_size = 4
-        # `train_batch_size` is a property = per_device * n_gpu; in DDP n_gpu=1 so it equals
-        # per_device (4). The buggy formula used this // world_size (=2), giving 8 instead of 16.
-        fake_trainer.args.train_batch_size = 4
-        fake_trainer.args.gradient_accumulation_steps = 2
-        fake_trainer.args.length_column_name = "length"
-        fake_trainer.args.batch_rebalance_alpha = 0.001
-        fake_trainer.args.batch_rebalance_max_tokens = 0
-        fake_trainer.args.dataloader_drop_last = True
-        fake_trainer.processing_class = None
-        fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]
+        def build(per_device_train_batch_size, n_gpu, world_size, grad_accum=2):
+            n = 32
+            fake_trainer = MagicMock()
+            fake_trainer.args.train_sampling_strategy = "batch_rebalance"
+            fake_trainer.args.world_size = world_size
+            fake_trainer.args.process_index = 0
+            fake_trainer.args.per_device_train_batch_size = per_device_train_batch_size
+            # `train_batch_size` is a property = per_device_train_batch_size * max(1, n_gpu).
+            fake_trainer.args.train_batch_size = per_device_train_batch_size * max(1, n_gpu)
+            fake_trainer.args.gradient_accumulation_steps = grad_accum
+            fake_trainer.args.length_column_name = "length"
+            fake_trainer.args.batch_rebalance_alpha = 0.001
+            fake_trainer.args.batch_rebalance_max_tokens = 0
+            fake_trainer.args.dataloader_drop_last = True
+            fake_trainer.processing_class = None
+            fake_trainer.train_dataset = [{"input_ids": list(range((i % 5) + 1))} for i in range(n)]
+            return fake_trainer
 
-        sampler = Trainer._get_train_sampler(fake_trainer)
+        # DDP: 2 processes, 1 GPU each. per_device=4 -> train_batch_size=4.
+        # expected = train_batch_size(4) * grad_accum(2) * world_size(2) = 16.
+        sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=1, world_size=2))
         self.assertIsInstance(sampler, BatchRebalanceSampler)
-        # expected = per_device(4) * grad_accum(2) * world_size(2) = 16, NOT 8.
         self.assertEqual(sampler.effective_batch_size, 16)
+
+        # DP: 1 process, 4 GPUs. per_device=4 -> train_batch_size = 4*4 = 16.
+        # expected = train_batch_size(16) * grad_accum(2) * world_size(1) = 32. The previous
+        # formula used per_device directly and returned 8, dropping the n_gpu factor.
+        sampler = Trainer._get_train_sampler(build(per_device_train_batch_size=4, n_gpu=4, world_size=1))
+        self.assertEqual(sampler.effective_batch_size, 32)
 
 
 # ---------------------------------------------------------------------------

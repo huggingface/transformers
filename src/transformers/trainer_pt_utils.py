@@ -792,13 +792,14 @@ class BatchRebalanceSampler(Sampler):
                 yield rank_mbs[self.rank][ga]
 
         # Trailing partial batch when drop_last=False. If the remainder is smaller than the number
-        # of (rank, slot) groups, pad by repeating samples from the start of the epoch order (same
-        # strategy as torch.utils.data.DistributedSampler) so every group still has >= 1 sample and
-        # the all-reduce stays consistent across ranks.
+        # of (rank, slot) groups (K = dp_size * grad_accum), pad by repeating samples from the
+        # start of the epoch order (same strategy as torch.utils.data.DistributedSampler) so every
+        # group still has >= 1 sample and the all-reduce stays consistent across ranks.
         if self.has_tail:
             batch_indices = order[self.num_full_batches * self.effective_batch_size :]
-            if len(batch_indices) < self.dp_size * self.grad_accum:
-                pad = self.effective_batch_size - len(batch_indices)
+            K = self.dp_size * self.grad_accum
+            if len(batch_indices) < K:
+                pad = K - len(batch_indices)
                 batch_indices = batch_indices + order[:pad]
             batch_lengths = [self.lengths[i] for i in batch_indices]
             rank_mbs = self._assign(batch_indices, batch_lengths)

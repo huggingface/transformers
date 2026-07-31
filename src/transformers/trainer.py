@@ -1103,11 +1103,13 @@ class Trainer:
             world_size = max(1, self.args.world_size)
             rank = self.args.process_index if self.args.world_size > 1 else 0
             grad_accum = self.args.gradient_accumulation_steps
-            # `self.args.train_batch_size` is the per-process batch (per_device * #GPUs in this
-            # process), NOT per_device * world_size, so deriving micro_batch_size by dividing it by
-            # world_size undercounts by the world_size factor. Use per_device_train_batch_size
-            # directly: eff_bs = per_device_bs * grad_accum * dp_size.
-            effective_batch_size = self.args.per_device_train_batch_size * grad_accum * world_size
+            # `self.args.train_batch_size` is the per-process batch (per_device_train_batch_size *
+            # #GPUs in this process) and already excludes world_size. Multiplying it by grad_accum
+            # and world_size yields the true global effective batch size across all processes and
+            # accumulation steps, covering both DDP (world_size > 1, n_gpu == 1) and DP
+            # (world_size == 1, n_gpu > 1). Using `per_device_train_batch_size` directly would drop
+            # the n_gpu factor in the DP case.
+            effective_batch_size = self.args.train_batch_size * grad_accum * world_size
 
             return BatchRebalanceSampler(
                 lengths=lengths,
