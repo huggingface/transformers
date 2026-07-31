@@ -26,16 +26,6 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_distributed_available() and is_torch_greater_or_equal("2.7"):
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import (
-        StateDictOptions,
-        get_model_state_dict,
-        get_optimizer_state_dict,
-        set_optimizer_state_dict,
-    )
-
 
 def _is_torch_distributed_initialized() -> bool:
     if not is_torch_distributed_available():
@@ -159,6 +149,13 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
+
     options = StateDictOptions(full_state_dict=True, cpu_offload=True)
     full_state_dict = get_model_state_dict(model, options=options)
     if _get_torch_distributed_rank() == 0:
@@ -177,7 +174,13 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     through its normal path — no special flag needed at load time.
     """
     if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpoint saving requires `torch>=2.7`.")
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
     state_dict = get_model_state_dict(model)
     dcp.save(
@@ -195,12 +198,28 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Save optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     """Load optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
+
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
