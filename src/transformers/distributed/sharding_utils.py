@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_distributed_available() and is_torch_greater_or_equal("2.5"):
+if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard
