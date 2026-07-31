@@ -1530,12 +1530,12 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # FIXME: we can infer it from input/n-matches no?
         dummy_tgt_length = self.assistant_kwargs["position_ids"].shape[1]
         target_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i][:, :dummy_tgt_length] for i in self.target_layer_ids], dim=-1
+            [model_outputs.hidden_states[i + 1][:, :dummy_tgt_length] for i in self.target_layer_ids], dim=-1
         )
 
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated token
-        block_mask = torch.tensor([self.mask_token_id] * self.block_size, device=input_ids.device)[None, ...]
+        block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1), device=input_ids.device)[None, ...]
         input_mask_ids = torch.cat([input_ids[:, -1:], block_mask], dim=-1)
         mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
 

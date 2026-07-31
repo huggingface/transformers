@@ -67,7 +67,7 @@ class OnyxAssistantConfig(PreTrainedConfig):
     num_attention_heads: int = 32
     num_key_value_heads: int = 8
     head_dim: int = 128
-    rms_norm_eps: float = 9.999999747378752e-06
+    rms_norm_eps: float = 1e-5
     rope_parameters: dict | None = None
     max_position_embeddings: int = 131072
     sliding_window: int = 2048
