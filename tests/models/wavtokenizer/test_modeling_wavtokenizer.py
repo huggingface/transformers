@@ -282,7 +282,7 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         )
         hop = config.hop_length
         lengths = [2 * hop, 5 * hop - 1, 9 * hop + 1]
-        batch = [floats_tensor([length], scale=1.0).numpy() for length in lengths]
+        batch = [floats_tensor([length], scale=1.0).cpu().numpy() for length in lengths]
         inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
@@ -303,7 +303,7 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         )
         hop = config.hop_length
         lengths = [2 * hop, 5 * hop - 1, 9 * hop + 1]
-        batch = [floats_tensor([length], scale=1.0).numpy() for length in lengths]
+        batch = [floats_tensor([length], scale=1.0).cpu().numpy() for length in lengths]
         inputs = feature_extractor(batch, sampling_rate=config.sampling_rate, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             out = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"])
@@ -339,14 +339,13 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
 
     Set `WAVTOKENIZER_HF_CHECKPOINT` to a converted model dir (output of
     `convert_wavtokenizer_checkpoint.py`) or a Hub repo id such as `swiss-ai/wavtokenizer-large-unify-40token`.
-    For full bit-parity verification against the ORIGINAL implementation, run
-    `scripts/check_wavtokenizer_parity.py` instead (needs the original repo). Set
-    `WAVTOKENIZER_CHECKPOINT_VARIANT=large-unify-40` to additionally check that checkpoint's frozen golden codes.
+    Set `WAVTOKENIZER_CHECKPOINT_VARIANT=large-unify-40` to additionally check that checkpoint's frozen
+    golden codes.
     """
 
     # Golden codes for a 0.5 s, 440 Hz, -6 dBFS sine at 24 kHz (first 10 of 20 codes), frozen from the
-    # converted `wavtokenizer_large_unify_600_24k.ckpt`, verified bit-exact against the original
-    # implementation by scripts/check_wavtokenizer_parity.py (2026-07-14).
+    # converted `wavtokenizer_large_unify_600_24k.ckpt` and verified bit-exact against the original
+    # implementation (2026-07-14).
     EXPECTED_FIRST_CODES: list[int] | None = [1323, 1442, 3524, 2056, 3229, 1723, 2785, 1389, 3144, 1723]
 
     @classmethod
