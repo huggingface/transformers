@@ -70,6 +70,7 @@ class UnlimitedOcrGenerationMixin(GenerationMixin):
             for layer in past_key_values.layers:
                 if layer._layer_type == "reference_sliding_attention":
                     layer.set_prefill_length(prefill_length)
+
         return super()._prefill(
             input_ids,
             generation_config,
