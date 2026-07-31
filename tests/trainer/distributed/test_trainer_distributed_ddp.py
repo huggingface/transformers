@@ -200,7 +200,8 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         with open(os.path.join(output_dir, "result.json")) as f:
             result = json.load(f)
         self.assertTrue(
-            result["ok"], msg="double-sharding regression checks failed:\n" + json.dumps(result, indent=2, sort_keys=True)
+            result["ok"],
+            msg="double-sharding regression checks failed:\n" + json.dumps(result, indent=2, sort_keys=True),
         )
         self.assertEqual(result["world_size"], num_processes)
 
