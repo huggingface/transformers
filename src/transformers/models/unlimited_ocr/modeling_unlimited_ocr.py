@@ -1536,8 +1536,8 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             )
             kv_length = max(
                 prefill_length + self.sliding_window,
-                # sliding window returns concatenated states
-                self.prefill_cumulative_length + self.cumulative_length_int + query_length,
+                # Query exceeds prefill and maybe also sliding window
+                self.prefill_cumulative_length + super().get_seq_length() + query_length,
             )
         # Decode
         else:
