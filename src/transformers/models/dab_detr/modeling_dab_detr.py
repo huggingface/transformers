@@ -1105,6 +1105,11 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         # Layer normalization on hidden states
         hidden_states = self.layernorm(hidden_states)
 
+        # The last intermediate hidden state is already a layernorm of the same
+        # decoder output; reuse the final one so detection heads and model
+        # outputs are consistent.
+        intermediate[-1] = hidden_states
+
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
