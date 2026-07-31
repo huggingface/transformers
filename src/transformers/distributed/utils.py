@@ -192,6 +192,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
+    # Import here to limit distributed warning only when this function is called and not when the module is imported.
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
