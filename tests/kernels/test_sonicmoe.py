@@ -206,6 +206,17 @@ class SonicMoeLoaderTest(unittest.TestCase):
             out = run(torch.zeros(6, 8, dtype=torch.bfloat16, device=torch_device))
         self.assertEqual(out.shape, (6, 8))
 
+    def test_is_sonicmoe_loadable_is_compile_safe(self):
+        # `is_sonicmoe_loadable` must fold to a constant (via `@assume_constant_result`); tracing its env
+        # probe would break the graph.
+        torch.compiler.reset()
+
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return x + 1 if sm.is_sonicmoe_loadable() else x - 1
+
+        run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+
 
 @require_torch
 class SonicMoeForwardTest(unittest.TestCase):

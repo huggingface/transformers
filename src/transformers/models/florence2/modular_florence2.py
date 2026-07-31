@@ -157,7 +157,14 @@ class Florence2Config(PreTrainedConfig):
 
 
 class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    pass
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": False,
+            "padding": False,
+            "return_mm_token_type_ids": False,
+            "return_text_replacement_offsets": False,
+        },
+    }
 
 
 @auto_docstring

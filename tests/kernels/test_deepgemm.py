@@ -218,6 +218,17 @@ class DeepGemmLoaderTest(unittest.TestCase):
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
+    def test_is_deepgemm_loadable_is_compile_safe(self):
+        # Regression guard: `is_deepgemm_loadable` sits in the compiled `fp8_linear` gate, so it must fold
+        # to a constant (via `@assume_constant_result`); tracing its env probe would break the graph.
+        torch.compiler.reset()
+
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return x + 1 if dg.is_deepgemm_loadable() else x - 1
+
+        run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
 #
@@ -412,6 +423,19 @@ class DeepGemmForwardTest(unittest.TestCase):
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
+
+    def test_linear_rejects_float32_scales_on_sm100(self):
+        # Regression for #47030: rounding a checkpoint's float32 scales up to UE8M0 without requantizing
+        # silently corrupts the output on SM100. `fp8_linear` skips DeepGEMM up front for this combo, but
+        # this guards the backstop inside the forward itself (which also protects the experts / megamoe
+        # paths, that have no such gate): the forward must reject float32 scales before any kernel op runs.
+        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
+        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)
+        with self._bundle(is_sm100=True) as captured:
+            with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
+        self.assertEqual(captured, {})  # raised before the kernel ran
 
     def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
         input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
