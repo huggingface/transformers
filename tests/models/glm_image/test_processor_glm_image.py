@@ -24,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import AutoImageProcessor, AutoTokenizer, GlmImageProcessor
+    from transformers import GlmImageProcessor
 
 if is_torch_available():
     import torch
@@ -34,36 +34,12 @@ if is_torch_available():
 @require_torch
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
-    model_id = "zai-org/GLM-Image"
+    # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-Image"
+    tiny_model_id = "hf-internal-testing/tiny-processor-glm_image"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id,
-            subfolder="processor",
-            **kwargs,
-        )
-
-    @classmethod
-    def _setup_image_processor(cls):
-        # Provide a tiny image-processor config so placeholder expansion stays small
-        return AutoImageProcessor.from_pretrained(
-            cls.model_id,
-            subfolder="processor",
-            do_resize=True,
-            patch_size=4,
-            min_pixels=12 * 12,
-            max_pixels=18 * 18,
-        )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        # Ensure tokenizer is loaded from the correct subfolder when using custom components
-        return AutoTokenizer.from_pretrained(cls.model_id, subfolder="processor")
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Override to create images with valid aspect ratio (< 4) for GLM-Image."""

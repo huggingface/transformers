@@ -320,6 +320,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("tapas", "TapasTokenizer"),
+        ("tipsv2", "Tipsv2Tokenizer" if is_sentencepiece_available() else None),
         ("trocr", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
@@ -419,7 +420,7 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-    "deepseek-ai/deepseek-r1-distill-llama-8b",
+    "deepseek-ai/deepseek-r1-distill-*",
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",

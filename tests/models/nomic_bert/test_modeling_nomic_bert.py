@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoModel, AutoTokenizer, NomicBertConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -277,6 +279,11 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Model doesn't support scaling rope and raises shape mismatch errors with token types!")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

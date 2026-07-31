@@ -298,7 +298,7 @@ With the data, model, and metrics ready, set up training. A few important notes 
 ...     learning_rate=1e-4,
 ...     weight_decay=1e-4,
 ...     lr_scheduler_type="cosine",
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     fp16=True,
 ...     dataloader_num_workers=4,
 ...     eval_strategy="epoch",

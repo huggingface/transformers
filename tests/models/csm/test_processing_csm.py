@@ -33,6 +33,7 @@ if is_torch_available():
 class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CsmProcessor
     audio_input_name = "input_values"
+    tiny_model_id = "hf-internal-testing/tiny-processor-csm"
     model_id = "hf-internal-testing/namespace-sesame-repo_name_csm-1b"
 
     @classmethod
@@ -193,7 +194,8 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-        processor = CsmProcessor.from_pretrained(self.tmpdirname)
+        # Load from full processor: test checks hardcoded token IDs that require full vocab
+        processor = CsmProcessor.from_pretrained(self.full_tmpdirname)
         rendered = processor.apply_chat_template(messages, tokenize=False)
 
         expected_rendered = (

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 本指南将向您展示如何：
 
-1. 在 [IMDb](https://huggingface.co/datasets/imdb) 数据集上微调 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)，以判断电影评论是正面还是负面。
+1. 在 [IMDb](https://huggingface.co/datasets/stanfordnlp/imdb) 数据集上微调 [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased)，以判断电影评论是正面还是负面。
 2. 使用微调后的模型进行推断。
 
 <Tip>
@@ -54,7 +54,7 @@ pip install transformers datasets evaluate accelerate
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 然后查看一个示例：

@@ -30,6 +30,7 @@ if is_vision_available():
 @require_vision
 class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PixtralProcessor
+    tiny_model_id = "hf-internal-testing/tiny-processor-pixtral"
     model_id = "mistral-community/pixtral-12b"
 
     @classmethod
@@ -42,6 +43,12 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
         cls.image_token = processor.image_token
+
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        processor = super()._setup_from_pretrained(model_id, **kwargs)
+        processor.tokenizer.pad_token_id = 0  # loaded tokenizer has no PAD defined
+        return processor
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
     @unittest.skip("Not tested before, to investigate")
@@ -78,7 +85,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsNotNone(processor.tokenizer)
 
     def test_processor_with_single_image(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -142,7 +149,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_single_list(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
 
         # Make small for checking image token expansion
@@ -195,7 +202,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_processor_with_multiple_images_multiple_lists(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor = self.processor_class.from_pretrained(self.full_tmpdirname)
         prompt_string = [
             "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:",
             "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",

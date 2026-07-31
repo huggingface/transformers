@@ -11,17 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import io
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    load_coco_image,
+    prepare_image_inputs,
+)
 
 
 if is_torch_available():
@@ -233,11 +235,7 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
         boxes = [[[0, 0, 1, 1]]]
 
         encodings = {}

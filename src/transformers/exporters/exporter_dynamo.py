@@ -80,6 +80,7 @@ class DynamoExporter(HfExporter):
     """
 
     required_packages = ["torch"]
+    min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
     def export(
