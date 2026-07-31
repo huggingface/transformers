@@ -1,7 +1,7 @@
 import sys
 from contextlib import contextmanager
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 
 from packaging.version import parse as parse_version
 from parameterized import parameterized
@@ -272,10 +272,10 @@ def test_import_without_torch_distributed():
         if name.startswith("transformers"):
             del sys.modules[name]
 
-    # Emulate USE_DISTRIBUTED=0 by faking torch.distributed availability to False and deleting the distributed submodules in sys.modules.
-    torch.distributed.is_available = lambda: False
-    sys.modules["torch._C._distributed_c10d"] = None
-    for name in list(sys.modules):
+    # Emulate USE_DISTRIBUTED=0 by temporarily faking torch.distributed availability to False.
+    dist_modules_to_remove = [
+        name
+        for name in list(sys.modules)
         if name.startswith(
             (
                 "torch.distributed.tensor",
@@ -283,8 +283,13 @@ def test_import_without_torch_distributed():
                 "torch.distributed.fsdp",
                 "torch.distributed._composable",
             )
-        ):
-            del sys.modules[name]
+        )
+    ]
 
-    # If transformers import errors out, it means that the distributed guarding is not working correctly.
-    from transformers import AutoImageProcessor  # noqa: F401
+    with (
+        patch.object(torch.distributed, "is_available", return_value=False),
+        patch.dict(sys.modules, {"torch._C._distributed_c10d": None}),
+        patch.dict(sys.modules, dict.fromkeys(dist_modules_to_remove, DEFAULT)),
+    ):
+        # If transformers import errors out, it means that the distributed guarding is not working correctly.
+        from transformers import AutoImageProcessor  # noqa: F401
