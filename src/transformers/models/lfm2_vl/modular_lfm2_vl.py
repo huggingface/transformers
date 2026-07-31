@@ -76,7 +76,6 @@ class Lfm2VlMultiModalProjector(nn.Module):
 class Lfm2VlPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
     base_model_prefix = "model"
-    _is_stateful = True
 
 
 class Lfm2VlCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -150,7 +149,7 @@ class Lfm2VlModel(LlavaModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:

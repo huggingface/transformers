@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -533,7 +533,7 @@ class InklingMoE(nn.Module):
         return hidden_states
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
+@use_kernel_forward_from_hub("causal_conv1d_update")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -553,7 +553,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
+@use_kernel_forward_from_hub("causal_conv1d_fn")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -631,7 +631,7 @@ class InklingShortConvolution(nn.Module):
             )
 
             # Drop the additional previous states
-            if use_precomputed_states:
+            if past_key_values is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -822,6 +822,7 @@ class InklingForCausalLM(Gemma3ForCausalLM):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     @can_return_tuple
     @auto_docstring
@@ -1058,7 +1059,7 @@ class InklingVisionModel(InklingPreTrainedModel):
             hidden_states = layer(hidden_states=hidden_states)
 
         hidden_states = self.final_norm(hidden_states)
-        hidden_states = hidden_states.reshape(num_patches, -1)
+        hidden_states = hidden_states.reshape(num_patches, 1, -1)
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states,
@@ -1382,7 +1383,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         audio_input_ids=None,
         audio_input_ids_mask=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         labels=None,
         is_first_iteration=False,
         **kwargs,

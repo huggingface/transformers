@@ -14,7 +14,15 @@
 
 import io
 
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import (
+    auto_docstring,
+    is_mistral_common_available,
+    is_soundfile_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -66,6 +74,7 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
     def __init__(
@@ -241,6 +250,7 @@ class VoxtralProcessor(ProcessorMixin):
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
+    @requires(backends=("mistral-common",))
     def apply_transcription_request(
         self,
         audio: str | list[str] | AudioInput,
@@ -328,6 +338,7 @@ class VoxtralProcessor(ProcessorMixin):
                 load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
             ]
         else:
+            requires_backends(self, ["soundfile"])
             audio = make_list_of_audio(audio)
             if format is None:
                 raise ValueError("`format` must be provided when passing audio arrays to VoxtralProcessor.")
