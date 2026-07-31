@@ -144,6 +144,13 @@ def main():
     with open(os.path.join(cli.output_dir, "result.json"), "w") as f:
         json.dump(result, f, indent=2, sort_keys=True)
 
+    # Visible summary line -- the distributed test harness requires the launched subprocess to
+    # produce some output (it otherwise treats silence as a failure).
+    print(
+        f"batch_rebalance_ddp: ok={result['ok']} world_size={world_size} n={n} "
+        f"covered={len(all_covered)} per_rank={result['per_rank_counts']}"
+    )
+
 
 if __name__ == "__main__":
     main()
