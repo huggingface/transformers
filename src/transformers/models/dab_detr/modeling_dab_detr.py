@@ -169,7 +169,7 @@ class DabDetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
@@ -1552,7 +1552,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
                 output = (logits, pred_boxes) + auxiliary_outputs + model_outputs
             else:
                 output = (logits, pred_boxes) + model_outputs
-            # Since DabDetrObjectDetectionOutput doesn't have reference points + intermedieate_hidden_states we cut down.
+            # Since DabDetrObjectDetectionOutput doesn't have reference points + intermediate_hidden_states we cut down.
             return ((loss, loss_dict) + output) if loss is not None else output[:-2]
 
         return DabDetrObjectDetectionOutput(
