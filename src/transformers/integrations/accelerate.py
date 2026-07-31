@@ -318,19 +318,7 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
-    # Ensure per_gpu is at least as large as the largest layer + additional buffer
-    # This prevents allocation failure when model_sizes is very small, and ensures there's still
-    # space to place other layers alongside the largest layer
-    modules_list = [
-        (name, model.get_submodule(name)) for name in module_sizes.keys() if name != ""
-    ]
-    if modules_list:
-        max_layer_size, _ = get_max_layer_size(modules_list, module_sizes, no_split_module_classes)
-        # Ensure per_gpu is at least max_layer_size + some buffer (e.g., 25% extra)
-        # This guarantees each GPU can hold the largest layer and other layers
-        min_per_gpu_with_buffer = int(max_layer_size * 1.25)
-        if per_gpu < min_per_gpu_with_buffer:
-            per_gpu = min_per_gpu_with_buffer
+    min_zero_memory = int(1.25 * max(leave_modules_sizes.values(), default=0))
 
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
     gpus_idx_list = sorted(
@@ -338,7 +326,10 @@ def get_balanced_memory(
     )
     # The last device is left with max_memory just in case the buffer is not enough.
     for idx in gpus_idx_list[:-1]:
-        max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
+        device_memory = max_memory[0] if low_zero and idx == 0 else per_gpu
+        if idx == 0 and not low_zero:
+            device_memory = max(device_memory, min_zero_memory)
+        max_memory[idx] = min(device_memory, max_memory[idx])
 
     if low_zero:
         min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
