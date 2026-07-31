@@ -139,7 +139,7 @@ def run_checkpoint(name, checkpoint_path, output_dir, config_path, args):
 
     def record(status: str, test_name: str, detail: str = ""):
         results.append((status, test_name, detail))
-        print(f"[{name}] [{status}] {test_name}" + (f" — {detail}" if detail else ""))
+        print(f"[{name}] [{status}] {test_name}" + (f" - {detail}" if detail else ""))
 
     if not args.skip_convert:
         from transformers.models.wavtokenizer.convert_wavtokenizer_checkpoint import convert_checkpoint
@@ -299,7 +299,7 @@ def summarize(results, title="PARITY SUMMARY"):
     print(f"{title}: {passed} passed, {failed} failed, {len(results) - passed - failed} informational")
     for status, name, detail in results:
         if status == FAIL:
-            print(f"  FAILED: {name} — {detail}")
+            print(f"  FAILED: {name} - {detail}")
     print("=" * 80)
 
 
