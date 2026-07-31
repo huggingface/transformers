@@ -1342,8 +1342,8 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
 
     def lazy_initialization(self, key_states, value_states):
         super().lazy_initialization(key_states, value_states)
-        self.prefill_keys = self.keys.clone()
-        self.prefill_values = self.values.clone()
+        self.prefill_keys = torch.empty_like(self.keys)
+        self.prefill_values = torch.empty_like(self.values)
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
