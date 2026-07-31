@@ -49,7 +49,7 @@ pip install -e .
 
 Search using the compressed-tensors [tag](https://huggingface.co/models?other=compressed-tensors) to find a compatible model on the Hugging Face Hub.
 
-Only models that have already been quantized can be loaded at the moment, and once a model is loaded, it cannot be saved. To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serizlied with a compressed-tensors config.
+Pre-quantized models can be loaded directly. To quantize a model into the compressed-tensors format, see [llm-compressor](https://github.com/vllm-project/llm-compressor). Alternatively, models can be created independently and serialized with a compressed-tensors config.
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -60,6 +60,65 @@ ct_model = AutoModelForCausalLM.from_pretrained("nm-testing/Meta-Llama-3.1-8B-In
 mem_params = sum([param.nelement()*param.element_size() for param in ct_model.parameters()])
 print(f"{mem_params/2**30:.4f} GB")
 # 8.4575 GB
+```
+
+## Loading modes
+
+A compressed-tensors checkpoint stores its weights compressed (fp8, or packed int4/int8). How they are executed is up to two [`CompressedTensorsConfig`] arguments.
+
+| Configuration | Weights after loading | Execution |
+|---------------|-----------------------|-----------|
+| default | left compressed | compressed-tensors owns the layers and decompresses the model on the first forward pass |
+| `dequantize=True` | dequantized to the model dtype (e.g. BF16) | regular dense matmuls, and the model can be fine-tuned or saved in that dtype |
+| `use_optimized_inference=True` | kept quantized | layers whose scheme has a kernel run through it, currently W8A8 fp8; inference only |
+
+## FP8 kernel acceleration
+
+Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in FP8 and run its matmuls through hardware-accelerated FP8 kernels ([torch.nn.functional.scaled_mm](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_mm.html), which dispatches to `torch._scaled_mm_v2`; older torch versions fall back to `torch._scaled_mm`), instead of dequantizing the weights back to BF16. Keeping weights in FP8 throughout inference lowers memory usage and speeds up computation. This is inference only, so leave it off to fine-tune.
+
+| Device | Kernel | Notes |
+|--------|--------|-------|
+| Intel XPU | `torch.nn.functional.scaled_mm` | All XPU devices with FP8 support |
+| NVIDIA CUDA (SM89+) | `torch.nn.functional.scaled_mm` | Ada Lovelace (L4, L40), Hopper (H100), Blackwell and newer |
+| CPU / CUDA SM80 (A100) | Fallback | `use_optimized_inference=True` is ignored, the model runs dequantized |
+
+The FP8 kernel path supports these quantization layouts.
+
+| Strategy | Example model |
+|----------|---------------|
+| Per-channel dynamic | [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic) |
+| Per-tensor static | [RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8](https://huggingface.co/RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8) |
+
+### Loading a pre-quantized FP8 model
+
+The FP8 kernels are opt-in: ask for them with `use_optimized_inference=True`, and they are used when the model's config specifies FP8 quantization and a supported GPU is available.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+    quantization_config=CompressedTensorsConfig(use_optimized_inference=True),
+    device_map="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic")
+inputs = tokenizer("Hello, how are you?", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=20)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+### Dequantizing at load time
+
+Without `use_optimized_inference=True`, the model takes the regular compressed-tensors route: the weights are left compressed and compressed-tensors decompresses them on the first forward pass. Pass `dequantize=True` to dequantize them during loading instead, which is what you want to fine-tune the model or save it in its original precision (e.g. BF16).
+
+```python
+from transformers import AutoModelForCausalLM, CompressedTensorsConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+    quantization_config=CompressedTensorsConfig(dequantize=True),
+    device_map="auto",
+)
 ```
 
 ## Model checkpoint
@@ -122,68 +181,50 @@ For a more detailed look at the model weights, use the [safetensors viewer](http
 |model.layers.0.self_attn.v_proj.weight | [1 024, 4 096] | F8_E4M3|
 |model.layers.0.self_attn.v_proj.weight_scale | [1] | BF16|
 
-When loading a compressed-tensors model with the [`~quantizers.HFQuantizer`] integration, all the [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) modules specified in the quantization config are replaced by [CompressedLinear](https://github.com/neuralmagic/compressed-tensors/blob/975cb223b19fcac2b98a4271d17668462d4d6e1d/src/compressed_tensors/linear/compressed_linear.py#L30) modules that manage the compressed weights and forward pass for inference. The `lm_head` module is still kept as an unquantized nn.Linear module.
+When loading a compressed-tensors model with the [`~quantizers.HFQuantizer`] integration, the targeted modules are handed over to compressed-tensors: it attaches the resolved `quantization_scheme`, sets `quantization_status`, registers the parameters the checkpoint stores (`weight` in fp8, plus `weight_scale` and, for a static strategy, `input_scale`) and installs its own forward pass over them. They stay [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) instances, so that is what `print` shows — recent compressed-tensors versions no longer wrap them in a `CompressedLinear` subclass. Modules listed under `ignore`, such as `lm_head`, are left untouched.
+
+With `dequantize=False` (the default), the weights are still compressed once loading is over, and compressed-tensors decompresses the whole model on the first forward pass. `dequantize=True` does it during loading instead, so no forward pass is needed to get dense weights.
 
 ```python
-from transformers import AutoModelForCausalLM
+import torch
+from transformers import AutoModelForCausalLM, CompressedTensorsConfig
 
-ct_model = AutoModelForCausalLM.from_pretrained("nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf")
-print(ct_model)
-"""
-LlamaForCausalLM(
-  (model): LlamaModel(
-    (embed_tokens): Embedding(128256, 4096)
-    (layers): ModuleList(
-      (0-31): 32 x LlamaDecoderLayer(
-        (self_attn): LlamaSdpaAttention(
-          (q_proj): CompressedLinear(
-            in_features=4096, out_features=4096, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (k_proj): CompressedLinear(
-            in_features=4096, out_features=1024, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (v_proj): CompressedLinear(
-            in_features=4096, out_features=1024, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (o_proj): CompressedLinear(
-            in_features=4096, out_features=4096, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (rotary_emb): LlamaRotaryEmbedding()
-        )
-        (mlp): LlamaMLP(
-          (gate_proj): CompressedLinear(
-            in_features=4096, out_features=14336, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (up_proj): CompressedLinear(
-            in_features=4096, out_features=14336, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (down_proj): CompressedLinear(
-            in_features=14336, out_features=4096, bias=False
-            (input_observer): MovingAverageMinMaxObserver()
-            (weight_observer): MovingAverageMinMaxObserver()
-          )
-          (act_fn): SiLU()
-        )
-        (input_layernorm): LlamaRMSNorm((4096,), eps=1e-05)
-        (post_attention_layernorm): LlamaRMSNorm((4096,), eps=1e-05)
-      )
-    )
-    (norm): LlamaRMSNorm((4096,), eps=1e-05)
-    (rotary_emb): LlamaRotaryEmbedding()
-  )
-  (lm_head): Linear(in_features=4096, out_features=128256, bias=False)
+model_id = "nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf"
+
+ct_model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=CompressedTensorsConfig(dequantize=False),
+    device_map="auto",
 )
-"""
+q_proj = ct_model.model.layers[0].self_attn.q_proj
+print(q_proj, q_proj.quantization_status)
+# Linear(in_features=4096, out_features=4096, bias=False) QuantizationStatus.COMPRESSED
+# ^ compressed-tensors module: fp8 weight, weight_scale, and its own forward
+
+ct_model(input_ids=torch.tensor([[0, 1, 2]], device=ct_model.device))
+print(q_proj, q_proj.quantization_status)
+# Linear(in_features=4096, out_features=4096, bias=False) QuantizationStatus.DECOMPRESSED
+# ^ weight is BF16 now, decompressed by that forward pass
+
+ct_model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=CompressedTensorsConfig(dequantize=True),
+    device_map="auto",
+)
+print(ct_model.model.layers[0].self_attn.q_proj)
+# Linear(in_features=4096, out_features=4096, bias=False)      weight: BF16
+```
+
+With `use_optimized_inference=True`, the layers covered by an fp8 config group are replaced by `CompressedTensorsFP8Linear`, which holds the fp8 weight and its scale in the layout its row-wise matmul kernel expects. Those weights stay in fp8, forward passes included.
+
+```python
+from transformers import AutoModelForCausalLM, CompressedTensorsConfig
+
+ct_model = AutoModelForCausalLM.from_pretrained(
+    "nm-testing/Meta-Llama-3.1-8B-Instruct-FP8-hf",
+    quantization_config=CompressedTensorsConfig(use_optimized_inference=True),
+    device_map="auto",
+)
+print(ct_model.model.layers[0].self_attn.q_proj)
+# CompressedTensorsFP8Linear(in_features=4096, out_features=4096, bias=False)      weight: F8_E4M3
 ```

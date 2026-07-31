@@ -33,6 +33,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..gemma.modeling_gemma import (
     GemmaAttention,
@@ -146,6 +147,7 @@ class Gemma2MLP(GemmaMLP):
 
 
 class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma2Config, device=None):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings

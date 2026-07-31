@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch SAM3 model."""
 
 import gc
+import math
 import tempfile
 import unittest
 
@@ -1544,3 +1545,29 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs_with_embeds.pred_logits, outputs_direct.pred_logits, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)
+
+
+@require_torch
+class Sam3SinePositionEmbeddingTest(unittest.TestCase):
+    def test_compiled_build_keeps_requested_dtype(self):
+        """Regression test for #47228: the cumsum-on-bool-ones formulation matched an
+        inductor rewrite that dropped the requested dtype, so half-precision models
+        crashed under torch.compile with a Float/BFloat16 matmul mismatch."""
+        from transformers.models.sam3.modeling_sam3 import Sam3SinePositionEmbedding
+
+        def build(pixel_values):
+            return Sam3SinePositionEmbedding.build_sine_position_embedding(
+                pixel_values.shape,
+                pixel_values.device,
+                pixel_values.dtype,
+                num_position_features=32,
+                normalize=True,
+                scale=2 * math.pi,
+            )
+
+        pixel_values = torch.zeros(1, 3, 8, 8, device=torch_device, dtype=torch.bfloat16)
+        eager = build(pixel_values)
+        compiled = torch.compile(build)(pixel_values)
+
+        self.assertEqual(compiled.dtype, torch.bfloat16)
+        torch.testing.assert_close(compiled, eager, atol=2e-2, rtol=2e-2)

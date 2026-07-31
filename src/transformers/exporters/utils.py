@@ -46,6 +46,7 @@ from collections.abc import MutableMapping
 from typing import Any
 
 from ..utils import logging
+from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import is_torch_available
 
 
@@ -57,8 +58,8 @@ if is_torch_available():
 
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
-        get_vision_bilinear_indices_and_weights,
-        get_vision_cu_seqlens,
+        get_vision_attention_seqlens,
+        get_vision_interpolation_indices_and_weights,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -428,13 +429,14 @@ def register_export_input_preparer(*markers: str):
 
 @register_export_input_preparer("grid_thw")
 def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `position_ids`, plus optional
-    `window_index`/`cu_window_seqlens` (XNet-style window attn) and
+    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional
+    `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
     `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
 
-    Optional helpers are gated by the presence of their config attribute on the encoder
-    (`window_size`+`patch_size` for window attention, `num_grid_per_side` for bilinear),
-    so a model that doesn't use that feature won't get its kwarg injected.
+    Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
+    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
+    modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
+    for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
     """
     grid_thw = inputs["grid_thw"]
     spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
@@ -443,7 +445,14 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         # none (its encoder hard-codes `1` because spatial merging happens in the projector).
         spatial_merge_size = inputs.get("merge_sizes", 1)
 
-    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw)
+    # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
+    # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
+    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
+    module = sys.modules[type(model).__module__]
+    temporal_encoder = hasattr(module, "get_vision_frame_index")
+    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
+        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+    )
     # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
     # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
@@ -455,19 +464,39 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
         inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
             grid_thw, spatial_merge_size, window_size, patch_size
         )
+        inputs["max_window_seqlen"] = get_max_seqlen(
+            inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
+        )
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side, spatial_merge_size
+        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
+        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear); read it rather than
+        # inferring, so the precomputed tensors match exactly what the model computes.
+        mode = _find_submodule_attr(model, "interpolation_mode")
+        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
+        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
+            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=spatial_merge_size
         )
+
+    # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
+    if temporal_encoder:
+        inputs["frame_index"] = module.get_vision_frame_index(grid_thw)
+
+    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
+    if hasattr(module, "get_vision_temporal_merge_index"):
+        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
+        kernel_height, kernel_width = (
+            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
+        )
+        inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
 
 
 @register_export_input_preparer("target_sizes")
 def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
     Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
-    merged-shape helpers so the per-image Python loops move outside the traced graph."""
+    merged-shape / maximum-sequence-length helpers outside the traced graph."""
     target_sizes = inputs["target_sizes"]
     num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
     if num_patches_per_side is not None:
@@ -480,12 +509,16 @@ def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any])
             grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
         )
         inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
+        cu_seqlens = torch.nn.functional.pad(
+            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
+        )
+        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "feature_lens")
 def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
+    `cu_seqlens`, `max_seqlen`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
     encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
     traced graph.
 
@@ -512,13 +545,13 @@ def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -
         inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
         inputs["valid_indices"] = get_valid_indices(chunk_lengths)
         inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 @register_export_input_preparer("input_features", "input_features_mask")
 def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute `cu_seqlens` for Qwen3-ASR — the encoder's call to ``get_audio_cu_seqlens``
-    has a data-dependent Python loop that we evaluate here so the encoder pops the result
-    from ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
+    """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
+    ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
     ``Qwen3ASREncoder.forward``.
     """
     from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
@@ -534,6 +567,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     feature_lens = input_features_mask.sum(-1).to(torch.long)
     chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
     inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
+    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
@@ -684,9 +718,13 @@ def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Mo
     return found
 
 
-def is_multimodal(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
-    return bool(_find_multimodal_submodules(model))
+def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
+    """Returns `True` if the model is multi-modal with modal encoders and a language model.
+
+    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
+    accessors and is trivially not multi-modal, so it short-circuits to `False`.
+    """
+    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
 
 
 def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:

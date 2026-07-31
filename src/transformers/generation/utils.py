@@ -34,6 +34,7 @@ from ..cache_utils import (
     StaticCache,
 )
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -56,6 +57,7 @@ from .candidate_generator import (
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
+    MTPCandidateGenerator,
     PromptLookupCandidateGenerator,
     SinglePositionMultiTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
@@ -143,6 +145,23 @@ GENERATION_MODES_MAPPING = {
     GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
     GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
 }
+
+MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "pixel_values",
+    "pixel_mask",
+    "input_features",
+    "input_features_mask",
+    "pixel_values_videos",
+    "num_local_patches",
+    "high_res_pixel_values",
+    "image_patches_indices",
+    "image_patches",
+    "image_sizes",
+    "image_sizes_videos",
+    "pixel_attention_mask",
+    "pixel_values_images",
+    "num_local_patches",
+)
 
 
 @dataclass
@@ -588,7 +607,16 @@ class GenerationMixin(ContinuousMixin):
         # 5. Forward ALL kwargs that are uninitialized, e.g. `use_cache` (except a few exceptions)
         kwargs_to_avoid_forwarding = ("labels", "next_sequence_length")
         for key, value in kwargs.items():
-            if key not in model_inputs and key not in kwargs_to_avoid_forwarding:
+            # Those keys are never forwarded
+            if key in kwargs_to_avoid_forwarding:
+                continue
+            # Those keys are forwarded only during prefill (or the first forward of a new batch of inputs, such as with cache
+            # continuation), or without a cache
+            elif key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL and (
+                not is_first_iteration and kwargs.get("use_cache", True)
+            ):
+                continue
+            elif key not in model_inputs:
                 model_inputs[key] = value
 
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
@@ -1002,6 +1030,13 @@ class GenerationMixin(ContinuousMixin):
                 max_length=generation_config.max_length,
                 logits_processor=logits_processor,
                 vocab_size=self.config.get_text_config().vocab_size,
+            )
+        elif generation_config.use_mtp:
+            candidate_generator = MTPCandidateGenerator(
+                main_model=self,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
             )
         # SinglePositionMultiTokenCandidateGenerator requires a target model that can provide, and an assistant model that
         # can work from a shared_kv_states dictionary. Currently, the only models that can provide this are Gemma 3n and
@@ -1947,20 +1982,7 @@ class GenerationMixin(ContinuousMixin):
             return
 
         # Otherwise we NEED to prepare a cache, based on `generation_config.cache_implementation`
-
-        # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
-        # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
-        # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
-            if generation_config.cache_implementation is not None:
-                logger.warning_once(
-                    "An assistant model is provided, using a dynamic cache instead of a cache of type="
-                    f"'{generation_config.cache_implementation}'."
-                )
-            generation_config.cache_implementation = "dynamic_full"
-
-        dynamic_cache_kwargs = {}
-        dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+        dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
 
         if generation_config.cache_implementation == "offloaded":
             dynamic_cache_kwargs["offloading"] = True
@@ -1997,8 +2019,7 @@ class GenerationMixin(ContinuousMixin):
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
-        # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
-        # TODO: prepare linear cache from a single API, instead of creating in modeling code
+        # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
         else:
             model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
@@ -2011,6 +2032,10 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
+
+        # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
+        if generation_config.is_assistant:
+            model_kwargs[cache_name].activate_past_recording()
 
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
@@ -2226,7 +2251,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
+        world_size = _get_torch_distributed_world_size()
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None
@@ -2418,7 +2443,7 @@ class GenerationMixin(ContinuousMixin):
 
             # others are ignored
             if synced_gpus is not None:
-                logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
+                logger.warning(f"synced_gpus is ignored for continuous batching. Got {synced_gpus = }")
             num_beams = kwargs.get("num_beams", 1)
             if num_beams > 1:  # FIXME: remove this once CB supports num_beams (which is planned)
                 logger.warning(f"num_beams is not supported for continuous batching yet. Got {num_beams = }. ")
@@ -2440,11 +2465,7 @@ class GenerationMixin(ContinuousMixin):
 
         # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
         generation_mode_kwargs = self._extract_generation_mode_kwargs(
-            custom_generate,
-            kwargs,
-            synced_gpus,
-            assistant_model,
-            streamer,
+            custom_generate, kwargs, synced_gpus, assistant_model, streamer
         )
 
         # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
@@ -3613,6 +3634,13 @@ class GenerationMixin(ContinuousMixin):
             or type(model_kwargs.get("past_key_values")) is StaticCache
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
+
+        # Make sure we can record past on the cache
+        cache = model_kwargs.get("past_key_values")
+        if cache is None:
+            raise RuntimeError("assisted decoding requires a cache")
+        cache.activate_past_recording()
+
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
@@ -3760,6 +3788,13 @@ class GenerationMixin(ContinuousMixin):
                     n_matches -= 1
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
+            # A partial acceptance plus the correction/bonus token can overshoot the length budget when the
+            # candidate generator does not cap its drafts (e.g. MTP always drafts `num_mtp_layers` tokens)
+            tokens_budget = generation_config.max_length - input_ids.shape[1]
+            if valid_tokens.shape[1] > tokens_budget:
+                valid_tokens = valid_tokens[:, :tokens_budget]
+                n_matches = valid_tokens.shape[1] - 1
+
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
             # Because of this last token, assisted generation search reduces to a normal greedy search/sample if there
@@ -3771,8 +3806,11 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens
-            outputs.past_key_values.crop(new_cur_len - 1)
+            # 4.2. Discard past key values relative to unused assistant tokens. When every candidate was
+            # accepted, `input_ids` also holds the bonus token, which is not in the cache yet: nothing to discard (and we should not crop negative tokens!!)
+            number_of_tokens_to_crop = candidate_length - n_matches
+            if number_of_tokens_to_crop > 0:
+                outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
@@ -3837,6 +3875,7 @@ class GenerationMixin(ContinuousMixin):
 
         if (
             isinstance(candidate_generator, AssistedCandidateGenerator)
+            and not isinstance(candidate_generator, MTPCandidateGenerator)
             and candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic"
         ):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (

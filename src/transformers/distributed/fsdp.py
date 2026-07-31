@@ -18,8 +18,9 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from ..integrations.tensor_parallel import replace_layer_number_by_wildcard
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
+from .utils import _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_distributed_available() and is_torch_greater_or_equal("2.6"):
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
@@ -39,12 +40,8 @@ logger = logging.get_logger(__name__)
 
 def is_fsdp_enabled() -> bool:
     """Check if FSDP is active via Accelerate (env var based) — covers FSDP1 only."""
-    if not is_torch_available():
-        return False
-
     return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
+        _is_torch_distributed_initialized()
         and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
         and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
     )
@@ -52,19 +49,15 @@ def is_fsdp_enabled() -> bool:
 
 def is_fsdp_managed_module(module: nn.Module) -> bool:
     """Check if a module is managed by FSDP (1 or 2)."""
-    if not is_torch_available():
-        return False
-    if not torch.distributed.is_available():
+    if not is_torch_distributed_available():
         return False
 
     # FSDP2: attribute set by apply_fsdp2()
     if getattr(module, "_is_fsdp_managed_module", False):
         return True
     # FSDP1: wrapped by FullyShardedDataParallel
-    try:
-        from torch.distributed.fsdp import FullyShardedDataParallel
-    except ImportError:
-        return False
+    from torch.distributed.fsdp import FullyShardedDataParallel
+
     return isinstance(module, FullyShardedDataParallel)
 
 
@@ -191,18 +184,15 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallel(
+def apply_fully_sharded_data_parallelism(
     model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
 ) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model.
+
+    Torch availability, distributed initialization and the version requirement
+    are asserted upstream by `initialize_fully_sharded_data_parallelism`.
     """
-    if not is_torch_available():
-        raise ImportError("PyTorch is required for FSDP support")
-
-    if not is_torch_greater_or_equal("2.6"):
-        raise OSError("FSDP2 requires torch>=2.6")
-
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
         raise ValueError(
