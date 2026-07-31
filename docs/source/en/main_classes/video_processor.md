@@ -73,19 +73,20 @@ print(video_metadata.total_num_frames, video_metadata.fps)
 If you pass an already decoded video array but still want to enable model-specific frame sampling, it is strongly recommended to provide video_metadata. This allows the sampler to know the original video’s duration and FPS. You can pass metadata as a `VideoMetadata` object or as a plain dict.
 
 ```python
+import torch
 from transformers import AutoVideoProcessor
 from transformers.video_utils import VideoMetadata
 
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", device="cuda")
-my_decodec_video = torch.randint(0, 255, size=(100, 3, 1280, 1280)) # short video of 100 frames
+decoded_video = torch.randint(0, 255, size=(100, 3, 1280, 1280)) # short video of 100 frames
 video_metadata = VideoMetadata(
     total_num_frames=100,
     fps=24,
     duration=4.1, # in seconds
 )
-processed_video_inputs = processor(videos=["video_path.mp4"], video_metadata=video_metadata, do_sample_frames=True, num_frames=10, return_tensors="pt")
+processed_video_inputs = processor(videos=[decoded_video], video_metadata=video_metadata, do_sample_frames=True, num_frames=10, return_tensors="pt")
 print(processed_video_inputs.pixel_values_videos.shape)
->>> [10, 3, 384, 384]
+[10, 3, 384, 384]
 ```
 
 ## BaseVideoProcessor
