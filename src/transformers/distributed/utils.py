@@ -16,20 +16,17 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
     from .configuration_utils import DistributedConfig
 
+
 if is_torch_available():
     import torch
 
-    _torch_distributed_available = torch.distributed.is_available()
-else:
-    _torch_distributed_available = False
-
-if is_torch_available() and is_torch_greater_or_equal("2.7"):
+if is_torch_distributed_available() and is_torch_greater_or_equal("2.7"):
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import (
@@ -41,9 +38,17 @@ if is_torch_available() and is_torch_greater_or_equal("2.7"):
 
 
 def _is_torch_distributed_initialized() -> bool:
-    if not _torch_distributed_available:
+    if not is_torch_distributed_available():
         return False
     return torch.distributed.is_initialized()
+
+
+def is_dtensor(obj) -> bool:
+    if not is_torch_distributed_available():
+        return False
+    from torch.distributed.tensor import DTensor
+
+    return isinstance(obj, DTensor)
 
 
 def _get_torch_distributed_rank() -> int:
