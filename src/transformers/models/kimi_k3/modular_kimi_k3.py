@@ -51,9 +51,9 @@ else:
     chunk_kda, fused_recurrent_kda = None, None
 
 
-
 class KimiK3RMSNorm(LlamaRMSNorm):
     pass
+
 
 class KimiK3RMSNormGated(Qwen3NextRMSNormGated):
     pass
@@ -62,20 +62,27 @@ class KimiK3RMSNormGated(Qwen3NextRMSNormGated):
 # TODO: replace w/ OlmoHybridShortConvolution once #47604 is merged
 class KimiK3ShortConvolution(nn.Module):
     def __init__(
-        self, hidden_size: int, kernel_size: int, conv_state_idx: int, bias: bool = False, activation: str = "silu"
+        self,
+        config: KimiK3TextConfig,
+        hidden_size: int,
+        conv_state_idx: int,
+        layer_idx: int,
+        bias: bool = False,
+        activation: str = "silu",
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
-        self.kernel_size = kernel_size
+        self.kernel_size = config.conv_kernel_size
         self.conv_state_idx = conv_state_idx
+        self.layer_idx = layer_idx
         self.activation = activation
 
         self.conv1d = nn.Conv1d(
             in_channels=hidden_size,
             out_channels=hidden_size,
             groups=hidden_size,
-            kernel_size=kernel_size,
-            padding=kernel_size - 1,
+            kernel_size=self.kernel_size,
+            padding=self.kernel_size - 1,
             bias=bias,
         )
 
@@ -88,22 +95,25 @@ class KimiK3ShortConvolution(nn.Module):
         seq_idx: int | None = None,
     ) -> torch.Tensor:
         is_recurrent_decoding = use_precomputed_states and seq_len == 1
+        # Convolutions (and the cached conv states) use a channel-first layout: [batch_size, hidden_size, seq_len]
+        input_states = input_states.transpose(1, 2)
 
         # If we can modify the states in-place, do it because it's much faster
         if is_recurrent_decoding and not past_key_values.layers[self.layer_idx].record_past:  # type: ignore
             conv_state = past_key_values.layers[self.layer_idx].conv_states[self.conv_state_idx]  # type: ignore
-            return causal_conv1d_update(
+            output_states = causal_conv1d_update(
                 input_states,
                 conv_state,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.activation,
             )
+            return output_states.transpose(1, 2)
 
         # Otherwise, apply convolution and then update the state separately
         if past_key_values is not None:
             input_states = past_key_values.update_conv_state(
-                input_states, self.layer_idx, state_idx=self.conv_state_idx, conv_kernel_size=self.conv_kernel_size
+                input_states, self.layer_idx, state_idx=self.conv_state_idx, conv_kernel_size=self.kernel_size
             )
         output_states = causal_conv1d_fn(
             input_states,
@@ -115,7 +125,7 @@ class KimiK3ShortConvolution(nn.Module):
         # Drop the additional previous states
         if past_key_values is not None:
             output_states = output_states[:, :, -seq_len:]
-        return output_states
+        return output_states.transpose(1, 2)
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -363,9 +373,9 @@ class KimiK3DeltaAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, projection_k_size, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, projection_v_size, bias=False)
 
-        self.q_conv = KimiK3ShortConvolution(projection_k_size, self.conv_kernel_size, conv_state_idx=0)
-        self.k_conv = KimiK3ShortConvolution(projection_k_size, self.conv_kernel_size, conv_state_idx=1)
-        self.v_conv = KimiK3ShortConvolution(projection_v_size, self.conv_kernel_size, conv_state_idx=2)
+        self.q_conv = KimiK3ShortConvolution(config, projection_k_size, conv_state_idx=0, layer_idx=layer_idx)
+        self.k_conv = KimiK3ShortConvolution(config, projection_k_size, conv_state_idx=1, layer_idx=layer_idx)
+        self.v_conv = KimiK3ShortConvolution(config, projection_v_size, conv_state_idx=2, layer_idx=layer_idx)
 
         # KDA delta rule implementations: fla kernels when available, torch fallbacks otherwise.
         self.chunk_kda = chunk_kda or torch_chunk_kda
@@ -375,9 +385,9 @@ class KimiK3DeltaAttention(nn.Module):
         self.forget_gate_up = nn.Linear(self.head_v_dim, projection_v_size, bias=False)
         self.beta_proj = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
-        A_log_init = torch.empty(self.num_v_heads, dtype=torch.float32).uniform_(1, 16)  # need actual values to log
+        A_log_init = torch.empty(self.num_v_heads, 1, dtype=torch.float32).uniform_(1, 16)  # need actual values to log
         self.A_log = torch.nn.Parameter(A_log_init.log())
-        self.dt_bias = nn.Parameter(torch.empty(self.num_v_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.num_v_heads, self.head_v_dim, dtype=torch.float32))
         self.forget_gate_lower_bound = config.forget_gate_lower_bound
 
         # Output normalization and projection
@@ -436,11 +446,12 @@ class KimiK3DeltaAttention(nn.Module):
         # Compute the gate, ie. the log-decay of the states, called "g" in flash-linear-attention API
         gate = self.forget_gate_up(self.forget_gate_down(hidden_states))
         gate = gate.reshape(value_shape)
+        log_decay_scale = self.A_log.exp()
         # If a lower bound is provided for the gate, the way to compute the log_decay is different
         if self.forget_gate_lower_bound is not None:
-            gate = self.forget_gate_lower_bound * (self.A_log.float().exp() * (gate + self.dt_bias)).sigmoid()
+            gate = self.forget_gate_lower_bound * (log_decay_scale * (gate + self.dt_bias)).sigmoid()
         else:
-            gate = -self.A_log.float().exp() * F.softplus(gate.float() + self.dt_bias)
+            gate = -log_decay_scale * F.softplus(gate.float() + self.dt_bias)
 
         beta = self.beta_proj(hidden_states).float().sigmoid()
 
@@ -562,7 +573,7 @@ class KimiK3GatedMLA(nn.Module):
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(kv_nope, k_shared, self.layer_idx)
+            kv_nope, k_shared = past_key_values.update(kv_nope, k_shared, self.layer_idx)
         # Expand the cached latent KV states to the full key shape
         key_states, value_states = self.expand_kv(kv_nope, k_shared)
 
@@ -650,6 +661,7 @@ class KimiK3Experts(DeepseekV4Experts):
         gate, up = gate_up.chunk(2, dim=-1)
         return situ_and_mul(gate, up, self.beta, self.linear_beta)
 
+
 class KimiK3MoE(DeepseekV3MoE):
     def __init__(self, config: KimiK3TextConfig):
         super().__init__(config)
@@ -696,7 +708,7 @@ class KimiK3DecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = KimiK3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KimiK3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.is_start_of_residual_block = self.layer_idx % config.attn_res_block_size == 0
+        self.is_start_of_residual_block = layer_idx % config.attn_res_block_size == 0
         self.pre_attn_residual = KimiK3AttentionResidual(config)
         self.post_attn_residual = KimiK3AttentionResidual(config)
 
@@ -756,7 +768,7 @@ class KimiK3AttentionResidual(nn.Module):
         super().__init__()
         self.config = config
         # Pseudo-queries have an output size of 1: they mimic a dot product along the last dim of size hidden_size
-        self.pseudo_queries = nn.Linear(config.hidden_size, 1, bias=False)  # TODO: BUG: add in keep in fp32
+        self.pseudo_queries = nn.Linear(config.hidden_size, 1, bias=False)
         self.attn_residual_norm = KimiK3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, block_residual: torch.Tensor) -> torch.Tensor:
