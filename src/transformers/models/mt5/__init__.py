@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_mt5 import *
     from .modeling_mt5 import *
-    from .tokenization_mt5 import *
 else:
     import sys
 

@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_distilbert import *
     from .modeling_distilbert import *
-    from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+    from .tokenization_distilbert import *
 else:
     import sys
 

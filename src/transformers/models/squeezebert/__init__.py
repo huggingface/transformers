@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_squeezebert import *
     from .modeling_squeezebert import *
-    from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
+    from .tokenization_squeezebert import *
 else:
     import sys
 
