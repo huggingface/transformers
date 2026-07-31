@@ -532,6 +532,13 @@ def sdpa_mask(
             "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
 
+    # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
+    # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+    # Details: https://github.com/pytorch/pytorch/issues/110213
+    if attention_mask is not None and not is_tracing(attention_mask) and attention_mask.device.type in ["cuda", "xpu"]:
+        unattended = ~attention_mask.any(dim=-1, keepdim=True)
+        attention_mask = attention_mask | unattended
+
     return attention_mask
 
 
