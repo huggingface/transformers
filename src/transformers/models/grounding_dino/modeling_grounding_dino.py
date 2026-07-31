@@ -2376,6 +2376,8 @@ def build_text_mask(logits, attention_mask):
 class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # the bbox_embed in the decoder are all clones though
+    accepts_loss_kwargs = False
+
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": "bbox_embed.0",
         "model.decoder.bbox_embed": "bbox_embed",

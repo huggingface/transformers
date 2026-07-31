@@ -1135,6 +1135,8 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
 )
 class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
     # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
+    accepts_loss_kwargs = False
+
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 

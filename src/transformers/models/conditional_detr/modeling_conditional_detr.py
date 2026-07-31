@@ -1507,6 +1507,8 @@ def inverse_sigmoid(x, eps=1e-5):
     """
 )
 class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
@@ -1653,6 +1655,8 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 

@@ -983,6 +983,8 @@ class NemotronAsrStreamingRNNTJointNetwork(ParakeetRNNTJointNetwork):
 class NemotronAsrStreamingForRNNT(
     ParakeetForRNNT, NemotronAsrStreamingPreTrainedModel, NemotronAsrStreamingGenerationMixin
 ):
+    accepts_loss_kwargs = False
+
     config: NemotronAsrStreamingConfig
 
     def __init__(self, config: NemotronAsrStreamingConfig):

@@ -1021,6 +1021,8 @@ class ConditionalDetrModel(DetrModel):
 
 
 class ConditionalDetrForObjectDetection(DetrForObjectDetection):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels)
@@ -1152,7 +1154,7 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
 
 
 class ConditionalDetrForSegmentation(DetrForSegmentation):
-    pass
+    accepts_loss_kwargs = False
 
 
 __all__ = [

@@ -1630,7 +1630,7 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, ignore_index=self.config.semantic_loss_ignore_index)
+            loss = self.loss_function(logits, labels, ignore_index=self.config.semantic_loss_ignore_index, **kwargs)
 
         return SemanticSegmenterOutput(
             loss=loss,

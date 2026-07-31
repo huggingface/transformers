@@ -1256,7 +1256,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

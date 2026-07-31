@@ -915,7 +915,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
 
         return ImageClassifierOutput(
             loss=loss,

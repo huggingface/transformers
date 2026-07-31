@@ -1244,7 +1244,9 @@ class T5Gemma2ForSequenceClassification(T5Gemma2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs
+            )
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1333,7 +1335,7 @@ class T5Gemma2ForTokenClassification(T5Gemma2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config, **kwargs)
 
         return TokenClassifierOutput(
             loss=loss,

@@ -617,7 +617,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             When set to `"4x"` the intermediate `vit_merger` is skipped so that each image keeps
             `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
+        downsample_mode = downsample_mode or self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
         pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
 
@@ -818,7 +818,9 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,

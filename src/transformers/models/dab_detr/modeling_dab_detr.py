@@ -1414,6 +1414,8 @@ class DabDetrMHAttentionMap(nn.Module):
 )
 class DabDetrForObjectDetection(DabDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    accepts_loss_kwargs = False
+
     _tied_weights_keys = {"model.decoder.bbox_embed": "bbox_predictor"}
 
     def __init__(self, config: DabDetrConfig):

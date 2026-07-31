@@ -1377,6 +1377,8 @@ class RfDetrSegmentationMLPBlock(nn.Module):
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
+    accepts_loss_kwargs = False
+
     _no_split_modules = None
 
     def __init__(self, config: RfDetrConfig):

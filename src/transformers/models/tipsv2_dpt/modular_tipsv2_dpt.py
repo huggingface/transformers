@@ -723,6 +723,7 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
                 upsampled_logits,
                 labels,
                 ignore_index=self.config.semantic_loss_ignore_index,
+                **kwargs,
             )
 
         return SemanticSegmenterOutput(

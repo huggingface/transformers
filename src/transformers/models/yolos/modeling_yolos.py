@@ -542,6 +542,8 @@ class YolosMLPPredictionHead(nn.Module):
     """
 )
 class YolosForObjectDetection(YolosPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: YolosConfig):
         super().__init__(config)
 

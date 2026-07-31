@@ -206,6 +206,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
     config: Nemotron3_5AsrConfig
     _no_split_modules = ["Nemotron3_5AsrRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
+    accepts_loss_kwargs = False
 
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)

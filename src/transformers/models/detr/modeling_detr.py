@@ -1307,6 +1307,8 @@ class DetrMLPPredictionHead(nn.Module):
     """
 )
 class DetrForObjectDetection(DetrPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
@@ -1444,6 +1446,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 

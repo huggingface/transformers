@@ -365,6 +365,8 @@ class Nemotron3_5AsrPromptProjector(nn.Module):
     """
 )
 class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGenerationMixin):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: Nemotron3_5AsrConfig):
         super().__init__(config)
         self.prompt_projector = Nemotron3_5AsrPromptProjector(config)

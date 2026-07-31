@@ -1144,6 +1144,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
     config: NemotronAsrStreamingConfig
     _no_split_modules = ["NemotronAsrStreamingRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
+    accepts_loss_kwargs = False
 
     def __init__(self, config: NemotronAsrStreamingConfig):
         super().__init__(config)
