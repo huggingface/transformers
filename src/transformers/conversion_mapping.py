@@ -141,6 +141,25 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "onyx_assistant": [
+            WeightRenaming(source_patterns=r"blk", target_patterns="layers"),
+            WeightRenaming(source_patterns=r"attn_q.weight", target_patterns="self_attn.q_proj.weight"),
+            WeightRenaming(source_patterns=r"attn_k.weight", target_patterns="self_attn.k_proj.weight"),
+            WeightRenaming(source_patterns=r"attn_v.weight", target_patterns="self_attn.v_proj.weight"),
+            WeightRenaming(source_patterns=r"attn_output.weight", target_patterns="self_attn.o_proj.weight"),
+            WeightRenaming(source_patterns=r"attn_q_norm.weight", target_patterns="self_attn.q_norm.weight"),
+            WeightRenaming(source_patterns=r"attn_k_norm.weight", target_patterns="self_attn.k_norm.weight"),
+            WeightRenaming(source_patterns=r"ffn_gate.weight", target_patterns="mlp.gate_proj.weight"),
+            WeightRenaming(source_patterns=r"ffn_down.weight", target_patterns="mlp.down_proj.weight"),
+            WeightRenaming(source_patterns=r"ffn_up.weight", target_patterns="mlp.up_proj.weight"),
+            WeightRenaming(source_patterns=r"ffn_norm.weight", target_patterns="feedforward_layernorm.weight"),
+            WeightRenaming(source_patterns=r"attn_norm.weight", target_patterns="attention_layernorm.weight"),
+            WeightRenaming(
+                source_patterns=r"enc.output_norm.weight", target_patterns="encoder.output_norm_enc.weight"
+            ),
+            WeightRenaming(source_patterns=r"output_norm.weight", target_patterns="norm.weight"),
+            WeightRenaming(source_patterns=r"fc.weight", target_patterns="encoder.fc.weight"),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(

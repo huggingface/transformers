@@ -61,27 +61,6 @@ class OnyxAssistantRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class OnyxAssistantExaone4RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        OnyxAssistantExaone4RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -152,7 +131,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class OnyxAssistantExaone4Attention(nn.Module):
+class OnyxAssistantAttention(nn.Module):
     def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -163,7 +142,7 @@ class OnyxAssistantExaone4Attention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
@@ -174,8 +153,8 @@ class OnyxAssistantExaone4Attention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self.q_norm = OnyxAssistantExaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = OnyxAssistantExaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = OnyxAssistantRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = OnyxAssistantRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -197,9 +176,7 @@ class OnyxAssistantExaone4Attention(nn.Module):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-        # We use global NoPE for hybrid attention model
-        if self.sliding_window is None or self.is_sliding:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -225,7 +202,7 @@ class OnyxAssistantExaone4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class OnyxAssistantExaone4MLP(nn.Module):
+class OnyxAssistantMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -241,13 +218,13 @@ class OnyxAssistantExaone4MLP(nn.Module):
         return down_proj
 
 
-class Exaone4DecoderLayer(GradientCheckpointingLayer):
+class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = OnyxAssistantExaone4Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = OnyxAssistantAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = OnyxAssistantExaone4MLP(config)
+        self.mlp = OnyxAssistantMLP(config)
         self.attention_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -300,7 +277,7 @@ class OnyxTargetEncoder(nn.Module):
         return target_hidden_states
 
 
-class OnyxAssistantExaone4RotaryEmbedding(nn.Module):
+class OnyxAssistantRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: OnyxAssistantConfig, device=None):
@@ -365,53 +342,12 @@ class OnyxAssistantExaone4RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class OnyxAssistantExaone4DecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = OnyxAssistantExaone4Attention(config=config, layer_idx=layer_idx)
-
-        self.mlp = OnyxAssistantExaone4MLP(config)
-        self.post_attention_layernorm = OnyxAssistantExaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxAssistantExaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
 @auto_docstring
-class OnyxAssistantExaone4PreTrainedModel(PreTrainedModel):
+class OnyxAssistantPreTrainedModel(PreTrainedModel):
     config: OnyxAssistantConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OnyxAssistantExaone4DecoderLayer"]
+    _no_split_modules = ["OnyxAssistantDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -420,21 +356,21 @@ class OnyxAssistantExaone4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": OnyxAssistantExaone4DecoderLayer,
-        "attentions": OnyxAssistantExaone4Attention,
+        "hidden_states": OnyxAssistantDecoderLayer,
+        "attentions": OnyxAssistantAttention,
     }
     config_class = OnyxAssistantConfig
 
 
 @auto_docstring
-class OnyxAssistantModel(OnyxAssistantExaone4PreTrainedModel):
+class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
     def __init__(self, config: OnyxAssistantConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [OnyxAssistantExaone4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [OnyxAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OnyxAssistantExaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = OnyxAssistantExaone4RotaryEmbedding(config=config)
+        self.norm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = OnyxAssistantRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.encoder = OnyxTargetEncoder(config)
 
@@ -504,6 +440,7 @@ class OnyxAssistantModel(OnyxAssistantExaone4PreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         for layer in self.layers:
+            # kinda wasteful, we just need the cache KV
             layer.self_attn(
                 hidden_states=target_hidden_states,
                 position_embeddings=position_embeddings,

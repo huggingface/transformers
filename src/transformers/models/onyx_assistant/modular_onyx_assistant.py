@@ -32,7 +32,7 @@ class OnyxAssistantRMSNorm(Exaone4RMSNorm):
     pass
 
 
-class Exaone4DecoderLayer(Exaone4DecoderLayer):
+class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
     def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.attention_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -97,6 +97,9 @@ class OnyxAssistantModel(Exaone4Model):
         del self.padding_idx
         del self.vocab_size
         self.encoder = OnyxTargetEncoder(config)
+        self.layers = nn.ModuleList(
+            [OnyxAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def update_cache_with_target_states(
         self, target_hidden_states: torch.Tensor, position_ids: torch.Tensor, past_key_values: Cache
@@ -107,6 +110,7 @@ class OnyxAssistantModel(Exaone4Model):
             past_key_values = DynamicCache(config=self.config)
 
         for layer in self.layers:
+            # kinda wasteful, we just need the cache KV
             layer.self_attn(
                 hidden_states=target_hidden_states,
                 position_embeddings=position_embeddings,

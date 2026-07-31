@@ -1527,9 +1527,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # This is actually cache so we need the new matches only and cat it to cache
         self._update_past_and_masks(input_ids)
-        dummy_tgt_length = self.assistant_kwargs["position_ids"].shape[
-            1
-        ]  # FIXME: we can infer it from input/n-matches no?
+        # FIXME: we can infer it from input/n-matches no?
+        dummy_tgt_length = self.assistant_kwargs["position_ids"].shape[1]
         target_hidden_states: torch.Tensor = torch.cat(
             [model_outputs.hidden_states[i][:, :dummy_tgt_length] for i in self.target_layer_ids], dim=-1
         )
@@ -1559,7 +1558,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         candidate_logits = self.target_model_output_embeddings(outputs.last_hidden_state)
         candidate_ids = candidate_logits.argmax(dim=-1)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=1)
-        return candidate_ids[:, 1:], candidate_logits[:, 1:]  # remove the cond `tgt_last_token`
+        return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
         # not used but has to be overriden from an abstract parent
