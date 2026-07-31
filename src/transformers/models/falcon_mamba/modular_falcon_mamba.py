@@ -173,7 +173,7 @@ class FalconMambaMixer(MambaMixer):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            return falcon_mamba_inner_fn(
+            return mamba_inner_fn(  # noqa
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,

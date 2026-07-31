@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
@@ -723,7 +724,7 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(text, str):
                 text = [text]
             # avoid in-place updates on text
-            text = text.copy()
+            text = list(text).copy()
 
         if audio is not None and hasattr(self, "feature_extractor"):
             sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
@@ -766,7 +767,7 @@ class ProcessorMixin(PushToHubMixin):
             # Some processors use nested struct, we need to flatten back if needed
             images = make_flat_list_of_images(images)
             for idx in range(len(images)):
-                replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+                replacement_text = self.replace_image_token(processed_images, image_idx=idx, **kwargs)
                 image_replacements.append(replacement_text)
         return processed_images, image_replacements
 
@@ -777,7 +778,7 @@ class ProcessorMixin(PushToHubMixin):
         if getattr(self, "video_token", None) is not None:
             videos = make_batched_videos(videos)
             for idx in range(len(videos)):
-                replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+                replacement_text = self.replace_video_token(processed_videos, video_idx=idx, **kwargs)
                 video_replacements.append(replacement_text)
 
         return processed_videos, video_replacements
@@ -788,19 +789,19 @@ class ProcessorMixin(PushToHubMixin):
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
             for idx in range(len(audio)):
-                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
+                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx, **kwargs)
                 audio_replacements.append(replacement_text)
 
         return processed_audio, audio_replacements
 
-    # To be overridden by each model's processor if they need to add placeholder tokens
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    # To be overriden by each model's processor if they need to add placeholder tokens
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
     def get_text_with_replacements(
@@ -2247,6 +2248,7 @@ class ProcessorMixin(PushToHubMixin):
         schema: dict | None = None,
         *,
         prefix: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None" = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -2266,10 +2268,13 @@ class ProcessorMixin(PushToHubMixin):
                 The prompt that came before generation. Many chat templates pre-write part of the message, so
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                Tool-call arguments are cast using the calling tool's JSON schema.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")
-        return self.tokenizer.parse_response(response, schema, prefix=prefix)
+        return self.tokenizer.parse_response(response, schema, prefix=prefix, tools=tools)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
@@ -2323,11 +2328,14 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
+        input_ids = text_inputs["input_ids"]
+        if hasattr(input_ids, "tolist"):
+            input_ids = input_ids.tolist()
         for modality in modalities:
             token_str = getattr(self, f"{modality}_token", None)
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
-                ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+                ids_count = [list(ids).count(token_id) for ids in input_ids]
                 text_count = [sample.count(token_str) for sample in text]
 
                 if ids_count != text_count:
