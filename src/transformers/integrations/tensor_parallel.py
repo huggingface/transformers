@@ -20,6 +20,7 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
+from ..distributed.utils import is_dtensor
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
@@ -46,7 +47,7 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if is_torch_distributed_available() and isinstance(t, DTensor):
+    if is_dtensor(t):
         return t.to_local()
     return t
 

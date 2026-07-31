@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
+from ..utils import is_torch_available, is_torch_distributed_available
 
 
 if TYPE_CHECKING:

@@ -43,6 +43,14 @@ def _is_torch_distributed_initialized() -> bool:
     return torch.distributed.is_initialized()
 
 
+def is_dtensor(obj) -> bool:
+    if not is_torch_distributed_available():
+        return False
+    from torch.distributed.tensor import DTensor
+
+    return isinstance(obj, DTensor)
+
+
 def _get_torch_distributed_rank() -> int:
     if not _is_torch_distributed_initialized():
         return 0
