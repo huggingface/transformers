@@ -35,7 +35,7 @@ from ...utils import TensorType, auto_docstring
 class Kimi_K25ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
-        The max limit to resize resize the image.
+        The max limit to resize the image.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):

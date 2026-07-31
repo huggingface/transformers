@@ -72,7 +72,7 @@ def navit_resize(
 class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
-        The max limit to resize resize the video.
+        The max limit to resize the video.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):
