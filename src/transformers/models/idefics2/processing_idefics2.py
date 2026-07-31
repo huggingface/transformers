@@ -120,7 +120,7 @@ class Idefics2Processor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
+            elif not isinstance(text, list) or not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`

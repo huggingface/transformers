@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -150,7 +150,7 @@ conversation3 = [
 ]
 
 
-# Conversation with mixed midia
+# Conversation with mixed media
 conversation4 = [
     {
         "role": "user",
@@ -158,14 +158,14 @@ conversation4 = [
             {"type": "image", "path": "/path/to/image3.jpg"},
             {"type": "image", "path": "/path/to/image4.jpg"},
             {"type": "video", "path": "/path/to/video.jpg"},
-            {"type": "text", "text": "What are the common elements in these medias?"},
+            {"type": "text", "text": "What are the common elements in these media?"},
         ],
     }
 ]
 
 conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
-ipnuts = processor.apply_chat_template(
+inputs = processor.apply_chat_template(
     conversations,
     fps=1,
     add_generation_prompt=True,
@@ -259,7 +259,7 @@ First, make sure to install the latest version of Flash Attention 2:
 pip install -U flash-attn --no-build-isolation
 ```
 
-Also, you should have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). FlashAttention-2 can only be used when a model is loaded in `torch.float16` or `torch.bfloat16`.
+Also, you should have hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of the [flash attention repository](https://github.com/Dao-AILab/flash-attention). FlashAttention-2 can only be used when a model is loaded in `torch.float16` or `torch.bfloat16`.
 
 To load and run a model using Flash Attention-2, simply add `attn_implementation="flash_attention_2"` when loading the model as follows:
 
@@ -267,7 +267,7 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import Qwen2VLForConditionalGeneration
 
 model = Qwen2VLForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2-VL-7B-Instruct", , 
+    "Qwen/Qwen2-VL-7B-Instruct", 
     attn_implementation="flash_attention_2",
  device_map="auto")
 ```
