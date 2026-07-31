@@ -1101,8 +1101,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.list[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as. Set `run_compressed` True to execute model as the
-            compressed format if not `dense`
+            format the weights are stored in, e.g. `dense`, `float-quantized` or `pack-quantized`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1113,11 +1112,16 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             layer names or types to not quantize, supports regex prefixed by 're:'
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
-        run_compressed (`bool`, *optional*, defaults to `True`): deprecated, use `dequantize` instead
-            (`dequantize = not run_compressed`).
+        run_compressed (`bool`, *optional*): deprecated, use `dequantize` instead. Its only effect is to set
+            `dequantize` to its opposite, `run_compressed=False` meaning `dequantize=True`.
         dequantize (`bool`, *optional*, defaults to `False`): when `True`, the quantized weights are dequantized
-            back to the model dtype (e.g. BF16) at load time instead of running in compressed / FP8-kernel mode.
-            Useful when the model needs to be fine-tuned or saved in its original dtype.
+            back to the model dtype (e.g. BF16) at load time, which is what fine-tuning or saving the model in its
+            original dtype needs. When `False`, the weights are left in their compressed form and
+            compressed-tensors decompresses them on the first forward pass.
+        use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
+            have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
+            CUDA SM89+ or XPU). Inference only, and opt-in: without it the model goes through the regular
+            compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(
@@ -1129,8 +1133,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         global_compression_ratio: float | None = None,
         ignore: list[str] | None = None,
         quant_method: str = "compressed-tensors",
-        run_compressed: bool = True,
+        run_compressed: bool | None = None,
         dequantize: bool = False,
+        use_optimized_inference: bool = False,
         **kwargs,
     ):
         if is_compressed_tensors_available():
@@ -1141,15 +1146,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             )
         self.quantization_config = None
 
-        if not run_compressed:
+        if run_compressed is not None:
             logger.warning_once(
                 "`run_compressed` is deprecated and will be removed in a future version. "
                 "Use `dequantize=True` instead of `run_compressed=False`."
             )
-            dequantize = True
+            # Its only effect is to set `dequantize`; an explicit `dequantize=True` wins over it.
+            dequantize = dequantize or not run_compressed
         self.dequantize = dequantize
-        # Kept in sync for backward compatibility; `dequantize` is the source of truth.
-        self.run_compressed = not dequantize
+        self.use_optimized_inference = use_optimized_inference
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1169,11 +1174,29 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if not self.dequantize and not self.is_quantization_compressed and not self.has_fp8_modules:
-            # Compressed execution only applies to compressed checkpoints; dequantize otherwise.
-            # FP8 checkpoints are excluded: even when not stored in COMPRESSED status (e.g. FROZEN
-            # per-tensor static FP8), the weights are already FP8 and run through the FP8 kernels.
+        if not self.dequantize and not self.is_quantization_compressed:
+            # Nothing is stored compressed, so there is neither anything to execute compressed nor
+            # anything to accelerate: the weights are already dense.
+            logger.warning(
+                "Compressed execution is only supported for compressed checkpoints. Setting `dequantize=True`."
+            )
             self.dequantize = True
+
+        if self.use_optimized_inference:
+            # Whether the optimized path is reachable at all is decided here; whether the hardware
+            # can run its kernels is left to `HfQuantizer.validate_environment`.
+            if self.dequantize:
+                logger.warning(
+                    "`dequantize=True` dequantizes the weights at load time, which leaves nothing for the quantized "
+                    "kernels to run on. Setting `use_optimized_inference=False`."
+                )
+                self.use_optimized_inference = False
+            elif not self.has_fp8_modules:
+                logger.info(
+                    "There are no kernels for this scheme. We only support fp8 for now for compressed tensors. "
+                    "Setting `use_optimized_inference=False`."
+                )
+                self.use_optimized_inference = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1237,7 +1260,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return {"run_compressed": self.run_compressed, "dequantize": self.dequantize}
+        return {"dequantize": self.dequantize, "use_optimized_inference": self.use_optimized_inference}
 
     @property
     def has_fp8_modules(self):
