@@ -60,10 +60,12 @@ class DbrxModelTester(CausalLMModelTester):
         # Set DBRX's unusual params
         self.clip_qkv = clip_qkv
 
-        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
+        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here.
+        # `ffn_config.hidden_size` must mirror the model's `hidden_size` (the experts read/write hidden
+        # states), while `ffn_config.ffn_hidden_size` is the larger MoE intermediate size.
         self.ffn_config = {
-            "ffn_hidden_size": self.hidden_size,
-            "hidden_size": 2 * self.hidden_size,
+            "ffn_hidden_size": 2 * self.hidden_size,
+            "hidden_size": self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,
