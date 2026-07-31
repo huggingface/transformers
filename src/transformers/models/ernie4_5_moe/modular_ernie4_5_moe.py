@@ -54,8 +54,7 @@ class Ernie4_5_MoeMLP(Qwen3MoeMLP):
 
 
 class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
-    def __init__(self, config: Ernie4_5_MoeConfig, device=None):
-        super().__init__(config, device)
+    pass
 
 
 @no_inherit_decorator
