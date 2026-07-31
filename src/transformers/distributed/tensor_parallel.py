@@ -223,17 +223,19 @@ class RowwiseParallel(TensorParallelLayer):
     def context_around_forward(self, module, mesh):
         if not self.uses_local_kernel(module):
             yield
-            return
-        # Each rank computes a partial sum, so the replicated bias must be added exactly once.
-        bias = module._parameters.get("bias")
-        if bias is not None and mesh.get_local_rank() != 0:
-            module._parameters["bias"] = None
-        try:
-            with _remaining_dtensor_params_to_local(module):
-                yield
-        finally:
+        else:
+            # A rowwise local kernel must produce only its partial matmul. If we don't hide 
+            # the bias, we will be adding the bias x world_size times which is not correct.
+            # We should add it once after the all_reduce (redistribute).
+            bias = module._parameters.get("bias")
             if bias is not None:
-                module._parameters["bias"] = bias
+                module._parameters["bias"] = None
+            try:
+                with _remaining_dtensor_params_to_local(module):
+                    yield
+            finally:
+                if bias is not None:
+                    module._parameters["bias"] = bias
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local kernel produced partial sums (weight is sharded along the input dim).
@@ -241,6 +243,8 @@ class RowwiseParallel(TensorParallelLayer):
             output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts], async_op=True)
+        if self.uses_local_kernel(module) and (bias := module._parameters.get("bias")) is not None:
+            output = output + bias
         return output.to_local() if self.use_local_output else output
 
 
