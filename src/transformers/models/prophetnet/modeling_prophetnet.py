@@ -56,7 +56,7 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     # Predict-stream mask: each stream only attends to its own future position (the diagonal).
     right_mask = (rows != cols).expand(ngram, sequence_length, sequence_length)
 
-    neg_inf_t = torch.tensor(neg_inf, dtype=dtype, device=device)
+    neg_inf_t = torch.full((), neg_inf, dtype=dtype, device=device)
     zero_t = torch.zeros((), dtype=dtype, device=device)
     left_block = torch.where(left_mask, neg_inf_t, zero_t)
     right_block = torch.where(right_mask, neg_inf_t, zero_t)

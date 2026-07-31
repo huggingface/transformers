@@ -20,18 +20,16 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..utils import is_torch_greater_or_equal, logging
+from ..distributed.utils import is_dtensor
+from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
     from torch import nn
-
-    # Cache this result has it's a C FFI call which can be pretty time-consuming
-    _torch_distributed_available = torch.distributed.is_available()
 
 
 logger = logging.get_logger(__name__)
@@ -46,9 +44,8 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if hasattr(torch.distributed, "tensor") and hasattr(torch.distributed.tensor, "DTensor"):
-        if isinstance(t, torch.distributed.tensor.DTensor):
-            return t.to_local()
+    if is_dtensor(t):
+        return t.to_local()
     return t
 
 
@@ -64,40 +61,11 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
             raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
         current_device = getattr(torch, device_type)
-        if not torch.distributed.is_initialized():
-            try:
-                rank = int(os.environ["RANK"])
-                local_rank = int(os.environ["LOCAL_RANK"])
-                world_size = int(os.environ["WORLD_SIZE"])
-
-                backend_map = {
-                    "cuda": "nccl",
-                    "cpu": "gloo",
-                    "xpu": "xccl",
-                    "hpu": "hccl",
-                    "neuron": "neuron",
-                    "tpu": "tpu_dist",
-                }
-                backend = backend_map.get(device_type)
-
-                torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
-                current_device = getattr(torch, device_type)
-                if device_type != "cpu":
-                    current_device.set_device(local_rank)
-
-            except Exception as e:
-                raise OSError(
-                    "We tried to initialize torch.distributed for you, but it failed. Make "
-                    "sure you init torch distributed in your script to use `tp_plan`."
-                ) from e
 
         if device_type != "cpu":
             current_device.set_device(int(os.environ["LOCAL_RANK"]))
@@ -1344,7 +1312,7 @@ class ParallelInterface(GeneralInterface):
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
         }
-        if is_torch_available() and _torch_distributed_available
+        if is_torch_distributed_available()
         else {}
     )
 
@@ -1634,7 +1602,7 @@ def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
     if isinstance(tp_plan, dict):
         model.tp_plan = tp_plan
     model_plan = model.tp_plan
-    if model_plan is not None and _torch_distributed_available:
+    if model_plan is not None:
         for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")

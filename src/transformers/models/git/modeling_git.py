@@ -791,7 +791,8 @@ class GitModel(GitPreTrainedModel):
             )
 
         # Adjust position ids by adding image seq length
-        if pixel_values is None and past_key_values is not None and input_ids.shape[1] == 1:
+        seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        if pixel_values is None and past_key_values is not None and seq_len == 1:
             position_ids = position_ids + past_key_values_length
 
         embedding_output = self.embeddings(
@@ -842,7 +843,7 @@ class GitModel(GitPreTrainedModel):
                 attention_mask = torch.cat(
                     [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
                 )
-        elif past_key_values is not None and input_ids.shape[1] == 1:
+        elif past_key_values is not None and seq_len == 1:
             # Expand attention mask and cache position with image tokens because GIT doesn't add image
             # placeholder tokens when processing. Doesn't worth the refactor, low usage!
             extended_attention_mask = torch.ones(
@@ -1099,32 +1100,6 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        pixel_values=None,
-        attention_mask=None,
-        use_cache=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- `git` has special `pixel_values` handling
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
 
 __all__ = ["GitForCausalLM", "GitModel", "GitPreTrainedModel", "GitVisionModel"]

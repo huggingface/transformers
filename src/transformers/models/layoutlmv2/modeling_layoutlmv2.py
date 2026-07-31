@@ -467,7 +467,7 @@ def my_convert_sync_batchnorm(module, process_group=None):
         module_output.bias = torch.nn.Parameter(module.bias)
         module_output.running_mean = module.running_mean
         module_output.running_var = module.running_var
-        module_output.num_batches_tracked = torch.tensor(0, dtype=torch.long, device=module.running_mean.device)
+        module_output.num_batches_tracked = torch.full((), 0, dtype=torch.long, device=module.running_mean.device)
     for name, child in module.named_children():
         module_output.add_module(name, my_convert_sync_batchnorm(child, process_group))
     del module
