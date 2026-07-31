@@ -98,7 +98,7 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: DiffusionGemmaTextConfig, layer_type: str, device=None, **kwargs
+        config: DiffusionGemmaTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
