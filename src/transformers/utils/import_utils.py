@@ -151,8 +151,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.15.2"
-KERNELS_MAX_VERSION = "0.16.0"
+KERNELS_MIN_VERSION = "0.16.0"
+KERNELS_MAX_VERSION = "0.17.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -161,9 +161,9 @@ def is_torch_available() -> bool:
     try:
         is_available, torch_version = _is_package_available("torch", return_version=True)
         parsed_version = version.parse(torch_version)
-        if is_available and parsed_version < version.parse("2.4.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.4 is required but found {torch_version}")
-        return is_available and version.parse(torch_version) >= version.parse("2.4.0")
+        if is_available and parsed_version < version.parse("2.5.0"):
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.5 is required but found {torch_version}")
+        return is_available and version.parse(torch_version) >= version.parse("2.5.0")
     except packaging.version.InvalidVersion:
         return False
 
@@ -223,6 +223,15 @@ def is_torch_cuda_available() -> bool:
 
         return torch.cuda.is_available()
     return False
+
+
+@lru_cache
+def is_torch_distributed_available() -> bool:
+    if not is_torch_available():
+        return False
+    import torch
+
+    return torch.distributed.is_available()
 
 
 @lru_cache
