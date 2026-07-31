@@ -1332,6 +1332,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             if prefill_kv_length == kv_length:
                 return self.prefill_keys, self.prefill_values
 
+            # Old speculative methods can draft tokens before prefill is complete
             key_states = key_states[..., prefill_kv_length:, :]
             value_states = value_states[..., prefill_kv_length:, :]
 
@@ -1506,6 +1507,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             if prefill_kv_length == kv_length:
                 return self.all_keys, self.all_values
 
+            # Old speculative methods can draft tokens before prefill is complete
             key_states = key_states[..., prefill_kv_length:, :]
             value_states = value_states[..., prefill_kv_length:, :]
 
