@@ -3188,6 +3188,14 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         model_kwargs["generation_step"] = outputs.generation_step
         return model_kwargs
 
+    def _prepare_generation_config(self, generation_config, **kwargs):
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
+        # Only the first code group comes from the talker itself; the code predictor draws the remaining
+        # `num_code_groups - 1` residual codes at every step. Mirror the talker's `do_sample` onto it so that greedy
+        # generation is deterministic as a whole, instead of yielding a greedy first group with sampled residuals.
+        self.code_predictor.generation_config.do_sample = generation_config.do_sample
+        return generation_config, model_kwargs
+
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -3218,15 +3226,18 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
             tts_pad_embed = kwargs.get("tts_pad_embed")
             last_id_hidden = self.get_input_embeddings()(input_ids)
 
+            # `top_k`/`top_p` are only passed when sampling, otherwise every step warns that they are unused.
+            code_predictor_kwargs = {"do_sample": self.code_predictor.generation_config.do_sample}
+            if code_predictor_kwargs["do_sample"]:
+                code_predictor_kwargs.update(top_k=50, top_p=0.8)
+
             past_hidden = hidden_states[0][-1][:, -1:].to(last_id_hidden.device)  # hidden, last layer, last token
             predictor_result = self.code_predictor.generate(
                 inputs_embeds=torch.cat((past_hidden, last_id_hidden), dim=1),
                 max_new_tokens=self.config.num_code_groups - 1,
-                do_sample=True,
-                top_k=50,
-                top_p=0.8,
                 output_hidden_states=True,
                 return_dict_in_generate=True,
+                **code_predictor_kwargs,
             )
             residual_codes = torch.cat((input_ids, predictor_result.sequences.to(input_ids.device)), dim=-1)
 
@@ -4067,9 +4078,37 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             .transpose(1, 2)
             .to(talker_result.hidden_states[-1][-1].device)
         )
-        talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
 
-        return thinker_result.sequences, talker_wavs.float()
+        if talker_codes.shape[0] == 1:
+            # A single sequence stops at its own EOS, so it has no trailing codes to drop: decode everything and
+            # return a `[1, 1, num_samples]` tensor, exactly as this model did before batched generation existed.
+            talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
+            return thinker_result.sequences, talker_wavs.float()
+
+        # In a batch, generation only stops once every sample has emitted EOS, so shorter samples keep producing codes
+        # past their EOS. Those trailing codes are meaningless so they are zeroed out before decoding and their
+        # waveform is dropped afterwards.
+        talker_sequences = talker_result.sequences[:, : talker_codes.shape[-1]]
+        eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_sequences.device).flatten()
+        eos_mask = (talker_sequences.unsqueeze(-1) == eos_token_ids).any(dim=-1)
+        code_positions = torch.arange(talker_sequences.shape[-1], device=talker_sequences.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, talker_sequences.shape[-1]).min(dim=-1).values
+
+        max_code_length = int(talker_code_lengths.max())
+        talker_codes = talker_codes[..., :max_code_length]
+        code_padding_mask = code_positions[:max_code_length] >= talker_code_lengths.unsqueeze(-1)  # [batch, codes]
+        talker_codes = talker_codes.masked_fill(code_padding_mask.unsqueeze(1), 0)
+
+        # `code2wav` is fully causal, so a batched decode followed by a per-sample truncation is equivalent to
+        # decoding each sample on its own. Each waveform is trimmed to its own length rather than padded to a
+        # common one, which would append audible garbage (or silence) to the shorter samples.
+        talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
+        waveform_lengths = talker_code_lengths * int(self.code2wav.total_upsample)
+        talker_wavs = [
+            wav[..., :length].reshape(-1).float() for wav, length in zip(talker_wavs, waveform_lengths.tolist())
+        ]
+
+        return thinker_result.sequences, talker_wavs
 
 
 __all__ = [

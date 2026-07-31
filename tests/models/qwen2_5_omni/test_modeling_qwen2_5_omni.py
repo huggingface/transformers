@@ -881,7 +881,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
                 talker_do_sample=False,
                 talker_max_new_tokens=10,
             )
-            single_audio_outputs.append(output[1][0] if output[1].ndim > 1 else output[1])
+            single_audio_outputs.append(output[1].reshape(-1))
 
         torch.manual_seed(0)
         inputs = self.processor.apply_chat_template(
@@ -904,7 +904,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         )
         batch_audio_output = output[1]
 
-        self.assertEqual(batch_audio_output.shape[0], len(conversations))
+        self.assertEqual(len(batch_audio_output), len(conversations))
         for batch_audio, single_audio in zip(batch_audio_output, single_audio_outputs):
             self.assertEqual(batch_audio.shape, single_audio.shape)
             torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)

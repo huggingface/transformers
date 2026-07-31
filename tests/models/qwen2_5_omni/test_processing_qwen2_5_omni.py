@@ -79,17 +79,28 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return audio_inputs
 
     def test_post_process_multimodal_output_batched_audio(self):
+        # Batched generation returns one waveform per sample, each trimmed to its own length.
         processor = self.processor_class.__new__(self.processor_class)
         generated_outputs = (
             torch.ones((2, 3), dtype=torch.long),
-            torch.arange(12, dtype=torch.float32).reshape(2, 1, 6),
+            [torch.arange(6, dtype=torch.float32), torch.arange(6, 10, dtype=torch.float32)],
         )
 
         audio_outputs = processor.post_process_multimodal_output(generated_outputs, generation_mode="audio")
 
         self.assertEqual(len(audio_outputs), 2)
         self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
-        self.assertTrue(np.array_equal(audio_outputs[1], np.arange(6, 12, dtype=np.float32)))
+        self.assertTrue(np.array_equal(audio_outputs[1], np.arange(6, 10, dtype=np.float32)))
+
+    def test_post_process_multimodal_output_single_audio(self):
+        # Single-sample generation returns a lone `(num_samples,)` tensor, which must not be iterated over.
+        processor = self.processor_class.__new__(self.processor_class)
+        generated_outputs = (torch.ones((1, 3), dtype=torch.long), torch.arange(6, dtype=torch.float32))
+
+        audio_outputs = processor.post_process_multimodal_output(generated_outputs, generation_mode="audio")
+
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
 
     @require_torch
     def _test_apply_chat_template(

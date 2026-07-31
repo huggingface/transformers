@@ -146,11 +146,6 @@ inputs = processor.apply_chat_template(
 text_ids = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-sf.write(
-    "output.wav",
-    audio.reshape(-1).detach().cpu().numpy(),
-    samplerate=24000,
-)
 print(text)
 ```
 
@@ -258,7 +253,7 @@ print(text)
 
 ### Batch audio generation
 
-[`Qwen3OmniMoeForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation.
+[`Qwen3OmniMoeForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation. With a batch of more than one sample, the generated audio is returned as a list with one waveform per sample, each already trimmed to its own length, so shorter samples are not padded with spurious audio. A single-sample call still returns one tensor.
 
 ```python
 import soundfile as sf
@@ -276,8 +271,8 @@ system_text = (
     "perceiving auditory and visual inputs, as well as generating text and speech."
 )
 texts = [
-    "Hello, I'm Qwen. How can I help you today?",
-    "The weather is nice today. Let's go for a walk.",
+    "Hello, I'm Qwen. How can I help you today? Just let me know!",
+    "The weather is nice today.",
 ]
 inputs = processor.apply_chat_template(
     [
@@ -308,12 +303,12 @@ inputs = processor.apply_chat_template(
 gen_kwargs = {
     "talker_do_sample": True,
     "speaker": "Ethan",     # Ethan, Chelsie
-    "thinker_max_new_tokens": max_new_tokens,
+    "talker_max_new_tokens": max_new_tokens,
 }
 _, pred_waveform = model.generate(**inputs, **gen_kwargs)
 
-for audio, sample_id in zip(pred_waveform, range(len(texts))):
-    sf.write(f"qwen3_omni_output_{sample_id}.wav", audio.reshape(-1).detach().to(torch.float32).cpu().numpy(), sampling_rate)
+for sample_id, audio in enumerate(pred_waveform):
+    sf.write(f"qwen3_omni_output_{sample_id}.wav", audio.detach().to(torch.float32).cpu().numpy(), sampling_rate)
     print(f"Saved audio to qwen3_omni_output_{sample_id}.wav")
 ```
 

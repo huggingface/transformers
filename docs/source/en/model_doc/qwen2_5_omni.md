@@ -146,11 +146,6 @@ inputs = processor.apply_chat_template(
 text_ids = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-sf.write(
-    "output.wav",
-    audio.reshape(-1).detach().cpu().numpy(),
-    samplerate=24000,
-)
 print(text)
 ```
 
@@ -258,7 +253,7 @@ print(text)
 
 ### Batch audio generation
 
-[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation.
+[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation. With a batch of more than one sample, the generated audio is returned as a list with one waveform per sample, each already trimmed to its own length, so shorter samples are not padded with spurious audio. A single-sample call still returns one tensor.
 
 ```python
 import soundfile as sf
@@ -269,7 +264,7 @@ model_id = "Qwen/Qwen2.5-Omni-7B"
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 sampling_rate = 24000  # output sampling rate
-max_new_tokens = 128  # maximum number of tokens to generate
+max_new_tokens = 200  # maximum number of tokens to generate
 
 system_text = (
     "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of "
@@ -308,14 +303,14 @@ inputs = processor.apply_chat_template(
 gen_kwargs = {
     "talker_do_sample": True,
     "speaker": "Ethan",  # Ethan, Chelsie
-    "thinker_max_new_tokens": max_new_tokens,
+    "talker_max_new_tokens": max_new_tokens,
 }
 _, pred_waveform = model.generate(**inputs, **gen_kwargs)
 
-for audio, sample_id in zip(pred_waveform, range(len(texts))):
+for sample_id, audio in enumerate(pred_waveform):
     sf.write(
         f"qwen2_5_omni_output_{sample_id}.wav",
-        audio.reshape(-1).detach().to(torch.float32).cpu().numpy(),
+        audio.detach().to(torch.float32).cpu().numpy(),
         sampling_rate,
     )
     print(f"Saved audio to qwen2_5_omni_output_{sample_id}.wav")

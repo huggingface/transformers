@@ -3719,7 +3719,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
             When `return_audio=True`:
                 - **Text** (`torch.Tensor`): Generated text token sequence.
-                - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
+                - **Audio waveform** (`torch.Tensor` or `list[torch.Tensor]`): A single `(num_samples,)`
+                  waveform when `batch_size == 1`, otherwise one waveform per batch sample, each trimmed to
+                  its own length.
         """
         # check `False` on purpose because the parameter can be `str/bool`. This is needed for BC
         generation_mode = kwargs.pop("generation_mode", None)
@@ -3918,14 +3920,13 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 **token2wav_kwargs,
             )
             # The BigVGAN vocoder squeezes its output, so a single-item decode comes back as `(num_samples,)`.
-            wavs.append(sample_wav.reshape(-1))
+            wavs.append(sample_wav.reshape(-1).float())
 
-        max_waveform_length = max(sample_wav.shape[-1] for sample_wav in wavs)
-        wav = wavs[0].new_zeros((batch_size, max_waveform_length))
-        for index, sample_wav in enumerate(wavs):
-            wav[index, : sample_wav.shape[-1]] = sample_wav
+        if batch_size == 1:
+            # Single-sample generation keeps returning a `(num_samples,)` tensor for backward compatibility.
+            return thinker_result.sequences, wavs[0]
 
-        return thinker_result.sequences, wav.float()
+        return thinker_result.sequences, wavs
 
 
 __all__ = [

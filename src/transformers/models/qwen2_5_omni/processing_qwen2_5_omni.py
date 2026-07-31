@@ -347,10 +347,12 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             )
 
         elif generation_mode == "audio":
-            audio_outputs = generated_outputs[1].detach().cpu()
-            if audio_outputs.ndim == 1:
-                return [audio_outputs.numpy()]
-            return [audio.reshape(-1).numpy() for audio in audio_outputs]
+            # Batched generation returns one waveform per sample, while a single sample comes back as a lone
+            # `(num_samples,)` tensor that return as a list
+            audio_outputs = generated_outputs[1]
+            if not isinstance(audio_outputs, (list, tuple)):
+                audio_outputs = [audio_outputs]
+            return [audio.reshape(-1).detach().cpu().numpy() for audio in audio_outputs]
 
         else:
             raise ValueError(
