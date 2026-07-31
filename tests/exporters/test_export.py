@@ -332,7 +332,9 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 # generation config used for the capture. `generation_config=None` is the model's own config (growing
 # `DynamicCache`); `cache_implementation="static"` exports against a `StaticCache`. Every cache runs
 # under both shape modes — under dynamic shapes a static cache still keeps a symbolic (resizable) size,
-# it just writes at fixed positions. Add a config to `_EXPORT_GENERATION_CONFIGS` to cross it with both.
+# it just writes at fixed positions. A dynamic-shape export also captures the `decode` stage multi-token
+# (a symbolic query axis — continuation-from-past, or a plain prefill on an empty cache) rather than the
+# single-token step, since a single-token axis can't stay symbolic.
 _EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
 _EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
 
@@ -738,7 +740,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(self, model_class, device=torch_device, generation_config=None):
+    def _prepare_export_generate_model_and_inputs(
+        self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
+    ):
         """Decompose a generative model into exportable components.
 
         For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
@@ -752,6 +756,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         ``generation_config`` is forwarded to the ``generate()`` capture (default: the model's own).
         Pass one with ``cache_implementation="static"`` to export against a fixed-size ``StaticCache``.
 
+        ``multi_token_decode`` captures the ``decode`` component with a multi-token query axis
+        (continuation-from-past, or a plain prefill when the cache is empty) instead of the classic
+        single-token step — see :func:`decompose_for_generation`.
+
         Returns:
             Dict of `{name: (model, inputs)}` — one entry per component.
         """
@@ -764,7 +772,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
-        return decompose_for_generation(model, inputs_dict, generation_config=generation_config)
+        return decompose_for_generation(
+            model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
 
     # ──────────────────── torch.export tests ─────────────────────
 
@@ -787,7 +797,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
 
@@ -827,7 +837,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config
+                model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
 
@@ -862,7 +872,10 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 continue
 
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, device="cpu", generation_config=generation_config
+                model_class,
+                device="cpu",
+                generation_config=generation_config,
+                multi_token_decode=dynamic,
             )
             eager_outputs = self._collect_eager_outputs(components)
 

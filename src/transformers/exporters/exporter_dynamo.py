@@ -580,7 +580,9 @@ def _pytree_unflatten(values, context: Any) -> Any:
     return _unflatten_from_context(context, list(values))
 
 
-def _register_pytree_node(object_cls: type):
+def register_pytree_node(object_cls: type):
+    """Register a single class (e.g. a `Cache` subclass like `StaticCache`) as a torch.export pytree
+    node, so `torch.export.load` can unflatten it as a graph input without needing the original model."""
     try:
         torch.utils._pytree.register_pytree_node(
             object_cls,
@@ -604,7 +606,7 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
-        _register_pytree_node(cache_type)
+        register_pytree_node(cache_type)
 
     # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
@@ -614,13 +616,13 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
             and obj.__name__.endswith("Cache")
             and not issubclass(obj, Cache)
         ):
-            _register_pytree_node(obj)
+            register_pytree_node(obj)
 
     # detectron2 ImageList (used by layoutlmv2)
     if is_detectron2_available() and isinstance(model, PreTrainedModel) and model.config.model_type == "layoutlmv2":
         from detectron2.structures.image_list import ImageList
 
-        _register_pytree_node(ImageList)
+        register_pytree_node(ImageList)
 
 
 # ── Stage 4: Dynamic shapes ─────────────────────────────────────────────────

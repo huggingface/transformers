@@ -371,12 +371,99 @@ for name, (submodel, subinputs) in components.items():
     exported[name] = exporter.export(submodel, subinputs, config=config)
 ```
 
+### Multi-token decode
+
+By default the `decode` component is a **single-token** step — one query token against the KV cache —
+so `torch.export` specializes its query-sequence axis to 1. Pass `multi_token_decode=True` to capture
+`decode` as a **multi-token** decode instead: [`~exporters.utils.decompose_for_generation`] merges two
+consecutive decode steps (it captures with `max_new_tokens=3`) into one forward, so that axis stays
+symbolic. A single graph then serves every query length — one token (ordinary decoding), many tokens
+at once (continuation-from-past, e.g. accepting a chunk of speculative tokens), and a plain prefill
+when the cache is empty.
+
+<hfoptions id="multi-token-decode">
+<hfoption id="Dynamo">
+
+```python
+from transformers.exporters import DynamoExporter, DynamoConfig
+
+exporter = DynamoExporter()
+config = DynamoConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# components["decode"] now accepts a variable number of query tokens
+```
+
+</hfoption>
+<hfoption id="ONNX">
+
+```python
+from transformers.exporters import OnnxExporter, OnnxConfig
+
+exporter = OnnxExporter()
+config = OnnxConfig(dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# components["decode"] now accepts a variable number of query tokens
+```
+
+</hfoption>
+<hfoption id="ExecuTorch">
+
+```python
+from transformers.exporters import ExecutorchExporter, ExecutorchConfig
+
+exporter = ExecutorchExporter()
+config = ExecutorchConfig(backend="xnnpack", dynamic=True)
+components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
+# components["decode"] now accepts a variable number of query tokens
+```
+
+</hfoption>
+</hfoptions>
+
+The query axis only stays symbolic under a dynamic-shape export (`dynamic=True`); a static export
+freezes it at the captured length, giving a fixed multi-token graph. It composes with the static KV
+cache below — the merged decode simply writes its tokens at consecutive cache positions.
+
 ### Static KV cache
 
-`generate()` grows a `DynamicCache` by default, which reallocates as the sequence extends. Some runtimes can handle in-place state modification (ExecuTorch, ONNX Runtime) through a **static** cache —
-a fixed-size buffer written at the current position each step. Export one by forwarding a
-`GenerationConfig` with `cache_implementation="static"` (and a `max_cache_len`) to
-[`~HfExporter.export_for_generation`]:
+`generate()` grows a `DynamicCache` by default, reallocating as the sequence extends — a moving target
+for an exported graph. A **static** cache is a fixed-size buffer, allocated once and written in place at
+the current position each step. Combined with a [multi-token decode](#multi-token-decode) it collapses
+generation into a single exported graph: the `decode` graph takes a fixed-size cache and a *variable*
+number of query tokens, so one graph serves both the prompt (empty cache → prefill) and each generated
+token (populated cache → decode). Export it by forwarding a `GenerationConfig` with
+`cache_implementation="static"` (and a `max_cache_len`) alongside `multi_token_decode=True`:
+
+<hfoptions id="static-cache">
+<hfoption id="Dynamo">
+
+```python
+from transformers import GenerationConfig
+from transformers.exporters import DynamoExporter, DynamoConfig
+
+exporter = DynamoExporter()
+gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
+components = exporter.export_for_generation(
+    model, inputs, config=DynamoConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+)
+```
+
+</hfoption>
+<hfoption id="ONNX">
+
+```python
+from transformers import GenerationConfig
+from transformers.exporters import OnnxExporter, OnnxConfig
+
+exporter = OnnxExporter()
+gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
+components = exporter.export_for_generation(
+    model, inputs, config=OnnxConfig(dynamic=True), generation_config=gen_config, multi_token_decode=True
+)
+```
+
+</hfoption>
+<hfoption id="ExecuTorch">
 
 ```python
 from transformers import GenerationConfig
@@ -384,53 +471,35 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 
 exporter = ExecutorchExporter()
 gen_config = GenerationConfig(cache_implementation="static", max_cache_len=2048)
-components = exporter.export_for_generation(model, inputs, config=ExecutorchConfig(dynamic=True), generation_config=gen_config)
+components = exporter.export_for_generation(
+    model, inputs, config=ExecutorchConfig(backend="xnnpack", dynamic=True), generation_config=gen_config, multi_token_decode=True
+)
 ```
 
-The `decode` component now takes a fixed-size cache. `dynamic=True` keeps its length symbolic
-(resizable at load time), but marks *every* axis `Dim.AUTO`, so torch.export spends time specializing
-axes that are actually fixed (batch, the size-1 decode step, `num_heads`, `head_dim`) — slow, and it
-warns about it. To keep just the cache length resizable without that cost, let
-`get_auto_dynamic_shapes` build the (cache-pytree-aware) structure, then prune it to the one axis
-that varies:
+</hfoption>
+</hfoptions>
 
-<details>
-
-<summary>Keep only the cache length dynamic (skip the <code>Dim.AUTO</code> overhead)</summary>
-
-```python
-from torch.export import Dim
-from transformers.exporters.exporter_dynamo import get_auto_dynamic_shapes, register_cache_pytrees_for_model
-
-register_cache_pytrees_for_model(model)
-auto = get_auto_dynamic_shapes(decode_inputs)  # correct nested structure, every axis Dim.AUTO
-
-# static everything except the cache-length axis (Dim.AUTO there is more robust than a bounded Dim,
-# which trips a `min(64·c, 192·c)` guard); drop the output-flag kwargs that aren't traced.
-dynamic_shapes = {k: v for k, v in auto.items() if not isinstance(decode_inputs[k], bool)}
-dynamic_shapes["input_ids"] = None
-dynamic_shapes["position_ids"] = None
-dynamic_shapes["attention_mask"] = {3: Dim.AUTO}  # [batch, 1, seq, cache]
-dynamic_shapes["past_key_values"] = [  # reuse get_auto's per-leaf list; keys/values → cache axis only
-    {2: Dim.AUTO} if spec else spec for spec in dynamic_shapes["past_key_values"]
-]
-
-decode = exporter.export(decode_model, decode_inputs, config=OnnxConfig(dynamic_shapes=dynamic_shapes))
-```
-
-The cache length stays symbolic while every other axis is fixed — faster to export, and the decode
-loop below still runs at the concrete runtime cache size.
-
-</details>
+The `decode` graph now has two symbolic axes — the query length (how many tokens you feed) and the cache
+length (`max_cache_len`, resizable at load time). `dynamic=True` marks these (and every other axis)
+`Dim.AUTO`, so the exported graph accepts any prompt length and cache size at load time.
 
 #### Zero-copy in-place updates
 
 The static cache is passed in and mutated in place, so one buffer carries state across decode steps
 with no host copies — as long as the runtime binds the caller's buffers rather than copying through its
-own arena:
+own arena. What that takes is the only per-backend part left:
+
+- **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
+  `components["decode"].module()(...)` updates the cache tensors you pass in directly. Reuse the same
+  tensors each step; nothing to configure.
+
+- **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
+  pairs. ORT's `CudaSession.set_buffer_sharing` (`onnxruntime.transformers.io_binding_helper`) binds
+  each pair to one device buffer, so the cache is read and updated in place across the loop with no host
+  round-trips.
 
 - **ExecuTorch** — turn off the memory-planning allocations on [`ExecutorchConfig`] so the in-place
-  write lands in the caller's own tensor (see the reference for what each flag does):
+  write can land in the caller's own tensor (see the reference for what each flag does):
 
   ```python
   config = ExecutorchConfig(
@@ -442,32 +511,208 @@ own arena:
   )
   ```
 
-- **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
-  pairs. ORT's `CudaSession` helper (`onnxruntime.transformers.io_binding_helper`) binds both to one
-  device buffer via `set_buffer_sharing`, so the cache is updated in place across the decode loop with
-  no host round-trips.
+  > [!NOTE]
+  > The zero-copy in-place write also needs the caller to bind output buffers at runtime via
+  > `Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
+  > exposes only `execute`/`set_inputs`/`get_outputs`). The flags above set it up, but the in-place
+  > write is a **C++-only** path (see the ExecuTorch decode-loop example below). From Python, read the
+  > updated cache back from the method outputs each step.
 
 <details>
 
 <summary>Decode-loop inference examples</summary>
 
-ExecuTorch — the cache buffers you pass in are written in place, so the same tensors carry forward each
-step (argument order follows the exported `decode` signature):
+The loop is the same shape on every backend — it's the *same* graph throughout. Start from an empty
+fixed-size cache, feed the whole prompt once (empty cache → prefill), then one token at a time
+(populated cache → decode). The cache's write position advances via its counters, so there's no
+`cache_position` to thread through — each call passes `input_ids`, a causal `attention_mask`,
+`position_ids`, and the cache, and gets back logits for every query position. How the cache is set up
+differs per runtime (a `StaticCache` object for Dynamo, raw device buffers for ONNX Runtime, caller
+arrays in C++ for ExecuTorch), so each tab builds its own below. The Dynamo and ONNX Runtime tabs
+update the cache in place; ExecuTorch's in-place path is C++ (its Python runtime can't, as noted above).
+
+<hfoptions id="decode-loop">
+<hfoption id="Dynamo">
+
+torch.export records the static-cache write as a `USER_INPUT_MUTATION`, so the loaded graph's `module()`
+updates the `StaticCache` you pass in **directly** — one cache carries state across the whole loop with
+nothing to bind or thread back out. `register_pytree_node(StaticCache)` lets `torch.export.load` unflatten
+the `StaticCache` input. The cache has to be **initialized up front** (torch.export bakes the allocated K/V
+into the input spec, so a lazy blank cache won't match) — but the saved program carries its own
+`example_inputs`, so reuse that already-initialized `StaticCache` template, reset to empty:
+
+```python
+import copy
+import torch
+from transformers import StaticCache
+from transformers.exporters.exporter_dynamo import register_pytree_node
+
+register_pytree_node(StaticCache)
+exported = torch.export.load("decode.pt2")
+decode = exported.module()   # runs on the device its inputs / cache live on (CUDA here)
+
+# the artifact carries an initialized StaticCache template — reuse it (reset to empty)
+_, example_kwargs = exported.example_inputs
+past_key_values = copy.deepcopy(example_kwargs["past_key_values"])
+past_key_values.reset()
+
+def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
+    return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
+
+# prefill: the whole prompt in one call
+positions = torch.arange(prompt_len, device="cuda")
+logits = decode(input_ids=prompt_ids, attention_mask=causal_mask(positions, max_cache_len),
+                position_ids=positions[None], past_key_values=past_key_values).logits
+next_token = logits[:, -1:].argmax(-1)
+
+# decode: query=1 buffers reused in place
+input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
+position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
+attention_mask = torch.empty((1, 1, 1, max_cache_len), dtype=torch.bool, device="cuda")
+slots = torch.arange(max_cache_len, device="cuda")
+for position in range(prompt_len, max_cache_len):
+    input_ids.copy_(next_token)
+    position_ids.fill_(position)
+    attention_mask[0, 0, 0].copy_(slots <= position)
+    logits = decode(input_ids=input_ids, attention_mask=attention_mask,
+                    position_ids=position_ids, past_key_values=past_key_values).logits
+    next_token = logits[:, -1:].argmax(-1)
+```
+
+</hfoption>
+<hfoption id="ONNX Runtime">
+
+ONNX Runtime runs the graph as-is; the in-place cache update is done with ORT's `CudaSession`
+(`onnxruntime.transformers.io_binding_helper`), a thin wrapper over ORT io-binding. `set_buffer_sharing`
+binds a cache `input.<name>` and its matching `output.<name>` to **one** device buffer, so the mutated
+K/V/counter are written straight back into the input; `allocate_buffers` allocates the remaining
+(non-shared) outputs — here just `logits`; and `infer(feed_dict)` binds your CUDA tensors by pointer
+and runs. The cache buffers come straight from the graph's own input metadata (`get_inputs()` shape and
+type), so no model config is needed — the one symbolic axis (cache length) becomes `max_cache_len`:
 
 ```python
 import torch
-from executorch.runtime import Runtime, Verification
+import onnxruntime as ort
+from onnxruntime.transformers.io_binding_helper import CudaSession, TypeHelper
 
-program = Runtime.get().load_program(components["decode"].buffer, verification=Verification.Minimal)
-decode = program.load_method("forward")
+def causal_mask(positions, cache_len):
+    return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
 
-# caller-owned StaticCache buffers, mutated in place — reuse them each step
-past_key_values = [torch.zeros(*shape) for shape in cache_shapes]
-input_ids = prefill_last_token
+session = ort.InferenceSession("decode.onnx", providers=["CUDAExecutionProvider"])
+cuda = CudaSession(session, torch.device("cuda"))
+
+# fresh device cache buffers built from each cache input's own shape/dtype; share each
+# input.<name>/output.<name> pair on one buffer so the update lands in place
+cache = {}
+for i in session.get_inputs():
+    if not i.name.startswith("input."):
+        continue
+    name = i.name[len("input.") :]
+    dims = [max_cache_len if isinstance(d, str) and not d.isdigit() else int(d) for d in i.shape]
+    cache[name] = torch.zeros(dims, dtype=TypeHelper.ort_type_to_torch_type(i.type), device="cuda")
+    cuda.set_buffer_sharing(f"input.{name}", f"output.{name}")
+cache_feed = {f"input.{name}": buf for name, buf in cache.items()}
+
+vocab_size = next(o.shape[-1] for o in session.get_outputs() if o.name.endswith("logits"))
+
+# prefill: the whole prompt in one call
+positions = torch.arange(prompt_len, device="cuda")
+cuda.allocate_buffers({"logits": (1, prompt_len, vocab_size)})
+out = cuda.infer({"input_ids": prompt_ids, "attention_mask": causal_mask(positions, max_cache_len),
+                  "position_ids": positions[None], **cache_feed})
+next_token = out["logits"][:, -1:].argmax(-1)
+
+# decode: query=1 buffers reused in place
+cuda.allocate_buffers({"logits": (1, 1, vocab_size)})
+input_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
+position_ids = torch.empty((1, 1), dtype=torch.long, device="cuda")
+attention_mask = torch.empty((1, 1, 1, max_cache_len), dtype=torch.bool, device="cuda")
+slots = torch.arange(max_cache_len, device="cuda")
 for position in range(prompt_len, max_cache_len):
-    logits, *_ = decode.execute([input_ids, torch.tensor([position]), *past_key_values])
-    input_ids = logits[:, -1].argmax(-1, keepdim=True)
+    input_ids.copy_(next_token)
+    position_ids.fill_(position)
+    attention_mask[0, 0, 0].copy_(slots <= position)
+    out = cuda.infer({"input_ids": input_ids, "attention_mask": attention_mask,
+                      "position_ids": position_ids, **cache_feed})
+    next_token = out["logits"][:, -1:].argmax(-1)
 ```
+
+</hfoption>
+<hfoption id="ExecuTorch">
+
+ExecuTorch's on-device runtime is C++, and the in-place cache update relies on
+`Method::set_output_data_ptr` — **not surfaced by the Python runtime** (`executorch.runtime.Method`
+exposes only `execute`/`set_inputs`/`get_outputs`), so the zero-copy decode is a C++-only path. Bind
+each mutated-cache **output** onto its matching cache **input** buffer, and the new K/V/counter land in
+the caller's `StaticCache` buffers with no copies. As in the other tabs the shapes and sizes come from the
+artifact itself — here the program's `method_meta` (`input_tensor_meta`/`output_tensor_meta` →
+`TensorInfo::nbytes()`), the C++ has no Python runtime to query:
+
+```cpp
+#include <executorch/extension/data_loader/file_data_loader.h>
+#include <executorch/extension/tensor/tensor_ptr.h>
+#include <executorch/runtime/executor/method.h>
+#include <executorch/runtime/executor/program.h>
+
+using namespace executorch::runtime;
+using executorch::extension::FileDataLoader;
+using executorch::extension::make_tensor_ptr;
+
+// load the exported decode and its `forward` method (Result error-checks elided for brevity)
+auto loader = FileDataLoader::from("decode.pte");
+auto program = Program::load(&loader.get());
+
+// method-execution memory: a fixed arena for bookkeeping + one buffer per the method's memory plan
+std::array<uint8_t, 4 * 1024 * 1024> arena;
+MemoryAllocator method_allocator(arena.size(), arena.data());
+auto meta = program->method_meta("forward");
+std::vector<std::vector<uint8_t>> planned(meta->num_memory_planned_buffers());
+std::vector<Span<uint8_t>> planned_spans;
+for (size_t i = 0; i < planned.size(); ++i) {
+    planned[i].resize(meta->memory_planned_buffer_size(i).get());
+    planned_spans.push_back({planned[i].data(), planned[i].size()});
+}
+HierarchicalAllocator planned_allocator({planned_spans.data(), planned_spans.size()});
+MemoryManager memory_manager(&method_allocator, &planned_allocator);
+auto decode = std::move(program->load_method("forward", &memory_manager).get());
+
+// shapes and sizes come from method_meta — no external config. Inputs are [ids, mask, position_ids,
+// cache×N]; outputs are [returned cache×N, logits, mutated cache×N].
+const size_t num_cache_tensors = meta->num_inputs() - 3;
+const size_t logits_out_idx = num_cache_tensors;
+std::vector<size_t> cache_nbytes(num_cache_tensors), cache_out_idx(num_cache_tensors);
+for (size_t i = 0; i < num_cache_tensors; ++i) {
+    cache_nbytes[i] = meta->input_tensor_meta(3 + i)->nbytes();
+    cache_out_idx[i] = num_cache_tensors + 1 + i;   // mutated cache = the last N outputs
+}
+const size_t logits_nbytes = meta->output_tensor_meta(logits_out_idx)->nbytes();
+
+// one set of StaticCache buffers (K/V + per-layer counters) is reused across steps, bound in place each call
+auto forward = [&](const TensorPtr& input_ids, const TensorPtr& mask, const TensorPtr& position_ids) {
+    decode.set_input(EValue(*input_ids), 0);
+    decode.set_input(EValue(*mask), 1);
+    decode.set_input(EValue(*position_ids), 2);
+    for (int i = 0; i < num_cache_tensors; ++i)
+        decode.set_input(EValue(*cache_tensor[i]), 3 + i);
+    // bind each mutated-cache output onto its input buffer → the write lands in place, zero copies
+    for (int i = 0; i < num_cache_tensors; ++i)
+        decode.set_output_data_ptr(cache_data[i], cache_nbytes[i], cache_out_idx[i]);
+    decode.set_output_data_ptr(logits_data, logits_nbytes, logits_out_idx);
+    decode.execute();                 // cache updated in place; logits written to logits_data
+    return argmax_last(logits_data);  // greedy pick
+};
+
+// prefill the whole prompt, then decode one token per step — the cache carries in place across all calls
+int64_t next_token = forward(prompt_ids, prompt_mask, prompt_positions);
+for (int64_t position = prompt_len; position < max_cache_len; ++position) {
+    next_token = forward(make_tensor_ptr({1, 1}, &next_token, ScalarType::Long),
+                         causal_mask(position),  // [1, 1, 1, max_cache_len] bool
+                         make_tensor_ptr({1, 1}, &position, ScalarType::Long));
+}
+```
+
+</hfoption>
+</hfoptions>
 
 </details>
 
