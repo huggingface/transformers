@@ -139,7 +139,7 @@ With the dataset ready, you can now set up the model for fine-tuning.
 
 ## Load a base model
 
-Load the ["microsoft/git-base"](https://huggingface.co/microsoft/git-base) into a [`AutoModelForCausalLM`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM) object.
+Load the ["microsoft/git-base"](https://huggingface.co/microsoft/git-base) into a [`AutoModelForCausalLM`] object.
 
 ```python
 from transformers import AutoModelForCausalLM

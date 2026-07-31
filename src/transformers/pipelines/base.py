@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Union
 
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
@@ -74,6 +75,13 @@ def no_collate_fn(items):
     if len(items) != 1:
         raise ValueError("This collate_fn is meant to be used with batch_size=1")
     return items[0]
+
+
+def _reform_generator(first_item, remaining):
+    # Sticks an item back onto the start of a generator. Used when we pop the first item
+    # to infer data formats.
+    yield first_item
+    yield from remaining
 
 
 def _pad(items, key, padding_value, padding_side):
@@ -851,7 +859,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = torch.device("cpu")
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
+        if _is_torch_distributed_initialized():
             self.device = self.model.device
         logger.debug(f"Device set to use {self.device}")
 
@@ -1205,17 +1213,33 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if args:
             logger.warning(f"Ignoring args : {args}")
 
-        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`
-        container_types = (list, tuple, types.GeneratorType)
-        if is_torch_available():
-            container_types = (*container_types, KeyDataset)
-        if isinstance(inputs, container_types):
-            if isinstance(inputs, types.GeneratorType):
-                inputs = list(inputs)
-            if is_valid_message(inputs[0]):
-                inputs = Chat(inputs)
-            elif isinstance(inputs[0], (list, tuple)) and all(chat and is_valid_message(chat[0]) for chat in inputs):
-                inputs = [Chat(chat) for chat in inputs]
+        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`.
+        # We peek at the first output of generators to decide the data format, which means we
+        # then have to stick it back on afterward using _reform_generator()
+        if isinstance(inputs, types.GeneratorType):
+            try:
+                first = next(inputs)
+            except StopIteration:
+                inputs = []
+            else:
+                if is_valid_message(first):
+                    inputs = Chat([first, *inputs])
+                elif isinstance(first, (list, tuple)) and first and is_valid_message(first[0]):
+                    # Keep this a generator expression, not a list, so it doesn't materialize everything
+                    inputs = (Chat(chat) for chat in _reform_generator(first, inputs))
+                else:
+                    inputs = _reform_generator(first, inputs)
+        else:
+            container_types = (list, tuple)
+            if is_torch_available():
+                container_types = (*container_types, KeyDataset)
+            if isinstance(inputs, container_types):
+                if is_valid_message(inputs[0]):
+                    inputs = Chat(inputs)
+                elif isinstance(inputs[0], (list, tuple)) and all(
+                    chat and is_valid_message(chat[0]) for chat in inputs
+                ):
+                    inputs = [Chat(chat) for chat in inputs]
 
         if num_workers is None:
             if self._num_workers is None:
@@ -1246,24 +1270,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         is_generator = isinstance(inputs, types.GeneratorType)
         is_list = isinstance(inputs, list)
 
-        is_iterable = is_dataset or is_generator or is_list
-        can_use_iterator = is_dataset or is_generator or is_list
-
         if is_list:
-            if can_use_iterator:
-                final_iterator = self.get_iterator(
-                    inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
-                )
-                outputs = list(final_iterator)
-                return outputs
-            else:
-                return self.run_multi(inputs, preprocess_params, forward_params, postprocess_params)
-        elif can_use_iterator:
+            # A list input is eagerly consumed and returns a list of outputs.
+            final_iterator = self.get_iterator(
+                inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+            )
+            return list(final_iterator)
+        elif is_dataset or is_generator:
+            # Datasets and generators stream lazily: return an iterator consumed on demand so the input is
+            # never fully materialized.
             return self.get_iterator(
                 inputs, num_workers, batch_size, preprocess_params, forward_params, postprocess_params
             )
-        elif is_iterable:
-            return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
         elif isinstance(self, ChunkPipeline):
             return next(
                 iter(
@@ -1275,20 +1293,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
-    def run_multi(self, inputs, preprocess_params, forward_params, postprocess_params):
-        return [self.run_single(item, preprocess_params, forward_params, postprocess_params) for item in inputs]
-
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
         model_inputs = self.preprocess(inputs, **preprocess_params)
         model_outputs = self.forward(model_inputs, **forward_params)
         outputs = self.postprocess(model_outputs, **postprocess_params)
         return outputs
-
-    def iterate(self, inputs, preprocess_params, forward_params, postprocess_params):
-        # This function should become `get_iterator` again, this is a temporary
-        # easy solution.
-        for input_ in inputs:
-            yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
 
 
 Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)

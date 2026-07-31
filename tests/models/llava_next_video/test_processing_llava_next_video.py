@@ -15,6 +15,7 @@
 import json
 import unittest
 
+import numpy as np
 import torch
 
 from transformers import LlavaNextVideoProcessor
@@ -32,18 +33,8 @@ if is_vision_available():
 @require_vision
 class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        return tokenizer
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
+    # Tiny processor created with make_tiny_processor.py from "llava-hf/LLaVA-NeXT-Video-7B-hf"
+    tiny_model_id = "hf-internal-testing/tiny-processor-llava_next_video"
 
     @classmethod
     def prepare_processor_dict(cls):
@@ -53,6 +44,14 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "patch_size": 128,
             "vision_feature_select_strategy": "default",
         }
+
+    def prepare_video_inputs(self, batch_size=None):
+        """Use tiny frames to keep test_processor_text_has_no_visual memory-efficient."""
+        video_input = [np.random.randint(255, size=(3, 8, 8), dtype=np.uint8)] * 2
+        video_input = np.array(video_input)
+        if batch_size is None:
+            return video_input
+        return [video_input] * batch_size
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

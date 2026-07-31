@@ -203,7 +203,7 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
         super().__init__(config)
         del self.camembert
 
-        self.roberta = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=True)
 
     @can_return_tuple
     @auto_docstring

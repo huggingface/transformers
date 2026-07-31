@@ -331,6 +331,8 @@ def scale_bbox_to_transformed_image(
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
+    valid_processor_kwargs = FuyuProcessorKwargs
+
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs

@@ -57,13 +57,13 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/statue_of_liberty_64x64.jpg"
                             ),
                         },
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/golden_gate_64x64.jpg"
                             ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
@@ -76,7 +76,9 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/view_64x64.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],

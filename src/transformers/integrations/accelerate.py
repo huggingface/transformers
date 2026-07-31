@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+from ..distributed.fsdp import is_fsdp_enabled
 from ..utils import (
     is_accelerate_available,
     is_torch_available,
@@ -35,7 +36,6 @@ from ..utils import (
 )
 from ..utils.quantization_config import QuantizationMethod
 from .deepspeed import is_deepspeed_zero3_enabled
-from .fsdp import is_fsdp_enabled
 
 
 if is_torch_available():
@@ -208,12 +208,15 @@ def get_max_memory(max_memory: dict[int | str, int | str] | None = None):
     # Adjust for allocated but free memory
     for device_name in final_max_memory:
         if isinstance(device_name, int):  # it's a GPU device
-            # Only cuda and xpu use caching memory allocator
-            if is_torch_xpu_available():
-                unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
-            elif torch.cuda.is_available():
-                unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
-            else:
+            try:
+                # Only cuda and xpu use caching memory allocator
+                if is_torch_xpu_available():
+                    unused_memory = torch.xpu.memory_reserved(device_name) - torch.xpu.memory_allocated(device_name)
+                elif torch.cuda.is_available():
+                    unused_memory = torch.cuda.memory_reserved(device_name) - torch.cuda.memory_allocated(device_name)
+                else:
+                    unused_memory = 0
+            except Exception:
                 unused_memory = 0
             # Add the pre-allocated but unused device memory
             final_max_memory[device_name] += unused_memory
@@ -295,28 +298,21 @@ def get_balanced_memory(
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
     # add which is the biggest of:
-    # - the size of no split block (if applicable)
+    # - the size of the biggest no split block (if applicable)
     # - the mean of the layer sizes
     if no_split_module_classes is None:
         no_split_module_classes = []
     elif not isinstance(no_split_module_classes, (list, tuple, set)):
         no_split_module_classes = [no_split_module_classes]
 
-    # Identify the size of the no_split_block modules
+    # Identify the size of the biggest no_split_block modules. Note that a single _no_split_module class, i.e. XXXDecoderLayer,
+    # may have different sizes depending on the layer idx, even if it's the same class (e.g. if we have either mlp or moe inside
+    # the DecoderLayer depending on the layer idx). For this reason, we have to find ALL layers matching the _no_split_module class
+    # and take the max, not just the first layer matching the class (as it may be smaller than future layers)
     buffer = 0
     if len(no_split_module_classes) > 0:
-        no_split_children = {}
-        for name, size in module_sizes.items():
-            if name == "":
-                continue
-            submodule = model.get_submodule(name)
-            class_name = submodule.__class__.__name__
-            if class_name in no_split_module_classes and class_name not in no_split_children:
-                no_split_children[class_name] = size
-
-            if set(no_split_children.keys()) == set(no_split_module_classes):
-                break
-        buffer = max(no_split_children.values()) if len(no_split_children) > 0 else 0
+        all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
+        buffer = max(module_sizes[k] for k in all_no_split_modules)
 
     mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))

@@ -356,7 +356,14 @@ register_checkpoint_conversion_mapping(
 
 ### Lookup rules
 
-When [`get_model_conversion_mapping`] processes a `PreTrainedModel`, every sub-`PreTrainedModel` is visited in DFS order (`nn.Module.named_modules()` filtered to `PreTrainedModel` instances). For each one:
+When [`get_model_conversion_mapping`] processes a `PreTrainedModel`, every sub-`PreTrainedModel` is visited in DFS order (`nn.Module.named_modules()` filtered to `PreTrainedModel` instances). Each sub-model is resolved in two stages, a custom code filter runs first, then the registered mapping is looked up.
+
+Custom code models are skipped before any lookup happens. A sub-model counts as custom code when [`~PreTrainedModel.is_custom_code`] returns `True`, which covers models loaded from the Hub with `trust_remote_code=True` and any model class not in Transformers. Custom code models don't inherit a conversion mapping because its class name or `model_type` might collide with a native model. For example, a custom architecture that sets `model_type="mixtral"` won't pick up Mixtral's built-in expert-fusion transforms.
+
+> [!IMPORTANT]
+> Register a custom code model explicitly with [`register_checkpoint_conversion_mapping`] to apply a conversion mapping. Registration adds the class name or `model_type` to the set of user-registered mappings, which exempts the model from the custom code skip and routes it through the normal lookup below.
+
+For each sub-model that clears the custom code filter:
 
 1. **Class-name lookup is tried first**, then `model_type`. If both are registered for the same module, the **class-name mapping wins** and the `model_type` one is ignored for that module — this lets a task head (e.g. `LlavaForConditionalGeneration`) override the shared `model_type` baseline (`"llava"`).
 2. The selected mapping has `scope_prefix` set to the sub-module's dotted path (`""` for the root).

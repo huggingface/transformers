@@ -20,18 +20,16 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..utils import is_torch_greater_or_equal, logging
+from ..distributed.utils import is_dtensor
+from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
     from torch import nn
-
-    # Cache this result has it's a C FFI call which can be pretty time-consuming
-    _torch_distributed_available = torch.distributed.is_available()
 
 
 logger = logging.get_logger(__name__)
@@ -46,9 +44,8 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if hasattr(torch.distributed, "tensor") and hasattr(torch.distributed.tensor, "DTensor"):
-        if isinstance(t, torch.distributed.tensor.DTensor):
-            return t.to_local()
+    if is_dtensor(t):
+        return t.to_local()
     return t
 
 
@@ -64,40 +61,11 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
             raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
         current_device = getattr(torch, device_type)
-        if not torch.distributed.is_initialized():
-            try:
-                rank = int(os.environ["RANK"])
-                local_rank = int(os.environ["LOCAL_RANK"])
-                world_size = int(os.environ["WORLD_SIZE"])
-
-                backend_map = {
-                    "cuda": "nccl",
-                    "cpu": "gloo",
-                    "xpu": "xccl",
-                    "hpu": "hccl",
-                    "neuron": "neuron",
-                    "tpu": "tpu_dist",
-                }
-                backend = backend_map.get(device_type)
-
-                torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
-                current_device = getattr(torch, device_type)
-                if device_type != "cpu":
-                    current_device.set_device(local_rank)
-
-            except Exception as e:
-                raise OSError(
-                    "We tried to initialize torch.distributed for you, but it failed. Make "
-                    "sure you init torch distributed in your script to use `tp_plan`."
-                ) from e
 
         if device_type != "cpu":
             current_device.set_device(int(os.environ["LOCAL_RANK"]))
@@ -108,7 +76,6 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
         device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
     else:
         if device_mesh.ndim > 1:
@@ -118,10 +85,9 @@ def initialize_tensor_parallelism(
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["tp"]
-        tp_size = device_mesh.size()
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
-    return device_map, device_mesh, tp_size
+    return device_map, device_mesh
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -674,6 +640,10 @@ class TensorParallelLayer:
     ) -> torch.Tensor:
         raise NotImplementedError
 
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        """Raise if the module cannot be sharded with this style on the given mesh."""
+        pass
+
     def prepare_module_tp(self, module: nn.Module, device_mesh, **kwargs) -> nn.Module:
         distribute_module(
             module,
@@ -718,6 +688,16 @@ class ColwiseParallel(TensorParallelLayer):
     def __init__(self, gather_output: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.gather_output = gather_output
+
+    def validate_module(self, module: nn.Module, device_mesh, layer_name: str = ""):
+        out_features = getattr(module, "out_features", None)
+        if self.gather_output and out_features is not None and out_features % device_mesh.size() != 0:
+            raise ValueError(
+                f"`{layer_name}` ({type(module).__name__} with out_features={out_features}) is sharded with "
+                f"'colwise_gather_output', which requires out_features to be divisible by the number of ranks "
+                f"({device_mesh.size()}) to all-gather equal-size shards. Resize the weight (e.g. "
+                f"`model.resize_token_embeddings` for LM heads) or override this module's entry in the tp_plan."
+            )
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
@@ -1332,7 +1312,7 @@ class ParallelInterface(GeneralInterface):
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
         }
-        if is_torch_available() and _torch_distributed_available
+        if is_torch_distributed_available()
         else {}
     )
 
@@ -1512,6 +1492,7 @@ def add_tensor_parallel_hooks_to_module(
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+        tp_layer.validate_module(module, device_mesh, layer_name)
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
@@ -1609,9 +1590,9 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
-    model._tp_size = tp_size
+def apply_tensor_parallelism(model, tp_plan, distributed_config, device_mesh):
+    """Apply tensor parallelism to a model according to the TP plan."""
+    model._tp_size = distributed_config.tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
         if isinstance(distributed_config, dict):
@@ -1621,7 +1602,7 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
     if isinstance(tp_plan, dict):
         model.tp_plan = tp_plan
     model_plan = model.tp_plan
-    if model_plan is not None and _torch_distributed_available:
+    if model_plan is not None:
         for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")

@@ -16,6 +16,8 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: heterogeneous_configurations
+      title: Heterogeneous configurations
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
@@ -124,6 +126,8 @@
       title: torch.compile
     - local: exporters
       title: Exporters
+    - local: exporters_extend
+      title: Extending the exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -501,6 +505,10 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/axk1
+        title: A.X-K1
+      - local: model_doc/axk2
+        title: A.X-K2
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert
@@ -679,6 +687,10 @@
         title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
+      - local: model_doc/granitemoe_swa
+        title: GraniteMoeSWA
+      - local: model_doc/granite_swa
+        title: GraniteSWA
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
@@ -1249,6 +1261,8 @@
         title: ColPali
       - local: model_doc/colqwen2
         title: ColQwen2
+      - local: model_doc/cosmos3_edge
+        title: Cosmos3 Edge
       - local: model_doc/cosmos3_omni
         title: Cosmos3 Omni
       - local: model_doc/data2vec
@@ -1319,6 +1333,8 @@
         title: Idefics2
       - local: model_doc/idefics3
         title: Idefics3
+      - local: model_doc/inkling
+        title: Inkling
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
@@ -1475,6 +1491,10 @@
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
         title: TAPAS
+      - local: model_doc/tipsv2
+        title: TIPSv2
+      - local: model_doc/tipsv2_dpt
+        title: TIPSv2 DPT
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/tvp
