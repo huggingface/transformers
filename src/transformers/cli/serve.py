@@ -54,6 +54,15 @@ class Serve:
         quantization: Annotated[
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
+        gguf_file: Annotated[
+            str | None,
+            typer.Option(
+                help=(
+                    "Load the weights from this GGUF file inside the model repo. Config and tokenizer "
+                    "still come from the model id."
+                )
+            ),
+        ] = None,
         reasoning: Annotated[
             ReasoningMode,
             typer.Option(
@@ -132,6 +141,7 @@ class Serve:
             trust_remote_code=trust_remote_code,
             attn_implementation=attn_implementation,
             quantization=quantization,
+            gguf_file=gguf_file,
             model_timeout=model_timeout,
             force_model=force_model,
         )

@@ -112,6 +112,7 @@ class ModelManager:
         dtype: str | None = "auto",
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
+        gguf_file: str | None = None,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -131,6 +132,7 @@ class ModelManager:
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
+        self.gguf_file = gguf_file
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -265,6 +267,12 @@ class ModelManager:
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
+
+        if self.gguf_file is not None:
+            # Reuse the config resolved above: `from_pretrained` would otherwise try to rebuild it
+            # from the GGUF metadata, which is not supported for every architecture.
+            model_kwargs["gguf_file"] = self.gguf_file
+            model_kwargs["config"] = config
 
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 

@@ -4265,16 +4265,11 @@ class PreTrainedModel(
         )
 
         if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+            # Raw tensors keyed by their GGUF names; renaming and conversion are `WeightTransform`s
+            # contributed below, so the standard loading pipeline handles them like any checkpoint.
+            from .integrations.gguf import load_gguf_state_dict
 
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
-            )["tensors"]
+            state_dict = load_gguf_state_dict(checkpoint_files[0], config=config)
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4320,6 +4315,11 @@ class PreTrainedModel(
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        if gguf_file:
+            from .integrations.gguf import get_gguf_conversion_mapping, read_gguf_architecture
+
+            gguf_arch = read_gguf_architecture(checkpoint_files[0])
+            weight_conversions = get_gguf_conversion_mapping(gguf_arch, config) + weight_conversions
 
         model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
