@@ -650,7 +650,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
 
         Returns:
-            `int`: Index of the associated word in the original string.
+            `int`: Index of the word containing the character.
         """
 
         if not self._encodings:
