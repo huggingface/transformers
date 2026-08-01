@@ -327,7 +327,9 @@ def get_max_seqlen(
         return max_seqlen
     if not is_flash_attention_requested(config):
         return None
-    return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+    # Move to CPU to avoid D2H sync from .item()
+    cu_seqlens_cpu = cu_seqlens.cpu()
+    return int((cu_seqlens_cpu[1:] - cu_seqlens_cpu[:-1]).max())
 
 
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
