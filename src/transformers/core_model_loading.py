@@ -1362,7 +1362,9 @@ def set_param_for_module(
             if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 dtensor_param = _dtensor_from_local_like(local_param, ref)
-                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+                param_value = torch.nn.Parameter(
+                    dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
+                )
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
