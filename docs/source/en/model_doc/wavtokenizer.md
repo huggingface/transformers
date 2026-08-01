@@ -30,7 +30,7 @@ quantizer follow [EnCodec](encodec)'s SEANet encoder with a single-codebook vect
 [Vocos](https://huggingface.co/papers/2306.00814)-style backbone (ConvNeXt blocks and a positional conv/attention net) with
 an inverse STFT head.
 
-The 40 tokens/s variant of WavTokenizer is used as the audio tokenizer of Apertus 1.5.
+The 40 tokens/s variant of WavTokenizer is used as the audio tokenizer of [Apertus 1.5](./apertus1p5).
 
 The abstract from the paper is the following:
 
@@ -77,6 +77,9 @@ python src/transformers/models/wavtokenizer/convert_wavtokenizer_checkpoint.py \
     --checkpoint_path /path/to/original.ckpt \
     --output_dir /path/to/converted-model
 ```
+
+A converted checkpoint is also the audio half of an [Apertus 1.5](./apertus1p5) composite; see that page for
+the full conversion path.
 
 ## Usage example
 
