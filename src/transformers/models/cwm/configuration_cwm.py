@@ -107,6 +107,11 @@ class CwmConfig(PreTrainedConfig):
         self.layer_types = list(self.layer_types)
         self.eos_token_id = self.eos_token_id if self.eos_token_id is not None else [128001, 128008, 128009]
         if self.head_dim is None:
+            if self.hidden_size % self.num_attention_heads != 0:
+                raise ValueError(
+                    f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                    f"heads ({self.num_attention_heads})."
+                )
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -115,11 +120,7 @@ class CwmConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
+        super().validate_architecture()
 
 
 __all__ = ["CwmConfig"]

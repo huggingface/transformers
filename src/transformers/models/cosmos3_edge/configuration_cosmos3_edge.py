@@ -89,6 +89,11 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
                 "mrope_section": [24, 20, 20],
             }
         if self.head_dim is None:
+            if self.hidden_size % self.num_attention_heads != 0:
+                raise ValueError(
+                    f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                    f"heads ({self.num_attention_heads})."
+                )
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -97,11 +102,7 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
+        super().validate_architecture()
         rope_type = self.rope_parameters["rope_type"]
         if rope_type != "default":
             raise ValueError(f"Cosmos3 Edge requires `rope_type='default'`, got {rope_type!r}.")
