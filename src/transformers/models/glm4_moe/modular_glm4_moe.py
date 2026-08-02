@@ -96,6 +96,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_mtp_layers": "num_nextn_predict_layers",

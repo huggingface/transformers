@@ -35,7 +35,7 @@ logging.set_verbosity_info()
 
 def convert_prophetnet_checkpoint_to_pytorch(prophetnet_checkpoint_path: str, pytorch_dump_folder_path: str):
     """
-    Copy/paste/tweak prohpetnet's weights to our prophetnet structure.
+    Copy/paste/tweak prophetnet's weights to our prophetnet structure.
     """
     if "xprophetnet" in prophetnet_checkpoint_path:
         prophet_old = XLMProphetNetForConditionalGenerationOld.from_pretrained(prophetnet_checkpoint_path)

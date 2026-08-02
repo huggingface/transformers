@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -33,7 +33,8 @@ The abstract from the technical report is the following:
 ## Notes
 
 - Use [`Qwen3OmniMoeForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen3OmniMoeThinkerForConditionalGeneration`] for text-only and [`Qwen3OmniMoeTalkerForConditionalGeneration`] for audio-only outputs.
-- In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
+- Audio generation with [`Qwen3OmniMoeForConditionalGeneration`] supports only single batch size at the moment.
+- In case out-of-memory errors when working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very large value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
 ## Usage example
@@ -67,7 +68,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can't you hear and see in this video?"},
         ],
     },
 ]
@@ -123,7 +124,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can't you hear and see in this video?"},
         ],
     },
 ]
@@ -158,7 +159,7 @@ import soundfile as sf
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto"
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -224,7 +225,7 @@ conversation4 = [
             {"type": "image", "path": "/path/to/image.jpg"},
             {"type": "video", "path": "/path/to/video.mp4"},
             {"type": "audio", "path": "/path/to/audio.wav"},
-            {"type": "text", "text": "What are the elements can you see and hear in these medias?"},
+            {"type": "text", "text": "What are the elements can you see and hear in these media?"},
         ],
     }
 ]

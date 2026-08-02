@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .auto import *
     from .autoformer import *
     from .axk1 import *
+    from .axk2 import *
     from .aya_vision import *
     from .bamba import *
     from .bark import *
@@ -193,7 +194,9 @@ if TYPE_CHECKING:
     from .granite4_vision import *
     from .granite_speech import *
     from .granite_speech_plus import *
+    from .granite_swa import *
     from .granitemoe import *
+    from .granitemoe_swa import *
     from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *

@@ -108,6 +108,7 @@ class MiniMaxConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {"num_experts": "num_local_experts"}
 
     vocab_size: int = 32000
