@@ -32,13 +32,16 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+# Compiled once at import time instead of on every `normalize_answer` call, since this function
+# is called per gold/predicted answer for every example during SQuAD evaluation.
+_ARTICLES_REGEX = re.compile(r"\b(a|an|the)\b", re.UNICODE)
+
 
 def normalize_answer(s):
     """Lower text and remove punctuation, articles and extra whitespace."""
 
     def remove_articles(text):
-        regex = re.compile(r"\b(a|an|the)\b", re.UNICODE)
-        return re.sub(regex, " ", text)
+        return re.sub(_ARTICLES_REGEX, " ", text)
 
     def white_space_fix(text):
         return " ".join(text.split())
