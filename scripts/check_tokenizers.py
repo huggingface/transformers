@@ -10,21 +10,23 @@ from transformers.utils import logging
 
 logging.set_verbosity_info()
 
+
 # Some tokenizers (e.g. RobertaTokenizerFast) have a broken tokenizer.json on the Hub
 # that is missing the model type and pre_tokenizer configuration. We need to patch
 # them after loading.
 def patch_fast_tokenizer(fast, checkpoint):
     """Patch fast tokenizers that have broken tokenizer.json files on the Hub."""
+    import json
+
+    from huggingface_hub import hf_hub_download
     from tokenizers import decoders, pre_tokenizers
     from tokenizers.models import BPE
-    from huggingface_hub import hf_hub_download
-    import json
 
     # Check if the fast tokenizer is broken (missing pre_tokenizer or merges)
     needs_patching = False
     if fast.backend_tokenizer.pre_tokenizer is None:
         needs_patching = True
-    elif hasattr(fast.backend_tokenizer.model, 'merges') and len(fast.backend_tokenizer.model.merges) == 0:
+    elif hasattr(fast.backend_tokenizer.model, "merges") and len(fast.backend_tokenizer.model.merges) == 0:
         needs_patching = True
 
     if not needs_patching:
@@ -32,32 +34,32 @@ def patch_fast_tokenizer(fast, checkpoint):
 
     try:
         # Load the tokenizer.json to get the correct configuration
-        tokenizer_json_path = hf_hub_download(checkpoint, 'tokenizer.json')
+        tokenizer_json_path = hf_hub_download(checkpoint, "tokenizer.json")
         with open(tokenizer_json_path) as f:
             tokenizer_json = json.load(f)
 
         # Fix pre_tokenizer
-        pre_tokenizer_config = tokenizer_json.get('pre_tokenizer')
-        if pre_tokenizer_config and pre_tokenizer_config.get('type') == 'ByteLevel':
+        pre_tokenizer_config = tokenizer_json.get("pre_tokenizer")
+        if pre_tokenizer_config and pre_tokenizer_config.get("type") == "ByteLevel":
             fast.backend_tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
-                add_prefix_space=pre_tokenizer_config.get('add_prefix_space', False),
-                trim_offsets=pre_tokenizer_config.get('trim_offsets', True),
+                add_prefix_space=pre_tokenizer_config.get("add_prefix_space", False),
+                trim_offsets=pre_tokenizer_config.get("trim_offsets", True),
             )
 
         # Fix decoder
-        decoder_config = tokenizer_json.get('decoder')
-        if decoder_config and decoder_config.get('type') == 'ByteLevel':
+        decoder_config = tokenizer_json.get("decoder")
+        if decoder_config and decoder_config.get("type") == "ByteLevel":
             fast.backend_tokenizer.decoder = decoders.ByteLevel(
-                add_prefix_space=decoder_config.get('add_prefix_space', True),
-                trim_offsets=decoder_config.get('trim_offsets', True),
+                add_prefix_space=decoder_config.get("add_prefix_space", True),
+                trim_offsets=decoder_config.get("trim_offsets", True),
             )
 
         # Fix BPE model (vocab and merges)
-        model_config = tokenizer_json.get('model', {})
-        vocab = model_config.get('vocab', {})
-        merges = model_config.get('merges', [])
+        model_config = tokenizer_json.get("model", {})
+        vocab = model_config.get("vocab", {})
+        merges = model_config.get("merges", [])
         if vocab and merges:
-            merges = [tuple(m.split(' ')) if isinstance(m, str) else tuple(m) for m in merges]
+            merges = [tuple(m.split(" ")) if isinstance(m, str) else tuple(m) for m in merges]
             fast.backend_tokenizer.model = BPE(vocab=vocab, merges=merges, fuse_unk=True)
 
     except Exception as e:
@@ -103,13 +105,13 @@ def check_diff(
 
 def check_LTR_mark(line: str, idx: int, fast: PreTrainedTokenizerBase) -> bool:
     # Use encode_plus if available, otherwise use encode with return_offsets_mapping
-    if hasattr(fast, 'encode_plus'):
+    if hasattr(fast, "encode_plus"):
         enc = fast.encode_plus(line)[0]
         offsets = enc.offsets
     else:
         # For newer tokenizers that don't have encode_plus
         enc = fast(line, return_offsets_mapping=True, return_tensors=None)
-        offsets = enc['offset_mapping']
+        offsets = enc["offset_mapping"]
     curr, prev = offsets[idx], offsets[idx - 1]
     if curr is not None and line[curr[0] : curr[1]] == "\u200f":
         return True
@@ -274,14 +276,14 @@ if __name__ == "__main__":
         "XLMRobertaTokenizer": ["xlm-roberta-base", "xlm-roberta-large"],
         "XLNetTokenizer": ["xlnet-base-cased", "xlnet-large-cased"],
     }
-    
+
     for name, (slow_class, fast_class) in TOKENIZER_CLASSES.items():
         checkpoint_names = CHECKPOINTS.get(name, [])
-        
+
         if not checkpoint_names:
             print(f"Skipping {name}: no hardcoded checkpoints (add to CHECKPOINTS dict to test)")
             continue
-            
+
         for checkpoint in checkpoint_names:
             imperfect = 0
             perfect = 0
