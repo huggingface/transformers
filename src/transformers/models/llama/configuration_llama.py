@@ -96,5 +96,9 @@ class LlamaConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        super().validate_architecture()
+
 
 __all__ = ["LlamaConfig"]
