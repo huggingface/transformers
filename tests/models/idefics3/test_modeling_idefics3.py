@@ -365,6 +365,26 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    def test_generate_from_image_hidden_states_and_pixel_values(self):
+        # Regression test: `generate()` must accept `image_hidden_states` reused from a previous
+        # forward/generate call even while `pixel_values` is still present in kwargs (e.g. a caller
+        # reusing the same processor output dict across turns) instead of raising
+        # "You cannot specify both pixel_values and image_hidden_states at the same time".
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Idefics3ForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+
+        model.generate(
+            input_ids=inputs_dict["input_ids"],
+            attention_mask=inputs_dict["attention_mask"],
+            pixel_values=inputs_dict["pixel_values"],
+            image_hidden_states=outputs.image_hidden_states,
+            max_new_tokens=2,
+            do_sample=False,
+        )
+
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
