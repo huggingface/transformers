@@ -59,11 +59,11 @@ class GraniteSpeechProcessor(ProcessorMixin):
         device: str = "cpu",
         **kwargs: Unpack[GraniteSpeechProcessorKwargs],
     ) -> BatchFeature:
-        text = self._get_validated_text(text)
+        text = self._validate_inputs(text)
         kwargs.setdefault("audio_kwargs", {}).setdefault("device", device)
         return super().__call__(text=text, audio=audio, **kwargs)
 
-    def _get_validated_text(self, text: str | list) -> list[str]:
+    def _validate_inputs(self, text: str | list) -> list[str]:
         if isinstance(text, str):
             return [text]
         elif isinstance(text, list) and isinstance(text[0], str):

@@ -17,7 +17,7 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -109,22 +109,15 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        # Check only if passed explicitly as another value since by default we'll use `pt`
-        for group in (kwargs, kwargs.get("text_kwargs", {}), kwargs.get("common_kwargs", {})):
-            if group.get("return_tensors", "pt") != "pt":
-                raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("text input must be a string or list of strings")
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         if audio is not None:
-            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=self.feature_extractor.sampling_rate)
-            audio = make_list_of_audio(audio)
-            for example in audio:
-                if example.ndim != 1:
-                    raise ValueError(f"Audio should be mono, got shape: {example.shape}")
+            _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
+            self.validate_inputs(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
             audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
@@ -143,6 +136,28 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             model_inputs["labels"] = labels
 
         return BatchFeature(data=model_inputs, tensor_type="pt", skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def prepare_inputs_layout(self, text=None, audio=None, **kwargs):
+        _, text, _, audio = super().prepare_inputs_layout(text=text, audio=audio, **kwargs)
+        if isinstance(text, str):
+            text = [text]
+        return None, text, None, audio
+
+    def validate_inputs(
+        self,
+        text: TextInput | list[TextInput] | None = None,
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(text=text, audio=audio, **kwargs)
+
+        if not isinstance(text, (list, tuple)):
+            raise ValueError("text input must be a string or list of strings")
+
+        if audio is not None:
+            for example in audio:
+                if example.ndim != 1:
+                    raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         audio_inputs = self.feature_extractor(audio, **kwargs)

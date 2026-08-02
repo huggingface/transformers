@@ -17,7 +17,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, to_py_obj
+from ...utils import auto_docstring
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -49,7 +49,7 @@ class Gemma3Processor(ProcessorMixin):
         **kwargs,
     ):
         self.image_seq_length = image_seq_length
-        self.image_token_id = tokenizer.image_token_id
+        self.image_token_id = tokenizer.boi_token_id
         self.boi_token = tokenizer.boi_token
         self.image_token = tokenizer.boi_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
@@ -69,15 +69,19 @@ class Gemma3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
-        # Create empty text to be replaced with placeholders
-        if images is not None and not text:
-            images = self.image_processor.fetch_images(images)
-            text = [" ".join([self.boi_token] * len(images)) for images in make_nested_list_of_images(images)]
-
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         if "mm_token_type_ids" in model_inputs:
             model_inputs["token_type_ids"] = model_inputs.pop("mm_token_type_ids")
         return model_inputs
+
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+        if images is not None:
+            images = make_nested_list_of_images(images)
+            # Create empty text to be replaced with placeholders
+            if not text:
+                text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
+        return images, text, None, None
 
     def validate_inputs(
         self,
@@ -88,13 +92,12 @@ class Gemma3Processor(ProcessorMixin):
         super().validate_inputs(images=images, text=text, **kwargs)
 
         if images is not None and text is not None:
-            batched_images = make_nested_list_of_images(images)
-            if len(batched_images) != len(text):
+            if len(images) != len(text):
                 raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(text)})."
+                    f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
                 )
 
-            for prompt, images in zip(text, batched_images):
+            for prompt, images in zip(text, images):
                 if len(images) != prompt.count(self.boi_token):
                     raise ValueError(
                         f"Prompt contained {prompt.count(self.boi_token)} image tokens but received {len(images)} images."
@@ -104,6 +107,8 @@ class Gemma3Processor(ProcessorMixin):
         """
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
+
+        Gemma3 uses a different token as placeholder in input text than in the expanded text.
         """
         token_str = self.tokenizer.image_token
         token_id = self.tokenizer.image_token_id
@@ -141,6 +146,10 @@ class Gemma3Processor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     @property
+    def image_token_ids(self) -> list[int]:
+        return [self.tokenizer.image_token_id]
+
+    @property
     def model_input_names(self) -> list[str]:
         return super().model_input_names + ["token_type_ids"]
 
@@ -149,7 +158,7 @@ class Gemma3Processor(ProcessorMixin):
         return ["num_crops"]
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        num_crops = to_py_obj(image_inputs["num_crops"])[image_idx]
+        num_crops = image_inputs["num_crops"][image_idx]
         if not num_crops:
             return self.full_image_sequence
 
