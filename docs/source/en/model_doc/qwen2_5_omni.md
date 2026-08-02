@@ -33,7 +33,6 @@ The abstract from the technical report is the following:
 ## Notes
 
 - Use [`Qwen2_5OmniForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen2_5OmniThinkerForConditionalGeneration`] for text-only and [`Qwen2_5OmniTalkersForConditionalGeneration`] for audio-only outputs.
-- Audio generation with [`Qwen2_5OmniForConditionalGeneration`] supports only single batch size at the moment.
 - In case out-of-memory errors when working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very large value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
