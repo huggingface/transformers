@@ -69,6 +69,10 @@ class Gemma3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
+        if text is not None and not isinstance(text, str):
+            if not isinstance(text, list) or not isinstance(text[0], str):
+                raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         if "mm_token_type_ids" in model_inputs:
             model_inputs["token_type_ids"] = model_inputs.pop("mm_token_type_ids")
