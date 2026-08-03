@@ -22,6 +22,7 @@ class VoxCPM2Tokenizer(LlamaTokenizer):
     """Llama tokenizer that keeps Han characters as individual tokens."""
 
     def __init__(self, *args, **kwargs):
+        kwargs.setdefault("add_prefix_space", True)
         super().__init__(*args, **kwargs)
         metaspace = pre_tokenizers.Metaspace(
             replacement="▁",
