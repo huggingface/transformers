@@ -470,7 +470,9 @@ class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = super().forward(hidden_states)
-        return hidden_states[..., : -self.causal_trim]
+        if self.causal_trim > 0:
+            hidden_states = hidden_states[..., : -self.causal_trim]
+        return hidden_states
 
 
 __all__ = [
