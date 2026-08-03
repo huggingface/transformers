@@ -14,7 +14,7 @@
 
 import math
 
-from transformers import VoxCPM2Config, is_torch_available
+from transformers import VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
 from transformers.testing_utils import require_torch
 
 
@@ -22,6 +22,7 @@ if is_torch_available():
     import torch
 
     from transformers.models.voxcpm2.modeling_voxcpm2 import (
+        VoxCPM2Attention,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2ScalarQuantizationLayer,
@@ -201,3 +202,54 @@ def test_timestep_projection_matches_reference():
 
     default_output_layer = VoxCPM2TimestepEmbedding(4, 6)
     assert default_output_layer(torch.randn(2, 4)).shape == (2, 6)
+
+
+@require_torch
+def test_attention_matches_reference():
+    config = VoxCPM2TextConfig(
+        vocab_size=32,
+        hidden_size=6,
+        intermediate_size=12,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=4,
+        kv_channels=4,
+        use_mup=False,
+        rope_parameters=None,
+    )
+    config._attn_implementation = "sdpa"
+    layer = VoxCPM2Attention(config, layer_idx=0).eval()
+
+    assert list(layer.state_dict()) == ["q_proj.weight", "k_proj.weight", "v_proj.weight", "o_proj.weight"]
+    assert layer.q_proj.weight.shape == (8, 6)
+    assert layer.k_proj.weight.shape == (4, 6)
+    assert layer.o_proj.weight.shape == (6, 8)
+
+    hidden_states = torch.randn(1, 4, 6)
+    angles = torch.randn(1, 4, 4)
+    position_embeddings = (angles.cos(), angles.sin())
+    for is_causal, rotary_embeddings in ((True, None), (False, None), (True, position_embeddings)):
+        output, _ = layer(hidden_states, position_embeddings=rotary_embeddings, is_causal=is_causal)
+
+        query_states = layer.q_proj(hidden_states).view(1, 4, 2, 4).transpose(1, 2)
+        key_states = layer.k_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
+        value_states = layer.v_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
+        if rotary_embeddings is not None:
+            cos, sin = (embedding.unsqueeze(1) for embedding in rotary_embeddings)
+            rotated_query = torch.cat((-query_states[..., 2:], query_states[..., :2]), dim=-1)
+            rotated_key = torch.cat((-key_states[..., 2:], key_states[..., :2]), dim=-1)
+            query_states = query_states * cos + rotated_query * sin
+            key_states = key_states * cos + rotated_key * sin
+
+        expected_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            is_causal=is_causal,
+            enable_gqa=True,
+            scale=layer.scaling,
+        )
+        expected_output = expected_output.transpose(1, 2).reshape(1, 4, 8)
+        expected_output = layer.o_proj(expected_output)
+        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
