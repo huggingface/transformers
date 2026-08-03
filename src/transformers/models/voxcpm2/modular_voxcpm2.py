@@ -802,6 +802,28 @@ class VoxCPM2LocalDiT(nn.Module):
         return hidden_states.transpose(1, 2).contiguous()
 
 
+class VoxCPM2ConditionalFlowMatching(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        if not isinstance(config.dit_config, VoxCPM2DiTConfig) or not isinstance(
+            config.dit_config.cfm_config, VoxCPM2CfmConfig
+        ):
+            raise TypeError("`dit_config.cfm_config` must be a `VoxCPM2CfmConfig` instance")
+        cfm_config = config.dit_config.cfm_config
+        self.solver = cfm_config.solver
+        self.sigma_min = cfm_config.sigma_min
+        self.t_scheduler = cfm_config.t_scheduler
+        self.training_cfg_rate = cfm_config.training_cfg_rate
+        self.inference_cfg_rate = cfm_config.inference_cfg_rate
+        self.reg_loss_type = cfm_config.reg_loss_type
+        self.ratio_r_neq_t_range = cfm_config.ratio_r_neq_t_range
+        self.noise_cond_prob_range = cfm_config.noise_cond_prob_range
+        self.noise_cond_scale = cfm_config.noise_cond_scale
+        self.in_channels = config.feat_dim
+        self.mean_mode = config.dit_config.mean_mode
+        self.estimator = VoxCPM2LocalDiT(config)
+
+
 __all__ = [
     "VoxCPM2AudioVAEConfig",
     "VoxCPM2CfmConfig",
