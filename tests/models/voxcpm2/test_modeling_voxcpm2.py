@@ -38,6 +38,7 @@ if is_torch_available():
         VoxCPM2DecoderLayer,
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
+        VoxCPM2Model,
         VoxCPM2NoiseBlock,
         VoxCPM2PreTrainedModel,
         VoxCPM2RMSNorm,
@@ -81,6 +82,62 @@ def test_pretrained_model_initialization():
     model._init_weights(condition)
     torch.testing.assert_close(condition.scale_embed.weight, torch.ones_like(condition.scale_embed.weight))
     torch.testing.assert_close(condition.bias_embed.weight, torch.zeros_like(condition.bias_embed.weight))
+
+
+@require_torch
+def test_model_constructor_and_state_dict_layout():
+    config = VoxCPM2Config(
+        lm_config={
+            "vocab_size": 32,
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "no_rope": True,
+            "rope_parameters": None,
+        },
+        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
+        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
+        audio_vae_config={
+            "encoder_dim": 4,
+            "encoder_rates": (2,),
+            "latent_dim": 4,
+            "decoder_dim": 8,
+            "decoder_rates": (2,),
+            "depthwise": True,
+            "sr_bin_boundaries": (10000, 20000),
+        },
+        feat_dim=4,
+        patch_size=2,
+        residual_lm_num_layers=1,
+        scalar_quantization_latent_dim=4,
+    )
+    model = VoxCPM2Model(config)
+
+    assert model.base_lm.config._attn_implementation == "sdpa"
+    assert model.residual_lm.config._attn_implementation == "sdpa"
+    assert model.feat_encoder.encoder.config._attn_implementation == "sdpa"
+    assert model.feat_decoder.estimator.decoder.config._attn_implementation == "sdpa"
+    assert model.base_model is model
+    assert model.chunk_size == 2
+    assert model._decode_chunk_size == 2
+    assert model.audio_start_token == 101
+    assert model.ref_audio_end_token == 104
+
+    state_keys = set(model.state_dict())
+    expected_keys = {
+        "base_lm.embed_tokens.weight",
+        "residual_lm.norm.weight",
+        "feat_encoder.special_token",
+        "feat_decoder.estimator.in_proj.weight",
+        "fsq_layer.in_proj.weight",
+        "audio_vae.encoder.fc_mu.parametrizations.weight.original0",
+    }
+    assert expected_keys.issubset(state_keys)
+    assert not any(key.startswith("model.") for key in state_keys)
 
 
 @require_torch
