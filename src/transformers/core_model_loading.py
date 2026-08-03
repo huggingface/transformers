@@ -1554,7 +1554,6 @@ def convert_and_load_state_dict_in_model(
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
-    device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}

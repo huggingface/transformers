@@ -31,7 +31,7 @@ if is_torchao_available():
     from torchao.quantization import Float8WeightOnlyConfig
 
 
-#TODO(3outeille): better guarding
+# TODO(3outeille): better guarding
 if is_torch_available():
     import torch
     import torch.distributed as dist

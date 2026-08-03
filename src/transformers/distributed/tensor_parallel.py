@@ -96,11 +96,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
     # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
-    originals = {
-        name: param
-        for name, param in module.named_parameters(recurse=False)
-        if isinstance(param, DTensor)
-    }
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
     local_params = {name: param.to_local() for name, param in originals.items()}
     module._parameters.update(local_params)
     try:
@@ -125,6 +121,7 @@ def _use_local_dtensor_params(module):
                     replacement,
                     requires_grad=current.requires_grad,
                 )
+
 
 class TensorParallelLayer:
     def requires_local_tensors(self, module):

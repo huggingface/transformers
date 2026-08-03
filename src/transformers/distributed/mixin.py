@@ -18,15 +18,15 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
+from ..utils import is_torch_greater_or_equal, logging
+from ..utils.hub import create_and_tag_model_card
+from .configuration_utils import DistributedConfig
+from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .tensor_parallel import (
     ALL_PARALLEL_STYLES,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
 )
-from ..utils import is_torch_greater_or_equal, logging
-from ..utils.hub import create_and_tag_model_card
-from .configuration_utils import DistributedConfig
-from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .utils import (
     _distributed_barrier,
     _ensure_torch_distributed,
@@ -48,8 +48,7 @@ if TYPE_CHECKING:
 
 
 class DistributedMixin:
-    """Distributed orchestration and save/load hooks for [`PreTrainedModel`].
-    """
+    """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
@@ -196,7 +195,7 @@ class DistributedMixin:
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_tensor_parallelism(model, tp_mesh)
-             
+
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)

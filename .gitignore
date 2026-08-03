@@ -183,3 +183,6 @@ test-results/
 # AI agent local setup artifacts
 /.agents/skills
 /.claude/skills
+/fsdp_checkpoint/
+/fsdp_seed/
+/tp_checkpoint/

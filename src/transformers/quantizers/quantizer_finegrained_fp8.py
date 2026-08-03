@@ -191,7 +191,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
             # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
             # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-            # both. See `FP8Experts._impl_tp_layer_overrides`.   
+            # both. See `FP8Experts._impl_tp_layer_overrides`.
             updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
 
             # Expert scales must be sharded along with their corresponding weights.
