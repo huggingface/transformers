@@ -16,6 +16,7 @@
 from dataclasses import dataclass
 from math import pi
 
+import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
 

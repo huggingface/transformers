@@ -1773,13 +1773,44 @@ class EsmFoldStructureModule(nn.Module):
 
     def _init_residue_constants(self, float_dtype, device):
         if not hasattr(self, "default_frames"):
-            self.default_frames = nn.Buffer(torch.tensor( residue_constants.restype_rigid_group_default_frame, dtype=float_dtype, device=device, requires_grad=False, ), persistent=False)
+            self.default_frames = nn.Buffer(
+                torch.tensor(
+                    residue_constants.restype_rigid_group_default_frame,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
         if not hasattr(self, "group_idx"):
-            self.group_idx = nn.Buffer(torch.tensor( residue_constants.restype_atom14_to_rigid_group, device=device, requires_grad=False, ), persistent=False)
+            self.group_idx = nn.Buffer(
+                torch.tensor(
+                    residue_constants.restype_atom14_to_rigid_group,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
         if not hasattr(self, "atom_mask"):
-            self.atom_mask = nn.Buffer(torch.tensor( residue_constants.restype_atom14_mask, dtype=float_dtype, device=device, requires_grad=False, ), persistent=False)
+            self.atom_mask = nn.Buffer(
+                torch.tensor(
+                    residue_constants.restype_atom14_mask,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
         if not hasattr(self, "lit_positions"):
-            self.lit_positions = nn.Buffer(torch.tensor( residue_constants.restype_atom14_rigid_group_positions, dtype=float_dtype, device=device, requires_grad=False, ), persistent=False)
+            self.lit_positions = nn.Buffer(
+                torch.tensor(
+                    residue_constants.restype_atom14_rigid_group_positions,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
 
     def torsion_angles_to_frames(self, r, alpha, f):
         # Lazily initialize the residue constants on the correct device

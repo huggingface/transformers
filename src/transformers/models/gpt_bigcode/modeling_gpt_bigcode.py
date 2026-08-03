@@ -381,7 +381,9 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         max_positions = config.max_position_embeddings
-        self.bias = nn.Buffer(torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False)
+        self.bias = nn.Buffer(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
+        )
 
         self.gradient_checkpointing = False
 

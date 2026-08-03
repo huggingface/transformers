@@ -378,7 +378,9 @@ class CsmBackboneModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
-        self.audio_tokens_offsets = nn.Buffer(torch.arange(config.num_codebooks) * config.codebook_size, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        )
 
     def forward(self, input_ids):
         inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)

@@ -82,7 +82,9 @@ class RoCBertEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
-        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False)
+        self.token_type_ids = nn.Buffer(
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False
+        )
 
     def forward(
         self,

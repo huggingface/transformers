@@ -23,7 +23,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from math import pi
 
-from torch import Tensor, broadcast_tensors, nn
+import torch.nn as nn
+from torch import Tensor, broadcast_tensors
 
 from ... import initialization as init
 from ...activations import ACT2FN

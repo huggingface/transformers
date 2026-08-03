@@ -146,7 +146,9 @@ class FNetBasicFourierTransform(nn.Module):
         elif config.max_position_embeddings <= 4096:
             if is_scipy_available():
                 self.dft_mat_hidden = nn.Buffer(torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64))
-                self.dft_mat_seq = nn.Buffer(torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64))
+                self.dft_mat_seq = nn.Buffer(
+                    torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
+                )
                 self.fourier_transform = partial(
                     two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
                 )
