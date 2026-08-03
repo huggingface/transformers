@@ -19,7 +19,7 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2ScalarQuantizationLayer
+    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2ScalarQuantizationLayer, VoxCPM2Snake1d
 
 
 @require_torch
@@ -57,3 +57,28 @@ def test_scalar_quantization_matches_reference():
     reference_input = hidden_states.clone().requires_grad_()
     layer.out_proj(torch.tanh(layer.in_proj(reference_input))).sum().backward()
     torch.testing.assert_close(training_input.grad, reference_input.grad, rtol=0, atol=0)
+
+
+@require_torch
+def test_snake_activation_matches_reference():
+    layer = VoxCPM2Snake1d(3)
+    with torch.no_grad():
+        layer.alpha.copy_(torch.tensor([[[0.5], [1.0], [2.0]]]))
+
+    assert list(layer.state_dict()) == ["alpha"]
+    assert layer.alpha.shape == (1, 3, 1)
+
+    hidden_states = torch.randn(2, 3, 4, 5, requires_grad=True)
+    output = layer(hidden_states)
+    reshaped_states = hidden_states.reshape(2, 3, -1)
+    expected_output = reshaped_states + (layer.alpha + 1e-9).reciprocal() * torch.sin(
+        layer.alpha * reshaped_states
+    ).pow(2)
+    expected_output = expected_output.reshape_as(hidden_states)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    output_gradient = hidden_states.grad.clone()
+    hidden_states.grad = None
+    expected_output.sum().backward()
+    torch.testing.assert_close(output_gradient, hidden_states.grad, rtol=0, atol=0)
