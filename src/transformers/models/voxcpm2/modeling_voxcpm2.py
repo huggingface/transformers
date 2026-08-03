@@ -1441,6 +1441,45 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         if num_inference_steps <= 0:
             raise ValueError("`num_inference_steps` must be strictly positive")
 
+    def _prefill_generation(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, Cache, Cache]:
+        target_dtype = self.enc_to_lm_proj.weight.dtype
+        audio_features = audio_features.to(dtype=target_dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
+
+        embedding_scale = self.config.lm_config.scale_emb if self.config.lm_config.use_mup else 1.0
+        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_mask = text_mask.to(dtype=text_embeddings.dtype)
+        audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
+        inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
+        inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
+
+        base_outputs = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True, use_cache=True)
+        encoded_states = base_outputs.last_hidden_state.to(target_dtype)
+        encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
+            -1
+        ) + encoded_states * text_mask.unsqueeze(-1)
+        lm_hidden_states = encoded_states[:, -1]
+
+        residual_inputs = self.fusion_concat_proj(
+            torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+        )
+        residual_outputs = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True, use_cache=True)
+        residual_hidden_states = residual_outputs.last_hidden_state[:, -1].to(target_dtype)
+
+        return (
+            lm_hidden_states,
+            residual_hidden_states,
+            audio_features[:, -1],
+            base_outputs.past_key_values,
+            residual_outputs.past_key_values,
+        )
+
     @can_return_tuple
     @auto_docstring
     def forward(
