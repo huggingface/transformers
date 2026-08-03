@@ -812,6 +812,27 @@ class VoxCPM2AudioDecoder(nn.Module):
         return hidden_states
 
 
+class VoxCPM2AudioVAE(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        self.config = config
+        self.encoder_dim = config.encoder_dim
+        self.encoder_rates = config.encoder_rates
+        self.decoder_dim = config.decoder_dim
+        self.decoder_rates = config.decoder_rates
+        self.depthwise = config.depthwise
+        self.use_noise_block = config.use_noise_block
+        self.latent_dim = config.latent_dim
+        self.hop_length = config.hop_length
+        self.encoder = VoxCPM2AudioEncoder(config)
+        self.decoder = VoxCPM2AudioDecoder(config)
+        self.sample_rate = config.sample_rate
+        self.out_sample_rate = config.out_sample_rate
+        self.sr_bin_boundaries = config.sr_bin_boundaries
+        self.chunk_size = config.hop_length
+        self.decode_chunk_size = config.decode_hop_length
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
