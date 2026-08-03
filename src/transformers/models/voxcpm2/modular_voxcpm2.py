@@ -858,6 +858,88 @@ class VoxCPM2AudioVAE(nn.Module):
         return self.decoder(latent_features, sample_rate)
 
 
+class VoxCPM2StreamingAudioDecoder:
+    def __init__(self, audio_vae: VoxCPM2AudioVAE):
+        self.audio_vae = audio_vae
+        self.states = {}
+        self.original_forwards = []
+
+    def __enter__(self):
+        self.states.clear()
+        self._install_streaming_forwards()
+        return self
+
+    def __exit__(self, *args):
+        self._restore_forwards()
+        self.states.clear()
+
+    def decode_chunk(self, latent_features: torch.Tensor) -> torch.Tensor:
+        return self.audio_vae.decode(latent_features)
+
+    def _install_streaming_forwards(self):
+        for module in self.audio_vae.decoder.modules():
+            if isinstance(module, VoxCPM2CausalConv1d) and module.causal_padding > 0:
+                self._patch_causal_convolution(module)
+            elif isinstance(module, VoxCPM2CausalConvTranspose1d):
+                context_size = (module.kernel_size[0] - 1) // module.stride[0]
+                if context_size > 0:
+                    self._patch_causal_transposed_convolution(module, context_size)
+
+    def _patch_causal_convolution(self, module: VoxCPM2CausalConv1d):
+        state_key = id(module)
+        original_forward = module.forward
+        padding = module.causal_padding
+
+        def streaming_forward(hidden_states: torch.Tensor) -> torch.Tensor:
+            if state_key in self.states:
+                padded_states = torch.cat((self.states[state_key], hidden_states), dim=-1)
+            else:
+                padded_states = F.pad(hidden_states, (padding, 0))
+
+            if hidden_states.shape[-1] >= padding:
+                self.states[state_key] = hidden_states[..., -padding:].detach()
+            else:
+                previous_states = self.states.get(
+                    state_key,
+                    torch.zeros(
+                        hidden_states.shape[0],
+                        hidden_states.shape[1],
+                        padding,
+                        device=hidden_states.device,
+                        dtype=hidden_states.dtype,
+                    ),
+                )
+                self.states[state_key] = torch.cat((previous_states, hidden_states), dim=-1)[..., -padding:].detach()
+            return nn.Conv1d.forward(module, padded_states)
+
+        module.forward = streaming_forward
+        self.original_forwards.append((module, original_forward))
+
+    def _patch_causal_transposed_convolution(self, module: VoxCPM2CausalConvTranspose1d, context_size: int):
+        state_key = id(module)
+        original_forward = module.forward
+
+        def streaming_forward(hidden_states: torch.Tensor) -> torch.Tensor:
+            if state_key in self.states:
+                padded_states = torch.cat((self.states[state_key], hidden_states), dim=-1)
+            else:
+                padded_states = F.pad(hidden_states, (context_size, 0))
+            self.states[state_key] = hidden_states[..., -context_size:].detach()
+            hidden_states = nn.ConvTranspose1d.forward(module, padded_states)
+            left_trim = context_size * module.stride[0]
+            if module.causal_trim > 0:
+                return hidden_states[..., left_trim : -module.causal_trim]
+            return hidden_states[..., left_trim:]
+
+        module.forward = streaming_forward
+        self.original_forwards.append((module, original_forward))
+
+    def _restore_forwards(self):
+        for module, original_forward in self.original_forwards:
+            module.forward = original_forward
+        self.original_forwards.clear()
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
