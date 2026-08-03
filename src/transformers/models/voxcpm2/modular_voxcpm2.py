@@ -15,6 +15,7 @@
 import math
 
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -450,6 +451,16 @@ class VoxCPM2ScalarQuantizationLayer(nn.Module):
 
 class VoxCPM2Snake1d(Snake1d):
     pass
+
+
+class VoxCPM2CausalConv1d(nn.Conv1d):
+    def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.causal_padding = padding * 2 - output_padding
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
+        return super().forward(hidden_states)
 
 
 __all__ = [

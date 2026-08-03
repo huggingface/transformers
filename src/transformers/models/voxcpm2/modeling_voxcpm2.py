@@ -20,6 +20,7 @@
 
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from .configuration_voxcpm2 import VoxCPM2Config
@@ -61,3 +62,13 @@ class VoxCPM2Snake1d(nn.Module):
         hidden_states = hidden_states + (self.alpha + 1e-9).reciprocal() * torch.sin(self.alpha * hidden_states).pow(2)
         hidden_states = hidden_states.reshape(shape)
         return hidden_states
+
+
+class VoxCPM2CausalConv1d(nn.Conv1d):
+    def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.causal_padding = padding * 2 - output_padding
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
+        return super().forward(hidden_states)
