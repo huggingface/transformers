@@ -921,6 +921,41 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
             weights = weights * mask
         return weights.detach()
 
+    def sample_r_t(
+        self,
+        hidden_states: torch.Tensor,
+        mean: float = -0.4,
+        standard_deviation: float = 1.0,
+        ratio_r_neq_t: float = 0.0,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        if self.t_scheduler == "log-norm":
+            r_samples = (
+                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
+                + mean
+            )
+            t_samples = (
+                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
+                + mean
+            )
+            r_samples = torch.sigmoid(r_samples)
+            t_samples = torch.sigmoid(t_samples)
+        elif self.t_scheduler == "uniform":
+            r_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
+            t_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
+        else:
+            raise ValueError(f"Unsupported timestep scheduler: {self.t_scheduler}")
+
+        use_distinct_timesteps = (
+            torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) < ratio_r_neq_t
+        )
+        r_samples, t_samples = torch.where(
+            use_distinct_timesteps,
+            torch.stack((torch.minimum(r_samples, t_samples), torch.maximum(r_samples, t_samples))),
+            torch.stack((t_samples, t_samples)),
+        )
+        return r_samples.squeeze(), t_samples.squeeze()
+
 
 __all__ = [
     "VoxCPM2AudioVAEConfig",
