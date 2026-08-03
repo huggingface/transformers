@@ -93,6 +93,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
             if package_version == "N/A" and getattr(package, "__file__", None) is None:
                 package_exists = False
+        logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
         return package_exists, package_version
@@ -174,6 +175,7 @@ MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
 @lru_cache
+@_compile_constant
 def is_torch_available() -> bool:
     try:
         is_available, torch_version = _is_package_available("torch", return_version=True)
@@ -186,12 +188,14 @@ def is_torch_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def get_torch_version() -> str:
     _, torch_version = _is_package_available("torch", return_version=True)
     return torch_version
 
 
 @lru_cache
+@_compile_constant
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
@@ -208,6 +212,7 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) ->
 
 
 @lru_cache
+@_compile_constant
 def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     """
     Accepts a library version and returns True if the current version of the library is less than or equal to the
@@ -243,6 +248,7 @@ def is_torch_cuda_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_distributed_available() -> bool:
     if not is_torch_available():
         return False
@@ -334,6 +340,7 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_npu_available(check_device=False) -> bool:
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not is_torch_available() or not _is_package_available("torch_npu")[0]:
@@ -355,6 +362,7 @@ def is_torch_npu_available(check_device=False) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_xpu_available(check_device: bool = False) -> bool:
     """
     Checks if XPU acceleration is available via stock PyTorch (>=2.6) and
@@ -431,6 +439,7 @@ def is_torch_musa_available(check_device=False) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     """
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
@@ -715,6 +724,7 @@ def enable_tf32(enable: bool) -> None:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
 
@@ -730,6 +740,7 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: str = KERNELS_MAX_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
     viable_version = False
@@ -756,6 +767,7 @@ def is_libcst_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
     if not is_torch_available():
         return False
@@ -927,6 +939,7 @@ def is_mambapy_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_peft_available() -> bool:
     return _is_package_available("peft")[0]
 
@@ -1299,6 +1312,7 @@ def is_qutlass_available():
 
 
 @lru_cache
+@_compile_constant
 def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
     is_available, compressed_tensors_version = _is_package_available("compressed_tensors", return_version=True)
     return is_available and version.parse(compressed_tensors_version) >= version.parse(min_version)

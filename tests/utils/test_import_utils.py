@@ -312,8 +312,6 @@ def test_import_without_torch_distributed():
         ("is_peft_available", ()),
         ("is_kernels_available", ()),
         ("is_compressed_tensors_available", ()),
-        # Not traceable on their own — these reach a subprocess, an import, a JSON parse or a torch
-        # runtime query — and so carry `@_compile_constant` to fold instead of trace.
         ("get_cuda_runtime_version", ()),
         ("is_detectron2_available", ()),
         ("is_flash_attn_greater_or_equal_2_10", ()),
@@ -328,10 +326,14 @@ def test_import_without_torch_distributed():
 def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     """
     These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
-    kernel integration reaches through `to_local`. Their bodies must therefore stay traceable, and
-    `@lru_cache` is no protection: dynamo ignores cache wrappers and traces the wrapped function anyway.
-    Most bottom out in `_is_package_available`, so a single dynamo-unsupported call there (a
-    `logging.Logger` method, for one) breaks every one of them at once.
+    kernel integration reaches through `to_local`. Each therefore carries `@_compile_constant`, so dynamo
+    evaluates it once at trace time and never enters the body.
+
+    Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
+    `_is_package_available`, whose `importlib.metadata` lookup dynamo cannot follow — and follows
+    differently per Python version, so a body that traces on one interpreter breaks on another. An
+    untraced body cannot break on any of them. `@lru_cache` is no protection either: dynamo steps past
+    cache wrappers and traces the wrapped function, which is why the marker sits underneath the cache.
 
     Only `is_cuda_stream_capturing` and `is_torch_deterministic` are deliberately absent: their answers
     genuinely change during a process, so they are the two helpers that must *not* carry

@@ -232,9 +232,10 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
     def test_to_local_is_compile_safe(self):
         # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
-        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check
-        # bottoms out in `_is_package_available` — which must stay free of anything dynamo cannot trace.
-        # `@lru_cache` on the check is no protection: dynamo ignores cache wrappers and traces the body.
+        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
+        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
+        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
+        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
         torch.compiler.reset()
 
         @torch.compile(fullgraph=True)
