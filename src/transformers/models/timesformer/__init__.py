@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_timesformer import *
     from .modeling_timesformer import *
+    from .video_processing_timesformer import *
 else:
     import sys
 

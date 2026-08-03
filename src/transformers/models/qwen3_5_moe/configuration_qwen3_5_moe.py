@@ -61,6 +61,8 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
@@ -184,6 +186,9 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
+            # old ckpt with incorrect model type -> override manually
+            if self.vision_config.get("model_type") == "qwen3_5_moe":
+                self.vision_config["model_type"] = "qwen3_5_moe_vision"
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()

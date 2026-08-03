@@ -313,6 +313,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
 
+    @require_torch_non_multi_accelerator
     def test_num_items_in_batch_causal_lm(self):
         """
         For a causal LM, `_get_num_items_in_batch` must count over `labels[..., 1:]` because
@@ -354,6 +355,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
             self.assertEqual(int(num_items), 8)
 
+    @require_torch_non_multi_accelerator
     def test_num_items_in_batch_non_causal_lm(self):
         """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
         with tempfile.TemporaryDirectory() as tmp_dir:

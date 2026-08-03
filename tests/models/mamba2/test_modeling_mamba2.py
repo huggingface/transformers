@@ -18,12 +18,12 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -206,17 +206,45 @@ class Mamba2ModelTester:
             torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
         )
 
-    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
-        model = Mamba2Model(config)
+    def create_and_check_mamba2_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_mamba2_chunked_prefill_*`
+        """
+        model = Mamba2Model(config=config)
+        model.to(device)
         model.eval()
 
-        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
-            self.parent.skipTest(
-                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
-            )
-        if torch_device != "cuda":
-            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
 
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
+
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        """Slow vs fast path check guarded by require kernels to enable fast path"""
+        model = Mamba2Model(config)
+        model.eval()
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -260,6 +288,18 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
 
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
+
+    @require_torch_accelerator
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
@@ -267,6 +307,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # This test adjusts n_groups to half the original setting and effectively
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
+    @require_torch_accelerator
+    @require_kernels
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2

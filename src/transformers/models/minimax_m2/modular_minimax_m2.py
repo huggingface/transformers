@@ -27,7 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
@@ -71,6 +71,8 @@ class MiniMaxM2Config(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_allgather",
         "layers.*.self_attn.v_proj": "colwise_allgather",
         "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
     base_model_sp_plan = {
@@ -83,6 +85,8 @@ class MiniMaxM2Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
         "layers.*.post_attention_layernorm": "activation",
         "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "norm": "activation",
     }
@@ -170,6 +174,7 @@ class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class MiniMaxM2Attention(FlexOlmoAttention):
     def __init__(self, config: MiniMaxM2Config, layer_idx: int):
         super().__init__(config, layer_idx)

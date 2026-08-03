@@ -1331,6 +1331,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:

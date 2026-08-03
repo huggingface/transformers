@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
+
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -217,9 +219,14 @@ class AriaImageProcessor(TorchvisionBackend):
         """
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
 
-        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
-        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
+        num_patches = (
+            1
+            if not split_image
+            else math.ceil(resized_height / max_image_size) * math.ceil(resized_width / max_image_size)
+        )
         return num_patches
 
 

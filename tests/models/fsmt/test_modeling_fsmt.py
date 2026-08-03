@@ -303,8 +303,8 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
     @parameterized.expand([("random",), ("same",)])
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 

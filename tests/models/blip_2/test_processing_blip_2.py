@@ -40,3 +40,7 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {"num_query_tokens": 1}
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token.content

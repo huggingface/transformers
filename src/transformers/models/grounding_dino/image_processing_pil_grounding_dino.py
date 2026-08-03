@@ -61,7 +61,6 @@ from ...utils.import_utils import requires
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
-
 if is_vision_available():
     import PIL.Image
 if is_torch_available():

@@ -37,8 +37,8 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
-from .generation_parakeet import ParakeetTDTDecoderCache, ParakeetTDTGenerationMixin
+from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetRNNTConfig, ParakeetTDTConfig
+from .generation_parakeet import ParakeetRNNTDecoderCache, ParakeetRNNTGenerationMixin, ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -837,10 +837,10 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         return sequences
 
 
-class ParakeetTDTDecoder(nn.Module):
-    """LSTM-based prediction network for TDT."""
+class ParakeetRNNTDecoder(nn.Module):
+    """LSTM-based prediction network For RNN-T"""
 
-    def __init__(self, config: ParakeetTDTConfig):
+    def __init__(self, config: ParakeetRNNTConfig):
         super().__init__()
         self.blank_token_id = config.blank_token_id
         self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
@@ -855,7 +855,7 @@ class ParakeetTDTDecoder(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        cache: ParakeetTDTDecoderCache | None = None,
+        cache: ParakeetRNNTDecoderCache | None = None,
     ) -> torch.Tensor:
         if cache is not None:
             blank_mask = input_ids[:, -1] == self.blank_token_id
@@ -865,7 +865,7 @@ class ParakeetTDTDecoder(nn.Module):
 
         embeddings = self.embedding(input_ids)
 
-        # Get cached hidden/cell states if available, otherwise initialize with ParakeetTDTDecoderCache
+        # Get cached hidden/cell states if available, otherwise initialize with ParakeetRNNTDecoderCache
         if cache is not None:
             was_initialized = cache.is_initialized
             if not was_initialized:
@@ -885,13 +885,13 @@ class ParakeetTDTDecoder(nn.Module):
         return decoder_output
 
 
-class ParakeetTDTJointNetwork(nn.Module):
-    """Joint network that combines encoder and decoder outputs to predict tokens and durations."""
+class ParakeetRNNTJointNetwork(nn.Module):
+    """Joint network that combines encoder and decoder outputs to predict token logits."""
 
-    def __init__(self, config: ParakeetTDTConfig):
+    def __init__(self, config: ParakeetRNNTConfig):
         super().__init__()
         self.activation = ACT2FN[config.hidden_act]
-        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
         self.vocab_size = config.vocab_size
 
     def forward(
@@ -904,41 +904,41 @@ class ParakeetTDTJointNetwork(nn.Module):
 
 
 @dataclass
-class ParakeetTDTOutput(BaseModelOutputWithPooling):
+class ParakeetRNNTOutput(BaseModelOutputWithPooling):
     """
-    Output of the Parakeet TDT forward pass.
+    Output of the Parakeet RNN-T forward pass.
 
     Args:
         loss (`torch.FloatTensor`, *optional*):
-            TDT loss, returned when `labels` are provided.
+            RNN-T loss, returned when `labels` are provided.
         logits (`torch.FloatTensor`):
-            Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
-            or `(batch, 1, 1, vocab+durations)` for single-step inference.
-        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+            or `(batch, 1, 1, vocab)` for single-step inference.
+        decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    decoder_cache: ParakeetTDTDecoderCache | None = None
+    decoder_cache: ParakeetRNNTDecoderCache | None = None
 
 
 @auto_docstring(
     custom_intro="""
-    Parakeet Encoder with a TDT (Token Duration Transducer) head.
+    Parakeet Encoder with an RNN-T (RNN Transducer) head.
     """
 )
-class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
-    config: ParakeetTDTConfig
-    _no_split_modules = ["ParakeetTDTDecoder"]
+class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
+    config: ParakeetRNNTConfig
+    _no_split_modules = ["ParakeetRNNTDecoder"]
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
-    def __init__(self, config: ParakeetTDTConfig):
+    def __init__(self, config: ParakeetRNNTConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
-        self.decoder = ParakeetTDTDecoder(config)
-        self.joint = ParakeetTDTJointNetwork(config)
+        self.decoder = ParakeetRNNTDecoder(config)
+        self.joint = ParakeetRNNTJointNetwork(config)
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
         self.post_init()
@@ -965,16 +965,125 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        decoder_cache: ParakeetTDTDecoderCache | None = None,
+        decoder_cache: ParakeetRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
         encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> ParakeetTDTOutput:
+    ) -> ParakeetRNNTOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+        decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
+            Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
+            (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
+            the decoder runs and the cache is updated in-place.
+        use_decoder_cache (`bool`, *optional*):
+            Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
+            is created automatically during the forward pass.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
+            Can be a tuple or `ParakeetEncoderModelOutput`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForRNNT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-rnnt-0.6b"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForRNNT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> outputs = model(**inputs)
+        ```
+        """
+        if encoder_outputs is None:
+            encoder_outputs = self.get_audio_features(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+
+        if use_decoder_cache and decoder_cache is None:
+            decoder_cache = ParakeetRNNTDecoderCache(self.config)
+
+        decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
+        logits = self.joint(
+            encoder_hidden_states=encoder_outputs.pooler_output[:, :, None, :],
+            decoder_hidden_states=decoder_hidden_states[:, None, :, :],
+        ).squeeze(2)
+
+        loss = None
+        if labels is not None:
+            logit_lengths = encoder_outputs.attention_mask.sum(-1)
+            loss = self.loss_function(
+                logits=logits[:, : int(logit_lengths.max())],
+                labels=labels,
+                logit_lengths=logit_lengths,
+                label_lengths=(labels != self.config.blank_token_id).sum(-1),
+                blank_token_id=self.config.blank_token_id,
+                **kwargs,
+            )
+
+        return ParakeetRNNTOutput(
+            loss=loss,
+            logits=logits,
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            pooler_output=encoder_outputs.pooler_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            decoder_cache=decoder_cache,
+        )
+
+
+class ParakeetTDTJointNetwork(ParakeetRNNTJointNetwork):
+    """Extends the RNN-T joint network with a duration head.
+
+    The only difference from [`ParakeetRNNTJointNetwork`] is the output width of `head`: it grows from
+    `vocab_size` to `vocab_size + len(durations)` so the network jointly predicts tokens and durations.
+    """
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__(config)
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+
+
+@auto_docstring(
+    custom_intro="""
+    Parakeet Encoder with a TDT (Token Duration Transducer) head.
+    """
+)
+class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
+    config: ParakeetTDTConfig
+
+    def __init__(self, config: ParakeetTDTConfig):
+        super().__init__(config)
+        self.joint = ParakeetTDTJointNetwork(config)
+
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_cache: ParakeetRNNTDecoderCache | None = None,
+        use_decoder_cache: bool | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetRNNTOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Decoder input token ids for single-step inference.
+        decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
             Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
             (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
             the decoder runs and the cache is updated in-place.
@@ -1010,7 +1119,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
             )
 
         if use_decoder_cache and decoder_cache is None:
-            decoder_cache = ParakeetTDTDecoderCache(self.config)
+            decoder_cache = ParakeetRNNTDecoderCache(self.config)
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
@@ -1028,9 +1137,10 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
                 label_lengths=(labels != self.config.pad_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
                 durations=self.config.durations,
+                **kwargs,
             )
 
-        return ParakeetTDTOutput(
+        return ParakeetRNNTOutput(
             loss=loss,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1041,4 +1151,4 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         )
 
 
-__all__ = ["ParakeetForCTC", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]
+__all__ = ["ParakeetForCTC", "ParakeetForRNNT", "ParakeetForTDT", "ParakeetEncoder", "ParakeetPreTrainedModel"]

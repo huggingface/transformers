@@ -400,7 +400,6 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
@@ -1008,10 +1007,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
 @dataclass
 class LwDetrDecoderOutput(BaseModelOutputWithCrossAttentions):
     r"""
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-        used to compute the weighted average in the cross-attention heads.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`, *optional*, returned when `config.auxiliary_loss=True`):
         Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
         layernorm.

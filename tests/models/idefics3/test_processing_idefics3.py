@@ -97,6 +97,22 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
                 self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
+                # Test with two images per single text
+                text = [f"These are two images {processor.image_token}{processor.image_token}"] * len(image_inputs)
+                inputs = processor(
+                    text=text,
+                    images=image_inputs * 2,
+                    padding=True,
+                    return_mm_token_type_ids=True,
+                    return_tensors="pt",
+                )
+
+                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+                self.assertEqual(
+                    sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"])
+                )
+
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):

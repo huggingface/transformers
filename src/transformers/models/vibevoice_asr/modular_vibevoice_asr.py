@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from dataclasses import dataclass
 
 import torch
@@ -27,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
@@ -88,7 +90,6 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647
     acoustic_tokenizer_chunk_size: int = 1440000
-    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.acoustic_tokenizer_encoder_config, dict):
@@ -120,6 +121,27 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        if self.acoustic_tokenizer_chunk_size % hop_length != 0:
+            raise ValueError(
+                f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length "
+                f"({hop_length}), got {self.acoustic_tokenizer_chunk_size}."
+            )
+
+    @property
+    def max_position_embeddings(self) -> int:
+        return math.ceil(self.acoustic_tokenizer_chunk_size / self.acoustic_tokenizer_encoder_config.hop_length)
+
+    @max_position_embeddings.setter
+    def max_position_embeddings(self, value: int):
+        if value <= 0:
+            raise ValueError(f"Attempted to set `max_position_embeddings` to {value}; you need a positive value!")
+
+        hop_length = self.acoustic_tokenizer_encoder_config.hop_length
+        self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
 class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
@@ -169,12 +191,12 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _supports_attention_backend = True
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -186,12 +208,12 @@ class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VibeVoice ASR causal language model outputs.
     """
 )
+@dataclass
 class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -233,6 +255,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
@@ -304,6 +327,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -361,8 +385,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     """
 )
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.model = VibeVoiceAsrModel(config)
@@ -372,6 +394,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
+    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(

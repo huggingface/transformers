@@ -25,7 +25,7 @@ from ...video_utils import VideoInput
 
 
 if is_vision_available():
-    from .image_processing_pil_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
+    from .image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
@@ -256,6 +256,46 @@ class Gemma4Processor(ProcessorMixin):
             vision_data.update({"num_audio_tokens": num_audio_tokens})
 
         return MultiModalData(**vision_data)
+
+    def _compute_audio_num_tokens(self, audio_waveform, sampling_rate: int) -> int:
+        """Number of audio soft tokens, replicating the encoder's seq-length arithmetic.
+
+        Mirrors Gemma4AudioFeatureExtractor mel framing + the two stride-2 Conv2d
+        subsampling layers in Gemma4AudioSubSampleConvProjection, capped at
+        ``audio_seq_length``. Must match ``audio_mask.sum()`` from the audio tower or
+        vLLM's ``_merge_multimodal_embeddings`` will raise on a length mismatch.
+
+        Args:
+            audio_waveform: A 1-D array or list containing the raw audio samples.
+            sampling_rate: The sampling rate of the audio waveform in Hz.
+
+        Returns:
+            The number of audio soft tokens to insert as placeholders.
+        """
+        num_samples = len(audio_waveform)
+
+        # Step 1: mel frames (matches feature_extraction_gemma4.py)
+        frame_size_for_unfold = self.feature_extractor.frame_length + 1
+        pad_left = self.feature_extractor.frame_length // 2  # semicausal time padding
+        num_mel_frames = (num_samples + pad_left - frame_size_for_unfold) // self.feature_extractor.hop_length + 1
+        if num_mel_frames <= 0:
+            return 0
+
+        # Step 2: SSCP subsampling. Two stride-2 Conv2d layers (kernel=3, pad=1)
+        # from Gemma4AudioSubSampleConvProjection(Layer) in modeling_gemma4.py.
+        # These are architectural constants, not exposed via Gemma4AudioConfig
+        # (note: config.conv_kernel_size=5 is the *conformer* depthwise conv, NOT
+        # this one). The layer count tracks len(subsampling_conv_channels)==2.
+        # Keep in sync if the audio encoder's subsampling stack changes.
+        sscp_num_layers = 2
+        sscp_kernel, sscp_stride, sscp_padding = 3, 2, 1
+        t = num_mel_frames
+        for _ in range(sscp_num_layers):
+            # Conv1d/2d output-length along the time axis (dilation=1).
+            t = (t + 2 * sscp_padding - sscp_kernel) // sscp_stride + 1
+
+        # Cap at the configured maximum
+        return min(t, self.audio_seq_length)
 
     @property
     def model_input_names(self):

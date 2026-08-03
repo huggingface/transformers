@@ -50,6 +50,8 @@ class OlmoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_allgather",  # due to the norm, we have to gather
         "layers.*.self_attn.v_proj": "colwise_allgather",  # due to the norm, we have to gather
         "layers.*.self_attn.o_proj": "vocab_allreduce",  # due to the norm, we have to gather
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
     base_model_sp_plan = {
@@ -62,6 +64,41 @@ class OlmoeConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
         "layers.*.post_attention_layernorm": "activation",
         "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "norm": "activation",
+    }
+    # Expert-only EP plan: shards MoE experts along the expert axis; gate stays replicated.
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "norm": "activation",
     }

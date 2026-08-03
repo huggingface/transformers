@@ -240,7 +240,7 @@ def _apply_rotary_emb(
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = _apply_rotary_emb(q, cos, sin)
@@ -594,6 +594,8 @@ class GptOssForCausalLM(GptOssPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_allgather"}
     _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"lm_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 

@@ -14,10 +14,13 @@
 
 import unittest
 
+import numpy as np
+from parameterized import parameterized
+
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -30,11 +33,8 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-@unittest.skip("Model not yet released, tests will fail to download processor config")
 class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_6Processor
-    # TODO: the repo isn't yet there, we need to test it works before release and skip all tests right before merge
-    # Re-enable tests after release
     model_id = "openbmb/MiniCPM-V-4_6"
 
     video_text_kwargs_max_length = 600
@@ -65,7 +65,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         text = self.prepare_text_inputs(modalities=["video"])
         video_input = self.prepare_video_inputs()
-        inputs = processor(text=text, videos=video_input, return_tensors="pt")
+        inputs = processor(text=text, videos=video_input, do_sample_frames=False, return_tensors="pt")
 
         self.assertIn("pixel_values_videos", inputs)
         self.assertIn("input_ids", inputs)
@@ -125,3 +125,227 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             torch.equal(inputs_with_id["input_ids"], inputs_without_id["input_ids"]),
             "use_image_id should produce different input_ids when True vs False",
         )
+
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list[str],
+    ):
+        processor = self.get_processor()
+
+        if processor_name not in self.processor_class.get_attributes():
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
+
+        # some models have only Fast image processor
+        if getattr(processor, processor_name).__class__.__name__.endswith("Fast"):
+            return_tensors = "pt"
+
+        batch_messages = [
+            [
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
+            ]
+        ] * batch_size
+
+        # Test that jinja can be applied
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), batch_size)
+
+        # Test that tokenizing with template and directly with `self.tokenizer` gives same output
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        tok_output = processor.tokenizer(
+            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+        )
+        expected_output = tok_output.input_ids
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
+
+        # Test that kwargs passed to processor's `__call__` are actually used
+        tokenized_prompt_100 = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors=return_tensors,
+            processor_kwargs={
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": self.chat_template_max_length,
+            },
+        )
+        self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
+
+        # Test that `return_dict=True` returns text related inputs in the dict
+        out_dict_text = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+        )
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
+
+        # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][1]["content"] = [batch_messages[idx][1]["content"][0], {"type": modality, "url": url}]
+
+        out_dict = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+            processor_kwargs={"num_frames": 2},  # by default no more than 2 frames, otherwise too slow
+        )
+        input_name = getattr(self, input_name)
+        self.assertTrue(input_name in out_dict)
+        self.assertEqual(len(out_dict["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+        self.assertEqual(len(out_dict[input_name]), 1)  # always 1 in this model
+
+        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
+        for k in out_dict:
+            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+
+        # Test continue from final message
+        assistant_message = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "It is the sound of"}],
+        }
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx] = batch_messages[idx] + [assistant_message]
+        continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
+        for prompt in continue_prompt:
+            self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    def test_apply_chat_template_video_frame_sampling(self):
+        processor = self.get_processor()
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        num_frames = 3
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"num_frames": num_frames, "fps": None},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+
+        # Load with `fps` arg
+        fps = 10
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"fps": fps, "num_frames": None},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+
+        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
+        fps = 10
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs={
+                "do_sample_frames": False,
+                "fps": fps,
+                "return_tensors": "pt",
+            },
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 1424192)
+
+        # Load without any arg should load the whole video
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 129472)
+
+        # Load video as a list of frames (i.e. images).
+        # NOTE: each frame should have same size because we assume they come from one video
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
+        }
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            do_sample_frames=False,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(out_dict_with_video[self.videos_input_name].shape[-1], 203392)
+
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        # MiniCPM needs different format for tools as per saved jinja template
+
+        processor = self.get_processor()
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, torch.Tensor)
+
+    @parameterized.expand([(1, "pt")])
+    @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        pass

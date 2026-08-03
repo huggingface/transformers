@@ -491,7 +491,7 @@ class DirectStreamer:
         self._tokenizer = tokenizer
         self._loop = loop
         self._queue = queue
-        self._decode_stream = DecodeStream([], skip_special_tokens)
+        self._decode_stream: DecodeStream = DecodeStream([], skip_special_tokens)
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
@@ -523,7 +523,7 @@ class DirectStreamer:
 
             is_start_or_end_token = _advance_thinking_state(self, token_id)
 
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            text = self._decode_stream.step(self._tokenizer, token_id)  # ty:ignore[unresolved-attribute]
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
                 continue
             if self._inside_thinking:
@@ -575,7 +575,7 @@ class CBStreamer:
         self._loop = loop
         self._queue = queue
         self._tokenizer = tokenizer
-        self._decode_stream = DecodeStream([], True)
+        self._decode_stream: DecodeStream = DecodeStream([], True)
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
@@ -602,7 +602,7 @@ class CBStreamer:
 
             is_start_or_end_token = _advance_thinking_state(self, token_id)
 
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            text = self._decode_stream.step(self._tokenizer, token_id)  # ty:ignore[unresolved-attribute]
             if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
                 continue
             if self._inside_thinking:
@@ -1232,12 +1232,17 @@ class BaseHandler:
                     if isinstance(url, dict):
                         url = url["url"]
                     parsed["content"].append({"type": "image", "url": url})
-                # Audio: unlike images, load_audio doesn't accept raw base64 — wrap as a data URI
+                # Audio: OpenAI's input_audio is {"data": <base64>, "format": "wav"|"mp3"}, enabling URI for load_audio
+                # If format is missing, we can just hand over raw base64 and let load_audio sniff the format from the bytes.
                 elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
                     input_audio = content["input_audio"]
-                    fmt = input_audio.get("format", "wav") if isinstance(input_audio, dict) else "wav"
-                    audio_b64 = input_audio["data"]
-                    parsed["content"].append({"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"})
+                    if isinstance(input_audio, dict):
+                        audio_b64 = input_audio["data"]
+                        fmt = input_audio.get("format")
+                        url = f"data:audio/{fmt};base64,{audio_b64}" if fmt else audio_b64
+                    else:
+                        url = input_audio
+                    parsed["content"].append({"type": "audio", "url": url})
                 # Extensions (not part of the OpenAI API standard)
                 elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
                     parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})

@@ -23,7 +23,6 @@ from dataclasses import MISSING, dataclass, fields
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
-from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 from typing_extensions import dataclass_transform
@@ -39,6 +38,7 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
+    hf_api,
     is_torch_available,
     logging,
 )
@@ -65,6 +65,7 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
     "mamba",
@@ -73,6 +74,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
 )
 
 
@@ -148,9 +150,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     - **base_model_tp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
     - **base_model_sp_plan** (`dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a sequence
-      parallel plan, used in place of `base_model_tp_plan` when `distributed_config.enable_sequence_parallel` is set.
-      Same key/value shape as the TP plan; values are style names registered in `ALL_PARALLEL_STYLES`
-      (e.g. `"vocab_reduce_scatter"`, `"rowwise_reduce_scatter"`, `"activation"`, `"module_allgather"`).
+      parallel plan, used when `distributed_config.enable_sequence_parallel=True` and
+      `enable_expert_parallel=False`. Same key/value shape as the TP plan.
+    - **base_model_tp_ep_plan** (`dict[str, Any]`) -- Complete plan for inference TP + expert parallel
+      (`enable_sequence_parallel=False`, `enable_expert_parallel=True`).
+    - **base_model_sp_ep_plan** (`dict[str, Any]`) -- Complete plan for training SP + expert parallel
+      (`enable_sequence_parallel=True`, `enable_expert_parallel=True`).
     - **base_model_fsdp_plan** (`dict[Any, str]`) -- A dict that maps sub-modules of a base model to an FSDP2
       sharding strategy (e.g. `"free_full_weight"` / `"keep_full_weight"`). Keys can be wildcard module paths
       (e.g. `"layers.*"`) or tuples of paths (grouped into a single `fully_shard` call).
@@ -226,6 +231,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
     base_model_sp_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_tp_ep_plan: ClassVar[dict[str, Any] | None] = None
+    base_model_sp_ep_plan: ClassVar[dict[str, Any] | None] = None
     base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
@@ -530,7 +537,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.

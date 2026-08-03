@@ -377,12 +377,12 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         return window_indices.unsqueeze(1) * max_post_length * audio_embed_frame_step + frame_offsets
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for MusicFlamingo causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -410,7 +410,7 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
 )
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tied_weights_keys = None
 
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)

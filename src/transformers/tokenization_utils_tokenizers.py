@@ -1296,15 +1296,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         import re
         from functools import lru_cache
 
-        from huggingface_hub import model_info
         from packaging import version
 
-        from transformers.utils.hub import cached_file
+        from transformers.utils.hub import cached_file, hf_api
 
         @lru_cache(maxsize=128)
         def is_base_mistral(model_id: str) -> bool:
             try:
-                model = model_info(model_id)
+                model = hf_api().model_info(model_id)
             except Exception:
                 # Never block tokenizer init on a Hub error — assume non-Mistral.
                 return False

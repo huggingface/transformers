@@ -13,7 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+<<<<<<< Updated upstream
 *This model was released on 2025-04-17 and added to Hugging Face Transformers on 2025-12-16.*
+=======
+*This model was published in HF papers on 2025-04-17 and contributed to Hugging Face Transformers on 2025-12-16.*
+>>>>>>> Stashed changes
 
 # PE Video
 

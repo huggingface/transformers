@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
+from huggingface_hub import is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
@@ -53,7 +53,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.fsdp import is_fsdp_enabled
+from .distributed.fsdp import is_fsdp_enabled, verify_fsdp_plan
 from .distributed.sharding_utils import _dtensor_from_local_like
 from .distributed.tensor_parallel import (
     _get_parameter_tp_plan,
@@ -84,7 +84,7 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -127,8 +127,10 @@ from .utils import (
     logging,
 )
 from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
-from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
+from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files, hf_api
 from .utils.import_utils import (
+    KERNELS_MAX_VERSION,
+    KERNELS_MIN_VERSION,
     is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
@@ -145,6 +147,8 @@ if is_accelerate_available():
     from accelerate.utils import extract_model_from_parallel
 
 if TYPE_CHECKING:
+    from kernels.layer.mode import Mode
+
     from ._typing import DeviceMeshLike
 
 
@@ -186,6 +190,7 @@ class LoadStateDictConfig:
     hf_quantizer: HfQuantizer | None = None
     device_mesh: "DeviceMeshLike | None" = None
     tp_plan: dict[str, str] | None = None
+    fsdp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
@@ -207,6 +212,12 @@ def _get_torch_distributed_world_size() -> int:
     if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_world_size"):
         return 1
     return torch.distributed.get_world_size()
+
+
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized() or not hasattr(torch.distributed, "get_rank"):
+        return 0
+    return torch.distributed.get_rank()
 
 
 def is_local_dist_rank_0():
@@ -732,7 +743,7 @@ def _get_resolved_checkpoint_files(
                         Thread(
                             target=auto_conversion,
                             args=(pretrained_model_name_or_path,),
-                            kwargs={"ignore_errors_during_conversion": False, **cached_file_kwargs},
+                            kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
                             name="Thread-auto_conversion",
                         ).start()
 
@@ -1205,6 +1216,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     # General model properties
     config_class: type[PreTrainedConfig] | None = None
+    generation_config_class: type[GenerationConfig] = GenerationConfig  # default, used with `GenerationMixin`
     _auto_class = None
     base_model_prefix: str = ""
     _is_stateful: bool = False
@@ -1354,6 +1366,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config = config
         self.name_or_path = config.name_or_path
 
+        # Make kernel_config an attribute that can be used by the model.
+        self.kernel_config = None
+
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
@@ -1368,7 +1383,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.config._experts_implementation
         )
         if self.can_generate():
-            self.generation_config = GenerationConfig.from_model_config(config)
+            # `from_model_config` is a legacy behavior -- we shouldn't set generation flags in the model config
+            try:
+                self.generation_config = self.generation_config_class.from_model_config(config)
+            except NotImplementedError:
+                self.generation_config = self.generation_config_class()
 
         # for initialization of the loss
         loss_type = self.__class__.__name__
@@ -1395,10 +1414,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # before the instance attribute shadows them — task-head plans live on the head class.
         cls_tp_plan = getattr(self, "_tp_plan", None) or {}
         cls_sp_plan = getattr(self, "_sp_plan", None) or {}
+        cls_tp_ep_plan = getattr(self, "_tp_ep_plan", None) or {}
+        cls_sp_ep_plan = getattr(self, "_sp_ep_plan", None) or {}
         cls_fsdp_plan = getattr(self, "_fsdp_plan", None) or {}
         self._tp_plan = dict(cls_tp_plan)
         self._sp_plan = dict(cls_sp_plan)
-        self._ep_plan = {}
+        self._tp_ep_plan = dict(cls_tp_ep_plan)
+        self._sp_ep_plan = dict(cls_sp_ep_plan)
         self._pp_plan = {}
         self._fsdp_plan = dict(cls_fsdp_plan)
         # If current model is a base model, attach `base_model_*_plan` from config
@@ -1406,7 +1428,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
             self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
-            self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
+            self._tp_ep_plan = (
+                self.config.base_model_tp_ep_plan.copy() if self.config.base_model_tp_ep_plan is not None else {}
+            )
+            self._sp_ep_plan = (
+                self.config.base_model_sp_ep_plan.copy() if self.config.base_model_sp_ep_plan is not None else {}
+            )
             self._fsdp_plan = (
                 self.config.base_model_fsdp_plan.copy() if self.config.base_model_fsdp_plan is not None else {}
             )
@@ -1428,12 +1455,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
         for name, module in self.named_children():
             # Parallel plans
-            if plan := getattr(module, "_ep_plan", None):
-                self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_sp_plan", None):
                 self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_tp_ep_plan", None):
+                self._tp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_ep_plan", None):
+                self._sp_ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
@@ -1467,12 +1496,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """
-        The full tp plan for the model's modules
-        """
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
-            return self._ep_plan
         return self._tp_plan
+
+    @property
+    def fsdp_plan(self) -> dict[str, str]:
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -1584,8 +1612,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
-        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
-        # with nested models, we can't dispatch different dtype per backbone module
+        # Keep the resolved `dtype` on the config so it matches the actual weights, the same way
+        # `from_pretrained` does. Also set it on all subconfigs to avoid dtype mismatch. When "auto"
+        # dtype with nested models, we can't dispatch different dtype per backbone module
+        config.dtype = dtype
         for sub_config_key in config.sub_configs:
             if (sub_config := getattr(config, sub_config_key)) is not None:
                 sub_config.dtype = dtype
@@ -1648,7 +1678,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
+        Returns whether this model can generate sequences with `.generate()`, from the `GenerationMixin`
+        or one with a similar interface.
 
         Under the hood, on classes where this function returns True, some generation-specific changes are triggered:
         for instance, the model instance will have a populated `generation_config` attribute.
@@ -1656,7 +1687,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Directly inherits `GenerationMixin` -> can generate
+        # Directly inherits `GenerationMixin` (or a class ending in the same substring) -> can generate
         if "GenerationMixin" in str(cls.__bases__):
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
@@ -1916,6 +1947,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         is_paged, base_implementation = split_attention_implementation(attn_implementation)
+
+        # A kernel the model explicitly lists in `_compatible_flash_implementations` is vouched for by
+        # the model author, so authorize loading it even when it lives outside the `kernels-community` org.
+        if base_implementation in (getattr(self, "_compatible_flash_implementations", None) or []):
+            allow_all_kernels = True
 
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
@@ -2232,6 +2268,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not isinstance(experts_implementation, dict)
             else experts_implementation.get("", self.config._experts_implementation)
         )
+
+        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan`
+        # by `update_tp_plan` (and isn't re-evaluated) and `setup_megamoe_weights`
+        # mutates the expert weights into UTCCP layout on first forward. Either side of
+        # a switch would silently produce garbage, so reject it with a clear pointer.
+        current = self.config._experts_implementation
+        if "deepgemm_megamoe" in (current, requested_implementation) and current != requested_implementation:
+            raise RuntimeError(
+                f"Cannot switch experts implementation from {current!r} to {requested_implementation!r} "
+                "at runtime: `deepgemm_megamoe` is a load-time choice. Reload via "
+                "`from_pretrained(..., experts_implementation=...)` to switch."
+            )
 
         if requested_implementation != self.config._experts_implementation:
             requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
@@ -2679,9 +2727,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
+                    source_param = self.get_parameter(source_param_name)
+                    target_param = self.get_parameter(target_param_name)
+
+                    # Skip check if both are disk offloaded. Tied tensors always
+                    # share the same offload device as per `infer_auto_device_map`
+                    if source_param.device.type == "meta" and target_param.device.type == "meta":
+                        continue
+
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                    if not torch.equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
@@ -3402,16 +3458,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         os.makedirs(save_directory, exist_ok=True)
         save_on_this_rank = is_main_process
-        if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is not None:
+        if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is not None:
             # DTensor gather materializes a full plain state dict only on global rank 0.
-            save_on_this_rank = save_on_this_rank and torch.distributed.get_rank() == 0
+            save_on_this_rank = save_on_this_rank and _get_torch_distributed_rank() == 0
         save_directory_path = os.fspath(save_directory)
 
         if push_to_hub and save_on_this_rank:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory_path.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}
@@ -3481,7 +3537,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model_to_save.config.distributed_config = distributed_config
 
         if distributed_checkpoint:
-            if torch.distributed.is_initialized() and getattr(self, "device_mesh", None) is None:
+            if _is_torch_distributed_initialized() and getattr(self, "device_mesh", None) is None:
                 raise ValueError(
                     "save_pretrained(distributed_checkpoint=True) requires the model to have been "
                     "initialized with a distributed_config (device_mesh is None)."
@@ -3824,7 +3880,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return dtype_plan
 
-    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
+    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
         Args:
@@ -3832,36 +3888,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to use the `kernels` library to kernelize some layers of the model.
             kernel_config (`KernelConfig`, *optional*):
                 The kernel configuration to use to kernelize the model. If `None`, the default kernel mapping will be used.
+            mode (`Mode`, *optional*):
+                The mode that should be applied during `kernelize`. Optional, defaults to either training or inference mode
+                based on the internal `training` flag.
         """
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
+                    "Kernels are not available. "
+                    f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                    f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
                 )
-            from kernels import use_kernel_mapping
-
             from .integrations.hub_kernels import register_kernel_mapping_transformers
 
             register_kernel_mapping_transformers()
 
-            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+            if kernel_config is not None:
+                if not isinstance(kernel_config, KernelConfig):
+                    raise ValueError(
+                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                    )
+
+                # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
+                self.kernel_config = kernel_config
+
                 # This will make sure the mapping is valid, and the layers are registered in the model
                 kernel_config.sanitize_kernel_mapping(self)
 
                 # This will create a compatible mapping for the model with the kernels library
                 kernel_config.create_compatible_mapping(self)
 
-                # This is a context manager to override the default kernel mapping
-                # We are calling kernelize inside this context manager using the use_kernels setter
-                # Param inherit_mapping should be False to avoid still loading kernel from remote
-                inherit_mapping = not kernel_config.use_local_kernel
-                with use_kernel_mapping(kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                    self.use_kernels = True
-            # We use the default kernel mapping in .integrations.hub_kernels
-            else:
-                self.use_kernels = True
+            kernelize(self, mode=mode)
         else:
-            self.use_kernels = False
+            self._use_kernels = False
 
     @classmethod
     def from_pretrained(
@@ -4033,16 +4092,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 exclusive with `quantization_config` (for now) and `device_map`. When set, accelerate is not used for
                 device placement or dispatch. Launch with `torchrun --nproc_per_node=N script.py`.
 
-                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_plan`. When a size is specified without a
-                plan, the plan defaults to the model's predefined behavior: TP uses the model's predefined
-                tensor parallel sharding plan, FSDP wraps each transformer layer individually with FSDP2
-                (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
-                parameter names to parallel styles (e.g. `{"model.layers.*.self_attn.q_proj": "colwise"}`),
-                `fsdp_plan` maps module names to wrap (e.g. `{"model.layers.0": {}, "model.layers.1": {}}`).
+                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_cpu_offload`, and
+                `fsdp_mixed_precision`. When a size is specified without a plan, the plan defaults to
+                the model's predefined behavior: TP uses the model's predefined tensor parallel
+                sharding plan, FSDP uses the model's ``base_model_fsdp_plan`` with FSDP2
+                (`fully_shard`). `tp_plan` can override the tensor parallel layout (e.g.
+                `{"model.layers.*.self_attn.q_proj": "colwise"}`).
 
                 Examples:
                     - TP-only: `DistributedConfig(tp_size=4)`
                     - FSDP-only: `DistributedConfig(fsdp_size=4)`
+                    - FSDP with mixed precision: `DistributedConfig(fsdp_size=4, fsdp_mixed_precision=True)`
                     - 2D parallel: `DistributedConfig(tp_size=2, fsdp_size=2)` on 4 GPUs
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
@@ -4323,6 +4383,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             register_fusion_patches(cls, config, fusion_config)
 
+        # Kernel patches: single-layer replacement (stateful __init__) then fusions.
+        if kernel_config is not None and use_kernels:
+            from .integrations.hub_kernels import register_kernel_replacements_and_fusions
+
+            # For remote kernels, we need to apply the context manager
+            allow_all_kernels_context = [allow_all_hub_kernels()] if allow_all_kernels else []
+            with ContextManagers(allow_all_kernels_context):
+                register_kernel_replacements_and_fusions(cls, config, kernel_config)
+
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -4347,20 +4416,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            # Tie weights before sharding so `apply_fully_shard_data_parallel` /
-            # `apply_tensor_parallel` see the shared-parameter graph and can route tied
-            # entries (e.g. `lm_head` -> `embed_tokens`) correctly. `_finalize_model_loading`
-            # re-runs `tie_weights` after the checkpoint is loaded to handle missing-key edge cases.
-            model.tie_weights()
             model = distribute_model(model, distributed_config, device_mesh)
         elif device_map is not None:
             # Expand device_map if it was passed as a `str`, i.e. `device_map="auto"`
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-        # Finalize model weight initialization
-        active_tp_plan = (
-            getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_size", None) is not None else None
-        )
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4372,7 +4432,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
-            tp_plan=active_tp_plan,
+            tp_plan=model.tp_plan,
+            fsdp_plan=model.fsdp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4397,8 +4458,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # If the device_map has more than 1 device: dispatch model with hooks on all devices
-        if device_map is not None and len(set(device_map.values())) > 1:
+        # If the device_map has more than 1 device or disk offloading: dispatch model with hooks
+        if device_map is not None and (len(set(device_map.values())) > 1 or "disk" in set(device_map.values())):
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, disk_offload_index, offload_buffers)
 
         if hf_quantizer is not None:
@@ -4438,10 +4499,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_tp_plan_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+        expected_fsdp_plan_keys = [name for name, _ in model.named_modules()]
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, load_config.tp_plan)
+            verify_tp_plan(expected_tp_plan_keys, load_config.tp_plan)
+            verify_fsdp_plan(expected_fsdp_plan_keys, load_config.fsdp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4459,7 +4522,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Warmup cuda to load the weights much faster on devices
         if load_config.device_map is not None and not is_hqq_or_quark:
-            expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
+            expanded_device_map = expand_device_map(load_config.device_map, expected_tp_plan_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
         error_msgs = []
@@ -4497,7 +4560,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         with open(file, "rb") as _fh:
                             merged_state_dict.update(_safe_load_bytes(_fh.read()))
                         continue
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
+                    is_mps = load_config.device_map is not None and any(
+                        (d.type if isinstance(d, torch.device) else d) == "mps"
+                        for d in load_config.device_map.values()
+                    )
+                    backend, device = ("pread", "mps") if is_mps else ("mmap", "cpu")
+                    file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
@@ -4700,42 +4768,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self, mode=None):
-        """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
-        if not is_kernels_available():
-            raise ValueError(
-                "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
-            )
-        from kernels import Device, Mode, kernelize
-
-        def attach_hidden_kernels(module):
-            for name, fn in getattr(module, "_hidden_kernels", {}).items():
-                if name not in dict(module.named_children()):
-                    if not isinstance(fn, nn.Module):
-                        raise ValueError(
-                            f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
-                            "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
-                            "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
-                        )
-                    module.register_module(name, fn)
-
-        def detach_hidden_kernels(module):
-            for name in getattr(module, "_hidden_kernels", {}):
-                # Skip deregistering if it failed to properly register,
-                # i.e. `ValueError` will be raised afterwards
-                if hasattr(module, name):
-                    delattr(module, name)
-
-        try:
-            self.apply(attach_hidden_kernels)
-
-            mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
-            kernelize(self, device=Device(type=self.device.type), mode=mode)
-            self._use_kernels = True
-
-        finally:
-            self.apply(detach_hidden_kernels)
-
     @property
     def use_kernels(self) -> bool:
         return getattr(self, "_use_kernels", False)
@@ -4747,7 +4779,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         if value:
-            self.kernelize()
+            self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(
@@ -4978,9 +5010,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 yield name, tensor
 
     def train(self, mode: bool = True):
+        changed_mode = self.training != mode
         out = super().train(mode)
-        if self.use_kernels:
-            self.kernelize()
+        # Avoid recasting kernels if not necessary
+        if self.use_kernels and changed_mode:
+            self.set_use_kernels(True)
         return out
 
     def eval(self):
@@ -5138,6 +5172,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             # Note that we use an absolute value instead of device proportion here, as a 8GiB device could still allocate too much
             # if using e.g. 90% of device size, while a 140GiB device would allocate too little
             byte_count = min(byte_count, total_device_memory - 1.2 * 1024**3)
+        elif device.type == "mps":
+            # Skip warmup on MPS: there is a limit of the maximum size a single buffer can have on MPS,
+            # which from testing seems to be about 2/3 of the total device memory (tested on apple silicon).
+            # This causes the warmup function to return a `RuntimeError: Invalid buffer size: XX.XX GiB`.
+            # NOTE: not tested on intel macs
+            continue
         # We divide by 2 here as we allocate in fp16
         _ = torch.empty(int(byte_count // 2), dtype=torch.float16, device=device, requires_grad=False)
 

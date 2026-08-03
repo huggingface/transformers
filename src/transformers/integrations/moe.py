@@ -24,6 +24,7 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
+from .deepgemm import deepgemm_bf16_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
@@ -133,7 +134,8 @@ def batched_mm_experts_forward(
     # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
     # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    expert_ids.clamp_(0, self.num_experts - 1)
+    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
@@ -275,17 +277,20 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
-        weight.device.type == "cpu"
-        # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+    if (
+        (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
+        or weight.device.type == "cpu"
         and is_torch_less_or_equal("2.10.0", accept_dev=True)
         and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
+        or weight.device.type == "cpu"
+        and is_torch_less_or_equal("2.8.0", accept_dev=True)
     ):
-        # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
+        # We cannot use torch.grouped_mm and have to fall back when:
         # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
-        # 2. Before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
-        #    guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
-        #    and not really necessary because the cpu path uses a fallback for-loop implementation.
+        # 2. on CPU with torch <= 2.10, the kernel requires 16 bytes alignment, which is not guaranteed for
+        #    tensors loaded using memmap (e.g. safetensors lazy loading)
+        # 3. on CPU with torch <= 2.8, torch._grouped_mm has no CPU kernel at all (raises NotImplementedError)
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
@@ -441,6 +446,12 @@ def grouped_mm_experts_forward(
     proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
+    # Mid-mask (bwd path). The up grouped_mm leaves sentinel rows of `proj_out` uninit. This
+    # matters in BACKWARD: the masked_fill_ backward zeros the gradient at sentinel rows (select,
+    # so even NaN → 0) before the non-linearity bwd's garbage can reach grad(gate_up_proj[_bias]).
+    # Forward needs no masking here (the down grouped_mm skips these rows) — the value-zeroing is
+    # just a harmless side effect.
+    proj_out.masked_fill_(sentinel_mask, 0.0)
 
     # Apply gating or activation
     if self.has_gate:
@@ -483,6 +494,7 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "deepgemm": deepgemm_bf16_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,

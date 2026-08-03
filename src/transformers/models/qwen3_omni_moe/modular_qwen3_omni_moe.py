@@ -401,6 +401,42 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_experts_allreduce",
     }
+    # Inference TP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    # Training SP + EP (per-layer overrides applied in `_update_parallel_plans`).
+    base_model_sp_ep_plan = {
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
+    }
 
     vocab_size: int = 3072
     hidden_size: int = 1024
@@ -413,8 +449,8 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
     use_sliding_window = AttributeError()
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
         self.sliding_window = self.sliding_window
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
@@ -1158,12 +1194,13 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
+@auto_docstring
 @dataclass
 class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     r"""
-    Args:
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+        The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
     rope_deltas: torch.LongTensor | None = None
@@ -1262,7 +1299,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        rope_deltas=None,
         labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
@@ -1665,7 +1701,11 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_ep_plan = {"codec_head": "colwise_allgather"}
+    _sp_ep_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]

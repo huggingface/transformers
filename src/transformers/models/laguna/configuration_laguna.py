@@ -32,6 +32,10 @@ class LagunaConfig(PreTrainedConfig):
     r"""
     num_attention_heads_per_layer (`list[int]`, *optional*):
         Per-layer override for ``num_attention_heads``. Length must equal ``num_hidden_layers``.
+    gating (`bool` or `str`, *optional*, defaults to `True`):
+        Softplus output-gate granularity. ``True`` or ``"per-head"`` applies one gate per head,
+        broadcast across ``head_dim``; ``"per-element"`` applies one gate per ``(head, head_dim)``
+        channel.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
@@ -67,8 +71,34 @@ class LagunaConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "moe_tp_gate_up_colwise",
+        "layers.*.mlp.experts.down_proj": "moe_tp_down_rowwise",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+    }
+    # Expert-only EP plan: shards MoE experts along the expert axis; gate stays replicated.
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+    }
+    base_model_tp_ep_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.g_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
+        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_experts_allreduce",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
@@ -115,6 +145,7 @@ class LagunaConfig(PreTrainedConfig):
     # Laguna-specific attention
     head_dim: int = 128
     attention_bias: bool = False
+    gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None

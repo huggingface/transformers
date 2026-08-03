@@ -7,7 +7,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+checkpoints/
 # tests and logs
 tests/fixtures/cached_*_text.txt
 logs/

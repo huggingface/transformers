@@ -50,3 +50,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("InstructBlipVideoProcessor takes in 'images' instead of 'videos' (legacy)")
     def test_processor_with_multiple_inputs(self):
         pass
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.video_token = processor.video_token.content
