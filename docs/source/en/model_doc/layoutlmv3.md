@@ -96,11 +96,6 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
     - __call__
     - save_vocabulary
 
-## LayoutLMv3TokenizerFast
-
-[[autodoc]] LayoutLMv3TokenizerFast
-    - __call__
-
 ## LayoutLMv3Processor
 
 [[autodoc]] LayoutLMv3Processor

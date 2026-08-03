@@ -156,11 +156,6 @@ visualizer("""def func(a, b):
 
 [[autodoc]] CodeLlamaTokenizer
     - get_special_tokens_mask
-    - save_vocabulary
-
-## CodeLlamaTokenizerFast
-
-[[autodoc]] CodeLlamaTokenizerFast
-    - get_special_tokens_mask
     - update_post_processor
     - save_vocabulary
+

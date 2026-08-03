@@ -65,10 +65,6 @@ sequence length for fine-tuning and inference.
     - get_special_tokens_mask
     - save_vocabulary
 
-## FNetTokenizerFast
-
-[[autodoc]] FNetTokenizerFast
-
 ## FNetModel
 
 [[autodoc]] FNetModel
