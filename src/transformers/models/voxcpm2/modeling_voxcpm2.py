@@ -83,6 +83,26 @@ class VoxCPM2ModelOutput(ModelOutput):
     generated_latent_features: torch.FloatTensor | None = None
 
 
+@dataclass
+class VoxCPM2GenerationOutput(ModelOutput):
+    r"""
+    Output type for [`VoxCPM2Model.generate`].
+
+    Args:
+        audio_sequences (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Generated audio waveforms.
+        latent_features (`torch.FloatTensor` of shape
+            `(batch_size, feature_dim, generated_length * patch_size)`):
+            Generated AudioVAE latent features before waveform decoding.
+        stop_logits (`torch.FloatTensor` of shape `(batch_size, generated_length, 2)`):
+            Continue and stop logits collected at each generated audio patch.
+    """
+
+    audio_sequences: torch.FloatTensor | None = None
+    latent_features: torch.FloatTensor | None = None
+    stop_logits: torch.FloatTensor | None = None
+
+
 @auto_docstring
 class VoxCPM2PreTrainedModel(PreTrainedModel):
     config: VoxCPM2Config
@@ -1521,4 +1541,4 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         )
 
 
-__all__ = ["VoxCPM2Model", "VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
+__all__ = ["VoxCPM2GenerationOutput", "VoxCPM2Model", "VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
