@@ -378,6 +378,20 @@ def test_generation_cache_update_matches_full_recomputation():
 
 
 @require_torch
+def test_generation_stop_prediction():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    hidden_states = torch.randn(3, 8)
+
+    stop_logits, stop_flags = model._get_stop_flags(hidden_states)
+
+    expected_logits = model.stop_head(model.stop_actn(model.stop_proj(hidden_states)))
+    torch.testing.assert_close(stop_logits, expected_logits)
+    torch.testing.assert_close(stop_flags, expected_logits.argmax(dim=-1).bool())
+    assert stop_logits.shape == (3, 2)
+    assert stop_flags.dtype == torch.bool
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
