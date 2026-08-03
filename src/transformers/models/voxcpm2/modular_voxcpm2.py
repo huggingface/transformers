@@ -30,6 +30,7 @@ from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
 from ..minicpm4.modeling_minicpm4 import (
     MiniCPM4Attention,
     MiniCPM4DecoderLayer,
+    MiniCPM4RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -560,6 +561,10 @@ class VoxCPM2Attention(MiniCPM4Attention):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
+
+
+class VoxCPM2RMSNorm(MiniCPM4RMSNorm):
+    pass
 
 
 class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):
