@@ -29,6 +29,7 @@ if is_torch_available():
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
+        VoxCPM2CausalDecoderBlock,
         VoxCPM2CausalEncoderBlock,
         VoxCPM2CausalResidualUnit,
         VoxCPM2ConditionalFlowMatching,
@@ -220,6 +221,27 @@ def test_decoder_noise_block_matches_reference():
     torch.manual_seed(7)
     output = layer(hidden_states)
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+
+@require_torch
+def test_causal_decoder_block_matches_reference():
+    layer = VoxCPM2CausalDecoderBlock(input_dim=8, output_dim=4, stride=3, groups=2)
+    state_keys = set(layer.state_dict())
+    assert len(state_keys) == 28
+    assert "block.1.parametrizations.weight.original0" in state_keys
+    assert "block.2.block.1.parametrizations.weight.original1" in state_keys
+
+    hidden_states = torch.randn(2, 8, 10, requires_grad=True)
+    output = layer(hidden_states)
+    expected_output = layer.block(hidden_states)
+    assert output.shape == (2, 4, 30)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    assert hidden_states.grad is not None
+
+    noise_layer = VoxCPM2CausalDecoderBlock(8, 4, stride=3, groups=2, use_noise_block=True)
+    assert len(noise_layer.state_dict()) == 30
 
 
 @require_torch
