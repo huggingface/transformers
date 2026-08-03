@@ -961,9 +961,9 @@ class GenerationMixin(ContinuousMixin):
 
     def _expand_multimodal_outputs(
         self: "GenerativePreTrainedModel",
+        input_ids: torch.LongTensor,
         mm_encoder_output: ModelOutput | None,
         expand_size: int = 1,
-        input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
     ):
         def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
@@ -983,7 +983,7 @@ class GenerationMixin(ContinuousMixin):
 
             # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
             token_id_key = f"{modality}_token_id"
-            if input_ids is None or input_ids.numel() == 0:
+            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(
                         getattr(self.config, token_id_key),
@@ -1030,9 +1030,9 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids becaus ethe hlper counts placeholders within encoded text!
         self._expand_multimodal_outputs(
+            input_ids,
             model_kwargs.get("mm_encoder_outputs"),
             expand_size=expand_size,
-            input_ids=input_ids,
             inputs_embeds=model_kwargs.get("inputs_embeds"),
         )
 
@@ -2675,7 +2675,6 @@ class GenerationMixin(ContinuousMixin):
                     )
 
         # 4. Define other model kwargs (encoder-decoder kwargs / multimodal kwargs / kwargs for consistency)
-
         # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
