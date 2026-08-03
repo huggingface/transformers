@@ -1531,6 +1531,54 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             aligned_features[audio_mask.to(device=aligned_features.device, dtype=torch.bool)] = audio_features[0]
         return aligned_features
 
+    def _prepare_generation_audio_features(
+        self,
+        input_ids: torch.LongTensor,
+        audio_mask: torch.Tensor,
+        audio_features: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        raw_audio_inputs = (
+            prompt_input_values,
+            prompt_attention_mask,
+            reference_input_values,
+            reference_attention_mask,
+        )
+        if audio_features is not None:
+            if any(value is not None for value in raw_audio_inputs):
+                raise ValueError("Precomputed `audio_features` cannot be combined with raw audio inputs")
+            return audio_features
+
+        if prompt_input_values is None and prompt_attention_mask is not None:
+            raise ValueError("`prompt_attention_mask` requires `prompt_input_values`")
+        if reference_input_values is None and reference_attention_mask is not None:
+            raise ValueError("`reference_attention_mask` requires `reference_input_values`")
+
+        prompt_features = None
+        if prompt_input_values is not None:
+            prompt_features = self._encode_generation_audio_features(
+                prompt_input_values,
+                prompt_attention_mask,
+                padding_side="left",
+            )
+        reference_features = None
+        if reference_input_values is not None:
+            reference_features = self._encode_generation_audio_features(
+                reference_input_values,
+                reference_attention_mask,
+                padding_side="right",
+            )
+
+        return self._align_generation_audio_features(
+            input_ids,
+            audio_mask,
+            reference_features=reference_features,
+            prompt_features=prompt_features,
+        )
+
     def _validate_generation_inputs(
         self,
         input_ids: torch.LongTensor,
