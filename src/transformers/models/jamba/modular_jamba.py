@@ -149,6 +149,9 @@ class JambaMambaMixer(FalconMambaMixer):
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
+        self.use_mambapy = config.use_mambapy
+        self.use_associative_scan = config.use_associative_scan
+
     def init_jamba_weights(self):
         raise NotImplementedError("Not needed for jamba")
 
@@ -255,9 +258,8 @@ class JambaMambaMixer(FalconMambaMixer):
                 delta_bias=time_proj_bias,
                 delta_softplus=True,
                 return_last_state=output_final_state,
-                # TODO: No faster alternatives for mamba atm (needs config adjustments)
-                use_mambapy=False,
-                use_associative_scan=False,
+                use_mambapy=self.use_mambapy,
+                use_associative_scan=self.use_associative_scan,
             )
 
             if output_final_state:

@@ -202,7 +202,7 @@ def mamba_selective_scan(
     delta_bias: torch.Tensor | None = None,
     delta_softplus: bool = False,
     return_last_state: bool = False,
-    use_falcon_mambapy: bool = False,
+    use_mambapy: bool = False,
     use_associative_scan: bool = False,
     **kwargs,
 ):
@@ -234,7 +234,7 @@ def mamba_selective_scan(
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
     deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
-    if use_falcon_mambapy and pscan is not None:
+    if use_mambapy and pscan is not None:
         all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
@@ -326,7 +326,7 @@ class FalconMambaMixer(nn.Module):
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
-        self.use_falcon_mambapy = config.use_falcon_mambapy
+        self.use_mambapy = config.use_mambapy
         self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
@@ -503,8 +503,7 @@ class FalconMambaMixer(nn.Module):
                 delta_bias=time_proj_bias,
                 delta_softplus=True,
                 return_last_state=output_final_state,
-                # TODO: rename to normal mambapy
-                use_mambapy=self.use_falcon_mambapy,
+                use_mambapy=self.use_mambapy,
                 use_associative_scan=self.use_associative_scan,
             )
 

@@ -343,7 +343,7 @@ def mamba_selective_scan(
     delta_bias: torch.Tensor | None = None,
     delta_softplus: bool = False,
     return_last_state: bool = False,
-    use_jambapy: bool = False,
+    use_mambapy: bool = False,
     use_associative_scan: bool = False,
     **kwargs,
 ):
@@ -375,7 +375,7 @@ def mamba_selective_scan(
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
     deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
-    if use_jambapy and pscan is not None:
+    if use_mambapy and pscan is not None:
         all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
@@ -488,6 +488,9 @@ class JambaMambaMixer(nn.Module):
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
 
+        self.use_mambapy = config.use_mambapy
+        self.use_associative_scan = config.use_associative_scan
+
     @force_accelerate_hooks(["conv1d", "dt_proj"])
     def forward(
         self,
@@ -592,9 +595,8 @@ class JambaMambaMixer(nn.Module):
                 delta_bias=time_proj_bias,
                 delta_softplus=True,
                 return_last_state=output_final_state,
-                # TODO: No faster alternatives for mamba atm (needs config adjustments)
-                use_mambapy=False,
-                use_associative_scan=False,
+                use_mambapy=self.use_mambapy,
+                use_associative_scan=self.use_associative_scan,
             )
 
             if output_final_state:

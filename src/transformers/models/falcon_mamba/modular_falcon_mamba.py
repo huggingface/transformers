@@ -59,9 +59,10 @@ class FalconMambaConfig(MambaConfig):
         Whether or not residuals should be in `float32`. If set to `False` residuals will keep the same `dtype` as the rest of the model
     rescale_prenorm_residual (`bool`, *optional*, defaults to `False`):
         Whether or not to rescale `out_proj` weights when initializing.
-    use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
-        This argument corresponds to `use_mambapy` in MambaConfig.
-        Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
+    use_mambapy (`bool`, *optional*, defaults to `False`):
+        Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`,
+        the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive
+        version if memory is limited.
     use_associative_scan (`bool`, *optional*, defaults to `True`):
         Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
         sequential implementation. The associative scan is only active during `torch.compile` tracing and
@@ -85,9 +86,14 @@ class FalconMambaConfig(MambaConfig):
     >>> configuration = model.config
     ```"""
 
-    use_falcon_mambapy: bool = False
+    use_mambapy: bool = False
     use_associative_scan: bool = True
     mixer_rms_eps: float = 1e-6
+
+    def __post_init__(self, **kwargs):
+        # BC for rename
+        self.use_mambapy = kwargs.pop("use_falcon_mambapy", False)
+        super().__post_init__(self, **kwargs)
 
     @property
     def layer_types(self):
@@ -242,8 +248,7 @@ class FalconMambaMixer(MambaMixer):
                 delta_bias=time_proj_bias,
                 delta_softplus=True,
                 return_last_state=output_final_state,
-                # TODO: rename to normal mambapy
-                use_mambapy=self.use_falcon_mambapy,
+                use_mambapy=self.use_mambapy,
                 use_associative_scan=self.use_associative_scan,
             )
 

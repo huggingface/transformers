@@ -80,6 +80,7 @@ def get_module_source_from_name(module_name: str) -> str:
 NAMES_TO_NEVER_REPLACE = (
     "mamba_ssm",
     "mamba-ssm",
+    "use_mambapy",
     "mamba_inner_fn",
     "mamba_selective_state_update",
     "mamba_selective_scan",
