@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...processing_utils import ProcessorMixin
 
 
@@ -78,6 +80,30 @@ class VoxCPM2Processor(ProcessorMixin):
             "text_mask": [text_mask],
             "audio_mask": [[1 - value for value in text_mask]],
         }
+
+    def _prepare_audio(self, audio, prefix, sampling_rate, return_tensors):
+        if prefix not in {"prompt", "reference"}:
+            raise ValueError("`prefix` must be either 'prompt' or 'reference'")
+
+        audio_inputs = self.feature_extractor(
+            audio,
+            padding=True,
+            sampling_rate=sampling_rate,
+            return_tensors=return_tensors,
+        )
+        input_values = audio_inputs["input_values"]
+        padding_mask = audio_inputs["padding_mask"]
+        if len(padding_mask) != 1:
+            raise ValueError("VoxCPM2 generation currently supports one audio sample at a time")
+
+        num_samples = int(np.asarray(padding_mask[0].tolist()).sum())
+        if num_samples == 0:
+            raise ValueError("Audio inputs must contain at least one sample")
+        num_patches = (num_samples + self.audio_patch_size - 1) // self.audio_patch_size
+        return {
+            f"{prefix}_input_values": input_values,
+            f"{prefix}_attention_mask": padding_mask,
+        }, num_patches
 
 
 __all__ = ["VoxCPM2Processor"]
