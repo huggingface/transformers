@@ -108,6 +108,37 @@ class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
         return hidden_states
 
 
+def _apply_voxcpm2_weight_norm(module: nn.Module) -> nn.Module:
+    weight_norm = nn.utils.weight_norm
+    if hasattr(nn.utils.parametrizations, "weight_norm"):
+        weight_norm = nn.utils.parametrizations.weight_norm
+    return weight_norm(module)
+
+
+class VoxCPM2CausalResidualUnit(nn.Module):
+    def __init__(self, hidden_dim: int = 16, dilation: int = 1, kernel_size: int = 7, groups: int = 1):
+        super().__init__()
+        padding = ((7 - 1) * dilation) // 2
+        self.block = nn.Sequential(
+            VoxCPM2Snake1d(hidden_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    hidden_dim,
+                    hidden_dim,
+                    kernel_size=kernel_size,
+                    dilation=dilation,
+                    padding=padding,
+                    groups=groups,
+                )
+            ),
+            VoxCPM2Snake1d(hidden_dim),
+            _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1)),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.block(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
