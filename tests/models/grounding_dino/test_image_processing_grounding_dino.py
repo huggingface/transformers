@@ -22,7 +22,11 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+)
 
 
 if is_torch_available():
@@ -39,7 +43,7 @@ if is_torchvision_available():
     from transformers import GroundingDinoImageProcessor
 
 
-class GroundingDinoImageProcessingTester:
+class GroundingDinoImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -131,18 +135,6 @@ class GroundingDinoImageProcessingTester:
         return GroundingDinoObjectDetectionOutput(
             pred_boxes=torch.rand(self.batch_size, self.num_queries, 4),
             logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
-        )
-
-    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.prepare_image_inputs with DeformableDetr->GroundingDino
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
         )
 
 

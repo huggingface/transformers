@@ -19,12 +19,13 @@ import sys
 import tempfile
 import warnings
 from copy import deepcopy
+from typing import Any
 
 import numpy as np
 import pytest
 
 from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat
+from transformers.image_utils import AnnotationFormat, ImageInput
 from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
@@ -42,6 +43,8 @@ from transformers.utils import is_torch_available, is_vision_available
 
 if is_torch_available():
     import torch
+
+    from transformers.modeling_outputs import SemanticSegmenterOutput
 
 if is_vision_available():
     from PIL import Image
@@ -165,10 +168,47 @@ def prepare_video_inputs(
     return video_inputs
 
 
+class ImageProcessingTester:
+    """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
+    def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
+        return self.num_channels, self.size["height"], self.size["width"]
+
+    def prepare_post_process_semantic_segmentation_inputs(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(self.batch_size, self.num_labels, self.size["height"], self.size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
+
 class ImageProcessingTestMixin:
     test_cast_dtype = None
+    image_processor_tester = None
 
     def setUp(self):
+        if self.image_processor_tester is None:
+            raise ValueError(
+                f"You have inherited from {type(self).__name__} but did not set the image_processor_tester."
+            )
+
         # Infer model_name from test folder (parent of this test file)
 
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()

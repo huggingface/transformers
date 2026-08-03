@@ -21,7 +21,7 @@ from transformers.image_utils import PILImageResampling, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics3ImageProcessingTester:
+class Idefics3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,

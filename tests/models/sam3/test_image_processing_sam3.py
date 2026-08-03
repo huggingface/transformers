@@ -20,9 +20,9 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -35,7 +35,7 @@ if is_vision_available():
     pass
 
 
-class Sam3ImageProcessingTester:
+class Sam3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -73,20 +73,6 @@ class Sam3ImageProcessingTester:
             "size": self.size,
             "mask_size": self.mask_size,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {

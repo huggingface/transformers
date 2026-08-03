@@ -21,19 +21,17 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
 if is_torch_available():
     import torch
 
-    from transformers.modeling_outputs import SemanticSegmenterOutput
 
-
-class SegformerImageProcessingTester:
+class SegformerImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -72,38 +70,6 @@ class SegformerImageProcessingTester:
             "image_std": self.image_std,
             "do_reduce_labels": self.do_reduce_labels,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
-    def prepare_post_process_semantic_segmentation_inputs(self):
-        inputs = {
-            "outputs": SemanticSegmenterOutput(
-                logits=torch.randn(
-                    self.batch_size,
-                    self.num_labels,
-                    self.size["height"],
-                    self.size["width"],
-                )
-            )
-        }
-        expected_shape = {
-            "num_labels": self.num_labels,
-            "height": self.size["height"],
-            "width": self.size["width"],
-        }
-        return inputs, expected_shape
 
 
 def prepare_semantic_single_inputs():

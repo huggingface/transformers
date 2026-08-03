@@ -25,7 +25,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
 
 
@@ -36,7 +36,7 @@ if is_torch_available():
     import torch
 
 
-class RTDetrImageProcessingTester:
+class RTDetrImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,

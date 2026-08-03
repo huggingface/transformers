@@ -24,9 +24,9 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     AnnotationFormatTestMixin,
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -37,7 +37,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class ConditionalDetrImageProcessingTester:
+class ConditionalDetrImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -124,17 +124,6 @@ class ConditionalDetrImageProcessingTester:
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrSegmentationOutput

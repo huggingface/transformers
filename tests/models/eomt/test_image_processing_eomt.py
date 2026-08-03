@@ -23,9 +23,9 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -39,7 +39,7 @@ if is_vision_available():
     from transformers.models.eomt.modeling_eomt import EomtForUniversalSegmentationOutput
 
 
-class EomtImageProcessingTester:
+class EomtImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -88,17 +88,6 @@ class EomtImageProcessingTester:
             masks_queries_logits=torch.randn((batch_size, self.num_queries, self.height, self.width)),
             class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_labels + 1)),
             patch_offsets=patch_offsets,
-        )
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
         )
 
     def prepare_post_process_semantic_segmentation_inputs(self):

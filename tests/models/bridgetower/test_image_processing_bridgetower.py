@@ -18,11 +18,11 @@ import unittest
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
-class BridgeTowerImageProcessingTester:
+class BridgeTowerImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -73,17 +73,6 @@ class BridgeTowerImageProcessingTester:
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

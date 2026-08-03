@@ -14,7 +14,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, load_coco_image
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, load_coco_image
 
 
 if is_torch_available() and is_vision_available():
@@ -24,7 +24,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class FuyuImageProcessingTester:
+class FuyuImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -103,9 +103,6 @@ class FuyuImageProcessingTester:
             image_inputs = [torch.from_numpy(img) for img in image_inputs]
 
         return image_inputs
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
 
 
 @require_torch
