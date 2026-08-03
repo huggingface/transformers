@@ -533,6 +533,13 @@ class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
         return hidden_states
 
 
+def _apply_voxcpm2_weight_norm(module: nn.Module) -> nn.Module:
+    weight_norm = nn.utils.weight_norm
+    if hasattr(nn.utils.parametrizations, "weight_norm"):
+        weight_norm = nn.utils.parametrizations.weight_norm
+    return weight_norm(module)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
