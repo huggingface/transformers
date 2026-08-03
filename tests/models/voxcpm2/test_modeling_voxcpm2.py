@@ -100,6 +100,8 @@ def test_pretrained_model_metadata():
     assert model._supports_sdpa
     assert not model.supports_gradient_checkpointing
     assert "VoxCPM2DecoderLayer" in model._no_split_modules
+    assert model._get_dtype_plan(torch.float16)["audio_vae"] == torch.float32
+    assert model._get_dtype_plan(torch.bfloat16)["audio_vae"] == torch.float32
 
 
 @require_torch
