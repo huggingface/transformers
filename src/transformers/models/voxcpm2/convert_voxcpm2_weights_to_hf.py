@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import json
 from pathlib import Path
 
@@ -141,3 +142,16 @@ def convert_checkpoint(input_path: str | Path, output_path: str | Path, push_to_
         generation_config.push_to_hub(push_to_hub)
 
     return model, processor
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert an original VoxCPM2 checkpoint to Transformers format.")
+    parser.add_argument("--input_path", type=Path, required=True, help="Directory containing the original checkpoint.")
+    parser.add_argument("--output_path", type=Path, required=True, help="Directory for the converted checkpoint.")
+    parser.add_argument("--push_to_hub", help="Optional Hub repository to upload the converted files to.")
+    args = parser.parse_args()
+    convert_checkpoint(args.input_path, args.output_path, push_to_hub=args.push_to_hub)
+
+
+if __name__ == "__main__":
+    main()
