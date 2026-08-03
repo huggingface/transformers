@@ -50,7 +50,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
@@ -210,6 +210,10 @@ def mamba_selective_scan(
     if delta_softplus:
         dt = F.softplus(dt)
 
+    # We need to transpose on the basis of the original kernel layout
+    B = B.transpose(1, 2)
+    C = C.transpose(1, 2)
+
     # Discretize A and B for the entire sequence
     discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
@@ -237,7 +241,7 @@ def mamba_selective_scan(
             combine_mode=combine_mode,
         )
 
-        scan_output = torch.matmul(all_states.transpose(1, 2).to(input_dtype), C.transpose(1, 2).unsqueeze(-1))
+        scan_output = torch.matmul(all_states.transpose(1, 2).to(input_dtype), C.unsqueeze(-1))
         scan_output = scan_output.squeeze(-1).transpose(1, 2)
         ssm_state = all_states[:, :, -1]
 
@@ -259,7 +263,7 @@ def mamba_selective_scan(
             ssm_state = discrete_A[:, :, index] * ssm_state + deltaB_u[:, :, index]
 
             # Subsequent output
-            scan_output = torch.matmul(ssm_state.to(input_dtype), C[:, :, index].unsqueeze(-1))
+            scan_output = torch.matmul(ssm_state.to(input_dtype), C[:, index, :].unsqueeze(-1))
             scan_outputs.append(scan_output[:, :, 0])
         scan_output = torch.stack(scan_outputs, dim=-1)
 
@@ -351,7 +355,7 @@ class MambaMixer(nn.Module):
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         init.copy_(self.dt_proj.bias, inv_dt)
 
-    @force_accelerate_hooks("conv1d")
+    @force_accelerate_hooks(["conv1d", "dt_proj"])
     def forward(
         self,
         hidden_states: torch.Tensor,
