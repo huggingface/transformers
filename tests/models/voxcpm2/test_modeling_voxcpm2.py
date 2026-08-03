@@ -16,7 +16,7 @@ import math
 
 import pytest
 
-from transformers import VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
+from transformers import VoxCPM2AudioVAEConfig, VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
 from transformers.testing_utils import require_torch
 
 
@@ -25,6 +25,7 @@ if is_torch_available():
 
     from transformers.models.voxcpm2.modeling_voxcpm2 import (
         VoxCPM2Attention,
+        VoxCPM2AudioEncoder,
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
@@ -171,6 +172,36 @@ def test_causal_encoder_block_matches_reference():
 
     output.sum().backward()
     assert hidden_states.grad is not None
+
+
+@require_torch
+def test_audio_encoder_matches_reference():
+    config = VoxCPM2AudioVAEConfig(
+        encoder_dim=4,
+        encoder_rates=(2, 3),
+        latent_dim=3,
+        decoder_dim=16,
+        decoder_rates=(2, 2),
+        depthwise=True,
+    )
+    model = VoxCPM2AudioEncoder(config)
+    assert len(model.state_dict()) == 65
+    assert model.encoder_dim == 16
+    assert "block.0.parametrizations.weight.original0" in model.state_dict()
+    assert "fc_mu.parametrizations.weight.original1" in model.state_dict()
+
+    input_values = torch.randn(2, 1, 36, requires_grad=True)
+    output = model(input_values)
+    hidden_states = model.block(input_values)
+    assert output["hidden_state"].shape == (2, 16, 6)
+    assert output["mu"].shape == (2, 3, 6)
+    assert output["logvar"].shape == (2, 3, 6)
+    torch.testing.assert_close(output["hidden_state"], hidden_states, rtol=0, atol=0)
+    torch.testing.assert_close(output["mu"], model.fc_mu(hidden_states), rtol=0, atol=0)
+    torch.testing.assert_close(output["logvar"], model.fc_logvar(hidden_states), rtol=0, atol=0)
+
+    output["mu"].sum().backward()
+    assert input_values.grad is not None
 
 
 @require_torch
