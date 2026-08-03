@@ -471,6 +471,20 @@ def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConf
     return encoder_config
 
 
+def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.dit_config, VoxCPM2DiTConfig):
+        raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+    dit_config = _get_tslm_config(config)
+    dit_config.hidden_size = config.dit_config.hidden_dim
+    dit_config.intermediate_size = config.dit_config.ffn_dim
+    dit_config.num_attention_heads = config.dit_config.num_heads
+    dit_config.num_hidden_layers = config.dit_config.num_layers
+    dit_config.kv_channels = config.dit_config.kv_channels
+    dit_config.head_dim = config.dit_config.kv_channels
+    dit_config.vocab_size = 0
+    return dit_config
+
+
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
     def __init__(self, config: VoxCPM2Config):
         super().__init__()
