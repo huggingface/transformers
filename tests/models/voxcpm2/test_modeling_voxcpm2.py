@@ -29,6 +29,7 @@ if is_torch_available():
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2DecoderLayer,
+        VoxCPM2LocalEncoder,
         VoxCPM2RMSNorm,
         VoxCPM2RotaryEmbedding,
         VoxCPM2ScalarQuantizationLayer,
@@ -413,3 +414,63 @@ def test_transformer_backbone_embeddings_and_cache():
     assert set(residual_model.state_dict()) == expected_keys - {"embed_tokens.weight"}
     with pytest.raises(ValueError, match="inputs_embeds.*vocab_size"):
         residual_model(input_ids=input_ids)
+
+
+@require_torch
+def test_local_encoder_matches_reference_layout():
+    config = VoxCPM2Config(
+        lm_config={
+            "vocab_size": 32,
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "max_position_embeddings": 8,
+            "use_mup": False,
+            "rope_parameters": {
+                "rope_type": "longrope",
+                "rope_theta": 10000.0,
+                "long_factor": [1.0, 1.0],
+                "short_factor": [1.0, 1.0],
+                "original_max_position_embeddings": 8,
+            },
+        },
+        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 2, "kv_channels": 4},
+        feat_dim=4,
+        audio_vae_config={"latent_dim": 4},
+    )
+    config.lm_config._attn_implementation = "sdpa"
+    model = VoxCPM2LocalEncoder(config)
+
+    layer_keys = {
+        f"encoder.layers.{layer_index}.{name}"
+        for layer_index in range(2)
+        for name in (
+            "self_attn.q_proj.weight",
+            "self_attn.k_proj.weight",
+            "self_attn.v_proj.weight",
+            "self_attn.o_proj.weight",
+            "mlp.gate_proj.weight",
+            "mlp.up_proj.weight",
+            "mlp.down_proj.weight",
+            "input_layernorm.weight",
+            "post_attention_layernorm.weight",
+        )
+    }
+    expected_keys = {"special_token", "in_proj.weight", "in_proj.bias", "encoder.norm.weight", *layer_keys}
+    assert set(model.state_dict()) == expected_keys
+
+    audio_features = torch.randn(2, 3, 4, 4)
+    output = model(audio_features)
+    projected_features = model.in_proj(audio_features)
+    special_tokens = model.special_token.expand(2, 3, 1, -1)
+    encoder_input = torch.cat((special_tokens, projected_features), dim=2).reshape(6, 5, 8)
+    expected_output = model.encoder(inputs_embeds=encoder_input, is_causal=False).last_hidden_state[:, 0]
+    expected_output = expected_output.reshape(2, 3, 8)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    assert model.special_token.grad is not None
