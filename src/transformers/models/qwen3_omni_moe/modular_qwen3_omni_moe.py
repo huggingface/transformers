@@ -2562,6 +2562,32 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             tts_bos_embed,
             tts_eos_embed,
         )
+
+        # The talker consumes one entry of `trailing_text_hidden` per step, so it is what tells it how much text is
+        # left to speak. In a batch, rows whose text finished early keep being forwarded with pad tokens, so past
+        # their own EOS those entries are meaningless and the `tts_eos` marker only lands at the end of the longest
+        # row. Move each row's marker to just after its last real token and pad the rest, otherwise the talker never
+        # learns its text ended and keeps vocalizing. Entry `j` holds generated token `j + 1`, so a row whose EOS is
+        # generated token `e` has that token at `j = e - 1` and takes the marker at `j = e`. For the longest row
+        # this is exactly what `_get_talker_assistant_parts` already built, keeping single-sample behavior unchanged.
+        thinker_eos_token_id = thinker_kwargs.get("eos_token_id")
+        if thinker_eos_token_id is not None:
+            thinker_generate_ids = thinker_result.sequences[:, sequence_length:]
+            thinker_eos_token_ids = torch.as_tensor(thinker_eos_token_id, device=input_ids.device).flatten()
+            is_thinker_eos = (thinker_generate_ids.unsqueeze(-1) == thinker_eos_token_ids).any(dim=-1)
+            generated_length = thinker_generate_ids.shape[1]
+            generated_positions = torch.arange(generated_length, device=input_ids.device)
+            first_eos_positions = torch.where(is_thinker_eos, generated_positions, generated_length).min(dim=-1).values
+            trailing_positions = torch.arange(trailing_text_hidden.shape[1], device=input_ids.device).unsqueeze(0)
+            pad_positions_mask = (trailing_positions > first_eos_positions.unsqueeze(1)).unsqueeze(-1)
+            eos_positions_mask = (trailing_positions == first_eos_positions.unsqueeze(1)).unsqueeze(-1)
+            trailing_text_hidden = torch.where(
+                pad_positions_mask, tts_pad_embed.to(trailing_text_hidden.dtype), trailing_text_hidden
+            )
+            trailing_text_hidden = torch.where(
+                eos_positions_mask, tts_eos_embed.to(trailing_text_hidden.dtype), trailing_text_hidden
+            )
+
         talker_input_embed = torch.cat((talker_user_embeds, talker_assistant_embeds), dim=1)
         talker_input_id = torch.cat((talker_user_ids, talker_assistant_ids), dim=1)
         talker_attention_mask = torch.cat(
@@ -2591,25 +2617,29 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
             return thinker_result.sequences, talker_wavs.float()
 
-        # In a batch, generation only stops once every sample has emitted EOS, so shorter samples keep producing codes
-        # past their EOS. Those trailing codes are meaningless so they are zeroed out before decoding and their
-        # waveform is dropped afterwards.
-        talker_sequences = talker_result.sequences[:, : talker_codes.shape[-1]]
+        # In a batch, generation only stops once every sample has emitted EOS, so shorter samples keep producing
+        # codes past their own EOS. Those are not valid codec ids and would index outside the codebook, so they are
+        # zeroed before decoding and their audio is dropped afterwards.
+        num_codes = talker_codes.shape[-1]
+        talker_sequences = talker_result.sequences[:, :num_codes]
         eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_sequences.device).flatten()
         eos_mask = (talker_sequences.unsqueeze(-1) == eos_token_ids).any(dim=-1)
-        code_positions = torch.arange(talker_sequences.shape[-1], device=talker_sequences.device)
-        talker_code_lengths = torch.where(eos_mask, code_positions, talker_sequences.shape[-1]).min(dim=-1).values
+        code_positions = torch.arange(num_codes, device=talker_sequences.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, num_codes).min(dim=-1).values
+        talker_codes = talker_codes.masked_fill((code_positions >= talker_code_lengths.unsqueeze(-1)).unsqueeze(1), 0)
 
-        max_code_length = int(talker_code_lengths.max())
-        talker_codes = talker_codes[..., :max_code_length]
-        code_padding_mask = code_positions[:max_code_length] >= talker_code_lengths.unsqueeze(-1)  # [batch, codes]
-        talker_codes = talker_codes.masked_fill(code_padding_mask.unsqueeze(1), 0)
+        # `code2wav` is causal, so decoding the batch and then cutting each sample at its own length matches
+        # decoding that sample alone. A chunk of `n` codes yields slightly fewer than `n * total_upsample` samples,
+        # because the causal transposed convolutions drop a fixed number of trailing samples per chunk; that loss is
+        # derived from this decode rather than hardcoded, so it holds for any `code2wav` configuration.
+        chunk_size = 300
+        talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=chunk_size, left_context_size=25)
+        samples_per_code = int(self.code2wav.total_upsample)
+        num_chunks = (num_codes + chunk_size - 1) // chunk_size
+        samples_lost_per_chunk = (num_codes * samples_per_code - talker_wavs.shape[-1]) // num_chunks
+        chunks_per_sample = (talker_code_lengths + chunk_size - 1) // chunk_size
+        waveform_lengths = talker_code_lengths * samples_per_code - samples_lost_per_chunk * chunks_per_sample
 
-        # `code2wav` is fully causal, so a batched decode followed by a per-sample truncation is equivalent to
-        # decoding each sample on its own. Each waveform is trimmed to its own length rather than padded to a
-        # common one, which would append audible garbage (or silence) to the shorter samples.
-        talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
-        waveform_lengths = talker_code_lengths * int(self.code2wav.total_upsample)
         talker_wavs = [
             wav[..., :length].reshape(-1).float() for wav, length in zip(talker_wavs, waveform_lengths.tolist())
         ]

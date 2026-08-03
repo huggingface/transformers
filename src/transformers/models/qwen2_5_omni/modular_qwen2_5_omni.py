@@ -2036,8 +2036,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
         return model_inputs
 
@@ -2170,6 +2170,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         if attention_mask is not None and position_ids is None:
             past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
             if past_key_values_length == 0 or self.rope_deltas is None:
+                # Left padding offsets every position by the number of pad tokens, so the delta that continues the
+                # positions during decoding has to discount them, exactly as the thinker does. Without this, padded
+                # rows decode with shifted RoPE positions and their audio degrades.
+                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -2187,7 +2191,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                     inputs_embeds[:, -2, :] += self.get_input_embeddings()(
                         torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
                     )
-                self.rope_deltas = rope_deltas
+                self.rope_deltas = rope_deltas - delta0
 
             else:
                 if inputs_embeds is not None:
@@ -2240,8 +2244,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         )
 
     # prepare inputs for talker lm generation
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
         return model_inputs
 
@@ -3787,6 +3791,27 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             ],
             dim=1,
         )
+
+        # In a batch, rows that finished early keep being forwarded with pad tokens, so their trailing
+        # hidden states are meaningless. Rewrite each row's reply stream so the text EOS embedding sits
+        # right after its last real token, followed by pad embeddings. For the longest row this matches
+        # the appended `eos_embedding`/`pad_embedding` above, keeping single-sample behavior unchanged.
+        thinker_eos_token_id = thinker_kwargs.get("eos_token_id", self.thinker.generation_config.eos_token_id)
+        if thinker_eos_token_id is not None:
+            thinker_eos_token_ids = torch.as_tensor(thinker_eos_token_id, device=input_ids.device).flatten()
+            is_thinker_eos = (thinker_generate_ids.unsqueeze(-1) == thinker_eos_token_ids).any(dim=-1)
+            generated_length = thinker_generate_ids.shape[1]
+            token_positions = torch.arange(generated_length, device=input_ids.device)
+            first_eos_positions = (
+                torch.where(is_thinker_eos, token_positions, generated_length)
+                .min(dim=-1)
+                .values.clamp(min=1, max=generated_length - 1)
+            )
+            reply_positions = torch.arange(thinker_reply_part.shape[1], device=input_ids.device).unsqueeze(0)
+            pad_positions_mask = (reply_positions >= first_eos_positions.unsqueeze(1)).unsqueeze(-1)
+            eos_positions_mask = (reply_positions == (first_eos_positions - 1).unsqueeze(1)).unsqueeze(-1)
+            thinker_reply_part = torch.where(pad_positions_mask, pad_embedding, thinker_reply_part)
+            thinker_reply_part = torch.where(eos_positions_mask, eos_embedding, thinker_reply_part)
 
         talker_attention_mask = None
         if "attention_mask" in kwargs:
