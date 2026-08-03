@@ -13,7 +13,6 @@ specific language governing permissions and limitations under the License.
 
 # SeamlessM4T
 
-
 ## Overview
 
 The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://huggingface.co/papers/2308.11596) by the Seamless Communication team from Meta AI.
@@ -183,10 +182,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - get_special_tokens_mask
     - save_vocabulary
 
-## SeamlessM4TTokenizerFast
-
-[[autodoc]] SeamlessM4TTokenizerFast
-    - __call__
 
 ## SeamlessM4TFeatureExtractor
 

@@ -102,10 +102,6 @@ print(f"Predicted label: {predicted_label}")
 
 [[autodoc]] ElectraTokenizer
 
-## ElectraTokenizerFast
-
-[[autodoc]] ElectraTokenizerFast
-
 ## Electra specific outputs
 
 [[autodoc]] models.electra.modeling_electra.ElectraForPreTrainingOutput

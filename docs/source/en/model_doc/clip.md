@@ -101,10 +101,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
     - get_special_tokens_mask
     - save_vocabulary
 
-## CLIPTokenizerFast
-
-[[autodoc]] CLIPTokenizerFast
-
 ## CLIPImageProcessor
 
 [[autodoc]] CLIPImageProcessor

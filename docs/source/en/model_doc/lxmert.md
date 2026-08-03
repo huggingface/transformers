@@ -69,10 +69,6 @@ This model was contributed by [eltoto1219](https://huggingface.co/eltoto1219). T
 
 [[autodoc]] LxmertTokenizer
 
-## LxmertTokenizerFast
-
-[[autodoc]] LxmertTokenizerFast
-
 ## Lxmert specific outputs
 
 [[autodoc]] models.lxmert.modeling_lxmert.LxmertModelOutput

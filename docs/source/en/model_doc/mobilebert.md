@@ -85,10 +85,6 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] MobileBertTokenizer
 
-## MobileBertTokenizerFast
-
-[[autodoc]] MobileBertTokenizerFast
-
 ## MobileBert specific outputs
 
 [[autodoc]] models.mobilebert.modeling_mobilebert.MobileBertForPreTrainingOutput

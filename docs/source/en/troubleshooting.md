@@ -30,7 +30,7 @@ Sometimes errors occur, but we are here to help! This guide covers some of the m
 
 2. Create an [Issue](https://github.com/huggingface/transformers/issues/new/choose) on the 🤗 Transformers repository if it is a bug related to the library. Try to include as much information describing the bug as possible to help us better figure out what's wrong and how we can fix it.
 
-3. Check the [Migration](migration) guide if you use an older version of 🤗 Transformers since some important changes have been introduced between versions.
+3. Check the [v5 migration](https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md) guide if you use an older version of 🤗 Transformers since some important changes have been introduced between versions.
 
 For more details about troubleshooting and getting help, take a look at [Chapter 8](https://huggingface.co/course/chapter8/1?fw=pt) of the Hugging Face course.
 
@@ -60,7 +60,7 @@ Here are some potential solutions you can try to lessen memory use:
 
 <Tip>
 
-Refer to the Performance [guide](performance) for more details about memory-saving techniques.
+Refer to the **Training > Performance > Memory optimization** section for more details about memory-saving techniques.
 
 </Tip>
 

@@ -150,10 +150,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] Qwen2Tokenizer
     - save_vocabulary
 
-## Qwen2TokenizerFast
-
-[[autodoc]] Qwen2TokenizerFast
-
 ## Qwen2RMSNorm
 
 [[autodoc]] Qwen2RMSNorm

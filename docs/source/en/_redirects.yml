@@ -1,7 +1,16 @@
 # Optimizing inference
 
-perf_infer_gpu_many: perf_infer_gpu_one
+perf_infer_gpu_many: perf_infer_gpu_multi
+perf_infer_gpu_one: attention_interface
 perf_train_cpu_many: perf_train_cpu
-transformers_agents: agents
 quantization: quantization/overview
 serving: serve-cli/serving
+
+# Removed in v5
+
+transformers_agents: index
+perf_train_gpu_one: optimization_overview
+performance: optimization_overview
+task_summary: pipeline_tutorial
+model_summary: index
+migration: index

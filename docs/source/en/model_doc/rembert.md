@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # RemBERT
 
-
 ## Overview
 
 The RemBERT model was proposed in [Rethinking Embedding Coupling in Pre-trained Language Models](https://huggingface.co/papers/2010.12821) by Hyung Won Chung, Thibault Févry, Henry Tsai, Melvin Johnson, Sebastian Ruder.
@@ -62,11 +61,6 @@ also similar to the Albert one rather than the BERT one.
     - get_special_tokens_mask
     - save_vocabulary
 
-## RemBertTokenizerFast
-
-[[autodoc]] RemBertTokenizerFast
-    - get_special_tokens_mask
-    - save_vocabulary
 
 ## RemBertModel
 
