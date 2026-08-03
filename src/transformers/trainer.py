@@ -56,6 +56,7 @@ from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.utils import clip_grad_norm
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -741,7 +742,10 @@ class Trainer:
                     if self.args.parallelism_config is None:
                         from accelerate import ParallelismConfig
 
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
+                        args["parallelism_config"] = ParallelismConfig(
+                            tp_size=self.model.tp_size,
+                            dp_shard_size=self.args.world_size // self.model.tp_size,
+                        )
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             elif args["parallelism_config"].tp_size != self.model.tp_size:
@@ -828,6 +832,7 @@ class Trainer:
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
+        self.is_native_distributed = getattr(self.model.config, "distributed_config", None) is not None
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
@@ -1177,6 +1182,22 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+
+            if self.is_native_distributed:
+                # Expert params are DTensors while the rest stay plain, and the fused/foreach kernels
+                # reject a mixed list. Split each group so every group is homogeneous; hyperparameters
+                # are copied verbatim, so the weight-decay grouping is preserved.
+                from torch.distributed.tensor import DTensor
+
+                split_groups = []
+                for group in optimizer_grouped_parameters:
+                    params = group.pop("params")
+                    dtensor_params = [p for p in params if isinstance(p, DTensor)]
+                    plain_params = [p for p in params if not isinstance(p, DTensor)]
+                    for subset in (dtensor_params, plain_params):
+                        if subset:
+                            split_groups.append({**group, "params": subset})
+                optimizer_grouped_parameters = split_groups
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -2519,13 +2540,18 @@ class Trainer:
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        if self.is_native_distributed:
+            return clip_grad_norm(model.parameters(), self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+            if self.is_native_distributed:
+                grad_norm = clip_grad_norm(model.parameters(), float("inf"))
+            else:
+                grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
         if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             if hasattr(grad_norm, "item"):
