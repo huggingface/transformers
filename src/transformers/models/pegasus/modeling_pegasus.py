@@ -851,7 +851,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.model = PegasusModel(config)
-        self.final_logits_bias = nn.Buffer( torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
