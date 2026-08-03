@@ -1369,5 +1369,8 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.base_lm.embed_tokens
+
 
 __all__ = ["VoxCPM2Model", "VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
