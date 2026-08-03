@@ -2091,6 +2091,82 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         generation_output.audio = audio
         return generation_output
 
+    @torch.inference_mode()
+    def generate_streaming(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        min_new_audio_patches: int | None = None,
+        max_new_audio_patches: int | None = None,
+        num_inference_steps: int = 10,
+        guidance_scale: float | None = None,
+        temperature: float | None = None,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        decoder_context_patches: int = 3,
+        generator: torch.Generator | None = None,
+        return_dict_in_generate: bool | None = None,
+        **kwargs,
+    ) -> Generator[torch.Tensor | VoxCPM2GenerationOutput, None, None]:
+        r"""Streams waveform chunks from a mixed text-audio prompt."""
+        del attention_mask
+        (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+        ) = self._resolve_generation_parameters(
+            generation_config,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+            kwargs,
+        )
+
+        decoder_context = self._prepare_decoder_context(
+            audio_features,
+            audio_mask,
+            decoder_context_patches=decoder_context_patches,
+        )
+        audio_vae_dtype = next(self.audio_vae.parameters()).dtype
+        feature_stream = self._generate_audio_features_streaming(
+            input_ids=input_ids,
+            text_mask=text_mask,
+            audio_features=audio_features,
+            audio_mask=audio_mask,
+            min_new_audio_patches=min_new_audio_patches,
+            max_new_audio_patches=max_new_audio_patches,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            temperature=temperature,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+            generator=generator,
+        )
+
+        with self.audio_vae.streaming_decode() as streaming_decoder:
+            if decoder_context.shape[1] > 0:
+                context_features = decoder_context.reshape(decoder_context.shape[0], -1, decoder_context.shape[-1])
+                context_features = context_features.transpose(1, 2).contiguous()
+                streaming_decoder.decode_chunk(context_features.to(audio_vae_dtype))
+
+            for generation_output in feature_stream:
+                audio = streaming_decoder.decode_chunk(generation_output.latent_features.to(audio_vae_dtype)).squeeze(
+                    1
+                )
+                if not return_dict_in_generate:
+                    yield audio
+                else:
+                    generation_output.audio = audio
+                    yield generation_output
+
     @can_return_tuple
     @auto_docstring
     def forward(
