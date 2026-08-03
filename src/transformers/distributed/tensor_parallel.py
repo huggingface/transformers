@@ -18,7 +18,7 @@ import re
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 logger = logging.get_logger(__name__)
@@ -26,13 +26,10 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-if is_torch_available() and is_torch_greater_or_equal("2.5"):
+if is_torch_distributed_available():
     import torch.distributed as dist
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
-
-    # Cache this result has it's a C FFI call which can be pretty time-consuming
-    _torch_distributed_available = torch.distributed.is_available()
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -93,47 +90,40 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 
 
 @contextlib.contextmanager
-def _params_to_local(module):
+def _use_local_dtensor_params(module):
+    # Kernels as DeepGEMM require local tensors rather than DTensors.
+    # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
     originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
-    for name, param in originals.items():
-        module._parameters[name] = param.to_local()
+    local_params = {name: param.to_local() for name, param in originals.items()}
+    module._parameters.update(local_params)
     try:
         yield
     finally:
-        module._parameters.update(originals)
+        for name, original in originals.items():
+            current = module._parameters[name]
 
+            if current is local_params[name]:
+                module._parameters[name] = original
 
-def _activation_to_local(args, grad_placements=None):
-    """Swap a DTensor activation for its local shard.
-
-    ``grad_placements`` declares the placement of the *gradient* of that local tensor.
-    It matters whenever the gradient's placement differs from the forward's: without it
-    ``to_local`` assumes the forward placement, so a replicated input whose gradient is
-    really ``Partial`` never gets its per-rank contributions summed.
-    """
-    if args and isinstance(args[0], DTensor):
-        args = (args[0].to_local(grad_placements=grad_placements),) + args[1:]
-    return args
+            # Some kernels such as Megamoe performs changing on FP4 weights and scale factors during its forward pass.
+            # That implies creating a new Parameter so we should not restore the original DTensor.
+            elif current is not None and not isinstance(current, DTensor):
+                replacement = DTensor.from_local(
+                    current,
+                    original.device_mesh,
+                    original.placements,
+                    run_check=False,
+                )
+                module._parameters[name] = torch.nn.Parameter(
+                    replacement,
+                    requires_grad=current.requires_grad,
+                )
 
 
 class TensorParallelLayer:
-    """Base TP style. DTensor lives only at module boundaries:
-
-    1. ``transform_inputs_pre_forward``: wrap/redistribute the input to the layout the kernel needs.
-    2. ``unwrap_for_kernel``: swap the input activation and any DTensor params for their local
-       shards, so the kernel always runs on plain tensors (quantized weights are plain local
-       shards already and would not compose with DTensor inputs).
-    3. ``transform_output_post_forward``: re-wrap the plain kernel output with the placement the
-       local math produced (e.g. ``Shard(-1)`` for colwise, ``Partial`` for rowwise) and
-       redistribute it to ``output_layouts``.
-
-    Step 2 drops out of the autograd graph's view of the mesh, so a style whose input
-    gradient is not in the same placement as its input must say so via
-    ``input_grad_placements``.
-    """
-
-    # Placement of the gradient of the localized input activation; None = same as the forward.
-    input_grad_placements = None
+    def requires_local_tensors(self, module):
+        """Whether this module's forward requires local inputs and parameters."""
+        return False
 
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
@@ -142,11 +132,10 @@ class TensorParallelLayer:
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         return args, kwargs
 
-    @contextlib.contextmanager
-    def unwrap_for_kernel(self, module, args, kwargs, mesh):
-        args = _activation_to_local(args, self.input_grad_placements)
-        with _params_to_local(module):
-            yield args, kwargs
+    def context_around_forward(self, module, mesh):
+        if self.requires_local_tensors(module):
+            return _use_local_dtensor_params(module)
+        return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
         return output
@@ -157,7 +146,7 @@ class TensorParallelLayer:
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
+            with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
@@ -176,6 +165,9 @@ class ColwiseParallel(TensorParallelLayer):
         # input gradient (dY_r @ W_r) is one term of a sum and has to be reduced across ranks.
         self.input_grad_placements = [Partial()]
 
+    def requires_local_tensors(self, module):
+        return getattr(module, "_hf_tp_requires_local_tensors", False)
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -192,10 +184,15 @@ class ColwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
+        if self.requires_local_tensors(module):
+            # After a DTensor becomes a local tensor, DTensor can no longer infer how
+            # the local gradients are distributed. The forward() sees replicated input + partial weights
+            # which means input gradient will be partial as well.
+            x = x.to_local(grad_placements=[Partial()])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
-        # The local kernel produced this rank's shard of the output features (last dim).
+        # The local forward produced this rank's shard of the output features (last dim).
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
@@ -215,6 +212,9 @@ class RowwiseParallel(TensorParallelLayer):
         self.input_layouts = input_layouts or Shard(-1)
         self.output_layouts = output_layouts or Replicate()
         self.use_local_output = use_local_output
+
+    def requires_local_tensors(self, module):
+        return getattr(module, "_hf_tp_requires_local_tensors", False)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -238,31 +238,36 @@ class RowwiseParallel(TensorParallelLayer):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired], async_op=True)
+        if self.requires_local_tensors(module):
+            x = x.to_local()
         return (x,) + args[1:], kwargs
 
     @contextlib.contextmanager
-    def unwrap_for_kernel(self, module, args, kwargs, mesh):
-        if isinstance(module, torch.nn.Embedding):
-            # A vocab-sharded lookup needs DTensor's masked embedding kernel; keep everything distributed.
-            yield args, kwargs
-            return
-        # Each rank computes a partial sum, so the replicated bias must be added exactly once.
-        bias = module._parameters.get("bias")
-        if bias is not None and mesh.get_local_rank() != 0:
-            module._parameters["bias"] = None
-        try:
-            with super().unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
-                yield args, kwargs
-        finally:
+    def context_around_forward(self, module, mesh):
+        if not self.requires_local_tensors(module):
+            yield
+        else:
+            # A rowwise local forward must produce only its partial matmul. If we don't hide
+            # the bias, we will be adding the bias x world_size times which is not correct.
+            # We should add it once after the all_reduce (redistribute).
+            bias = module._parameters.get("bias")
             if bias is not None:
-                module._parameters["bias"] = bias
+                module._parameters["bias"] = None
+            try:
+                with _use_local_dtensor_params(module):
+                    yield
+            finally:
+                if bias is not None:
+                    module._parameters["bias"] = bias
 
     def transform_output_post_forward(self, module, output, mesh):
-        # The local kernel produced partial sums (weight is sharded along the input dim).
+        # The local forward produced partial sums (weight is sharded along the input dim).
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
         if output.placements != (self.output_layouts,):
             output = output.redistribute(placements=[self.output_layouts], async_op=True)
+        if self.requires_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
+            output = output + bias
         return output.to_local() if self.use_local_output else output
 
 
@@ -286,6 +291,29 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 
         module.register_full_backward_hook(_all_reduce_grads)
         return module
+
+
+class AllReduceParallel(TensorParallelLayer):
+    """All-reduce a module's partial forward output across the TP mesh."""
+
+    def transform_output_post_forward(self, module, output, mesh):
+        if output is None:
+            return None
+        if not isinstance(output, DTensor):
+            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
+        if output.placements != (Replicate(),):
+            output = output.redistribute(placements=[Replicate()])
+        return output.to_local()
+
+
+class MlaKvAProjParallel(TensorParallelLayer):
+    """All-reduce the rotary branch gradient of an MLA KV-A projection."""
+
+    def transform_output_post_forward(self, module, output, mesh):
+        rope_dim = module.config.qk_rope_head_dim
+        pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
+        rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
+        return torch.cat([pass_output, rope_output], dim=-1)
 
 
 class SequenceParallel(TensorParallelLayer):
@@ -321,35 +349,36 @@ class SequenceParallel(TensorParallelLayer):
 # =============================================================================
 
 
-def _packed_output_shard_dim(param_ndim: int) -> int:
-    """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
-    if param_ndim == 1:
-        return -1
-    return param_ndim - 2
-
-
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
     def __init__(
         self,
         *,
-        input_layouts=None,
         use_local_output: bool = True,
         split_factor: int = 2,
     ):
-        self.input_layouts = (input_layouts or Replicate(),)
+        self.input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
         self.split_factor = split_factor
         # Same as ColwiseParallel: replicated input, output-dim sharded weight, so the input
         # gradient is partial.
         self.input_grad_placements = [Partial()]
 
+    def requires_local_tensors(self, module):
+        return True
+
+    def _packed_output_shard_dim(self, param_ndim: int) -> int:
+        """Dimension holding packed gate/up features: dim 0 for 2D Linear, dim 1 for 3D MoE experts."""
+        if param_ndim == 1:
+            return -1
+        return param_ndim - 2
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        shard_dim = _packed_output_shard_dim(meta.ndim)
+        shard_dim = self._packed_output_shard_dim(meta.ndim)
         # Wrap as a DTensor placeholder. Runs on meta — distribute_tensor builds metadata only.
         if meta.ndim == 1:
             placement = Shard(shard_dim)
@@ -362,10 +391,16 @@ class PackedColwiseParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         input_tensor = args[0]
+        # Ensure the input is a Replicate DTensor on the TP mesh.
         if not isinstance(input_tensor, DTensor):
             input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
+
+        # The packed kernels runs on local tensors, so Dtensor cannot infer the layout of the
+        # gradient produced by the kernel. The kernel sees replicated input + partial weights
+        # which means input gradient will be partial as well
+        input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -399,7 +434,7 @@ class MoEParamShard(TensorParallelLayer):
         )
 
 
-if is_torch_available() and is_torch_greater_or_equal("2.5"):
+if is_torch_distributed_available():
 
     class _AllReduceBackward(torch.autograd.Function):
         """Identity forward, allreduce-sum backward.
@@ -417,6 +452,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
         @staticmethod
         def backward(ctx, grad):
+            grad = grad.contiguous()
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
@@ -424,6 +460,9 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 class MoEExpertsParallel(TensorParallelLayer):
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
+
+    def requires_local_tensors(self, module):
+        return True
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
         hidden_states, top_k_index, top_k_weights = args
@@ -448,7 +487,7 @@ class MoEExpertsParallel(TensorParallelLayer):
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
-            with self.unwrap_for_kernel(module, args, kwargs, mesh) as (args, kwargs):
+            with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
             return self.transform_output_post_forward(module, output, mesh)
 
@@ -516,6 +555,9 @@ class RouterParallelMegaMoe(EpRouterParallel):
     ``EpRouterParallel`` does.
     """
 
+    def transform_output_post_forward(self, module, output, mesh):
+        return output
+
 
 class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
     """TP layer for DeepGEMM Mega MoE experts.
@@ -530,6 +572,9 @@ class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
         hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
         return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
 
+    def context_around_forward(self, module, mesh):
+        return _use_local_dtensor_params(module)
+
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
@@ -542,10 +587,12 @@ class ParallelInterface(GeneralInterface):
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-            "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
+            "packed_colwise": PackedColwiseParallel(),
             "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "all_reduce": AllReduceParallel(),
+            "mla_kv_a_proj": MlaKvAProjParallel(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "moe_tp_experts": MoEExpertsParallel(output_layouts=Replicate()),
             "moe_identity_expert": MoeIdentityParallel(),
@@ -553,7 +600,7 @@ class ParallelInterface(GeneralInterface):
             "megamoe_router": RouterParallelMegaMoe(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
         }
-        if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
+        if is_torch_distributed_available()
         else {}
     )
 
@@ -572,6 +619,8 @@ def apply_tensor_parallelism(model, tp_mesh):
                 ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            if style_name == "mla_kv_a_proj":
+                module.config = model.config.get_text_config()
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     return model

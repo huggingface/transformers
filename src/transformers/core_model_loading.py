@@ -1359,7 +1359,9 @@ def set_param_for_module(
             if is_dtensor(ref):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 dtensor_param = _dtensor_from_local_like(local_param, ref)
-                param_value = torch.nn.Parameter(dtensor_param, requires_grad=ref.requires_grad)
+                param_value = torch.nn.Parameter(
+                    dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
+                )
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
@@ -1545,11 +1547,9 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
-    device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1586,8 +1586,6 @@ def convert_and_load_state_dict_in_model(
 
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1665,20 +1663,9 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle TP/Dtensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            materialize_device = param_device
 
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
-                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                        )
-                    sharding_op = mapping.distributed_operation
-                    materialize_device = device_map[""]
 
             future_or_tensor = spawn_materialize(
                 thread_pool,

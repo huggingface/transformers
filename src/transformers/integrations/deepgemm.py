@@ -44,7 +44,6 @@ from ..utils.import_utils import (
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from ..distributed.utils import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -650,10 +649,10 @@ def deepgemm_bf16_experts_forward(
         hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
     )
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_down = to_local(self.down_proj)
-    up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
-    down_bias = to_local(self.down_proj_bias) if self.has_bias else None
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_down = self.down_proj
+    up_bias = (self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
+    down_bias = self.down_proj_bias if self.has_bias else None
 
     # Up projection.
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
@@ -717,10 +716,10 @@ def deepgemm_fp8_fp4_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, is_sm100())
     (
@@ -795,11 +794,11 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     side Parameters — the kernel takes raw pointers.
     """
     deepgemm = load_deepgemm_kernel()
-    gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
-    down_sf_raw = to_local(module.down_proj_scale_inv.data)
+    gate_up_sf_raw = module.gate_up_proj_scale_inv.data
+    down_sf_raw = module.down_proj_scale_inv.data
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
-    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
+    down_w = module.down_proj.data.view(torch.int8).contiguous()
 
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts

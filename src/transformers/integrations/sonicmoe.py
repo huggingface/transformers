@@ -30,7 +30,6 @@ from packaging import version
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available, maybe_import_error
 from .hub_kernels import lazy_load_kernel
-from ..distributed.utils import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -230,10 +229,10 @@ def sonicmoe_experts_forward(
     # already zero (RouterParallel masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
-    w1 = to_local(self.gate_up_proj)
-    w2 = to_local(self.down_proj)
-    b1 = to_local(self.gate_up_proj_bias) if self.has_bias else None
-    b2 = to_local(self.down_proj_bias) if self.has_bias else None
+    w1 = self.gate_up_proj
+    w2 = self.down_proj
+    b1 = self.gate_up_proj_bias if self.has_bias else None
+    b2 = self.down_proj_bias if self.has_bias else None
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()

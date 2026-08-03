@@ -14,12 +14,14 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
+    from torch.distributed.tensor import DTensor
+
     from .configuration_utils import DistributedConfig
 
 
@@ -33,7 +35,7 @@ def _is_torch_distributed_initialized() -> bool:
     return torch.distributed.is_initialized()
 
 
-def is_dtensor(obj) -> bool:
+def is_dtensor(obj: object) -> TypeGuard[DTensor]:
     if not is_torch_distributed_available():
         return False
     from torch.distributed.tensor import DTensor
@@ -113,7 +115,7 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-#TODO(3outeille): unify initialization across parallelism
+# TODO(3outeille): unify initialization across parallelism
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -156,6 +158,7 @@ def initialize_tensor_parallelism(
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
     return device_map, device_mesh
+
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load

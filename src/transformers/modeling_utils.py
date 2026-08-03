@@ -53,6 +53,8 @@ from .core_model_loading import (
 )
 from .distributed import DistributedConfig
 from .distributed.mixin import DistributedMixin
+from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
 from .distributed.utils import (
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
@@ -81,8 +83,6 @@ from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
-from .distributed.tensor_parallel import _get_parameter_tp_plan, verify_tp_plan
-from .distributed.sharding_utils import _dtensor_from_local_like
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -163,9 +163,9 @@ SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreT
 _is_quantized = False
 _is_ds_init_called = False
 
-#TODO(3outeille): remove this after rebasing on https://github.com/huggingface/transformers/pull/47619 PR
-# if torch.distributed.is_available():
-#     from torch.distributed import DTensor
+# TODO(3outeille): remove this after rebasing on https://github.com/huggingface/transformers/pull/47619
+if torch.distributed.is_available():
+    from torch.distributed.tensor import DTensor
 
 
 @dataclass(frozen=True)
@@ -4760,8 +4760,8 @@ class PreTrainedModel(
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
-            #TODO(3outeille): add distributed guarding after rebasing
-            if isinstance(param, DTensor):
+            # TODO(3outeille): remove the distributed guard after rebasing
+            if torch.distributed.is_available() and isinstance(param, DTensor):
                 local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
                 value = torch.nn.Parameter(
                     _dtensor_from_local_like(local, param),
