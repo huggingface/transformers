@@ -60,7 +60,6 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
-    from torch.fx.experimental.symbolic_shapes import guard_or_true
     from torch.nn.attention import SDPBackend, sdpa_kernel
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
@@ -494,6 +493,7 @@ def _patch_remove_empty_tensors_from_cat(_original):
     inputs conservatively (the pass is purely an optimisation).
     """
     from executorch.exir.dialects._ops import ops as exir_ops
+    from torch.fx.experimental.symbolic_shapes import guard_or_true
 
     def patch(self, graph_module, cat_node):
         pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
