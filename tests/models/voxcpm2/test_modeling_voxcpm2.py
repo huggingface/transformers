@@ -609,3 +609,61 @@ def test_conditional_flow_matching_euler_steps():
         use_cfg_zero_star=False,
     )
     torch.testing.assert_close(generated_sample, initial_sample - 1.5 * derivative, rtol=1e-6, atol=1e-6)
+
+
+@require_torch
+def test_conditional_flow_matching_loss():
+    config = VoxCPM2Config(
+        lm_config={
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "no_rope": True,
+            "rope_parameters": None,
+        },
+        dit_config={
+            "hidden_dim": 8,
+            "ffn_dim": 16,
+            "num_heads": 2,
+            "num_layers": 1,
+            "kv_channels": 4,
+            "cfm_config": {
+                "t_scheduler": "uniform",
+                "training_cfg_rate": 0.0,
+                "noise_cond_prob_range": (0.0, 0.0),
+                "noise_cond_scale": 0.0,
+            },
+        },
+        feat_dim=4,
+        audio_vae_config={"latent_dim": 4},
+    )
+    model = VoxCPM2ConditionalFlowMatching(config)
+    estimator = torch.nn.Identity()
+    estimator.forward = lambda sample, mu, timestep, conditioning, delta_timestep: torch.zeros_like(sample)
+    model.estimator = estimator
+
+    target = torch.randn(2, 4, 3)
+    mu = torch.randn(2, 4)
+    conditioning = torch.randn(2, 4, 3)
+    target_mask = torch.tensor([[[1.0, 1.0, 0.0]], [[1.0, 0.0, 0.0]]])
+
+    torch.manual_seed(11)
+    torch.rand(2)
+    torch.randn_like(conditioning)
+    torch.rand(2)
+    torch.rand(2)
+    torch.rand(2)
+    noise = torch.randn_like(target)
+    target_velocity = noise - target
+    losses = torch.nn.functional.mse_loss(torch.zeros_like(target_velocity), target_velocity, reduction="none").mean(
+        dim=1
+    )
+    expected_loss = (losses * target_mask.squeeze(1)).sum() / target_mask.sum()
+
+    torch.manual_seed(11)
+    loss = model.compute_loss(target, mu, conditioning, target_mask=target_mask)
+    torch.testing.assert_close(loss, expected_loss, rtol=0, atol=0)
