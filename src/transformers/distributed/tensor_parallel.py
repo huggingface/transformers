@@ -93,15 +93,38 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 
 
 @contextlib.contextmanager
-def _remaining_dtensor_params_to_local(module):
-    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
-    for name, param in originals.items():
-        module._parameters[name] = param.to_local()
+def _use_local_dtensor_params(module):
+    # Kernels as DeepGEMM require local tensors rather than DTensors.
+    # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
+    originals = {
+        name: param
+        for name, param in module.named_parameters(recurse=False)
+        if isinstance(param, DTensor)
+    }
+    local_params = {name: param.to_local() for name, param in originals.items()}
+    module._parameters.update(local_params)
     try:
         yield
     finally:
-        module._parameters.update(originals)
+        for name, original in originals.items():
+            current = module._parameters[name]
 
+            if current is local_params[name]:
+                module._parameters[name] = original
+
+            # Some kernels such as Megamoe performs changing on FP4 weights and scale factors during its forward pass.
+            # That implies creating a new Parameter so we should not restore the original DTensor.
+            elif current is not None and not isinstance(current, DTensor):
+                replacement = DTensor.from_local(
+                    current,
+                    original.device_mesh,
+                    original.placements,
+                    run_check=False,
+                )
+                module._parameters[name] = torch.nn.Parameter(
+                    replacement,
+                    requires_grad=current.requires_grad,
+                )
 
 class TensorParallelLayer:
     def requires_local_tensors(self, module):
@@ -117,7 +140,7 @@ class TensorParallelLayer:
 
     def context_around_forward(self, module, mesh):
         if self.requires_local_tensors(module):
-            return _remaining_dtensor_params_to_local(module)
+            return _use_local_dtensor_params(module)
         return contextlib.nullcontext()
 
     def transform_output_post_forward(self, module, output, mesh):
@@ -234,7 +257,7 @@ class RowwiseParallel(TensorParallelLayer):
             if bias is not None:
                 module._parameters["bias"] = None
             try:
-                with _remaining_dtensor_params_to_local(module):
+                with _use_local_dtensor_params(module):
                     yield
             finally:
                 if bias is not None:
@@ -508,6 +531,9 @@ class RouterParallelMegaMoe(EpRouterParallel):
     ``EpRouterParallel`` does.
     """
 
+    def transform_output_post_forward(self, module, output, mesh):
+        return output
+
 
 class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
     """TP layer for DeepGEMM Mega MoE experts.
@@ -521,6 +547,9 @@ class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
         hidden_states, top_k_index, top_k_weights = args[0], args[1], args[2]
         return (hidden_states, top_k_index, top_k_weights, mesh.get_group()), kwargs
+
+    def context_around_forward(self, module, mesh):
+        return _use_local_dtensor_params(module)
 
     def transform_output_post_forward(self, module, output, mesh):
         return output
