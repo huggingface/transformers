@@ -12,10 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from pathlib import Path
 
 import torch
 from safetensors.torch import load_file
+
+from transformers import (
+    DacFeatureExtractor,
+    GenerationConfig,
+    VoxCPM2Config,
+    VoxCPM2Model,
+    VoxCPM2Processor,
+    VoxCPM2Tokenizer,
+)
 
 
 def _convert_weight_norm_key(key: str) -> str:
@@ -82,3 +92,52 @@ def _load_source_state_dicts(input_path: str | Path) -> tuple[dict[str, torch.Te
         raise FileNotFoundError(f"No AudioVAE checkpoint found in {input_path}")
 
     return _load_checkpoint_file(model_path), _load_checkpoint_file(audio_vae_path)
+
+
+def convert_checkpoint(input_path: str | Path, output_path: str | Path, push_to_hub: str | None = None):
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    with open(input_path / "config.json", encoding="utf-8") as config_file:
+        config = VoxCPM2Config(**json.load(config_file))
+    config.architectures = ["VoxCPM2Model"]
+
+    model_state_dict, audio_vae_state_dict = _load_source_state_dicts(input_path)
+    converted_state_dict = convert_voxcpm2_state_dict(model_state_dict, audio_vae_state_dict)
+    with torch.device("meta"):
+        model = VoxCPM2Model(config)
+    model.load_state_dict(converted_state_dict, strict=True, assign=True)
+    model.eval()
+
+    tokenizer = VoxCPM2Tokenizer.from_pretrained(input_path)
+    tokenizer.init_kwargs.pop("auto_map", None)
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.unk_token
+    feature_extractor = DacFeatureExtractor(
+        feature_size=1,
+        sampling_rate=config.audio_vae_config.sample_rate,
+        padding_value=0.0,
+        hop_length=1,
+        return_attention_mask=True,
+    )
+    processor = VoxCPM2Processor(
+        feature_extractor,
+        tokenizer,
+        audio_patch_size=config.patch_size * config.audio_vae_config.hop_length,
+    )
+    generation_config = GenerationConfig.from_model_config(config)
+    generation_config.min_new_tokens = 4
+    generation_config.max_new_tokens = 2000
+    generation_config.guidance_scale = config.dit_config.cfm_config.inference_cfg_rate
+    generation_config.temperature = 1.0
+
+    output_path.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(output_path)
+    processor.save_pretrained(output_path)
+    generation_config.save_pretrained(output_path)
+
+    if push_to_hub is not None:
+        model.push_to_hub(push_to_hub)
+        processor.push_to_hub(push_to_hub)
+        generation_config.push_to_hub(push_to_hub)
+
+    return model, processor
