@@ -652,6 +652,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -664,6 +665,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 
