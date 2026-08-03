@@ -267,6 +267,30 @@ def test_generation_input_validation():
 
 
 @require_torch
+def test_generation_audio_extraction_uses_attention_mask():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config())
+    input_values = torch.tensor([[[0.0, 0.0, 2.0, 0.0, 3.0, 0.0]]])
+
+    left_padded = model._extract_generation_audio(input_values, torch.tensor([[0, 0, 1, 1, 1, 1]]))
+    right_padded = model._extract_generation_audio(input_values, torch.tensor([[1, 1, 1, 1, 0, 0]]))
+
+    assert left_padded.tolist() == [[[2.0, 0.0, 3.0, 0.0]]]
+    assert right_padded.tolist() == [[[0.0, 0.0, 2.0, 0.0]]]
+    torch.testing.assert_close(model._extract_generation_audio(input_values[:, 0]), input_values)
+
+    with pytest.raises(ValueError, match="contiguous"):
+        model._extract_generation_audio(input_values, torch.tensor([[1, 0, 1, 0, 0, 0]]))
+    with pytest.raises(ValueError, match="zeros and ones"):
+        model._extract_generation_audio(input_values, torch.tensor([[1, 2, 1, 0, 0, 0]]))
+    with pytest.raises(ValueError, match="unmasked sample"):
+        model._extract_generation_audio(input_values, torch.zeros(1, 6))
+    with pytest.raises(ValueError, match="shape"):
+        model._extract_generation_audio(torch.zeros(1, 2, 6))
+    with pytest.raises(ValueError, match="one audio sample"):
+        model._extract_generation_audio(torch.zeros(2, 1, 6))
+
+
+@require_torch
 def test_generation_prefill_matches_full_backbones():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 2, 3]])
