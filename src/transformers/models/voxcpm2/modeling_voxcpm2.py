@@ -1398,6 +1398,39 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.base_lm.embed_tokens = value
 
+    def _validate_generation_inputs(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        min_length: int,
+        max_length: int,
+        num_inference_steps: int,
+    ):
+        if audio_features.ndim != 4:
+            raise ValueError("`audio_features` must have shape (batch_size, sequence_length, patch_size, feature_dim)")
+        batch_size, sequence_length, patch_size, feature_dim = audio_features.shape
+        if batch_size != 1:
+            raise ValueError("VoxCPM2 generation currently supports a batch size of 1")
+        if sequence_length == 0:
+            raise ValueError("VoxCPM2 generation requires at least one prompt position")
+        if input_ids.shape != (batch_size, sequence_length):
+            raise ValueError("`input_ids` and `audio_features` must share their batch and sequence dimensions")
+        if text_mask.shape != input_ids.shape or audio_mask.shape != input_ids.shape:
+            raise ValueError("`text_mask` and `audio_mask` must have the same shape as `input_ids`")
+        if patch_size != self.patch_size or feature_dim != self.feat_dim:
+            raise ValueError(
+                f"Expected audio patches with shape ({self.patch_size}, {self.feat_dim}), "
+                f"but received ({patch_size}, {feature_dim})"
+            )
+        if min_length < 0:
+            raise ValueError("`min_length` must be non-negative")
+        if max_length <= 0 or min_length >= max_length:
+            raise ValueError("`max_length` must be positive and greater than `min_length`")
+        if num_inference_steps <= 0:
+            raise ValueError("`num_inference_steps` must be strictly positive")
+
     @can_return_tuple
     @auto_docstring
     def forward(
