@@ -4133,7 +4133,9 @@ class PreTrainedModel(
         for name in ["tp_plan", "tp_size"]:
             if name in kwargs:
                 _ = kwargs.pop(name)
-                raise ValueError(f"`{name}` is no longer accepted by `from_pretrained`, use `distributed_config` instead")
+                raise ValueError(
+                    f"`{name}` is no longer accepted by `from_pretrained`, use `distributed_config` instead"
+                )
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
