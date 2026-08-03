@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.models.voxcpm2.tokenization_voxcpm2 import VoxCPM2Tokenizer
 
 
@@ -33,3 +34,20 @@ def get_tiny_voxcpm2_tokenizer() -> VoxCPM2Tokenizer:
     }
     merges = [("你", "好"), ("▁", "你好"), ("A", "B"), ("▁", "AB")]
     return VoxCPM2Tokenizer(vocab=vocab, merges=merges, pad_token="<pad>")
+
+
+def test_chinese_characters_are_split_before_bpe_merges():
+    tokenizer = get_tiny_voxcpm2_tokenizer()
+    base_tokenizer = LlamaTokenizer(
+        vocab=tokenizer._vocab,
+        merges=tokenizer._merges,
+        pad_token="<pad>",
+        add_prefix_space=True,
+    )
+
+    assert base_tokenizer("你好", add_special_tokens=False).input_ids == [8]
+    assert tokenizer("你好", add_special_tokens=False).input_ids == [4, 5, 6]
+    assert tokenizer.tokenize("你好") == ["▁", "你", "好"]
+    assert (
+        tokenizer("AB", add_special_tokens=False).input_ids == base_tokenizer("AB", add_special_tokens=False).input_ids
+    )
