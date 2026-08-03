@@ -729,6 +729,60 @@ def test_raw_prompt_generation_matches_precomputed_audio_features():
 
 
 @require_torch
+def test_raw_prompt_streaming_matches_precomputed_audio_features():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    processor = get_tiny_voxcpm2_processor()
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+    model_inputs = processor(
+        text="A",
+        audio=np.array([4.0, 5.0, 6.0], dtype=np.float32),
+        prompt_text="B",
+        reference_audio=np.array([1.0, 2.0, 3.0], dtype=np.float32),
+        sampling_rate=16000,
+        return_tensors="pt",
+    )
+    aligned_features = model._prepare_generation_audio_features(
+        model_inputs.input_ids,
+        model_inputs.audio_mask,
+        prompt_input_values=model_inputs.prompt_input_values,
+        prompt_attention_mask=model_inputs.prompt_attention_mask,
+        reference_input_values=model_inputs.reference_input_values,
+        reference_attention_mask=model_inputs.reference_attention_mask,
+    )
+    generation_kwargs = {
+        "min_new_audio_patches": 2,
+        "max_new_audio_patches": 2,
+        "num_inference_steps": 1,
+        "decoder_context_patches": 1,
+    }
+
+    precomputed_chunks = list(
+        model.generate_streaming(
+            model_inputs.input_ids,
+            model_inputs.text_mask,
+            aligned_features,
+            model_inputs.audio_mask,
+            generator=torch.Generator().manual_seed(7),
+            **generation_kwargs,
+        )
+    )
+    raw_chunks = list(
+        model.generate_streaming(
+            **model_inputs,
+            generator=torch.Generator().manual_seed(7),
+            **generation_kwargs,
+        )
+    )
+
+    assert len(raw_chunks) == len(precomputed_chunks) == 2
+    for raw_chunk, precomputed_chunk in zip(raw_chunks, precomputed_chunks):
+        torch.testing.assert_close(raw_chunk, precomputed_chunk, rtol=0, atol=0)
+
+
+@require_torch
 def test_streaming_waveform_generation_matches_non_streaming_generation():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 0, 0]])
