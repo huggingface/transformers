@@ -1595,8 +1595,8 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         text_mask: torch.Tensor,
         audio_features: torch.FloatTensor,
         audio_mask: torch.Tensor,
-        min_length: int,
-        max_length: int,
+        min_new_audio_patches: int,
+        max_new_audio_patches: int,
         num_inference_steps: int,
     ):
         if audio_features.ndim != 4:
@@ -1615,10 +1615,12 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
                 f"Expected audio patches with shape ({self.patch_size}, {self.feat_dim}), "
                 f"but received ({patch_size}, {feature_dim})"
             )
-        if min_length < 0:
-            raise ValueError("`min_length` must be non-negative")
-        if max_length <= 0 or min_length >= max_length:
-            raise ValueError("`max_length` must be positive and greater than `min_length`")
+        if min_new_audio_patches < 0:
+            raise ValueError("`min_new_audio_patches` must be non-negative")
+        if max_new_audio_patches <= 0 or min_new_audio_patches > max_new_audio_patches:
+            raise ValueError(
+                "`max_new_audio_patches` must be positive and greater than or equal to `min_new_audio_patches`"
+            )
         if num_inference_steps <= 0:
             raise ValueError("`num_inference_steps` must be strictly positive")
 
