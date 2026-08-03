@@ -30,7 +30,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..dac.modeling_dac import Snake1d
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
 from ..minicpm4.modeling_minicpm4 import (
@@ -1568,6 +1568,148 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module):
         self.base_lm.embed_tokens = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        loss_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        progress: float = 0.0,
+        sample_generate: bool = False,
+        num_inference_steps: int = 10,
+    ) -> tuple | VoxCPM2ModelOutput:
+        r"""
+        text_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Mask selecting text positions in the mixed text-audio sequence.
+        audio_features (`torch.FloatTensor` of shape
+            `(batch_size, sequence_length, patch_size, feature_dim)`):
+            AudioVAE latent features aligned with the mixed sequence.
+        audio_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Mask selecting audio positions in the mixed text-audio sequence.
+        loss_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Positions used to compute the diffusion loss and, when `labels` are provided, the stop loss.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Accepted for compatibility with the original training batches. VoxCPM2 derives positions internally.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Stop-prediction labels. A `loss_mask` must also be supplied when labels are provided.
+        progress (`float`, *optional*, defaults to 0.0):
+            Fraction of training completed, used by the flow-matching noise schedule.
+        sample_generate (`bool`, *optional*, defaults to `False`):
+            Whether to sample diagnostic audio latents for every input sequence position.
+        num_inference_steps (`int`, *optional*, defaults to 10):
+            Number of Euler steps used when `sample_generate=True`.
+        """
+        if audio_features.ndim != 4:
+            raise ValueError("`audio_features` must have shape (batch_size, sequence_length, patch_size, feature_dim)")
+        batch_size, sequence_length, patch_size, feature_dim = audio_features.shape
+        if input_ids.shape != (batch_size, sequence_length):
+            raise ValueError("`input_ids` and `audio_features` must share their batch and sequence dimensions")
+        if text_mask.shape != input_ids.shape or audio_mask.shape != input_ids.shape:
+            raise ValueError("`text_mask` and `audio_mask` must have the same shape as `input_ids`")
+        if patch_size != self.patch_size or feature_dim != self.feat_dim:
+            raise ValueError(
+                f"Expected audio patches with shape ({self.patch_size}, {self.feat_dim}), "
+                f"but received ({patch_size}, {feature_dim})"
+            )
+        if labels is not None and loss_mask is None:
+            raise ValueError("`loss_mask` must be provided when `labels` are provided")
+        if loss_mask is not None and loss_mask.shape != input_ids.shape:
+            raise ValueError("`loss_mask` must have the same shape as `input_ids`")
+        if labels is not None and labels.shape != input_ids.shape:
+            raise ValueError("`labels` must have the same shape as `input_ids`")
+        if position_ids is not None:
+            logger.warning_once("`position_ids` are ignored because VoxCPM2 derives sequence positions internally.")
+
+        target_dtype = self.enc_to_lm_proj.weight.dtype
+        audio_features = audio_features.to(dtype=target_dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
+
+        embedding_scale = self.config.lm_config.scale_emb if self.config.lm_config.use_mup else 1.0
+        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_mask = text_mask.to(dtype=text_embeddings.dtype)
+        audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
+        inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
+        inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
+
+        encoded_states = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True).last_hidden_state
+        encoded_states = encoded_states.to(target_dtype)
+        encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
+            -1
+        ) + encoded_states * text_mask.unsqueeze(-1)
+        lm_hidden_states = torch.cat((torch.zeros_like(encoded_states[:, :1]), encoded_states[:, :-1]), dim=1)
+
+        residual_inputs = self.fusion_concat_proj(
+            torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+        )
+        residual_states = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True).last_hidden_state
+        residual_states = residual_states.to(target_dtype)
+        residual_hidden_states = torch.cat((torch.zeros_like(residual_states[:, :1]), residual_states[:, :-1]), dim=1)
+
+        diffusion_hidden_states = torch.cat(
+            (self.lm_to_dit_proj(lm_hidden_states), self.res_to_dit_proj(residual_hidden_states)), dim=-1
+        ).reshape(batch_size * sequence_length, -1)
+        target_features = audio_features.reshape(batch_size * sequence_length, patch_size, feature_dim)
+        conditioning_features = torch.cat(
+            (torch.zeros_like(audio_features[:, :1]), audio_features[:, :-1]), dim=1
+        ).reshape(batch_size * sequence_length, patch_size, feature_dim)
+        target_features = target_features.transpose(1, 2).contiguous()
+        conditioning_features = conditioning_features.transpose(1, 2).contiguous()
+
+        diffusion_loss = None
+        if loss_mask is not None:
+            diffusion_mask = loss_mask.to(target_dtype).unsqueeze(-1).expand(-1, -1, patch_size)
+            diffusion_mask = diffusion_mask.reshape(batch_size * sequence_length, patch_size, 1)
+            diffusion_loss = self.feat_decoder.compute_loss(
+                target=target_features,
+                mu=diffusion_hidden_states,
+                conditioning=conditioning_features,
+                target_mask=diffusion_mask.transpose(1, 2).contiguous(),
+                progress=progress,
+            )
+
+        stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
+        stop_loss = None
+        if labels is not None:
+            typed_loss_mask = loss_mask.to(stop_logits.dtype)
+            stop_losses = self.stop_loss(stop_logits.transpose(1, 2), labels)
+            stop_loss = (stop_losses * typed_loss_mask).sum() / torch.clamp(typed_loss_mask.sum(), min=1.0)
+
+        loss = diffusion_loss
+        if stop_loss is not None:
+            loss = stop_loss if loss is None else loss + stop_loss
+
+        generated_latent_features = None
+        if sample_generate:
+            generated_features = self.feat_decoder(
+                mu=diffusion_hidden_states,
+                num_inference_steps=num_inference_steps,
+                patch_size=patch_size,
+                conditioning=conditioning_features,
+            )
+            generated_latent_features = generated_features.transpose(1, 2)
+            generated_latent_features = generated_latent_features.reshape(
+                batch_size, sequence_length * patch_size, feature_dim
+            )
+            generated_latent_features = generated_latent_features.transpose(1, 2).contiguous()
+
+        latent_features = target_features.transpose(1, 2)
+        latent_features = latent_features.reshape(batch_size, sequence_length * patch_size, feature_dim)
+        latent_features = latent_features.transpose(1, 2).contiguous()
+
+        return VoxCPM2ModelOutput(
+            loss=loss,
+            diffusion_loss=diffusion_loss,
+            stop_loss=stop_loss,
+            stop_logits=stop_logits,
+            latent_features=latent_features,
+            generated_latent_features=generated_latent_features,
+        )
 
 
 __all__ = [
