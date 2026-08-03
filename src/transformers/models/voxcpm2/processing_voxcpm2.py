@@ -56,5 +56,28 @@ class VoxCPM2Processor(ProcessorMixin):
         if audio is None and reference_audio is None and not text:
             raise ValueError("`text` cannot be empty for zero-shot generation")
 
+    def _build_generation_sequence(self, text_token_ids, prompt_audio_patches=0, reference_audio_patches=0):
+        if prompt_audio_patches < 0 or reference_audio_patches < 0:
+            raise ValueError("The number of audio patches must be non-negative")
+
+        input_ids = list(text_token_ids) + [self.audio_start_token_id]
+        text_mask = [1] * len(input_ids)
+        if reference_audio_patches:
+            reference_prefix = [self.reference_audio_start_token_id]
+            reference_prefix += [self.audio_placeholder_token_id] * reference_audio_patches
+            reference_prefix += [self.reference_audio_end_token_id]
+            input_ids = reference_prefix + input_ids
+            text_mask = [1] + [0] * reference_audio_patches + [1] + text_mask
+        if prompt_audio_patches:
+            input_ids += [self.audio_placeholder_token_id] * prompt_audio_patches
+            text_mask += [0] * prompt_audio_patches
+
+        return {
+            "input_ids": [input_ids],
+            "attention_mask": [[1] * len(input_ids)],
+            "text_mask": [text_mask],
+            "audio_mask": [[1 - value for value in text_mask]],
+        }
+
 
 __all__ = ["VoxCPM2Processor"]
