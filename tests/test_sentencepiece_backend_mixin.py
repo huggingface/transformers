@@ -1,11 +1,13 @@
 # Sentencepiece backend layer tests
 
+import os
 import shutil
 import tempfile
 from typing import TYPE_CHECKING
 
 from transformers import AutoTokenizer, PythonBackend, TokenizersBackend
 from transformers.tokenization_python import AddedToken
+from transformers.tokenization_utils_sentencepiece import SentencePieceBackend
 
 
 if TYPE_CHECKING:
@@ -105,6 +107,29 @@ class SentencePieceBackendTesterMixin:
             slow_decoded = tokenizer.decode(slow_ids)
             fast_decoded = rust_tokenizer.decode(slow_ids)
             self.assertEqual(slow_decoded, fast_decoded)
+
+    def test_convert_tokens_to_string_byte_fallback(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/47473.
+
+        SentencePieceBackend.convert_tokens_to_string previously did a simple
+        string join, so byte-fallback tokens like <0xF0><0x9F>... were returned
+        as literal strings instead of being decoded back to UTF-8.
+        """
+        vocab_file = os.path.join(os.path.dirname(__file__), "fixtures", "test_sentencepiece_with_bytefallback.model")
+        if not os.path.isfile(vocab_file):
+            self.skipTest(reason="byte-fallback fixture model not found")
+
+        tokenizer = SentencePieceBackend(vocab_file=vocab_file)
+
+        # Emoji is encoded as a sequence of byte-fallback tokens <0xF0><0x9F><0xA4><0x97>.
+        # Before the fix, convert_tokens_to_string returned the literal token strings.
+        text = "foo \U0001f917 bar"
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        tokens = tokenizer.convert_ids_to_tokens(ids)
+        # Ensure at least one byte-fallback token is present in the tokenisation
+        self.assertTrue(any(t.startswith("<0x") for t in tokens), f"Expected byte-fallback tokens in {tokens}")
+        decoded = tokenizer.convert_tokens_to_string(tokens)
+        self.assertEqual(decoded, text, f"Byte-fallback tokens not decoded to UTF-8, got: {decoded!r}")
 
     def test_save_sentencepiece_tokenizer(self) -> None:
         text = "This is text to test the tokenizer."

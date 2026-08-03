@@ -230,9 +230,29 @@ class SentencePieceBackend(PreTrainedTokenizer):
         return token
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
-        """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        """Converts a sequence of tokens (string) in a single string.
+
+        Byte-fallback tokens (e.g. ``<0x0A>``, ``<0xF0>``) produced by
+        SentencePiece models with ``byte_fallback=True`` are decoded correctly
+        by passing them through ``sp_model.decode`` rather than a simple string
+        join.  Special tokens are kept as-is and not fed to the SP model.
+        """
+        all_special_tokens = set(self.all_special_tokens)
+        current_sub_tokens: list[str] = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            if token in all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
