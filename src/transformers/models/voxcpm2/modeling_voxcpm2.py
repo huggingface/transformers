@@ -139,6 +139,31 @@ class VoxCPM2CausalResidualUnit(nn.Module):
         return hidden_states + self.block(hidden_states)
 
 
+class VoxCPM2CausalEncoderBlock(nn.Module):
+    def __init__(self, output_dim: int = 16, input_dim: int | None = None, stride: int = 1, groups: int = 1):
+        super().__init__()
+        input_dim = input_dim or output_dim // 2
+        self.block = nn.Sequential(
+            VoxCPM2CausalResidualUnit(input_dim, dilation=1, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=3, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=9, groups=groups),
+            VoxCPM2Snake1d(input_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                    output_padding=stride % 2,
+                )
+            ),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.block(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()

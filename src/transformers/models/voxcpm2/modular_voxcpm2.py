@@ -564,6 +564,31 @@ class VoxCPM2CausalResidualUnit(nn.Module):
         return hidden_states + self.block(hidden_states)
 
 
+class VoxCPM2CausalEncoderBlock(nn.Module):
+    def __init__(self, output_dim: int = 16, input_dim: int | None = None, stride: int = 1, groups: int = 1):
+        super().__init__()
+        input_dim = input_dim or output_dim // 2
+        self.block = nn.Sequential(
+            VoxCPM2CausalResidualUnit(input_dim, dilation=1, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=3, groups=groups),
+            VoxCPM2CausalResidualUnit(input_dim, dilation=9, groups=groups),
+            VoxCPM2Snake1d(input_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                    output_padding=stride % 2,
+                )
+            ),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.block(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
@@ -869,9 +894,9 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
     ) -> torch.Tensor:
         if self.solver != "euler":
             raise ValueError(f"Unsupported flow-matching solver: {self.solver}")
-        sample = torch.randn(
-            (mu.shape[0], self.in_channels, patch_size), device=mu.device, dtype=mu.dtype
-        ) * temperature
+        sample = (
+            torch.randn((mu.shape[0], self.in_channels, patch_size), device=mu.device, dtype=mu.dtype) * temperature
+        )
         timestep_span = torch.linspace(1, 0, num_inference_steps + 1, device=mu.device, dtype=mu.dtype)
         timestep_span = timestep_span + sway_sampling_coefficient * (
             torch.cos(torch.pi / 2 * timestep_span) - 1 + timestep_span
@@ -1013,8 +1038,7 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         )
 
         ratio_r_neq_t = (
-            self.ratio_r_neq_t_range[0]
-            + progress * (self.ratio_r_neq_t_range[1] - self.ratio_r_neq_t_range[0])
+            self.ratio_r_neq_t_range[0] + progress * (self.ratio_r_neq_t_range[1] - self.ratio_r_neq_t_range[0])
             if self.mean_mode
             else 0.0
         )
@@ -1023,9 +1047,9 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         detached_t_samples = t_samples.detach().clone()
 
         noise = torch.randn_like(target)
-        interpolated_states = (
-            1 - detached_t_samples.view(-1, 1, 1)
-        ) * target + detached_t_samples.view(-1, 1, 1) * noise
+        interpolated_states = (1 - detached_t_samples.view(-1, 1, 1)) * target + detached_t_samples.view(
+            -1, 1, 1
+        ) * noise
         target_velocity = noise - target
 
         def model_function(sample: torch.Tensor, r_timestep: torch.Tensor, t_timestep: torch.Tensor) -> torch.Tensor:
@@ -1046,9 +1070,9 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
                     (interpolated_states, r_samples, t_samples),
                     (target_velocity, r_velocity, t_velocity),
                 )
-            target_velocity = target_velocity - (
-                detached_t_samples - detached_r_samples
-            ).view(-1, 1, 1) * velocity_derivative
+            target_velocity = (
+                target_velocity - (detached_t_samples - detached_r_samples).view(-1, 1, 1) * velocity_derivative
+            )
         else:
             predicted_velocity = model_function(interpolated_states, r_samples, t_samples)
 
