@@ -28,6 +28,7 @@ if is_torch_available():
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
+        VoxCPM2ConditionalFlowMatching,
         VoxCPM2DecoderLayer,
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
@@ -550,3 +551,61 @@ def test_local_dit_matches_reference_layout():
     decoder_output = model.decoder(inputs_embeds=decoder_input, is_causal=False).last_hidden_state
     expected_output = model.out_proj(decoder_output[:, 5:]).transpose(1, 2).contiguous()
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+
+@require_torch
+def test_conditional_flow_matching_euler_steps():
+    config = VoxCPM2Config(
+        lm_config={
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "no_rope": True,
+            "rope_parameters": None,
+        },
+        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
+        feat_dim=4,
+        audio_vae_config={"latent_dim": 4},
+    )
+    model = VoxCPM2ConditionalFlowMatching(config)
+    assert len(model.state_dict()) == 24
+    assert all(key.startswith("estimator.") for key in model.state_dict())
+
+    estimator = torch.nn.Identity()
+    estimator.forward = (
+        lambda sample, mu, timestep, conditioning, delta_timestep: mu[:, :4].unsqueeze(-1).expand_as(sample)
+    )
+    model.estimator = estimator
+
+    sample = torch.randn(2, 4, 3)
+    mu = torch.randn(2, 4)
+    conditioning = torch.randn(2, 4, 3)
+    timestep_span = torch.tensor([1.0, 0.5, 0.0])
+    derivative = mu.unsqueeze(-1).expand_as(sample)
+
+    output = model.solve_euler(sample.clone(), timestep_span, mu, conditioning, cfg_value=1.5, use_cfg_zero_star=False)
+    torch.testing.assert_close(output, sample - 1.5 * derivative, rtol=1e-6, atol=1e-6)
+
+    zero_star_output = model.solve_euler(
+        sample.clone(), timestep_span, mu, conditioning, cfg_value=1.5, use_cfg_zero_star=True
+    )
+    torch.testing.assert_close(zero_star_output, sample - 0.75 * derivative, rtol=1e-6, atol=1e-6)
+
+    torch.manual_seed(7)
+    initial_sample = torch.randn_like(sample) * 0.5
+    torch.manual_seed(7)
+    generated_sample = model(
+        mu,
+        num_inference_steps=2,
+        patch_size=3,
+        conditioning=conditioning,
+        temperature=0.5,
+        cfg_value=1.5,
+        sway_sampling_coefficient=0.0,
+        use_cfg_zero_star=False,
+    )
+    torch.testing.assert_close(generated_sample, initial_sample - 1.5 * derivative, rtol=1e-6, atol=1e-6)
