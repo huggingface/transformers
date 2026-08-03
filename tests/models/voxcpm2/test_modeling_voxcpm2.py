@@ -19,7 +19,11 @@ from transformers.testing_utils import require_torch
 if is_torch_available():
     import torch
 
-    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2ScalarQuantizationLayer, VoxCPM2Snake1d
+    from transformers.models.voxcpm2.modeling_voxcpm2 import (
+        VoxCPM2CausalConv1d,
+        VoxCPM2ScalarQuantizationLayer,
+        VoxCPM2Snake1d,
+    )
 
 
 @require_torch
@@ -82,3 +86,30 @@ def test_snake_activation_matches_reference():
     hidden_states.grad = None
     expected_output.sum().backward()
     torch.testing.assert_close(output_gradient, hidden_states.grad, rtol=0, atol=0)
+
+
+@require_torch
+def test_causal_convolution_matches_reference():
+    layer = VoxCPM2CausalConv1d(2, 4, kernel_size=6, stride=3, padding=2, output_padding=1)
+    assert list(layer.state_dict()) == ["weight", "bias"]
+    assert layer.padding == (0,)
+    assert layer.causal_padding == 3
+
+    hidden_states = torch.randn(2, 2, 19, requires_grad=True)
+    output = layer(hidden_states)
+
+    reference_input = hidden_states.detach().clone().requires_grad_()
+    padded_states = torch.nn.functional.pad(reference_input, (layer.causal_padding, 0))
+    expected_output = torch.nn.functional.conv1d(
+        padded_states,
+        layer.weight,
+        layer.bias,
+        stride=layer.stride,
+        dilation=layer.dilation,
+        groups=layer.groups,
+    )
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    expected_output.sum().backward()
+    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
