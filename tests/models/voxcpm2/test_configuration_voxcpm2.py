@@ -136,6 +136,14 @@ class VoxCPM2ConfigTest(unittest.TestCase):
         self.assertEqual(config.hop_length, 640)
         self.assertEqual(config.decode_hop_length, 1920)
 
+    def test_output_sample_rate(self):
+        config = VoxCPM2Config(audio_vae_config={"out_sample_rate": 24000})
+
+        self.assertEqual(config.sample_rate, 24000)
+        self.assertEqual(config.to_dict()["sample_rate"], 24000)
+        with self.assertRaisesRegex(ValueError, "out_sample_rate"):
+            VoxCPM2Config(sample_rate=16000, audio_vae_config={"out_sample_rate": 24000})
+
     def test_feat_dim_must_match_audio_vae_latent_dim(self):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "must match AudioVAE"):
             VoxCPM2Config(feat_dim=32, audio_vae_config={"latent_dim": 64})
