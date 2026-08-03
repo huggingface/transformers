@@ -23,14 +23,13 @@ from .._typing import PeftConfigLike
 from ..conversion_mapping import get_model_conversion_mapping
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
     check_peft_version,
-    extract_commit_hash,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
@@ -200,6 +199,19 @@ class PeftAdapterMixin:
 
         if peft_config is None:
             load_config.download_kwargs.update(**adapter_kwargs)
+
+        if peft_model_id is not None:
+            # Resolve the revision once, so the adapter config and its weights come from the same repository state.
+            load_config.download_kwargs["revision"] = resolve_revision(
+                peft_model_id,
+                load_config.download_kwargs.get("revision"),
+                token=load_config.download_kwargs.get("token"),
+                proxies=load_config.download_kwargs.get("proxies"),
+                local_files_only=bool(load_config.download_kwargs.get("local_files_only", False)),
+                cache_dir=load_config.download_kwargs.get("cache_dir"),
+            )
+
+        if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 **load_config.download_kwargs,
@@ -669,34 +681,15 @@ def maybe_load_adapters(
 
     token = download_kwargs.get("token")
 
-    if download_kwargs.get("commit_hash") is None:
-        resolved_config_file = cached_file(
-            pretrained_model_name_or_path,
-            CONFIG_NAME,
-            cache_dir=download_kwargs.get("cache_dir"),
-            force_download=bool(download_kwargs.get("force_download", False)),
-            proxies=download_kwargs.get("proxies"),
-            local_files_only=bool(download_kwargs.get("local_files_only", False)),
-            token=token,
-            revision=download_kwargs.get("revision"),
-            subfolder=download_kwargs.get("subfolder"),
-            _raise_exceptions_for_gated_repo=False,
-            _raise_exceptions_for_missing_entries=False,
-            _raise_exceptions_for_connection_errors=False,
-        )
-        download_kwargs["commit_hash"] = extract_commit_hash(resolved_config_file, None)
-
     _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
     token_from_adapter_kwargs = adapter_kwargs.pop("token", None)
 
     if _adapter_model_path is None:
         peft_kwargs = adapter_kwargs.copy()
-        for arg_name in ("cache_dir", "proxies", "subfolder"):  # don't override revision
+        for arg_name in ("cache_dir", "proxies", "subfolder", "revision"):  # never override the user's own value
             if (arg_name not in peft_kwargs) and (arg_name in download_kwargs):
                 peft_kwargs[arg_name] = download_kwargs[arg_name]
-        if "commit_hash" in download_kwargs:
-            peft_kwargs["_commit_hash"] = download_kwargs["commit_hash"]
         peft_kwargs["force_download"] = bool(download_kwargs.get("force_download", False))
         peft_kwargs["local_files_only"] = bool(download_kwargs.get("local_files_only", False))
         peft_kwargs["token"] = token or token_from_adapter_kwargs

@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import ADAPTER_CONFIG_NAME
+from transformers.utils import ADAPTER_CONFIG_NAME, resolve_revision
 
 from ..bert.test_modeling_bert import BertModelTester
 
@@ -489,23 +489,31 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
-        # Make sure we have cached the model.
+        # A warm cache only needs the one call resolving `main` into a commit hash: every file is then read from the
+        # cache, without revalidating anything against the Hub.
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter["HEAD"], 0)
+        self.assertEqual(counter["GET"], 1)
         self.assertEqual(counter.total_calls, 1)
 
         # With a sharded checkpoint
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter["HEAD"], 0)
+        self.assertEqual(counter["GET"], 1)
         self.assertEqual(counter.total_calls, 1)
+
+    def test_pinned_model_has_no_calls_to_head(self):
+        # An immutable revision does not even need to be resolved: a warm cache is enough to load the whole model.
+        commit_hash = resolve_revision("hf-internal-testing/tiny-random-bert")
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", revision=commit_hash)
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", revision=commit_hash)
+        self.assertEqual(counter.total_calls, 0)
 
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping

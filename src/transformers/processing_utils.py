@@ -62,6 +62,7 @@ from .utils import (
     is_torch_available,
     list_repo_templates,
     logging,
+    resolve_revision,
 )
 from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
@@ -1231,7 +1232,8 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available)
+        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
+        # the user, as the audio tokenizer usually lives in another repository.
         audio_tokenizer_kwargs = copy.deepcopy(kwargs)
 
         cache_dir = kwargs.pop("cache_dir", None)
@@ -1241,6 +1243,16 @@ class ProcessorMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that the template listing and all the files below come from the same repo state
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -1721,7 +1733,15 @@ class ProcessorMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            proxies=kwargs.get("proxies"),
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token

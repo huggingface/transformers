@@ -32,6 +32,7 @@ from ...utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
+    resolve_revision,
     safe_load_json_file,
 )
 from ...utils.import_utils import is_torchvision_greater_or_equal, requires
@@ -270,6 +271,15 @@ def get_image_processor_config(
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
     # Load with a priority given to the nested processor config, if available in repo
+    # Resolve the revision once, so that both files below come from the same repository state.
+    revision = resolve_revision(
+        pretrained_model_name_or_path,
+        revision,
+        token=token,
+        proxies=proxies,
+        local_files_only=local_files_only,
+        cache_dir=cache_dir,
+    )
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
         filename=PROCESSOR_NAME,
@@ -578,6 +588,16 @@ class AutoImageProcessor:
         backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            proxies=kwargs.get("proxies"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         # Resolve the image processor config filename
         if "image_processor_filename" in kwargs:

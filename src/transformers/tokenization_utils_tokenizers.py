@@ -1279,7 +1279,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
+        revision=None,
         is_local=False,
         init_kwargs=None,
         fix_mistral_regex=None,
@@ -1323,9 +1323,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 cache_dir=cache_dir,
                 token=token,
                 local_files_only=local_files_only,
+                revision=revision,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
-                _commit_hash=_commit_hash,
             )
 
             # Detected using a (local) mistral tokenizer

@@ -24,7 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import auto_docstring, logging
-from ...utils.hub import cached_file
+from ...utils.hub import cached_file, resolve_revision
 from ..auto import AutoTokenizer
 
 
@@ -75,6 +75,15 @@ class BarkProcessor(ProcessorMixin):
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
         """
         token = kwargs.get("token")
+        # Resolve the revision once, so that the speaker embeddings and the tokenizer come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_processor_name_or_path,
+            kwargs.get("revision"),
+            token=token,
+            proxies=kwargs.get("proxies"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
         if speaker_embeddings_dict_path is not None:
             speaker_embeddings_path = cached_file(
                 pretrained_processor_name_or_path,
@@ -82,10 +91,10 @@ class BarkProcessor(ProcessorMixin):
                 subfolder=kwargs.pop("subfolder", None),
                 cache_dir=kwargs.pop("cache_dir", None),
                 force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                local_files_only=kwargs.pop("local_files_only", False),
+                proxies=kwargs.get("proxies"),
+                local_files_only=kwargs.get("local_files_only", False),
                 token=token,
-                revision=kwargs.pop("revision", None),
+                revision=kwargs["revision"],
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
@@ -188,6 +197,20 @@ class BarkProcessor(ProcessorMixin):
         voice_preset_dict = {}
         token = kwargs.get("token")
         repo_or_path = self.speaker_embeddings.get("repo_or_path", "/")
+        subfolder = kwargs.pop("subfolder", None)
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        # Resolve the revision once, so that the three prompt files come from the same repository state.
+        revision = resolve_revision(
+            repo_or_path,
+            kwargs.pop("revision", None),
+            token=token,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset_paths:
                 raise ValueError(
@@ -198,15 +221,15 @@ class BarkProcessor(ProcessorMixin):
                 repo_or_path, os.path.join(repo_or_path, voice_preset_paths[key]), voice_preset_paths[key]
             )
             path = cached_file(
-                self.speaker_embeddings.get("repo_or_path", "/"),
+                repo_or_path,
                 voice_preset_paths[key],
-                subfolder=kwargs.pop("subfolder", None),
-                cache_dir=kwargs.pop("cache_dir", None),
-                force_download=kwargs.pop("force_download", False),
-                proxies=kwargs.pop("proxies", None),
-                local_files_only=kwargs.pop("local_files_only", False),
+                subfolder=subfolder,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 token=token,
-                revision=kwargs.pop("revision", None),
+                revision=revision,
                 _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,

@@ -36,8 +36,6 @@ from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
-    extract_commit_hash,
     find_adapter_config_file,
     hf_api,
     is_kenlm_available,
@@ -45,6 +43,7 @@ from ..utils import (
     is_pyctcdecode_available,
     is_torch_available,
     logging,
+    resolve_revision,
 )
 from ..video_processing_utils import BaseVideoProcessor
 from .any_to_any import AnyToAnyPipeline
@@ -489,7 +488,7 @@ def _get_tokenizer_loading_kwargs(tokenizer, use_fast, model_kwargs):
     return tokenizer_identifier, tokenizer_kwargs, tokenizer_use_fast
 
 
-def _resolve_tokenizer(tokenizer, load_tokenizer, use_fast, model_name, config, task, hub_kwargs, model_kwargs):
+def _resolve_tokenizer(tokenizer, load_tokenizer, use_fast, model_name, config, task, hub_kwargs_for, model_kwargs):
     """Resolve and optionally load the tokenizer required by the pipeline class."""
 
     def load(tokenizer):
@@ -511,7 +510,7 @@ def _resolve_tokenizer(tokenizer, load_tokenizer, use_fast, model_name, config, 
             tokenizer_identifier,
             use_fast=tokenizer_use_fast,
             _from_pipeline=task,
-            **hub_kwargs,
+            **hub_kwargs_for(tokenizer_identifier),
             **tokenizer_kwargs,
         )
 
@@ -525,7 +524,7 @@ def _resolve_image_processor(
     model_name,
     config,
     task,
-    hub_kwargs,
+    hub_kwargs_for,
     model_kwargs,
 ):
     """Resolve and optionally load the image processor for vision-capable pipelines."""
@@ -543,7 +542,9 @@ def _resolve_image_processor(
         if not isinstance(image_processor, (str, tuple)):
             return image_processor
 
-        return AutoImageProcessor.from_pretrained(image_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        return AutoImageProcessor.from_pretrained(
+            image_processor, _from_pipeline=task, **hub_kwargs_for(image_processor), **model_kwargs
+        )
 
     return _load_pipeline_component(load_image_processor, image_processor, load)
 
@@ -554,7 +555,7 @@ def _resolve_video_processor(
     model_name,
     config,
     task,
-    hub_kwargs,
+    hub_kwargs_for,
     model_kwargs,
 ):
     def load(video_processor):
@@ -569,16 +570,18 @@ def _resolve_video_processor(
         if not isinstance(video_processor, str):
             return video_processor
 
-        return AutoVideoProcessor.from_pretrained(video_processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        return AutoVideoProcessor.from_pretrained(
+            video_processor, _from_pipeline=task, **hub_kwargs_for(video_processor), **model_kwargs
+        )
 
     return _load_pipeline_component(load_video_processor, video_processor, load)
 
 
-def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_name_or_path):
+def _maybe_load_ctc_decoder(model_name, hub_kwargs_for, kwargs, pretrained_model_name_or_path):
     """Attach a pyctcdecode decoder when the loaded feature extractor declares an LM-backed processor."""
     config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
         pretrained_model_name_or_path or model_name,
-        **hub_kwargs,
+        **hub_kwargs_for(pretrained_model_name_or_path or model_name),
     )
     processor_class = config_dict.get("processor_class", None)
 
@@ -613,7 +616,7 @@ def _resolve_feature_extractor(
     model_name,
     config,
     task,
-    hub_kwargs,
+    hub_kwargs_for,
     model_kwargs,
     kwargs,
     pretrained_model_name_or_path,
@@ -633,15 +636,15 @@ def _resolve_feature_extractor(
             return feature_extractor
 
         feature_extractor = AutoFeatureExtractor.from_pretrained(
-            feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
+            feature_extractor, _from_pipeline=task, **hub_kwargs_for(feature_extractor), **model_kwargs
         )
-        _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_name_or_path)
+        _maybe_load_ctc_decoder(model_name, hub_kwargs_for, kwargs, pretrained_model_name_or_path)
         return feature_extractor
 
     return _load_pipeline_component(load_feature_extractor, feature_extractor, load)
 
 
-def _resolve_processor(processor, load_processor, model_name, config, task, hub_kwargs, model_kwargs):
+def _resolve_processor(processor, load_processor, model_name, config, task, hub_kwargs_for, model_kwargs):
     """Resolve and optionally load a multimodal processor."""
 
     def load(processor):
@@ -656,7 +659,9 @@ def _resolve_processor(processor, load_processor, model_name, config, task, hub_
         if not isinstance(processor, (str, tuple)):
             return processor
 
-        processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        processor = AutoProcessor.from_pretrained(
+            processor, _from_pipeline=task, **hub_kwargs_for(processor), **model_kwargs
+        )
         if not isinstance(processor, ProcessorMixin):
             raise TypeError(
                 "Processor was loaded, but it is not an instance of `ProcessorMixin`. "
@@ -842,16 +847,28 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
-    commit_hash = kwargs.pop("_commit_hash", None)
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
+    requested_revision = revision
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
-        "_commit_hash": commit_hash,
         "local_files_only": local_files_only,
     }
+    # Repository whose revision was resolved into the commit hash currently held by `hub_kwargs["revision"]`.
+    resolved_repo = None
+
+    def hub_kwargs_for(repo_id):
+        """`hub_kwargs` adapted to the repository something is actually loaded from.
+
+        A commit hash is only valid for the repository it was resolved against, so anything coming from another
+        repository keeps the revision the user asked for and resolves it on its own.
+        """
+        if repo_id == resolved_repo or hub_kwargs["revision"] == requested_revision:
+            return hub_kwargs
+        return {**hub_kwargs, "revision": requested_revision}
 
     if task is None and model is None:
         raise RuntimeError(
@@ -876,26 +893,22 @@ def pipeline(
         model = str(model)
 
     pretrained_model_name_or_path = None
-    if commit_hash is None:
-        if isinstance(config, str):
-            pretrained_model_name_or_path = config
-        elif config is None and isinstance(model, str):
-            pretrained_model_name_or_path = model
+    if isinstance(config, str):
+        pretrained_model_name_or_path = config
+    elif config is None and isinstance(model, str):
+        pretrained_model_name_or_path = model
 
-        if not isinstance(config, PreTrainedConfig) and pretrained_model_name_or_path is not None:
-            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-            resolved_config_file = cached_file(
-                pretrained_model_name_or_path,
-                CONFIG_NAME,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-                cache_dir=model_kwargs.get("cache_dir"),
-                **hub_kwargs,
-            )
-            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
-        else:
-            hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
+    if pretrained_model_name_or_path is not None:
+        # Resolve the revision of the model repository once. Everything loaded from that repository below (config,
+        # remote code, weights, and the components that default to it) then uses this immutable commit.
+        resolved_repo = pretrained_model_name_or_path
+        hub_kwargs["revision"] = resolve_revision(
+            resolved_repo,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=model_kwargs.get("cache_dir"),
+        )
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -904,7 +917,6 @@ def pipeline(
         config = AutoConfig.from_pretrained(
             config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
-        hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
@@ -914,7 +926,6 @@ def pipeline(
                 model,
                 token=hub_kwargs["token"],
                 revision=hub_kwargs["revision"],
-                _commit_hash=hub_kwargs["_commit_hash"],
             )
 
             if maybe_adapter_path is not None:
@@ -927,11 +938,19 @@ def pipeline(
                     # model named in the adapter's config from the hub.
                     if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
                         model = adapter_config["base_model_name_or_path"]
+                        # The commit hash resolved above belongs to the adapter repository, resolve the base model's.
+                        resolved_repo = model
+                        hub_kwargs["revision"] = resolve_revision(
+                            model,
+                            requested_revision,
+                            token=token,
+                            local_files_only=local_files_only,
+                            cache_dir=model_kwargs.get("cache_dir"),
+                        )
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
-        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -968,7 +987,7 @@ def pipeline(
                 class_ref,
                 model,
                 code_revision=code_revision,
-                **hub_kwargs,
+                **hub_kwargs_for(model),
             )
     else:
         normalized_task, targeted_task, task_options = check_task(task)
@@ -983,10 +1002,13 @@ def pipeline(
             f"No model was supplied, defaulted to {model} and revision {revision}.\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
-        hub_kwargs["revision"] = revision
+        requested_revision = revision
+        resolved_repo = model
+        hub_kwargs["revision"] = resolve_revision(
+            model, revision, token=token, local_files_only=local_files_only, cache_dir=model_kwargs.get("cache_dir")
+        )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -1035,11 +1057,9 @@ def pipeline(
             model_classes=model_classes,
             config=config,
             task=task,
-            **hub_kwargs,
+            **hub_kwargs_for(adapter_path if adapter_path is not None else model),
             **model_kwargs,
         )
-
-    hub_kwargs["_commit_hash"] = model.config._commit_hash
 
     if pipeline_class is None:
         raise RuntimeError("Failed to resolve a pipeline class.")
@@ -1057,7 +1077,7 @@ def pipeline(
         model_name=model_name,
         config=config,
         task=task,
-        hub_kwargs=hub_kwargs,
+        hub_kwargs_for=hub_kwargs_for,
         model_kwargs=model_kwargs,
     )
     image_processor = _resolve_image_processor(
@@ -1067,7 +1087,7 @@ def pipeline(
         model_name=model_name,
         config=config,
         task=task,
-        hub_kwargs=hub_kwargs,
+        hub_kwargs_for=hub_kwargs_for,
         model_kwargs=model_kwargs,
     )
     feature_extractor = _resolve_feature_extractor(
@@ -1076,7 +1096,7 @@ def pipeline(
         model_name=model_name,
         config=config,
         task=task,
-        hub_kwargs=hub_kwargs,
+        hub_kwargs_for=hub_kwargs_for,
         model_kwargs=model_kwargs,
         kwargs=kwargs,
         pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -1087,7 +1107,7 @@ def pipeline(
         model_name=model_name,
         config=config,
         task=task,
-        hub_kwargs=hub_kwargs,
+        hub_kwargs_for=hub_kwargs_for,
         model_kwargs=model_kwargs,
     )
     video_processor = _resolve_video_processor(
@@ -1096,7 +1116,7 @@ def pipeline(
         model_name=model_name,
         config=config,
         task=task,
-        hub_kwargs=hub_kwargs,
+        hub_kwargs_for=hub_kwargs_for,
         model_kwargs=model_kwargs,
     )
 

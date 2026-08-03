@@ -353,7 +353,6 @@ def get_cached_module_file(
     revision: str | None = None,
     local_files_only: bool = False,
     repo_type: str | None = None,
-    _commit_hash: str | None = None,
     **deprecated_kwargs,
 ) -> str:
     """
@@ -412,7 +411,7 @@ def get_cached_module_file(
     if not is_local:
         submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
-            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
+            pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=revision, repo_type=repo_type
         )
 
     new_files = []
@@ -428,7 +427,6 @@ def get_cached_module_file(
             token=token,
             revision=revision,
             repo_type=repo_type,
-            _commit_hash=_commit_hash,
         )
         if not is_local and cached_module != resolved_module_file:
             new_files.append(module_file)
@@ -472,7 +470,7 @@ def get_cached_module_file(
                 importlib.invalidate_caches()
     else:
         # Get the commit hash
-        commit_hash = extract_commit_hash(resolved_module_file, _commit_hash)
+        commit_hash = extract_commit_hash(resolved_module_file, None)
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
         # benefit of versioning.
@@ -494,13 +492,12 @@ def get_cached_module_file(
                     force_download=force_download,
                     proxies=proxies,
                     token=token,
-                    revision=revision,
+                    revision=commit_hash,
                     local_files_only=local_files_only,
-                    _commit_hash=commit_hash,
                 )
                 new_files.append(f"{module_needed}.py")
 
-    if len(new_files) > 0 and revision is None:
+    if len(new_files) > 0:
         new_files = "\n".join([f"- {f}" for f in new_files])
         repo_type_str = "" if repo_type is None else f"{repo_type}s/"
         url = f"https://huggingface.co/{repo_type_str}{pretrained_model_name_or_path}"
