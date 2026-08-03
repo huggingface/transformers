@@ -139,6 +139,11 @@ def test_model_constructor_and_state_dict_layout():
     assert expected_keys.issubset(state_keys)
     assert not any(key.startswith("model.") for key in state_keys)
 
+    assert model.get_input_embeddings() is model.base_lm.embed_tokens
+    replacement_embeddings = torch.nn.Embedding(32, 8)
+    model.set_input_embeddings(replacement_embeddings)
+    assert model.get_input_embeddings() is replacement_embeddings
+
 
 @require_torch
 def test_scalar_quantization_matches_reference():
