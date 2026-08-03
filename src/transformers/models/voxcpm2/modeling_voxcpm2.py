@@ -1453,6 +1453,35 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             raise ValueError("The unmasked raw audio samples must form one contiguous span")
         return input_values[..., first_valid_index : last_valid_index + 1]
 
+    def _encode_generation_audio_features(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        padding_side: str,
+    ) -> torch.Tensor:
+        if padding_side not in {"left", "right"}:
+            raise ValueError("`padding_side` must be either 'left' or 'right'")
+
+        input_values = self._extract_generation_audio(input_values, attention_mask)
+        patch_num_samples = self.patch_size * self.chunk_size
+        padding = (-input_values.shape[-1]) % patch_num_samples
+        input_values = F.pad(input_values, (padding, 0) if padding_side == "left" else (0, padding))
+
+        audio_vae_parameter = next(self.audio_vae.parameters())
+        input_values = input_values.to(device=audio_vae_parameter.device, dtype=audio_vae_parameter.dtype)
+        latent_features = self.audio_vae.encode(input_values, sampling_rate=self._encode_sample_rate)
+        if latent_features.shape[-1] % self.patch_size != 0:
+            raise ValueError("The encoded audio length must be divisible by `patch_size`")
+
+        num_audio_patches = latent_features.shape[-1] // self.patch_size
+        latent_features = latent_features.transpose(1, 2).contiguous()
+        return latent_features.reshape(
+            latent_features.shape[0],
+            num_audio_patches,
+            self.patch_size,
+            latent_features.shape[-1],
+        )
+
     def _validate_generation_inputs(
         self,
         input_ids: torch.LongTensor,
