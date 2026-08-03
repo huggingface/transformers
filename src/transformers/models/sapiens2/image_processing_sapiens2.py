@@ -41,16 +41,21 @@ from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
+    """
+    Keyword arguments for the Sapiens2 image processor.
+
+    Args:
+        keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
+            The downscale factor for the target heatmap size relative to the model input size.
+        keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
+            The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
     """
 
     do_reduce_labels: bool
+
     keypoint_heatmap_downscale_factor: int
     keypoint_heatmap_sigma: float
+    keypoints: list[list[list[list[float]]]] | None
 
 
 def box_xywh_to_xyxy(x):
@@ -303,6 +308,20 @@ def generate_udp_gaussian_heatmaps(
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """Generates UDP Gaussian heatmaps and visibility weights from raw keypoint coordinates.
 
+    Args:
+        boxes (`list[list[list[float]]]`):
+            List of bounding boxes for each image in COCO format `(top_left_x, top_left_y, width, height)`.
+        keypoints (`list[list[list[list[float]]]]`):
+            List of keypoints for each person in each image. Expected format is COCO-style `[x, y, visibility]`.
+        output_size (`tuple[int, int]`):
+            The target size `(height, width)` of the cropped images.
+        downscale_factor (`int`, *optional*, defaults to 4):
+            The downscale factor for the target heatmap size relative to the output size.
+        sigma (`float`, *optional*, defaults to 6.0):
+            The standard deviation (sigma) for the 2D Gaussian distributions.
+        device (`str` or `torch.device`, *optional*):
+            The device to put the resulting tensors on.
+
     Returns:
         tuple:
         - heatmaps_list (list[torch.Tensor]): The generated heatmaps. Each tensor has shape
@@ -347,10 +366,10 @@ def generate_udp_gaussian_heatmaps(
 
             heatmap_coords = ((raw_coords - center) / scale + 0.5) * heatmap_size
 
-            xs = heatmap_coords[:, 0].view(-1, 1, 1)
-            ys = heatmap_coords[:, 1].view(-1, 1, 1)
+            x_coords = heatmap_coords[:, 0].view(-1, 1, 1)
+            y_coords = heatmap_coords[:, 1].view(-1, 1, 1)
 
-            distance_squared = (grid_x.unsqueeze(0) - xs) ** 2 + (grid_y.unsqueeze(0) - ys) ** 2
+            distance_squared = (grid_x.unsqueeze(0) - x_coords) ** 2 + (grid_y.unsqueeze(0) - y_coords) ** 2
             person_heatmaps = torch.exp(-distance_squared / (2 * (sigma**2)))
 
             if person_keypoints_tensor.shape[1] > 2:
@@ -430,26 +449,27 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
             The `x` and `y` values are expected to be absolute image pixel coordinates.
             Format is `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
             ground-truth heatmaps and visibility weights for pose estimation fine-tuning.
-        keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
-            The downscale factor for the target heatmap size relative to the model input size.
-        keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
-            The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
         """
-        batch_feature = super().preprocess(images, segmentation_maps, boxes, keypoints, **kwargs)
-        return batch_feature
+        if segmentation_maps is not None and keypoints is not None:
+            raise ValueError(
+                "Cannot process both `segmentation_maps` and `keypoints` in the same forward pass. "
+                "Please provide only one depending on the task you want to perform."
+            )
+
+        return super().preprocess(images, segmentation_maps, boxes, keypoints=keypoints, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         boxes: list[list[list[float]]] | None,
-        keypoints: list[list[list[list[float]]]] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None,
         keypoint_heatmap_downscale_factor: int,
         keypoint_heatmap_sigma: float,
+        keypoints: list[list[list[list[float]]]] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
