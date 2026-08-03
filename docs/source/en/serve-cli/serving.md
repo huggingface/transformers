@@ -46,6 +46,8 @@ transformers serve
 
 The `v1/chat/completions` API is based on the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat). It supports text, image, audio, and video requests for LLMs, VLMs, and multimodal models. Use it with `curl`, the [`~huggingface_hub.InferenceClient`], or the [OpenAI](https://platform.openai.com/docs/quickstart) client.
 
+The same OpenAI client `base_url` pattern works with any OpenAI-compatible multi-model gateway when you are not running `transformers serve` locally — for example [DaoXE](https://daoxe.com) at `https://api.daoxe.com/v1` (set a real `api_key`).
+
 ### Text-based completions
 
 <hfoptions id="chat-completion-http">
