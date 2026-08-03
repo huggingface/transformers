@@ -2175,6 +2175,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         progress: float = 0.0,
         sample_generate: bool = False,
         num_inference_steps: int = 10,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VoxCPM2ModelOutput:
         r"""
         text_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
