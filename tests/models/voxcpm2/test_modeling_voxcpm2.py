@@ -328,6 +328,31 @@ def test_audio_vae_encode_decode():
 
 
 @require_torch
+def test_audio_vae_streaming_decode_matches_full_decode():
+    config = VoxCPM2AudioVAEConfig(
+        encoder_dim=4,
+        encoder_rates=(2, 3),
+        latent_dim=3,
+        decoder_dim=16,
+        decoder_rates=(3, 2),
+        depthwise=True,
+        sr_bin_boundaries=(10000, 20000),
+        out_sample_rate=24000,
+    )
+    model = VoxCPM2AudioVAE(config).eval()
+    latent_chunks = [torch.randn(2, 3, 4), torch.randn(2, 3, 4)]
+    expected_output = model.decode(torch.cat(latent_chunks, dim=-1))
+
+    streaming_decoder = model.streaming_decode()
+    with streaming_decoder:
+        output = torch.cat([streaming_decoder.decode_chunk(chunk) for chunk in latent_chunks], dim=-1)
+
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+    assert not streaming_decoder.states
+    torch.testing.assert_close(model.decode(torch.cat(latent_chunks, dim=-1)), expected_output, rtol=0, atol=0)
+
+
+@require_torch
 def test_causal_transposed_convolution_matches_reference():
     layer = VoxCPM2CausalConvTranspose1d(4, 2, kernel_size=6, stride=3, padding=2, output_padding=1)
     assert list(layer.state_dict()) == ["weight", "bias"]
