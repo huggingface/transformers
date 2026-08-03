@@ -51,6 +51,45 @@ if is_torch_available():
     )
 
 
+def get_tiny_voxcpm2_config() -> VoxCPM2Config:
+    return VoxCPM2Config(
+        lm_config={
+            "vocab_size": 32,
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "no_rope": True,
+            "rope_parameters": None,
+        },
+        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
+        dit_config={
+            "hidden_dim": 8,
+            "ffn_dim": 16,
+            "num_heads": 2,
+            "num_layers": 1,
+            "kv_channels": 4,
+            "cfm_config": {"training_cfg_rate": 0.0, "t_scheduler": "uniform"},
+        },
+        audio_vae_config={
+            "encoder_dim": 4,
+            "encoder_rates": (2,),
+            "latent_dim": 4,
+            "decoder_dim": 8,
+            "decoder_rates": (2,),
+            "depthwise": True,
+            "sr_bin_boundaries": (10000, 20000),
+        },
+        feat_dim=4,
+        patch_size=2,
+        residual_lm_num_layers=1,
+        scalar_quantization_latent_dim=4,
+    )
+
+
 @require_torch
 def test_pretrained_model_metadata():
     model = VoxCPM2PreTrainedModel(VoxCPM2Config())
@@ -86,35 +125,7 @@ def test_pretrained_model_initialization():
 
 @require_torch
 def test_model_constructor_and_state_dict_layout():
-    config = VoxCPM2Config(
-        lm_config={
-            "vocab_size": 32,
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "no_rope": True,
-            "rope_parameters": None,
-        },
-        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
-        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
-        audio_vae_config={
-            "encoder_dim": 4,
-            "encoder_rates": (2,),
-            "latent_dim": 4,
-            "decoder_dim": 8,
-            "decoder_rates": (2,),
-            "depthwise": True,
-            "sr_bin_boundaries": (10000, 20000),
-        },
-        feat_dim=4,
-        patch_size=2,
-        residual_lm_num_layers=1,
-        scalar_quantization_latent_dim=4,
-    )
+    config = get_tiny_voxcpm2_config()
     model = VoxCPM2Model(config)
 
     assert model.base_lm.config._attn_implementation == "sdpa"
