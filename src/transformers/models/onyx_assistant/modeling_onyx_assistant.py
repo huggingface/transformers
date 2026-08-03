@@ -194,6 +194,7 @@ class OnyxAssistantAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window if self.is_sliding else None,
+            is_causal=False,
             **kwargs,
         )
 
@@ -394,6 +395,7 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            print("assistant forward:", position_ids)
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(mask_mapping := attention_mask, dict):
@@ -432,18 +434,34 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
         )
 
     def update_cache_with_target_states(
-        self, target_hidden_states: torch.Tensor, position_ids: torch.Tensor, past_key_values: Cache
+        self,
+        target_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        past_key_values: Cache = None,
     ) -> Cache:
         target_hidden_states = self.encoder(target_hidden_states)
         position_embeddings = self.rotary_emb(target_hidden_states, position_ids)
         if past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        for layer in self.layers:
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": target_hidden_states,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        mask_mapping = {
+            "full_attention": create_bidirectional_mask(**mask_kwargs),
+            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+        }
+        for i, layer in enumerate(self.layers):
             # kinda wasteful, we just need the cache KV
             layer.self_attn(
                 hidden_states=target_hidden_states,
                 position_embeddings=position_embeddings,
+                attention_mask=mask_mapping[self.config.layer_types[i]],
                 past_key_values=past_key_values,
             )
 

@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
+    PermuteForRope,
     PrefixChange,
     Transpose,
     VisionUnfuseAndPermuteForRope,
@@ -142,9 +143,17 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "onyx_assistant": [
+            WeightConverter(
+                source_patterns=["attn_k.weight"],
+                target_patterns=["self_attn.k_proj.weight"],
+                operations=[PermuteForRope()],
+            ),
+            WeightConverter(
+                source_patterns=["attn_q.weight"],
+                target_patterns=["self_attn.q_proj.weight"],
+                operations=[PermuteForRope()],
+            ),
             WeightRenaming(source_patterns=r"blk", target_patterns="layers"),
-            WeightRenaming(source_patterns=r"attn_q.weight", target_patterns="self_attn.q_proj.weight"),
-            WeightRenaming(source_patterns=r"attn_k.weight", target_patterns="self_attn.k_proj.weight"),
             WeightRenaming(source_patterns=r"attn_v.weight", target_patterns="self_attn.v_proj.weight"),
             WeightRenaming(source_patterns=r"attn_output.weight", target_patterns="self_attn.o_proj.weight"),
             WeightRenaming(source_patterns=r"attn_q_norm.weight", target_patterns="self_attn.q_norm.weight"),

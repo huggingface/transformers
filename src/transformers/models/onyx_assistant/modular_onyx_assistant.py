@@ -102,18 +102,34 @@ class OnyxAssistantModel(Exaone4Model):
         )
 
     def update_cache_with_target_states(
-        self, target_hidden_states: torch.Tensor, position_ids: torch.Tensor, past_key_values: Cache
+        self,
+        target_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor = None,
+        position_ids: torch.Tensor = None,
+        past_key_values: Cache = None,
     ) -> Cache:
         target_hidden_states = self.encoder(target_hidden_states)
         position_embeddings = self.rotary_emb(target_hidden_states, position_ids)
         if past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        for layer in self.layers:
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": target_hidden_states,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        mask_mapping = {
+            "full_attention": create_bidirectional_mask(**mask_kwargs),
+            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+        }
+        for i, layer in enumerate(self.layers):
             # kinda wasteful, we just need the cache KV
             layer.self_attn(
                 hidden_states=target_hidden_states,
                 position_embeddings=position_embeddings,
+                attention_mask=mask_mapping[self.config.layer_types[i]],
                 past_key_values=past_key_values,
             )
 

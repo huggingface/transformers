@@ -419,37 +419,60 @@ class PermuteForRope(ConversionOps):
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
     """
 
-    def __init__(self):
-        pass
+    def __init__(
+        self, subconfig_key: str | None = None, permute_layer_names: list[str] | None = None, inverse: bool = False
+    ):
+        self.subconfig_key = subconfig_key
+        self.inverse = inverse
+        self.permute_layer_names = permute_layer_names
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
-        dim1, dim2 = tensor.shape
-        n_heads = self.config.getattr("num_attention_heads", 1)
+        dim0 = tensor.shape[0]
+        config = self.config
+        if self.subconfig_key is not None:
+            config = getattr(self.config, self.subconfig_key, self.config)
+        n_heads = getattr(config, "num_attention_heads", 1)
+        half_head = dim0 // n_heads // 2
 
-        tensor = tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-        tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
+        head_shape = (2, half_head) if self.inverse else (half_head, 2)
+        if tensor.ndim == 2:
+            tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
+            tensor = tensor.transpose(1, 2).reshape(dim0, tensor.shape[-1])
+        elif tensor.ndim == 1:
+            tensor = tensor.view(n_heads, *head_shape)
+            tensor = tensor.transpose(1, 2).reshape(dim0)
         return tensor
 
     @torch.no_grad
     def convert(
         self,
-        input_dict: dict[str, list[torch.Tensor]],
+        input_dict: dict[str, list[torch.Tensor] | torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
-        output: dict[str, list[torch.Tensor]] = {}
+        outputs = []
         for key, tensors in input_dict.items():
-            if len(tensors) != 1:
-                raise ValueError("PermuteForRope expects a single tensor per key.")
-            output[key] = [self._apply(tensors[0])]
-        return output
+            # Permute q and key weights if they match requested layer names
+            if self.permute_layer_names is not None and not any(name in key for name in self.permute_layer_names):
+                # output[key] = tensors
+                outputs.append(tensors)
+                continue
+
+            if isinstance(tensors, list):
+                if len(tensors) != 1:
+                    raise ValueError("PermuteForRope expects a single tensor per key.")
+                tensors = tensors[0]
+            outputs.append(self._apply(tensors))
+        return dict(zip(target_patterns, outputs))
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return PermuteForRope()
+        return PermuteForRope(
+            subconfig_key=self.subconfig_key, permute_layer_names=self.permute_layer_names, inverse=not self.inverse
+        )
 
 
 class VisionFuseAndPermuteForRope(ConversionOps):
