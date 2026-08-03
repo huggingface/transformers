@@ -4411,11 +4411,9 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 4. `use_cache` (and other kwargs, like the encoder outputs) are forwarded
         self.assertFalse("use_cache" in model_inputs)  # From the previous input, there is no `use_cache`
-        model_inputs = model.prepare_inputs_for_generation(
-            decoder_input_ids, use_cache=True, encoder_outputs={"last_hidden_state": "foo"}
-        )
+        model_inputs = model.prepare_inputs_for_generation(decoder_input_ids, use_cache=True, encoder_outputs="foo")
         self.assertTrue(model_inputs["use_cache"] is True)
-        self.assertTrue(model_inputs["encoder_outputs"] == {"last_hidden_state": "foo"})
+        self.assertTrue(model_inputs["encoder_outputs"] == "foo")
         # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
 
     @slow
