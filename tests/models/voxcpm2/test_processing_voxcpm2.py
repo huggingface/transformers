@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import numpy as np
+import pytest
 
 from transformers import DacFeatureExtractor
 from transformers.models.voxcpm2.processing_voxcpm2 import VoxCPM2Processor
@@ -80,3 +81,45 @@ def test_processor_packs_all_generation_modes():
     for model_inputs in (zero_shot, continuation, reference, combined):
         assert model_inputs.attention_mask.bool().all()
         assert (model_inputs.text_mask + model_inputs.audio_mask == 1).all()
+
+
+@require_torch
+def test_processor_preserves_audio_lengths_and_validates_inputs():
+    processor = get_tiny_voxcpm2_processor()
+    processor.feature_extractor.hop_length = 4
+    prompt_audio = np.arange(5, dtype=np.float32)
+    reference_audio = np.arange(3, dtype=np.float32)
+
+    model_inputs = processor(
+        text="A",
+        audio=prompt_audio,
+        prompt_text="B",
+        reference_audio=reference_audio,
+        sampling_rate=16000,
+        return_tensors="pt",
+    )
+
+    assert model_inputs.prompt_input_values.shape == (1, 1, 8)
+    assert model_inputs.prompt_attention_mask.tolist() == [[1, 1, 1, 1, 1, 0, 0, 0]]
+    assert model_inputs.reference_input_values.shape == (1, 1, 4)
+    assert model_inputs.reference_attention_mask.tolist() == [[1, 1, 1, 0]]
+    assert model_inputs.audio_mask.sum() == 3
+
+    with pytest.raises(ValueError, match="provided together"):
+        processor(text="A", audio=prompt_audio, sampling_rate=16000)
+    with pytest.raises(ValueError, match="provided together"):
+        processor(text="A", prompt_text="B")
+    with pytest.raises(ValueError, match="one audio sample"):
+        processor(
+            text="A",
+            audio=[prompt_audio, prompt_audio],
+            prompt_text="B",
+            sampling_rate=16000,
+        )
+    with pytest.raises(ValueError, match="Expected mono audio"):
+        processor(
+            text="A",
+            audio=np.zeros((2, 5), dtype=np.float32),
+            prompt_text="B",
+            sampling_rate=16000,
+        )
