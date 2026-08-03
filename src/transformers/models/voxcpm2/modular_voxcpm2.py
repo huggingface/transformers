@@ -449,6 +449,14 @@ def _get_tslm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     return copy.deepcopy(config.lm_config)
 
 
+def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    ralm_config = _get_tslm_config(config)
+    ralm_config.num_hidden_layers = config.residual_lm_num_layers
+    ralm_config.vocab_size = 0
+    ralm_config.no_rope = config.residual_lm_no_rope
+    return ralm_config
+
+
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
     def __init__(self, config: VoxCPM2Config):
         super().__init__()
