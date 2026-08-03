@@ -547,6 +547,48 @@ def test_waveform_generation_and_decoder_context_crop():
 
 
 @require_torch
+def test_streaming_audio_features_match_non_streaming_generation():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 2, 3]])
+    text_mask = torch.ones_like(input_ids)
+    audio_mask = torch.zeros_like(input_ids)
+    audio_features = torch.zeros(1, 3, 2, 4)
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+
+    chunks = list(
+        model._generate_audio_features_streaming(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches=4,
+            max_new_audio_patches=5,
+            num_inference_steps=1,
+            generator=torch.Generator().manual_seed(7),
+        )
+    )
+    full_output = model._generate_audio_features(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=4,
+        max_new_audio_patches=5,
+        num_inference_steps=1,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    assert len(chunks) == 4
+    assert [chunk.num_generated_patches for chunk in chunks] == [1, 2, 3, 4]
+    assert all(chunk.audio_features.shape == (1, 1, 2, 4) for chunk in chunks)
+    streamed_features = torch.cat([chunk.audio_features for chunk in chunks], dim=1)
+    torch.testing.assert_close(streamed_features, full_output.audio_features, rtol=0, atol=0)
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
