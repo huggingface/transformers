@@ -249,6 +249,16 @@ def test_generation_input_validation():
             max_new_audio_patches=2,
             num_inference_steps=1,
         )
+    with pytest.raises(ValueError, match="greater than"):
+        model._validate_generation_inputs(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches=3,
+            max_new_audio_patches=2,
+            num_inference_steps=1,
+        )
 
 
 @require_torch
@@ -280,16 +290,49 @@ def test_generation_prefill_matches_full_backbones():
     assert base_cache is not residual_cache
     assert base_cache.get_seq_length() == input_ids.shape[1]
     assert residual_cache.get_seq_length() == input_ids.shape[1]
-    with pytest.raises(ValueError, match="greater than"):
-        model._validate_generation_inputs(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            min_new_audio_patches=3,
-            max_new_audio_patches=2,
-            num_inference_steps=1,
-        )
+
+
+@require_torch
+def test_generation_audio_patch_sampling():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+
+    class RecordingFlowMatcher(torch.nn.Module):
+        def forward(self, mu, num_inference_steps, patch_size, conditioning, **kwargs):
+            self.call = (mu, num_inference_steps, patch_size, conditioning, kwargs)
+            return conditioning
+
+    flow_matcher = RecordingFlowMatcher()
+    model.feat_decoder = flow_matcher
+    lm_hidden_states = torch.randn(1, 8)
+    residual_hidden_states = torch.randn(1, 8)
+    conditioning_features = torch.randn(1, 2, 4)
+
+    generated_features = model._sample_audio_patch(
+        lm_hidden_states,
+        residual_hidden_states,
+        conditioning_features,
+        num_inference_steps=3,
+        guidance_scale=2.5,
+        temperature=0.8,
+        sway_sampling_coefficient=0.4,
+        use_cfg_zero_star=False,
+    )
+
+    mu, num_inference_steps, patch_size, conditioning, kwargs = flow_matcher.call
+    expected_mu = torch.cat(
+        (model.lm_to_dit_proj(lm_hidden_states), model.res_to_dit_proj(residual_hidden_states)), dim=-1
+    )
+    torch.testing.assert_close(mu, expected_mu)
+    torch.testing.assert_close(conditioning, conditioning_features.transpose(1, 2))
+    torch.testing.assert_close(generated_features, conditioning_features)
+    assert num_inference_steps == 3
+    assert patch_size == 2
+    assert kwargs == {
+        "temperature": 0.8,
+        "cfg_value": 2.5,
+        "sway_sampling_coefficient": 0.4,
+        "use_cfg_zero_star": False,
+    }
 
 
 @require_torch
