@@ -828,6 +828,57 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         squared_norm = torch.sum(negative_states**2, dim=1, keepdim=True) + 1e-8
         return dot_product / squared_norm
 
+    def solve_euler(
+        self,
+        sample: torch.Tensor,
+        timestep_span: torch.Tensor,
+        mu: torch.Tensor,
+        conditioning: torch.Tensor,
+        cfg_value: float = 1.0,
+        use_cfg_zero_star: bool = True,
+    ) -> torch.Tensor:
+        timestep = timestep_span[0]
+        delta_timestep = timestep_span[0] - timestep_span[1]
+        zero_init_steps = max(1, int(len(timestep_span) * 0.04))
+
+        for step in range(1, len(timestep_span)):
+            if use_cfg_zero_star and step <= zero_init_steps:
+                derivative = torch.zeros_like(sample)
+            else:
+                batch_size = sample.shape[0]
+                sample_input = torch.cat((sample, sample), dim=0)
+                mu_input = torch.cat((mu, torch.zeros_like(mu)), dim=0)
+                timestep_input = timestep.expand(2 * batch_size)
+                delta_timestep_input = delta_timestep.expand(2 * batch_size)
+                if not self.mean_mode:
+                    delta_timestep_input = torch.zeros_like(delta_timestep_input)
+                conditioning_input = torch.cat((conditioning, conditioning), dim=0)
+
+                positive_derivative, negative_derivative = self.estimator(
+                    sample_input,
+                    mu_input,
+                    timestep_input,
+                    conditioning_input,
+                    delta_timestep_input,
+                ).chunk(2)
+                if use_cfg_zero_star:
+                    optimized_scale = self.optimized_scale(
+                        positive_derivative.reshape(batch_size, -1), negative_derivative.reshape(batch_size, -1)
+                    )
+                    optimized_scale = optimized_scale.reshape(batch_size, *([1] * (positive_derivative.ndim - 1)))
+                else:
+                    optimized_scale = 1.0
+                derivative = negative_derivative * optimized_scale + cfg_value * (
+                    positive_derivative - negative_derivative * optimized_scale
+                )
+
+            sample = sample - delta_timestep * derivative
+            timestep = timestep - delta_timestep
+            if step < len(timestep_span) - 1:
+                delta_timestep = timestep - timestep_span[step + 1]
+
+        return sample
+
 
 __all__ = [
     "VoxCPM2AudioVAEConfig",
