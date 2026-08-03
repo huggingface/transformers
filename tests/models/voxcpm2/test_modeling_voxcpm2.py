@@ -16,7 +16,7 @@ import math
 
 import pytest
 
-from transformers import VoxCPM2AudioVAEConfig, VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
+from transformers import GenerationConfig, VoxCPM2AudioVAEConfig, VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
 from transformers.testing_utils import require_torch
 
 
@@ -496,6 +496,54 @@ def test_autoregressive_audio_feature_generation():
             max_new_audio_patches=model.config.max_cache_length,
             num_inference_steps=1,
         )
+
+
+@require_torch
+def test_waveform_generation_and_decoder_context_crop():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 0, 0]])
+    text_mask = torch.tensor([[1, 0, 0]])
+    audio_mask = 1 - text_mask
+    audio_features = torch.randn(1, 3, 2, 4)
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+    generation_config = GenerationConfig(min_new_tokens=2, max_new_tokens=2, return_dict_in_generate=True)
+
+    output = model.generate(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        generation_config=generation_config,
+        num_inference_steps=1,
+        decoder_context_patches=1,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    assert isinstance(output, VoxCPM2GenerationOutput)
+    assert "audio" in output
+    assert output.audio.shape == (1, 8)
+    decoder_context = audio_features[:, -1:]
+    decoder_features = torch.cat((decoder_context, output.audio_features), dim=1)
+    decoder_features = decoder_features.reshape(1, 6, 4).transpose(1, 2).contiguous()
+    expected_audio = model.audio_vae.decode(decoder_features).squeeze(1)
+    expected_audio = expected_audio[:, model.patch_size * model._decode_chunk_size :]
+    torch.testing.assert_close(output.audio, expected_audio)
+
+    waveform = model.generate(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=2,
+        max_new_audio_patches=2,
+        num_inference_steps=1,
+        generator=torch.Generator().manual_seed(7),
+    )
+    assert isinstance(waveform, torch.Tensor)
+    assert waveform.shape == (1, 8)
 
 
 @require_torch
