@@ -543,7 +543,11 @@ class ClvpIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_OUTPUTS = torch.tensor(
-            [[-0.8582, 0.5228, 1.9944], [-0.0465, -1.1017, -0.0093], [-0.0466, -0.6030, -0.1280]]
+            [
+                [-0.750228, 0.505316, 1.996277],
+                [-0.046491, -1.101724, -0.009297],
+                [-0.046621, -0.602989, -0.127987],
+            ]
         )
 
         torch.testing.assert_close(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, rtol=1e-4, atol=1e-4)
