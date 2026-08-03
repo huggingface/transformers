@@ -21,6 +21,7 @@ if is_torch_available():
 
     from transformers.models.voxcpm2.modeling_voxcpm2 import (
         VoxCPM2CausalConv1d,
+        VoxCPM2CausalConvTranspose1d,
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2Snake1d,
     )
@@ -108,6 +109,34 @@ def test_causal_convolution_matches_reference():
         dilation=layer.dilation,
         groups=layer.groups,
     )
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    expected_output.sum().backward()
+    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
+
+
+@require_torch
+def test_causal_transposed_convolution_matches_reference():
+    layer = VoxCPM2CausalConvTranspose1d(4, 2, kernel_size=6, stride=3, padding=2, output_padding=1)
+    assert list(layer.state_dict()) == ["weight", "bias"]
+    assert layer.padding == (0,)
+    assert layer.output_padding == (0,)
+    assert layer.causal_trim == 3
+
+    hidden_states = torch.randn(2, 4, 7, requires_grad=True)
+    output = layer(hidden_states)
+
+    reference_input = hidden_states.detach().clone().requires_grad_()
+    expected_output = torch.nn.functional.conv_transpose1d(
+        reference_input,
+        layer.weight,
+        layer.bias,
+        stride=layer.stride,
+        groups=layer.groups,
+        dilation=layer.dilation,
+    )
+    expected_output = expected_output[..., : -layer.causal_trim]
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 
     output.sum().backward()
