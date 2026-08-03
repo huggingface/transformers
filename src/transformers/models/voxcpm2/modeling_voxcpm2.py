@@ -31,7 +31,7 @@ from torch.func import jvp
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1372,7 +1372,7 @@ def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
 
 
 @auto_docstring
-class VoxCPM2Model(VoxCPM2PreTrainedModel):
+class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
     @classmethod
     def can_generate(cls) -> bool:
         return True

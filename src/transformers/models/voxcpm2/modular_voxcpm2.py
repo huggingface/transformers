@@ -26,7 +26,7 @@ from torch.func import jvp
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1571,7 +1571,7 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
 
 
 @auto_docstring
-class VoxCPM2Model(VoxCPM2PreTrainedModel):
+class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
     @classmethod
     def can_generate(cls) -> bool:
         return True
