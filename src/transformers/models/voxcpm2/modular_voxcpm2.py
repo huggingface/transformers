@@ -760,6 +760,48 @@ class VoxCPM2LocalEncoder(nn.Module):
         return hidden_states.reshape(batch_size, num_steps, -1)
 
 
+class VoxCPM2LocalDiT(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        dit_config = _get_local_dit_backbone_config(config)
+        self.in_channels = config.feat_dim
+        self.out_channels = config.feat_dim
+
+        self.in_proj = nn.Linear(self.in_channels, dit_config.hidden_size)
+        self.cond_proj = nn.Linear(self.in_channels, dit_config.hidden_size)
+        self.out_proj = nn.Linear(dit_config.hidden_size, self.out_channels)
+        self.time_embeddings = VoxCPM2SinusoidalPositionEmbedding(dit_config.hidden_size)
+        self.time_mlp = VoxCPM2TimestepEmbedding(dit_config.hidden_size, dit_config.hidden_size)
+        self.delta_time_mlp = VoxCPM2TimestepEmbedding(dit_config.hidden_size, dit_config.hidden_size)
+        self.decoder = VoxCPM2BackboneModel(dit_config)
+
+    def forward(
+        self,
+        sample: torch.Tensor,
+        mu: torch.Tensor,
+        timestep: torch.Tensor,
+        conditioning: torch.Tensor,
+        delta_timestep: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_states = self.in_proj(sample.transpose(1, 2).contiguous())
+        conditioning_hidden_states = self.cond_proj(conditioning.transpose(1, 2).contiguous())
+
+        timestep_hidden_states = self.time_embeddings(timestep).to(hidden_states.dtype)
+        timestep_hidden_states = self.time_mlp(timestep_hidden_states)
+        delta_timestep_hidden_states = self.time_embeddings(delta_timestep).to(hidden_states.dtype)
+        delta_timestep_hidden_states = self.delta_time_mlp(delta_timestep_hidden_states)
+        timestep_hidden_states = timestep_hidden_states + delta_timestep_hidden_states
+
+        mu_hidden_states = mu.reshape(hidden_states.shape[0], -1, hidden_states.shape[-1])
+        hidden_states = torch.cat(
+            (mu_hidden_states, timestep_hidden_states.unsqueeze(1), conditioning_hidden_states, hidden_states), dim=1
+        )
+        hidden_states = self.decoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state
+        prefix_length = mu_hidden_states.shape[1] + 1 + conditioning_hidden_states.shape[1]
+        hidden_states = self.out_proj(hidden_states[:, prefix_length:])
+        return hidden_states.transpose(1, 2).contiguous()
+
+
 __all__ = [
     "VoxCPM2AudioVAEConfig",
     "VoxCPM2CfmConfig",
