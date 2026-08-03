@@ -85,7 +85,6 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
     _no_split_modules = ["VoxCPM2DecoderLayer", "VoxCPM2CausalDecoderBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_sdpa = True
