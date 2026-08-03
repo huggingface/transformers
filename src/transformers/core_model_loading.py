@@ -1774,8 +1774,6 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     weight_conversions = weight_conversions[::-1]
     # Reverse all Transforms
     reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
-
-    # If we are still here, we need to create the (reverse) conversion mapping from scratch
     renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
 
