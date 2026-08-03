@@ -185,16 +185,11 @@ def test_auto_model_registration():
 
 
 @require_torch
-def test_text_to_audio_pipeline():
+def test_text_to_audio_pipeline_zero_shot():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
     processor = get_tiny_voxcpm2_processor()
     speech_generator = TextToAudioPipeline(
         model=model,
-        tokenizer=processor.tokenizer,
         processor=processor,
         device=-1,
     )
@@ -205,8 +200,9 @@ def test_text_to_audio_pipeline():
     )
 
     assert isinstance(output["audio"], np.ndarray)
-    assert output["audio"].shape == (4,)
-    assert output["sampling_rate"] == 48000
+    assert output["audio"].shape == (model.patch_size * model._decode_chunk_size,)
+    assert output["sampling_rate"] == model.config.sample_rate
+    assert "'output_modalities': ('audio',)" in repr(speech_generator)
 
 
 @require_torch
