@@ -21,6 +21,7 @@ from transformers import (
     AutoModel,
     AutoModelForTextToWaveform,
     GenerationConfig,
+    TextToAudioPipeline,
     VoxCPM2AudioVAEConfig,
     VoxCPM2Config,
     VoxCPM2TextConfig,
@@ -181,6 +182,31 @@ def test_auto_model_registration():
 
     assert isinstance(AutoModel.from_config(config), VoxCPM2Model)
     assert isinstance(AutoModelForTextToWaveform.from_config(config), VoxCPM2Model)
+
+
+@require_torch
+def test_text_to_audio_pipeline():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+    processor = get_tiny_voxcpm2_processor()
+    speech_generator = TextToAudioPipeline(
+        model=model,
+        tokenizer=processor.tokenizer,
+        processor=processor,
+        device=-1,
+    )
+
+    output = speech_generator(
+        "A",
+        generate_kwargs={"min_new_tokens": 1, "max_new_tokens": 1, "num_inference_steps": 1},
+    )
+
+    assert isinstance(output["audio"], np.ndarray)
+    assert output["audio"].shape == (4,)
+    assert output["sampling_rate"] == 48000
 
 
 @require_torch
