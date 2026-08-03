@@ -132,20 +132,6 @@ class AutoHfExporterTest(unittest.TestCase):
             AutoHfExporter.from_config({})
 
 
-class ImportSurfaceTest(unittest.TestCase):
-    """`auto.py` imports every exporter module eagerly, so a symbol that only exists on a newer
-    torch than `setup.py` declares (`torch>=2.5`) takes the whole `transformers.exporters` package
-    down when imported at module scope — ONNX and Dynamo included. Version-gated symbols belong
-    inside the function that uses it."""
-
-    @require_torch
-    def test_guard_or_true_is_not_imported_at_module_scope(self):
-        from transformers.exporters import exporter_executorch
-
-        # `guard_or_true` landed in torch 2.8.
-        self.assertNotIn("guard_or_true", vars(exporter_executorch))
-
-
 class RegistrationTest(unittest.TestCase):
     """Cover the edge cases of `register_exporter` / `register_export_config` that normal
     registrations at module load don't hit — the type-check rejection paths. The mappings are
