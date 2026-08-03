@@ -3806,7 +3806,9 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens if any
+            # 4.2. Discard past key values relative to unused assistant tokens if any - if `number_of_tokens_to_crop == 0`, `crop` will
+            # still take care of shrinking back sliding window or linear attention cache layers back to their max size, so it's important
+            # to call it still
             number_of_tokens_to_crop = candidate_length - n_matches
             outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
