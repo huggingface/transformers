@@ -45,9 +45,12 @@ class VoxCPM2Processor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer)
 
     def _validate_generation_inputs(self, text, audio, prompt_text, reference_audio):
-        if not isinstance(text, str):
+        if isinstance(text, list) and len(text) == 1 and isinstance(text[0], str):
+            text = text[0]
+        elif not isinstance(text, str):
             raise TypeError(
-                "`text` must be a single string because VoxCPM2 generation currently supports batch size 1"
+                "`text` must be a string or a list containing one string because VoxCPM2 generation currently "
+                "supports batch size 1"
             )
         if prompt_text is not None and not isinstance(prompt_text, str):
             raise TypeError("`prompt_text` must be a string")
@@ -55,6 +58,7 @@ class VoxCPM2Processor(ProcessorMixin):
             raise ValueError("`audio` and `prompt_text` must be provided together")
         if audio is None and reference_audio is None and not text:
             raise ValueError("`text` cannot be empty for zero-shot generation")
+        return text
 
     def _build_generation_sequence(self, text_token_ids, prompt_audio_patches=0, reference_audio_patches=0):
         if prompt_audio_patches < 0 or reference_audio_patches < 0:
@@ -112,7 +116,7 @@ class VoxCPM2Processor(ProcessorMixin):
         sampling_rate=None,
         return_tensors="pt",
     ):
-        self._validate_generation_inputs(text, audio, prompt_text, reference_audio)
+        text = self._validate_generation_inputs(text, audio, prompt_text, reference_audio)
         text_to_tokenize = f"{prompt_text}{text}" if prompt_text is not None else text
         text_token_ids = self.tokenizer(text_to_tokenize, add_special_tokens=False).input_ids
 
