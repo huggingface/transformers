@@ -350,7 +350,7 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
+        inv_freq = self.compute_default_relative_positional_parameters(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod

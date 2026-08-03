@@ -146,7 +146,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:

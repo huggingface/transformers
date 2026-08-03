@@ -84,7 +84,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         self.pos_proj = nn.Conv2d(
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
-        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device=device)
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @staticmethod
@@ -1090,7 +1090,7 @@ class PPDocLayoutV2FrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 

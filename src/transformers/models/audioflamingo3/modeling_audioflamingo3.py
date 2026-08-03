@@ -134,7 +134,7 @@ class AudioFlamingo3Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. audioflamingo3 is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
@@ -540,7 +540,9 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

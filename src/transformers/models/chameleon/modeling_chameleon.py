@@ -101,7 +101,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -490,7 +490,7 @@ class ChameleonVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
 
-    This module implements the quantization process similar to te one described in
+    This module implements the quantization process similar to the one described in
     the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
     input vectors into discrete codebook vectors, which are learned during training.
     Current implementation improves over previous ones by avoiding costly matrix multiplications

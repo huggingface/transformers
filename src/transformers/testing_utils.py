@@ -3350,8 +3350,8 @@ def get_device_properties() -> DeviceProperties:
             gen = (arch & gen_mask) >> 32
             return ("xpu", gen, None)
     if IS_NPU_SYSTEM:
-        # TODO: after torch 2.5.1, use `if hasattr(torch, "npu") and torch.npu.is_available()` here for consistency with CUDA/XPU blocks
-        return ("npu", None, None)
+        if torch.npu.is_available():
+            return ("npu", None, None)
     return (torch_device, None, None)
 
 

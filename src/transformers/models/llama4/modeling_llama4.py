@@ -191,7 +191,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -1200,7 +1200,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_select_strategy (`str`):
             The feature selection strategy used to select the vision feature from the vision backbone.

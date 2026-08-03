@@ -66,7 +66,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
@@ -308,7 +308,9 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
