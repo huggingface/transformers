@@ -31,6 +31,7 @@ from ..minicpm4.modeling_minicpm4 import (
     MiniCPM4Attention,
     MiniCPM4DecoderLayer,
     MiniCPM4RMSNorm,
+    MiniCPM4RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -565,6 +566,11 @@ class VoxCPM2Attention(MiniCPM4Attention):
 
 class VoxCPM2RMSNorm(MiniCPM4RMSNorm):
     pass
+
+
+class VoxCPM2RotaryEmbedding(MiniCPM4RotaryEmbedding):
+    def __init__(self, config: VoxCPM2TextConfig, device=None):
+        super().__init__(config, device)
 
 
 class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):

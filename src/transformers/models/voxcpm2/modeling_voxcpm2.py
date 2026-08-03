@@ -29,9 +29,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast
 from .configuration_voxcpm2 import VoxCPM2Config, VoxCPM2TextConfig
 
 
@@ -274,6 +277,76 @@ class VoxCPM2RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class VoxCPM2RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: VoxCPM2TextConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: VoxCPM2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            if self.rope_type == "longrope":
+                rope_parameters = self.config.rope_parameters
+                head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
+                dim = int(head_dim * rope_parameters.get("partial_rotary_factor", 1.0))
+                factor_name = (
+                    "long_factor"
+                    if position_ids.max().item() + 1 > rope_parameters["original_max_position_embeddings"]
+                    else "short_factor"
+                )
+                ext_factors = torch.tensor(rope_parameters[factor_name], dtype=torch.float32, device=x.device)
+                inv_freq_shape = torch.arange(0, dim, 2, dtype=torch.int64, device=x.device).float() / dim
+                base_inv_freq = 1.0 / (rope_parameters["rope_theta"] ** inv_freq_shape)
+                freqs = position_ids.float().unsqueeze(-1) * (1.0 / ext_factors)
+                freqs = freqs * base_inv_freq
+            else:
+                inv_freq_expanded = self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).float()
+                position_ids_expanded = position_ids[:, None, :].float()
+                freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos, sin
 
 
 class VoxCPM2MLP(nn.Module):
