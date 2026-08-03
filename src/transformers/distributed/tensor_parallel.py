@@ -296,6 +296,19 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         return module
 
 
+class AllReduceParallel(TensorParallelLayer):
+    """All-reduce a module's partial forward output across the TP mesh."""
+
+    def transform_output_post_forward(self, module, output, mesh):
+        if output is None:
+            return None
+        if not isinstance(output, DTensor):
+            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
+        if output.placements != (Replicate(),):
+            output = output.redistribute(placements=[Replicate()])
+        return output.to_local()
+
+
 class SequenceParallel(TensorParallelLayer):
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
         self.sequence_dim = sequence_dim
@@ -570,6 +583,7 @@ class ParallelInterface(GeneralInterface):
             "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "all_reduce": AllReduceParallel(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "moe_tp_experts": MoEExpertsParallel(output_layouts=Replicate()),
             "moe_identity_expert": MoeIdentityParallel(),
