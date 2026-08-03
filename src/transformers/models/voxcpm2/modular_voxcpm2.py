@@ -20,8 +20,10 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -607,6 +609,94 @@ class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         return residual + hidden_states * self.residual_scale
+
+
+class VoxCPM2BackboneModel(nn.Module):
+    def __init__(self, config: VoxCPM2TextConfig):
+        super().__init__()
+        if config.sparse_config is not None:
+            raise NotImplementedError(
+                "VoxCPM2 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
+                "use dense attention."
+            )
+        self.config = config
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = (
+            nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+            if config.vocab_size > 0
+            else nn.Identity()
+        )
+        self.layers = nn.ModuleList(
+            [VoxCPM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = VoxCPM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = None if config.no_rope else VoxCPM2RotaryEmbedding(config=config)
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool = False,
+        is_causal: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if inputs_embeds is None:
+            if self.vocab_size == 0:
+                raise ValueError("`inputs_embeds` must be provided when `vocab_size` is 0")
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            ).unsqueeze(0)
+
+        if is_causal:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+
+        hidden_states = inputs_embeds
+        position_embeddings = (
+            None if self.rotary_emb is None else self.rotary_emb(hidden_states, position_ids=position_ids)
+        )
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                is_causal=is_causal,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
 
 
 __all__ = [
