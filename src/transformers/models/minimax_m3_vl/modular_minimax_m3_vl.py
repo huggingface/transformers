@@ -256,13 +256,12 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
 
-    def crop(self, max_length: int) -> None:
+    def crop(self, tokens_to_remove: int) -> None:
         # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-        if self.idx_keys is not None and self.idx_keys.shape[-2] > max_length:
-            self.idx_keys = self.idx_keys[..., :max_length, :]
-        super().crop(max_length)
+        effective_length = tokens_to_remove if tokens_to_remove > 0 else self.get_seq_length() - abs(tokens_to_remove)
+        if self.idx_keys is not None and self.idx_keys.shape[-2] > effective_length:
+            self.idx_keys = self.idx_keys[..., :effective_length, :]
+        super().crop(tokens_to_remove)
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
