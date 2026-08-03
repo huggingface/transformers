@@ -40,13 +40,13 @@ from ...utils import (
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     logging,
     safe_load_json_file,
 )
 from ...utils.hub import cached_file
 from ...utils.import_utils import is_torchvision_available, is_tracing, requires
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
     VideoMetadata,
@@ -74,30 +74,7 @@ class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
     font: str
 
 
-@add_start_docstrings(
-    "Constructs a fast Ernie 4.5 VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 16):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 180):
-            The maximum number of frames that can be sampled.
-        draw_on_frames (`bool`, *optional*, defaults to `True`):
-            Whether to draw timestamps on each frame or not.
-            This does not work with `torch.compile` but resembles
-            the performance of the original model.
-        font (`str`, *optional*, defaults to "Roboto-Regular.ttf"):
-            The associated font name for drawing on frames.
-            Defaults to "Roboto-Regular.ttf" and is expected to be
-            saved along the processor as separate file.
-    """,
-)
+@auto_docstring
 @requires(backends=("torchvision",))
 class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
@@ -539,9 +516,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    @add_start_docstrings(
-        BASE_VIDEO_PROCESSOR_DOCSTRING,
-    )
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,

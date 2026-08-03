@@ -21,8 +21,8 @@ import torch
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available, logging
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
@@ -71,18 +71,7 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_frames: int
 
 
-@add_start_docstrings(
-    "Constructs a fast Qwen3-VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 16):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
+@auto_docstring
 class Qwen3VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 32 * 32, "longest_edge": 32 * 32 * 768}

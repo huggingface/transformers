@@ -33,8 +33,8 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glm46v import smart_resize
 
@@ -47,18 +47,7 @@ class Glm46VVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_duration: int
 
 
-@add_start_docstrings(
-    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
+@auto_docstring
 class Glm46VVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 30000}

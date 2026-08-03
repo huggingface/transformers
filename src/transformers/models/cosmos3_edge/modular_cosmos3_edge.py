@@ -39,7 +39,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
     TensorType,
-    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     is_torchvision_available,
@@ -54,7 +53,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
@@ -1303,18 +1302,7 @@ class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
     max_frames: int
 
 
-@add_start_docstrings(
-    "Constructs a video processor that dynamically resizes and packs Cosmos3 Edge video frames.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 16):
-            Spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            Temporal patch size of the vision encoder. Cosmos3 Edge processes each sampled frame independently.
-        merge_size (`int`, *optional*, defaults to 2):
-            Spatial merge size applied by the vision projector.
-    """,
-)
+@auto_docstring
 class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}

@@ -32,8 +32,8 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_video_llama_3 import smart_resize
 
@@ -49,26 +49,7 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
     use_token_compression: bool | None
 
 
-@add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        min_frames (`int`, *optional*, defaults to 4):
-            The minimum number of frames that can be sampled.
-        max_frames (`int`, *optional*, defaults to 768):
-            The maximum number of frames that can be sampled.
-    """,
-)
+@auto_docstring
 class VideoLlama3VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}

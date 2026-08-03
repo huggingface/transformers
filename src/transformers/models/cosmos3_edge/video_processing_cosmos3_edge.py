@@ -26,8 +26,8 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available, logging
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
@@ -95,18 +95,7 @@ def smart_resize_video(
     return h_bar, w_bar
 
 
-@add_start_docstrings(
-    "Constructs a video processor that dynamically resizes and packs Cosmos3 Edge video frames.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 16):
-            Spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            Temporal patch size of the vision encoder. Cosmos3 Edge processes each sampled frame independently.
-        merge_size (`int`, *optional*, defaults to 2):
-            Spatial merge size applied by the vision projector.
-    """,
-)
+@auto_docstring
 class Cosmos3EdgeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
