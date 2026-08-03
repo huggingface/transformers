@@ -547,6 +547,63 @@ def test_waveform_generation_and_decoder_context_crop():
 
 
 @require_torch
+def test_streaming_waveform_generation_matches_non_streaming_generation():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 0, 0]])
+    text_mask = torch.tensor([[1, 0, 0]])
+    audio_mask = 1 - text_mask
+    audio_features = torch.randn(1, 3, 2, 4)
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+    generation_kwargs = {
+        "min_new_audio_patches": 2,
+        "max_new_audio_patches": 2,
+        "num_inference_steps": 1,
+        "decoder_context_patches": 1,
+    }
+
+    waveform = model.generate(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        generator=torch.Generator().manual_seed(7),
+        **generation_kwargs,
+    )
+    streamed_chunks = list(
+        model.generate_streaming(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            generator=torch.Generator().manual_seed(7),
+            **generation_kwargs,
+        )
+    )
+
+    assert len(streamed_chunks) == 2
+    assert all(chunk.shape == (1, 4) for chunk in streamed_chunks)
+    torch.testing.assert_close(torch.cat(streamed_chunks, dim=-1), waveform, rtol=1e-5, atol=1e-6)
+
+    structured_chunks = list(
+        model.generate_streaming(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            generator=torch.Generator().manual_seed(7),
+            return_dict_in_generate=True,
+            **generation_kwargs,
+        )
+    )
+    assert all(isinstance(chunk, VoxCPM2GenerationOutput) for chunk in structured_chunks)
+    assert [chunk.num_generated_patches for chunk in structured_chunks] == [1, 2]
+    assert all(chunk.audio.shape == (1, 4) for chunk in structured_chunks)
+
+
+@require_torch
 def test_streaming_audio_features_match_non_streaming_generation():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 2, 3]])
