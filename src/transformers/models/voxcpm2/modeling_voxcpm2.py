@@ -422,6 +422,17 @@ class VoxCPM2AudioVAE(nn.Module):
         input_values = self.preprocess(input_values, sampling_rate)
         return self.encoder(input_values)["mu"]
 
+    def decode(
+        self, latent_features: torch.Tensor, output_sampling_rate: int | torch.Tensor | None = None
+    ) -> torch.Tensor:
+        sample_rate = None
+        if self.sr_bin_boundaries is not None:
+            output_sampling_rate = self.out_sample_rate if output_sampling_rate is None else output_sampling_rate
+            sample_rate = torch.as_tensor(output_sampling_rate, device=latent_features.device, dtype=torch.int32)
+            if sample_rate.ndim == 0:
+                sample_rate = sample_rate.unsqueeze(0)
+        return self.decoder(latent_features, sample_rate)
+
 
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
