@@ -206,7 +206,7 @@ class ImageProcessingTestMixin:
     def setUp(self):
         if self.image_processor_tester is None:
             raise ValueError(
-                f"You have inherited from {type(self).__name__} but did not set the image_processor_tester."
+                f"You have inherited from {type(self).__name__} but did not set the image_processor_tester attribute."
             )
 
         # Infer model_name from test folder (parent of this test file)
