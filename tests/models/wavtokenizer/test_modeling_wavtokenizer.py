@@ -335,13 +335,14 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 @slow
 @require_torch
 class WavTokenizerIntegrationTest(unittest.TestCase):
-    """Integration tests against a converted real checkpoint.
+    """Integration tests against the released checkpoint.
 
-    Set `WAVTOKENIZER_HF_CHECKPOINT` to a converted model dir (output of
-    `convert_wavtokenizer_checkpoint.py`) or a Hub repo id such as `swiss-ai/wavtokenizer-large-unify-40token`.
-    Set `WAVTOKENIZER_CHECKPOINT_VARIANT=large-unify-40` to additionally check that checkpoint's frozen
-    golden codes.
+    `WAVTOKENIZER_HF_CHECKPOINT` overrides the default with another Hub repo id or a locally converted
+    directory (the output of `convert_wavtokenizer_checkpoint.py`); `WAVTOKENIZER_CHECKPOINT_VARIANT` then
+    selects which frozen golden codes to compare against, and defaults to the released checkpoint's.
     """
+
+    DEFAULT_CHECKPOINT = "swiss-ai/wavtokenizer-large-unify-40token"
 
     # Golden codes for a 0.5 s, 440 Hz, -6 dBFS sine at 24 kHz (first 10 of 20 codes), frozen from the
     # converted `wavtokenizer_large_unify_600_24k.ckpt` and verified bit-exact against the original
@@ -350,10 +351,10 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = os.environ.get("WAVTOKENIZER_HF_CHECKPOINT")
-        if cls.checkpoint is None:
-            raise unittest.SkipTest("WAVTOKENIZER_HF_CHECKPOINT not set (converted checkpoint required)")
-        cls.checkpoint_variant = os.environ.get("WAVTOKENIZER_CHECKPOINT_VARIANT")
+        cls.checkpoint = os.environ.get("WAVTOKENIZER_HF_CHECKPOINT", cls.DEFAULT_CHECKPOINT)
+        # the golden codes belong to the default checkpoint, so only claim them when that is what is loaded
+        default_variant = "large-unify-40" if cls.checkpoint == cls.DEFAULT_CHECKPOINT else None
+        cls.checkpoint_variant = os.environ.get("WAVTOKENIZER_CHECKPOINT_VARIANT", default_variant)
 
     def _sine(self, seconds=0.5, freq=440.0, sampling_rate=24000):
         t = torch.arange(int(seconds * sampling_rate)) / sampling_rate
