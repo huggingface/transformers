@@ -27,6 +27,7 @@ if is_torch_available():
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2DecoderLayer,
         VoxCPM2RMSNorm,
+        VoxCPM2RotaryEmbedding,
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
@@ -313,3 +314,35 @@ def test_rms_normalization_matches_reference():
     variance = hidden_states.float().pow(2).mean(dim=-1, keepdim=True)
     expected_output = layer.weight * (hidden_states * torch.rsqrt(variance + layer.variance_epsilon))
     torch.testing.assert_close(layer(hidden_states), expected_output, rtol=0, atol=0)
+
+
+@require_torch
+def test_rotary_embedding_matches_reference():
+    config = VoxCPM2TextConfig(
+        vocab_size=32,
+        hidden_size=8,
+        intermediate_size=16,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=4,
+        kv_channels=4,
+        max_position_embeddings=8,
+        rope_parameters={
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "long_factor": [1.0, 2.0],
+            "short_factor": [1.0, 2.0],
+            "original_max_position_embeddings": 8,
+        },
+    )
+    layer = VoxCPM2RotaryEmbedding(config)
+    assert not layer.state_dict()
+
+    position_ids = torch.tensor([[0, 1, 3]])
+    cosine, sine = layer(torch.zeros(1, 3, 8), position_ids)
+    inverse_frequencies = torch.tensor([1.0, 0.01]) / torch.tensor([1.0, 2.0])
+    frequencies = position_ids.float().unsqueeze(-1) * inverse_frequencies
+    expected_angles = torch.cat((frequencies, frequencies), dim=-1)
+    torch.testing.assert_close(cosine, expected_angles.cos(), rtol=0, atol=0)
+    torch.testing.assert_close(sine, expected_angles.sin(), rtol=0, atol=0)
