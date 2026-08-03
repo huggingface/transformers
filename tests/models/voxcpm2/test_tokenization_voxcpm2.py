@@ -73,3 +73,13 @@ def test_chinese_splitting_preserves_batch_padding_and_tensor_conversion():
         )
         assert tensor_batch.input_ids.tolist() == expected_input_ids
         assert tensor_batch.attention_mask.tolist() == expected_attention_mask
+
+
+def test_tokenizer_save_and_load_preserves_chinese_splitting(tmp_path):
+    tokenizer = get_tiny_voxcpm2_tokenizer()
+    tokenizer.save_pretrained(tmp_path)
+
+    restored_tokenizer = VoxCPM2Tokenizer.from_pretrained(tmp_path)
+
+    assert restored_tokenizer("你好", add_special_tokens=False).input_ids == [4, 5, 6]
+    assert restored_tokenizer("AB", add_special_tokens=False).input_ids == [12]
