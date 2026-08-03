@@ -25,8 +25,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -251,3 +253,83 @@ class VoxCPM2Attention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class VoxCPM2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        VoxCPM2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class VoxCPM2MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class VoxCPM2DecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = VoxCPM2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = VoxCPM2MLP(config)
+        self.input_layernorm = VoxCPM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = VoxCPM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers) if config.use_mup else 1.0
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        is_causal: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            is_causal=is_causal,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states * self.residual_scale
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states * self.residual_scale

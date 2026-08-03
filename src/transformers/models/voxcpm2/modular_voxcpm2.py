@@ -27,7 +27,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..dac.modeling_dac import Snake1d
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
-from ..minicpm4.modeling_minicpm4 import MiniCPM4Attention, apply_rotary_pos_emb, eager_attention_forward
+from ..minicpm4.modeling_minicpm4 import (
+    MiniCPM4Attention,
+    MiniCPM4DecoderLayer,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -555,6 +560,42 @@ class VoxCPM2Attention(MiniCPM4Attention):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
+
+
+class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):
+    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers) if config.use_mup else 1.0
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        is_causal: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            is_causal=is_causal,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states * self.residual_scale
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states * self.residual_scale
 
 
 __all__ = [
