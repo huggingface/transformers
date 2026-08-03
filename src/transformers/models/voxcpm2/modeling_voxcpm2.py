@@ -619,3 +619,8 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         self.in_channels = config.feat_dim
         self.mean_mode = config.dit_config.mean_mode
         self.estimator = VoxCPM2LocalDiT(config)
+
+    def optimized_scale(self, positive_states: torch.Tensor, negative_states: torch.Tensor) -> torch.Tensor:
+        dot_product = torch.sum(positive_states * negative_states, dim=1, keepdim=True)
+        squared_norm = torch.sum(negative_states**2, dim=1, keepdim=True) + 1e-8
+        return dot_product / squared_norm
