@@ -1371,6 +1371,10 @@ def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
 
 @auto_docstring
 class VoxCPM2Model(VoxCPM2PreTrainedModel):
+    @classmethod
+    def can_generate(cls) -> bool:
+        return True
+
     def __init__(self, config: VoxCPM2Config):
         super().__init__(config)
         config.lm_config._attn_implementation = config._attn_implementation
