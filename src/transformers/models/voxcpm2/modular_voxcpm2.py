@@ -1701,6 +1701,38 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         )
         return generated_features.transpose(1, 2).contiguous()
 
+    def _update_generation_cache(
+        self,
+        generated_features: torch.Tensor,
+        base_past_key_values: Cache,
+        residual_past_key_values: Cache,
+    ) -> tuple[torch.Tensor, torch.Tensor, Cache, Cache]:
+        generated_features = generated_features.to(dtype=self.enc_to_lm_proj.weight.dtype)
+        encoded_features = self.enc_to_lm_proj(self.feat_encoder(generated_features.unsqueeze(1)))[:, :1]
+
+        base_outputs = self.base_lm(
+            inputs_embeds=encoded_features,
+            past_key_values=base_past_key_values,
+            use_cache=True,
+            is_causal=True,
+        )
+        lm_hidden_states = self.fsq_layer(base_outputs.last_hidden_state[:, -1])
+
+        residual_inputs = self.fusion_concat_proj(torch.cat((lm_hidden_states, encoded_features[:, 0]), dim=-1))
+        residual_outputs = self.residual_lm(
+            inputs_embeds=residual_inputs.unsqueeze(1),
+            past_key_values=residual_past_key_values,
+            use_cache=True,
+            is_causal=True,
+        )
+        residual_hidden_states = residual_outputs.last_hidden_state[:, -1]
+        return (
+            lm_hidden_states,
+            residual_hidden_states,
+            base_outputs.past_key_values,
+            residual_outputs.past_key_values,
+        )
+
     @can_return_tuple
     @auto_docstring
     def forward(
