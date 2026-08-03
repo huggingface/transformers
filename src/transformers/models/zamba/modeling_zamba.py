@@ -390,9 +390,7 @@ def mamba_selective_scan(
     return scan_output
 
 
-@use_kernelized_func(
-    [mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
-)
+@use_kernelized_func([mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update])
 class ZambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
