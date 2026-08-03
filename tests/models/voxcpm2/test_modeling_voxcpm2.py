@@ -218,7 +218,13 @@ def test_generation_input_validation():
     audio_mask = torch.zeros_like(input_ids)
 
     model._validate_generation_inputs(
-        input_ids, text_mask, audio_features, audio_mask, min_length=0, max_length=2, num_inference_steps=1
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=2,
+        max_new_audio_patches=2,
+        num_inference_steps=1,
     )
 
     with pytest.raises(ValueError, match="batch size of 1"):
@@ -227,8 +233,8 @@ def test_generation_input_validation():
             text_mask.repeat(2, 1),
             audio_features.repeat(2, 1, 1, 1),
             audio_mask.repeat(2, 1),
-            min_length=0,
-            max_length=2,
+            min_new_audio_patches=0,
+            max_new_audio_patches=2,
             num_inference_steps=1,
         )
     with pytest.raises(ValueError, match="patches with shape"):
@@ -237,13 +243,19 @@ def test_generation_input_validation():
             text_mask,
             torch.zeros(1, 3, 3, 4),
             audio_mask,
-            min_length=0,
-            max_length=2,
+            min_new_audio_patches=0,
+            max_new_audio_patches=2,
             num_inference_steps=1,
         )
     with pytest.raises(ValueError, match="greater than"):
         model._validate_generation_inputs(
-            input_ids, text_mask, audio_features, audio_mask, min_length=2, max_length=2, num_inference_steps=1
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches=3,
+            max_new_audio_patches=2,
+            num_inference_steps=1,
         )
 
 
