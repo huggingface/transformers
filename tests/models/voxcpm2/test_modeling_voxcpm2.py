@@ -51,6 +51,8 @@ if is_torch_available():
         VoxCPM2TimestepEmbedding,
     )
 
+    all_model_classes = (VoxCPM2Model,)
+
 
 def get_tiny_voxcpm2_config() -> VoxCPM2Config:
     return VoxCPM2Config(
