@@ -139,6 +139,8 @@ def test_model_constructor_and_state_dict_layout():
     assert model.feat_encoder.encoder.config._attn_implementation == "sdpa"
     assert model.feat_decoder.estimator.decoder.config._attn_implementation == "sdpa"
     assert model.base_model is model
+    assert model.can_generate()
+    assert model.generation_config is not None
     assert model.chunk_size == 2
     assert model._decode_chunk_size == 2
     assert model.audio_start_token == 101
