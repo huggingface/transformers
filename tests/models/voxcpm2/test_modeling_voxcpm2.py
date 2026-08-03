@@ -17,7 +17,15 @@ import math
 import numpy as np
 import pytest
 
-from transformers import GenerationConfig, VoxCPM2AudioVAEConfig, VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
+from transformers import (
+    AutoModel,
+    AutoModelForTextToWaveform,
+    GenerationConfig,
+    VoxCPM2AudioVAEConfig,
+    VoxCPM2Config,
+    VoxCPM2TextConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import require_torch
 
 
@@ -165,6 +173,14 @@ def test_model_constructor_and_state_dict_layout():
     replacement_embeddings = torch.nn.Embedding(32, 8)
     model.set_input_embeddings(replacement_embeddings)
     assert model.get_input_embeddings() is replacement_embeddings
+
+
+@require_torch
+def test_auto_model_registration():
+    config = get_tiny_voxcpm2_config()
+
+    assert isinstance(AutoModel.from_config(config), VoxCPM2Model)
+    assert isinstance(AutoModelForTextToWaveform.from_config(config), VoxCPM2Model)
 
 
 @require_torch
