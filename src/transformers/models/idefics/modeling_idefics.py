@@ -1208,17 +1208,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # Overwritten -- custom processing based on `config.use_resampler`
-
-        images_kwargs = {}
-        if image_hidden_states is not None:
-            if self.config.use_resampler:
-                images_kwargs["perceiver_embeddings"] = image_hidden_states
-            else:
-                images_kwargs["image_encoder_embeddings"] = image_hidden_states
-        else:
-            images_kwargs["pixel_values"] = pixel_values
-        images_kwargs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1227,9 +1216,17 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             use_cache=use_cache,
             image_attention_mask=image_attention_mask,
-            **images_kwargs,
             **kwargs,
         )
+
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                model_inputs["perceiver_embeddings"] = image_hidden_states
+            else:
+                model_inputs["image_encoder_embeddings"] = image_hidden_states
+        else:
+            model_inputs["pixel_values"] = pixel_values
+        model_inputs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
 
         if image_attention_mask is not None and inputs_embeds is None:
             seq_length = model_inputs["input_ids"].shape[1]
