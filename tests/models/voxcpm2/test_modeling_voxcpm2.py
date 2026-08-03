@@ -36,6 +36,7 @@ if is_torch_available():
         VoxCPM2CausalResidualUnit,
         VoxCPM2ConditionalFlowMatching,
         VoxCPM2DecoderLayer,
+        VoxCPM2GenerationOutput,
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
         VoxCPM2Model,
@@ -427,6 +428,72 @@ def test_generation_decoder_context_uses_trailing_audio_only():
 
     with pytest.raises(ValueError, match="non-negative"):
         model._prepare_decoder_context(audio_features, torch.ones(1, 5), decoder_context_patches=-1)
+
+
+@require_torch
+def test_autoregressive_audio_feature_generation():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 2, 3]])
+    text_mask = torch.ones_like(input_ids)
+    audio_mask = torch.zeros_like(input_ids)
+    audio_features = torch.zeros(1, 3, 2, 4)
+    model._get_stop_flags = lambda hidden_states: (
+        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
+        torch.tensor([True], device=hidden_states.device),
+    )
+
+    output = model._generate_audio_features(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=4,
+        max_new_audio_patches=5,
+        num_inference_steps=1,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    assert isinstance(output, VoxCPM2GenerationOutput)
+    assert output.num_generated_patches == 4
+    assert output.audio_features.shape == (1, 4, 2, 4)
+    assert output.latent_features.shape == (1, 4, 8)
+    assert output.stop_logits.shape == (1, 4, 2)
+    expected_latent_features = output.audio_features.reshape(1, 8, 4).transpose(1, 2).contiguous()
+    torch.testing.assert_close(output.latent_features, expected_latent_features)
+
+    repeated_output = model._generate_audio_features(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=4,
+        max_new_audio_patches=5,
+        num_inference_steps=1,
+        generator=torch.Generator().manual_seed(7),
+    )
+    different_output = model._generate_audio_features(
+        input_ids,
+        text_mask,
+        audio_features,
+        audio_mask,
+        min_new_audio_patches=4,
+        max_new_audio_patches=5,
+        num_inference_steps=1,
+        generator=torch.Generator().manual_seed(8),
+    )
+    torch.testing.assert_close(output.audio_features, repeated_output.audio_features, rtol=0, atol=0)
+    assert not torch.equal(output.audio_features, different_output.audio_features)
+
+    with pytest.raises(ValueError, match="max_cache_length"):
+        model._generate_audio_features(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches=4,
+            max_new_audio_patches=model.config.max_cache_length,
+            num_inference_steps=1,
+        )
 
 
 @require_torch
