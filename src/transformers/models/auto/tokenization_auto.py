@@ -331,6 +331,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("vits", "VitsTokenizer"),
+        ("voxcpm2", "VoxCPM2Tokenizer" if is_tokenizers_available() else None),
         (
             "voxtral",
             "MistralCommonBackend"
