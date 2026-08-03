@@ -628,8 +628,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
             config=self.config,
             inputs_embeds=embedding_output[:, 0:1, :],  # force q_len == 1
             attention_mask=combined_attention_mask,
-            # Force mask creation
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask; the encoder below consumes it as a tensor.
+            allow_is_bidirectional_skip=False,
         )
 
         if self.bypass_transformer and visual_embeds is not None:

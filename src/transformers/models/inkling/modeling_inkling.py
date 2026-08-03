@@ -959,8 +959,8 @@ class InklingVisionModel(InklingPreTrainedModel):
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            hw_fold = int(end_scale[1] // start_scale[1])
+            t_fold = int(end_scale[0] // start_scale[0])
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
                     input_dim=start_scale[3] * shuffle_mult,
@@ -1305,7 +1305,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         audio_input_ids=None,
         audio_input_ids_mask=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         labels=None,
         is_first_iteration=False,
         **kwargs,
