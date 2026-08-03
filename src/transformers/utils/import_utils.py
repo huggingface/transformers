@@ -776,6 +776,7 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
     is_available, triton_version = _is_package_available("triton", return_version=True)
     return is_available and version.parse(triton_version) >= version.parse(min_version)
@@ -1409,6 +1410,7 @@ def is_nltk_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_numba_available() -> bool:
     is_available = _is_package_available("numba")[0]
     if not is_available:
@@ -1424,6 +1426,7 @@ def is_torchaudio_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     if not is_torch_available():
         return False
@@ -1458,6 +1461,7 @@ def is_sudachi_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_sudachi_projection_available() -> bool:
     is_available, sudachipy_version = _is_package_available("sudachipy", return_version=True)
     return is_available and version.parse(sudachipy_version) >= version.parse("0.6.8")
@@ -1513,6 +1517,7 @@ def is_matplotlib_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_mistral_common_available(min_version: str = MISTRAL_COMMON_MIN_VERSION) -> bool:
     is_available, mistral_common_version = _is_package_available("mistral_common", return_version=True)
     return (

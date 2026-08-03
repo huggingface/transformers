@@ -312,6 +312,11 @@ def test_import_without_torch_distributed():
         ("is_peft_available", ()),
         ("is_kernels_available", ()),
         ("is_compressed_tensors_available", ()),
+        ("is_mistral_common_available", ()),
+        ("is_numba_available", ()),
+        ("is_sudachi_projection_available", ()),
+        ("is_torchao_available", ()),
+        ("is_triton_available", ()),
         ("get_cuda_runtime_version", ()),
         ("is_detectron2_available", ()),
         ("is_flash_attn_greater_or_equal_2_10", ()),
@@ -326,18 +331,19 @@ def test_import_without_torch_distributed():
 def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     """
     These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
-    kernel integration reaches through `to_local`. Each therefore carries `@_compile_constant`, so dynamo
-    evaluates it once at trace time and never enters the body.
+    kernel integration reaches through `to_local`. Each carries `@_compile_constant`, so dynamo evaluates
+    it once at trace time and never enters the body; this checks the marker actually takes effect.
 
     Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
     `_is_package_available`, whose `importlib.metadata` lookup dynamo cannot follow — and follows
     differently per Python version, so a body that traces on one interpreter breaks on another. An
     untraced body cannot break on any of them. `@lru_cache` is no protection either: dynamo steps past
-    cache wrappers and traces the wrapped function, which is why the marker sits underneath the cache.
+    cache wrappers and traces the wrapped function, which is why the marker sits underneath the cache —
+    above it, the marker is a silent no-op.
 
-    Only `is_cuda_stream_capturing` and `is_torch_deterministic` are deliberately absent: their answers
-    genuinely change during a process, so they are the two helpers that must *not* carry
-    `@_compile_constant` — folding a transient into the graph would be worse than the graph break.
+    Add a helper here when compiled code starts calling it. Two are deliberately excluded and must never
+    be marked: `is_cuda_stream_capturing` and `is_torch_deterministic` genuinely change answer during a
+    process, so folding a transient into the graph would be worse than the graph break.
     """
     import torch
 
