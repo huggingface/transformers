@@ -33,6 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size_for_max_height_width,
+    get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
@@ -442,8 +443,6 @@ class MaskFormerImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        from ...image_utils import get_max_height_width
-
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
 

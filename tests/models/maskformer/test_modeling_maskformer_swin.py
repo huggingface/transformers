@@ -17,7 +17,13 @@ import collections
 import unittest
 
 from transformers import MaskFormerSwinConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
+from transformers.testing_utils import (
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
+    require_torch,
+    require_torch_multi_gpu,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -207,6 +213,23 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_shifted_window_attention_mask_dtype(self):
+        # The shifted-window attention mask must follow the hidden states' dtype, otherwise a
+        # half-precision model mixes a float32 mask into float16/bfloat16 scores and the matmul
+        # against the value states raises. See #18803, which fixed the same thing for Swin.
+        config, pixel_values, _ = self.model_tester.prepare_config_and_inputs()
+        for dtype, is_available in (
+            (torch.float16, is_torch_fp16_available_on_device),
+            (torch.bfloat16, is_torch_bf16_available_on_device),
+        ):
+            if not is_available(torch_device):
+                continue
+            with self.subTest(dtype=str(dtype)):
+                model = MaskFormerSwinModel(config).to(torch_device).to(dtype).eval()
+                with torch.no_grad():
+                    outputs = model(pixel_values.to(torch_device).to(dtype))
+                self.assertEqual(outputs.last_hidden_state.dtype, dtype)
 
     @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):

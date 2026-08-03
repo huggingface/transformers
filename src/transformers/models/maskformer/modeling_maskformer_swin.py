@@ -457,7 +457,7 @@ class MaskFormerSwinLayer(nn.Module):
         self.intermediate = MaskFormerSwinIntermediate(config, dim)
         self.output = MaskFormerSwinOutput(config, dim)
 
-    def get_attn_mask(self, input_resolution):
+    def get_attn_mask(self, input_resolution, dtype):
         """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
         Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
@@ -476,7 +476,7 @@ class MaskFormerSwinLayer(nn.Module):
         w_idx = torch.arange(width)
         h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
         w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
-        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).float()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
         mask_windows = window_partition(img_mask, self.window_size)
         mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
         attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
@@ -511,7 +511,7 @@ class MaskFormerSwinLayer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask((height_pad, width_pad))
+        attn_mask = self.get_attn_mask((height_pad, width_pad), dtype=hidden_states.dtype)
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
