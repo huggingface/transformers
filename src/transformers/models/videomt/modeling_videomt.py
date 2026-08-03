@@ -101,7 +101,7 @@ class VideomtEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:

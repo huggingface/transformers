@@ -244,7 +244,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
             raise ValueError(f"Ernie 4.5 VL requires the `default` rope type, but found {self.rope_type} instead.")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])

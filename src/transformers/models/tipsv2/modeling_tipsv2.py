@@ -686,9 +686,7 @@ class Tipsv2TextEmbeddings(nn.Module):
         self.position_embedding = Tipsv2SinusoidalPositionalEmbedding(config)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_sqrt_depth else 1.0
 
     def forward(

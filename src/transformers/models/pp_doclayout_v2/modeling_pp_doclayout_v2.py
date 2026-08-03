@@ -85,7 +85,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
         inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -454,9 +454,7 @@ class PPDocLayoutV2TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(

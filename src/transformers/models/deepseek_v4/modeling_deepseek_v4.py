@@ -1032,7 +1032,7 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)

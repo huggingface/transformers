@@ -402,8 +402,8 @@ class EomtDinov3RotaryEmbedding(nn.Module):
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
