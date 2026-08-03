@@ -119,7 +119,7 @@ class EsmRotaryEmbedding(nn.Module):
         self.rope_type = {}
 
         curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
-        self.register_buffer("inv_freq", curr_inv_freq)
+        self.inv_freq = nn.Buffer(curr_inv_freq)
         setattr(self, "attention_scaling", curr_attention_scaling)
 
     @staticmethod

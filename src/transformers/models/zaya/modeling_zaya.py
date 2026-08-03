@@ -65,8 +65,8 @@ class ZayaRotaryEmbedding(nn.Module):
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -537,7 +537,7 @@ class ZayaRouter(nn.Module):
 
         self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_router_classes, config.rms_norm_eps)
 
-        self.register_buffer("balancing_biases", torch.zeros(self.num_router_classes, dtype=torch.float32))
+        self.balancing_biases = nn.Buffer(torch.zeros(self.num_router_classes, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
 
     def forward(

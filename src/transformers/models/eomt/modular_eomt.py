@@ -395,7 +395,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         self.criterion = EomtLoss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
 
         self.post_init()
 

@@ -994,7 +994,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.config = config
-        self.register_buffer("freqs_ci", self._compute_freqs_ci(config), persistent=False)
+        self.freqs_ci = nn.Buffer(self._compute_freqs_ci(config), persistent=False)
 
     @staticmethod
     def _compute_freqs_ci(config):

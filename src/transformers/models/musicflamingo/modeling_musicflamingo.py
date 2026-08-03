@@ -71,7 +71,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         position_angles = self._compute_position_angles(self.inv_freq)
-        self.register_buffer("position_angles", position_angles, persistent=False)
+        self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

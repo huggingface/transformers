@@ -247,9 +247,9 @@ class MimiConv1d(nn.Module):
         # Effective kernel size with dilations.
         kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
-        self.register_buffer("stride", stride, persistent=False)
-        self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
 
         # Asymmetric padding required for odd strides
         self.padding_right = self.padding_total // 2
@@ -972,9 +972,9 @@ class MimiEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("initialized", torch.tensor([True], dtype=torch.float32))
-        self.register_buffer("cluster_usage", torch.ones(config.codebook_size))
-        self.register_buffer("embed_sum", embed)
+        self.initialized = nn.Buffer(torch.tensor([True], dtype=torch.float32))
+        self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
+        self.embed_sum = nn.Buffer(embed)
         self._embed = None
         self.epsilon = epsilon
 

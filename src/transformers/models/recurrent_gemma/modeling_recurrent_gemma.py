@@ -639,9 +639,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.register_buffer(
-            "normalizer", torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False
-        )
+        self.normalizer = nn.Buffer(torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 

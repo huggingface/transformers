@@ -1062,9 +1062,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.config = config
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        self.register_buffer(
-            "box_bias", self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False
-        )
+        self.box_bias = nn.Buffer(self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False)
 
         self.post_init()
 

@@ -640,7 +640,7 @@ class VideomtLoss(nn.Module):
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
@@ -1078,7 +1078,7 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
 
         self.criterion = VideomtLoss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.post_init()

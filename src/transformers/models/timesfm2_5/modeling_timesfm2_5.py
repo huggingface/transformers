@@ -396,10 +396,7 @@ class TimesFm2_5PositionalEmbedding(nn.Module):
 
         num_timescales = self.embedding_dims // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
-        self.register_buffer(
-            "inv_timescales",
-            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
-        )
+        self.inv_timescales = nn.Buffer(min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment))
 
     def forward(self, seq_length=None, position=None):
         """Generates a Tensor of sinusoids with different frequencies.

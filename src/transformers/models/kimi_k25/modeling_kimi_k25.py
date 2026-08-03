@@ -138,7 +138,7 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
-        self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
+        self.time_position_embeddings = nn.Buffer(time_position_embeddings, persistent=False)
 
     def compute_pos_embed(self):
         position_ids = torch.arange(self.num_frames, dtype=torch.float32)

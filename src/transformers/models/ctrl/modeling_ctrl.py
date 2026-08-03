@@ -226,9 +226,7 @@ class CTRLModel(CTRLPreTrainedModel):
         self.h = nn.ModuleList([EncoderLayer(config, layer_idx=i) for i in range(config.n_layer)])
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
-        self.register_buffer(
-            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
-        )
+        self.pos_encoding = nn.Buffer(positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()

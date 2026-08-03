@@ -87,9 +87,7 @@ class CodeGenAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
-        )
+        self.embed_positions = nn.Buffer(create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False)
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))

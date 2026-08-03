@@ -89,7 +89,7 @@ class DiaMultiChannelEmbedding(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_channels = config.num_channels
         offsets = torch.arange(config.num_channels, dtype=torch.long) * config.vocab_size  # (C,)
-        self.register_buffer("offsets", offsets, persistent=False)
+        self.offsets = nn.Buffer(offsets, persistent=False)
 
     def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
         tokens = (audio_codes + self.offsets.to(audio_codes.device)).view(
