@@ -26,9 +26,9 @@ rendered properly in your Markdown viewer.
 
 [MiniCPM4](https://huggingface.co/papers/2506.07900) is a family of decoder-only language models from OpenBMB designed for efficient on-device inference. It uses grouped-query attention, SwiGLU feed-forward layers, RMS normalization, and LongRoPE. MiniCPM4 also scales its embeddings, residual branches, and language-model logits to keep training stable across model sizes.
 
-MiniCPM4 uses the `minicpm` model type and the `MiniCPM` class prefix in Transformers, matching the names stored in the official checkpoint configurations. For example, causal language modeling uses [`MiniCPMForCausalLM`].
+MiniCPM4 uses the `minicpm4` model type and the `MiniCPM4` class prefix in Transformers. Auto classes also recognize the legacy identifiers stored in the official checkpoint configurations, so the released weights load without custom model code.
 
-The following checkpoints use the same native [`MiniCPMForCausalLM`] implementation:
+The following checkpoints use the same native [`MiniCPM4ForCausalLM`] implementation:
 
 - [`openbmb/MiniCPM4-0.5B`](https://huggingface.co/openbmb/MiniCPM4-0.5B)
 - [`openbmb/MiniCPM4-8B`](https://huggingface.co/openbmb/MiniCPM4-8B)
@@ -52,25 +52,25 @@ outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-## MiniCPMConfig
+## MiniCPM4Config
 
-[[autodoc]] MiniCPMConfig
+[[autodoc]] MiniCPM4Config
 
-## MiniCPMModel
+## MiniCPM4Model
 
-[[autodoc]] MiniCPMModel
+[[autodoc]] MiniCPM4Model
     - forward
 
-## MiniCPMForCausalLM
+## MiniCPM4ForCausalLM
 
-[[autodoc]] MiniCPMForCausalLM
+[[autodoc]] MiniCPM4ForCausalLM
     - forward
 
-## MiniCPMForSequenceClassification
+## MiniCPM4ForSequenceClassification
 
-[[autodoc]] MiniCPMForSequenceClassification
+[[autodoc]] MiniCPM4ForSequenceClassification
     - forward
 
-## MiniCPMPreTrainedModel
+## MiniCPM4PreTrainedModel
 
-[[autodoc]] MiniCPMPreTrainedModel
+[[autodoc]] MiniCPM4PreTrainedModel

@@ -45,7 +45,7 @@ from ..llama.modeling_llama import (
 
 @auto_docstring(checkpoint="openbmb/MiniCPM4-8B")
 @strict
-class MiniCPMConfig(LlamaConfig):
+class MiniCPM4Config(LlamaConfig):
     r"""
     scale_emb (`int` or `float`, *optional*, defaults to 12):
         Multiplier applied to input embeddings.
@@ -63,15 +63,15 @@ class MiniCPMConfig(LlamaConfig):
     Example:
 
     ```python
-    >>> from transformers import MiniCPMConfig, MiniCPMModel
+    >>> from transformers import MiniCPM4Config, MiniCPM4Model
 
-    >>> configuration = MiniCPMConfig()
-    >>> model = MiniCPMModel(configuration)
+    >>> configuration = MiniCPM4Config()
+    >>> model = MiniCPM4Model(configuration)
     >>> configuration = model.config
     ```
     """
 
-    model_type = "minicpm"
+    model_type = "minicpm4"
 
     # Architecture dimensions match MiniCPM4-8B. Compatibility fields omitted by MiniCPM4-0.5B keep their official
     # constructor defaults.
@@ -106,15 +106,15 @@ class MiniCPMConfig(LlamaConfig):
         return self.hidden_size / self.dim_model_base
 
 
-class MiniCPMScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
+class MiniCPM4ScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
     pass
 
 
-class MiniCPMRMSNorm(LlamaRMSNorm):
+class MiniCPM4RMSNorm(LlamaRMSNorm):
     pass
 
 
-class MiniCPMRotaryEmbedding(LlamaRotaryEmbedding):
+class MiniCPM4RotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -145,7 +145,7 @@ class MiniCPMRotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
-class MiniCPMMLP(LlamaMLP):
+class MiniCPM4MLP(LlamaMLP):
     pass
 
 
@@ -165,7 +165,7 @@ def apply_rotary_pos_emb(
     return query.to(query_dtype), key.to(key_dtype)
 
 
-class MiniCPMAttention(LlamaAttention):
+class MiniCPM4Attention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -206,8 +206,8 @@ class MiniCPMAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class MiniCPMDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: MiniCPMConfig, layer_idx: int):
+class MiniCPM4DecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: MiniCPM4Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
@@ -241,30 +241,30 @@ class MiniCPMDecoderLayer(LlamaDecoderLayer):
         return hidden_states
 
 
-class MiniCPMPreTrainedModel(LlamaPreTrainedModel):
+class MiniCPM4PreTrainedModel(LlamaPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, MiniCPMScaledWordEmbedding):
+        if isinstance(module, MiniCPM4ScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
 
 
 @auto_docstring
-class MiniCPMModel(LlamaModel):
-    def __init__(self, config: MiniCPMConfig):
+class MiniCPM4Model(LlamaModel):
+    def __init__(self, config: MiniCPM4Config):
         if config.sparse_config is not None:
             raise NotImplementedError(
-                "MiniCPM InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
+                "MiniCPM4 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
                 "use dense attention."
             )
         super().__init__(config)
-        self.embed_tokens = MiniCPMScaledWordEmbedding(
+        self.embed_tokens = MiniCPM4ScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
         )
 
 
 @auto_docstring
-class MiniCPMForCausalLM(LlamaForCausalLM):
+class MiniCPM4ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -283,9 +283,9 @@ class MiniCPMForCausalLM(LlamaForCausalLM):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MiniCPMForCausalLM
+        >>> from transformers import AutoTokenizer, MiniCPM4ForCausalLM
 
-        >>> model = MiniCPMForCausalLM.from_pretrained("openbmb/MiniCPM4-0.5B")
+        >>> model = MiniCPM4ForCausalLM.from_pretrained("openbmb/MiniCPM4-0.5B")
         >>> tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM4-0.5B")
 
         >>> prompt = "The capital of France is"
@@ -321,14 +321,14 @@ class MiniCPMForCausalLM(LlamaForCausalLM):
         )
 
 
-class MiniCPMForSequenceClassification(LlamaForSequenceClassification):
+class MiniCPM4ForSequenceClassification(LlamaForSequenceClassification):
     pass
 
 
 __all__ = [
-    "MiniCPMConfig",
-    "MiniCPMPreTrainedModel",
-    "MiniCPMModel",
-    "MiniCPMForCausalLM",
-    "MiniCPMForSequenceClassification",
+    "MiniCPM4Config",
+    "MiniCPM4PreTrainedModel",
+    "MiniCPM4Model",
+    "MiniCPM4ForCausalLM",
+    "MiniCPM4ForSequenceClassification",
 ]
