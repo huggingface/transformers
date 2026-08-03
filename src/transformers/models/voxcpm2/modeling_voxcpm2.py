@@ -89,7 +89,7 @@ class VoxCPM2GenerationOutput(ModelOutput):
     Output type for [`VoxCPM2Model.generate`].
 
     Args:
-        audio_sequences (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        audio (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Generated audio waveforms.
         latent_features (`torch.FloatTensor` of shape
             `(batch_size, feature_dim, generated_length * patch_size)`):
@@ -103,7 +103,7 @@ class VoxCPM2GenerationOutput(ModelOutput):
             Number of autoregressive audio patches generated.
     """
 
-    audio_sequences: torch.FloatTensor | None = None
+    audio: torch.FloatTensor | None = None
     latent_features: torch.FloatTensor | None = None
     audio_features: torch.FloatTensor | None = None
     stop_logits: torch.FloatTensor | None = None
