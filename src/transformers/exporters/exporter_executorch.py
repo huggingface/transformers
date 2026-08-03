@@ -62,13 +62,6 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.export import ExportedProgram
-    from torch.fx.experimental.symbolic_shapes import (
-        free_symbols,
-        free_unbacked_symbols,
-        guard_or_false,
-        guard_or_true,
-        statically_known_true,
-    )
     from torch.fx.passes.infra.pass_base import PassResult
     from torch.nn.attention import SDPBackend, sdpa_kernel
     from torch.utils._sympy.numbers import IntInfinity
@@ -574,6 +567,7 @@ def _patch_scaled_dot_product_attention(original):
     (both batch ``u0``) with plain broadcasting, so no ``Eq(u0, 1)`` guard is needed and no SDPA
     node survives to be re-decomposed.
     """
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
 
     def _has_unbacked_batch(t):
         # True when ``t``'s batch dim is a data-dependent (unbacked, ``u*``) SymInt.
@@ -722,6 +716,7 @@ def _patch_remove_empty_tensors_from_cat(_original):
     either way at trace time. Using ``guard_or_true`` keeps unbacked-shape
     inputs conservatively (the pass is purely an optimisation).
     """
+    from torch.fx.experimental.symbolic_shapes import guard_or_true
 
     def patch(self, graph_module, cat_node):
         pruned = [arg for arg in cat_node.args[0] if guard_or_true(arg.meta["val"].numel() != 0)]
@@ -782,6 +777,7 @@ def _patch_dim_order_from_stride(_original):
     so the sort still produces *a* dim order when the comparison is unbacked —
     the exact order on unbacked dims doesn't affect correctness, just memory layout.
     """
+    from torch.fx.experimental.symbolic_shapes import guard_or_false, guard_or_true
 
     def patch(stride):
         for s in stride:
@@ -982,6 +978,7 @@ def _make_squeeze_define_node(original):
     where both batch and time are dynamic). Replace the strict check with a no-op when
     the dynamic-dim count is preserved across the squeeze.
     """
+    from torch.fx.experimental.symbolic_shapes import free_symbols
 
     def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
         self.define_nodes_tensor_inputs_outputs(node, xnn_graph, vals_to_ids)
@@ -1418,6 +1415,7 @@ def _fix_negative_slice_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> 
     guard is statically false. Drop the stale ``unbacked_bindings``: the output length is now a
     computable expression, not the fresh unbacked symbol ``run_decompositions`` recorded.
     """
+    from torch.fx.experimental.symbolic_shapes import statically_known_true
 
     if node.target not in (torch.ops.aten.slice.Tensor, torch.ops.aten.slice_copy.Tensor) or len(node.args) < 3:
         return False
