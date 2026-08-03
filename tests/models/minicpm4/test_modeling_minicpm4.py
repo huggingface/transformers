@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 from transformers import AutoConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -28,7 +28,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model
+    from transformers import AutoModelForCausalLM, AutoTokenizer, MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model
     from transformers.models.minicpm4.modeling_minicpm4 import MiniCPM4RotaryEmbedding, apply_rotary_pos_emb
 
 
@@ -244,3 +244,83 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
             Path(directory, "config.json").write_text(json.dumps(checkpoint_config))
             with self.assertRaisesRegex(ValueError, "contains custom code"):
                 AutoConfig.from_pretrained(directory, trust_remote_code=False)
+
+
+@slow
+@require_torch
+class MiniCPM4IntegrationTest(unittest.TestCase):
+    model_id = "openbmb/MiniCPM4-0.5B"
+    revision = "5253c7fcc5e29e1cf3eacb59a58adf1ba4df8630"
+    checkpoint_configs = {
+        "openbmb/MiniCPM4-0.5B": (
+            "5253c7fcc5e29e1cf3eacb59a58adf1ba4df8630",
+            {
+                "hidden_size": 1024,
+                "num_hidden_layers": 24,
+                "max_position_embeddings": 32768,
+                "tie_word_embeddings": True,
+                "pad_token_id": None,
+            },
+        ),
+        "openbmb/MiniCPM4-8B": (
+            "bb2ae14cf59d4ca769c4e42ece54cc3b82a58ef7",
+            {
+                "hidden_size": 4096,
+                "num_hidden_layers": 32,
+                "max_position_embeddings": 32768,
+                "tie_word_embeddings": False,
+                "pad_token_id": 2,
+            },
+        ),
+        "openbmb/MiniCPM4.1-8B": (
+            "3a8dfed9c79a45e07dbff95bcd49d792343fa1a3",
+            {
+                "hidden_size": 4096,
+                "num_hidden_layers": 32,
+                "max_position_embeddings": 65536,
+                "tie_word_embeddings": False,
+                "pad_token_id": 2,
+            },
+        ),
+    }
+
+    def test_supported_checkpoint_configs(self):
+        for model_id, (revision, expected_config) in self.checkpoint_configs.items():
+            with self.subTest(model_id=model_id):
+                config = AutoConfig.from_pretrained(model_id, revision=revision, trust_remote_code=False)
+
+            self.assertIsInstance(config, MiniCPM4Config)
+            self.assertEqual(config.model_type, "minicpm4")
+            for attribute, expected_value in expected_config.items():
+                self.assertEqual(getattr(config, attribute), expected_value)
+
+    def test_model_0_5b_logits_and_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id,
+            revision=self.revision,
+            trust_remote_code=False,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            revision=self.revision,
+            trust_remote_code=False,
+            dtype="auto",
+        )
+        self.assertIsInstance(model, MiniCPM4ForCausalLM)
+
+        inputs = tokenizer("The capital of France is", return_tensors="pt")
+        with torch.no_grad():
+            logits = model(**inputs).logits
+
+        expected_logits = torch.tensor(
+            [-5.375, 1.6328125, 5.78125, -6.5625, -6.0, 9.875, 1.4296875, -5.6875, -6.0625, -5.5625]
+        )
+        torch.testing.assert_close(logits[0, -1, :10].cpu(), expected_logits, rtol=1e-3, atol=1e-3)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(
+            generated_text,
+            "The capital of France is Paris. Which of the following statements about Paris is true?\n"
+            "[A]. Paris is the",
+        )
