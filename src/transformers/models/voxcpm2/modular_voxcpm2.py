@@ -1733,6 +1733,10 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             residual_outputs.past_key_values,
         )
 
+    def _get_stop_flags(self, lm_hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.BoolTensor]:
+        stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
+        return stop_logits, stop_logits.argmax(dim=-1).bool()
+
     @can_return_tuple
     @auto_docstring
     def forward(
