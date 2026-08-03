@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ..dac.modeling_dac import Snake1d
@@ -514,6 +514,19 @@ def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     dit_config.head_dim = config.dit_config.kv_channels
     dit_config.vocab_size = 0
     return dit_config
+
+
+@auto_docstring
+class VoxCPM2PreTrainedModel(PreTrainedModel):
+    config: VoxCPM2Config
+    base_model_prefix = "model"
+    main_input_name = "input_ids"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VoxCPM2DecoderLayer", "VoxCPM2CausalDecoderBlock"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
@@ -1474,5 +1487,6 @@ __all__ = [
     "VoxCPM2DiTConfig",
     "VoxCPM2EncoderConfig",
     "VoxCPM2ModelOutput",
+    "VoxCPM2PreTrainedModel",
     "VoxCPM2TextConfig",
 ]

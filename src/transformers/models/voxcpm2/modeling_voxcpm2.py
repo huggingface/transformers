@@ -35,9 +35,9 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_voxcpm2 import (
@@ -77,6 +77,19 @@ class VoxCPM2ModelOutput(ModelOutput):
     stop_logits: torch.FloatTensor | None = None
     latent_features: torch.FloatTensor | None = None
     generated_latent_features: torch.FloatTensor | None = None
+
+
+@auto_docstring
+class VoxCPM2PreTrainedModel(PreTrainedModel):
+    config: VoxCPM2Config
+    base_model_prefix = "model"
+    main_input_name = "input_ids"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VoxCPM2DecoderLayer", "VoxCPM2CausalDecoderBlock"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
@@ -1265,4 +1278,4 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         return (weights * losses).sum() / torch.clamp(target_mask.sum(), min=1.0)
 
 
-__all__ = ["VoxCPM2ModelOutput"]
+__all__ = ["VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
