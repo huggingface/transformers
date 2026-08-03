@@ -165,9 +165,6 @@ def initialize_tensor_parallelism(
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
-
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):

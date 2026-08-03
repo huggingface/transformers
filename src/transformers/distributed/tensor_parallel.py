@@ -164,6 +164,9 @@ class ColwiseParallel(TensorParallelLayer):
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
+        # The input is replicated but each rank only owns a shard of the output features, so its
+        # input gradient (dY_r @ W_r) is one term of a sum and has to be reduced across ranks.
+        self.input_grad_placements = [Partial()]
 
     def requires_local_tensors(self, module):
         return getattr(module, "_hf_tp_requires_local_tensors", False)
@@ -338,6 +341,9 @@ class PackedColwiseParallel(TensorParallelLayer):
         self.input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
         self.split_factor = split_factor
+        # Same as ColwiseParallel: replicated input, output-dim sharded weight, so the input
+        # gradient is partial.
+        self.input_grad_placements = [Partial()]
 
     def requires_local_tensors(self, module):
         return True

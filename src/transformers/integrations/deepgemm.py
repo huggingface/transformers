@@ -140,38 +140,28 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     return None
 
 
-_IS_SM100: bool | None = None
-
-
-@torch._dynamo.allow_in_graph
-def _is_sm100() -> None:
-    """Resolve whether the current CUDA device is Blackwell (SM100+) into the `_IS_SM100` module global.
-
-    `@allow_in_graph` keeps the untraceable `torch.cuda.get_device_capability()` pybind out of the graph
-    (opaque node) and must return `None` (proxyable) — the same populate-a-global double-hop the kernel
-    loaders use. Re-queries each call rather than caching, so a faked capability in tests is honoured and
-    there is no stale global to reset.
-    """
-    global _IS_SM100
-    _IS_SM100 = torch.cuda.get_device_capability()[0] >= 10
-
-
+@torch._dynamo.assume_constant_result
 def is_sm100() -> bool:
-    """Whether the current CUDA device is Blackwell (SM100+). Reads the `_IS_SM100` global that the
-    `@allow_in_graph` `_is_sm100` populates, so it folds to a constant under `torch.compile` — the
-    branches on it (SF layout, cast kwargs, psum layout, and the arch guards) stay compile-safe without
-    the capability pybind ever entering the traced graph.
+    """Whether the current CUDA device is Blackwell (SM100+). `@assume_constant_result` makes dynamo
+    evaluate it once at trace time and inline the bool — keeping the untraceable
+    `torch.cuda.get_device_capability()` pybind out of the graph — so the branches on it (SF layout, cast
+    kwargs, psum layout, and the arch guards) stay compile-safe. Re-queries each eager call, so a faked
+    capability in tests is honoured.
     """
-    _is_sm100()
-    return _IS_SM100
+    return torch.cuda.get_device_capability()[0] >= 10
 
 
+@torch._dynamo.assume_constant_result
 def is_deepgemm_loadable(raise_error: bool = False) -> bool:
     """Whether the DeepGEMM kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on a
     supported arch (Hopper SM90 or Blackwell SM100), and a CUDA toolkit/nvcc new enough to JIT-compile it.
     A one-glance gate for callers — including external stacks — deciding whether to dispatch to DeepGEMM.
     With `raise_error=True` (used by the loader) it re-raises the specific `ImportError` explaining what's
     missing instead of returning `False`.
+
+    `@assume_constant_result` makes dynamo evaluate this once at trace time and inline the bool (its probe
+    is untraceable — an `lru_cache`'d import check + the `get_device_capability` pybind + nvcc lookup), so
+    the check can sit in a compiled dispatch gate (e.g. `fp8_linear`) without breaking the graph.
 
     FP4 / Mega MoE additionally need Blackwell (SM100); the relevant forwards enforce that via
     `_assert_sm100_requirements` / `is_sm100()`, since this env check can't see which dtype path the
@@ -326,7 +316,7 @@ def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> Non
         loader normalizes even float32-container checkpoints like dsv4-flash-base), so a ``float32`` scale
         on SM100 means a genuine non-UE8M0 checkpoint.
 
-    Uses `is_sm100()` (the compile-safe double-hop), so the whole guard folds to a constant under
+    Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
     ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
     rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
     model compiled from cold with no eager warmup). Both raise ``NotImplementedError``, which
