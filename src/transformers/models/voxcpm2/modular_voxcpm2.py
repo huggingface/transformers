@@ -14,7 +14,9 @@
 
 import math
 
+import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
@@ -422,6 +424,27 @@ class VoxCPM2Config(PreTrainedConfig):
 
     def get_text_config(self, *args, **kwargs):
         return self.lm_config
+
+
+class VoxCPM2ScalarQuantizationLayer(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        self.in_dim = config.lm_config.hidden_size
+        self.out_dim = config.lm_config.hidden_size
+        self.latent_dim = config.scalar_quantization_latent_dim
+        self.scale = config.scalar_quantization_scale
+
+        self.in_proj = nn.Linear(self.in_dim, self.latent_dim)
+        self.out_proj = nn.Linear(self.latent_dim, self.out_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = torch.tanh(self.in_proj(hidden_states))
+        quantized_states = torch.round(hidden_states * self.scale) / self.scale
+        if self.training:
+            hidden_states = hidden_states + (quantized_states - hidden_states).detach()
+        else:
+            hidden_states = quantized_states
+        return self.out_proj(hidden_states)
 
 
 __all__ = [
