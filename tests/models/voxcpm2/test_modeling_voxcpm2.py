@@ -39,6 +39,7 @@ if is_torch_available():
         VoxCPM2NoiseBlock,
         VoxCPM2RMSNorm,
         VoxCPM2RotaryEmbedding,
+        VoxCPM2SampleRateConditionLayer,
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
@@ -242,6 +243,27 @@ def test_causal_decoder_block_matches_reference():
 
     noise_layer = VoxCPM2CausalDecoderBlock(8, 4, stride=3, groups=2, use_noise_block=True)
     assert len(noise_layer.state_dict()) == 30
+
+
+@require_torch
+def test_sample_rate_conditioning_matches_reference():
+    hidden_states = torch.randn(2, 4, 5)
+    sample_rate_ids = torch.tensor([0, 2])
+
+    scale_bias_layer = VoxCPM2SampleRateConditionLayer(4, 3)
+    assert set(scale_bias_layer.state_dict()) == {"scale_embed.weight", "bias_embed.weight"}
+    torch.testing.assert_close(scale_bias_layer(hidden_states, sample_rate_ids), hidden_states, rtol=0, atol=0)
+
+    add_layer = VoxCPM2SampleRateConditionLayer(4, 3, conditioning_type="add")
+    expected_add_output = hidden_states + add_layer.cond_embed(sample_rate_ids).unsqueeze(-1)
+    torch.testing.assert_close(add_layer(hidden_states, sample_rate_ids), expected_add_output, rtol=0, atol=0)
+
+    concat_layer = VoxCPM2SampleRateConditionLayer(
+        4, 3, conditioning_type="concat", conditioning_dim=2, use_output_layer=True
+    )
+    assert concat_layer(hidden_states, sample_rate_ids).shape == hidden_states.shape
+    with pytest.raises(ValueError, match="use_output_layer"):
+        VoxCPM2SampleRateConditionLayer(4, 3, conditioning_type="concat")
 
 
 @require_torch
