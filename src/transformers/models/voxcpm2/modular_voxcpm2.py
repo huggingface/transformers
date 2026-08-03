@@ -742,6 +742,24 @@ class VoxCPM2BackboneModel(nn.Module):
         )
 
 
+class VoxCPM2LocalEncoder(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        encoder_config = _get_local_encoder_backbone_config(config)
+        self.special_token = nn.Parameter(torch.randn(1, 1, 1, encoder_config.hidden_size))
+        self.in_proj = nn.Linear(config.feat_dim, encoder_config.hidden_size)
+        self.encoder = VoxCPM2BackboneModel(encoder_config)
+
+    def forward(self, audio_features: torch.Tensor) -> torch.Tensor:
+        batch_size, num_steps, _, _ = audio_features.shape
+        hidden_states = self.in_proj(audio_features)
+        special_tokens = self.special_token.expand(batch_size, num_steps, 1, -1)
+        hidden_states = torch.cat((special_tokens, hidden_states), dim=2)
+        hidden_states = hidden_states.reshape(batch_size * num_steps, hidden_states.shape[2], hidden_states.shape[3])
+        hidden_states = self.encoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state[:, 0]
+        return hidden_states.reshape(batch_size, num_steps, -1)
+
+
 __all__ = [
     "VoxCPM2AudioVAEConfig",
     "VoxCPM2CfmConfig",

@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -37,7 +38,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
-from .configuration_voxcpm2 import VoxCPM2Config, VoxCPM2TextConfig
+from .configuration_voxcpm2 import VoxCPM2Config, VoxCPM2EncoderConfig, VoxCPM2TextConfig
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
@@ -496,3 +497,41 @@ class VoxCPM2BackboneModel(nn.Module):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
+
+
+def _get_tslm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.lm_config, VoxCPM2TextConfig):
+        raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+    return copy.deepcopy(config.lm_config)
+
+
+def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.encoder_config, VoxCPM2EncoderConfig):
+        raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
+    encoder_config = _get_tslm_config(config)
+    encoder_config.hidden_size = config.encoder_config.hidden_dim
+    encoder_config.intermediate_size = config.encoder_config.ffn_dim
+    encoder_config.num_attention_heads = config.encoder_config.num_heads
+    encoder_config.num_hidden_layers = config.encoder_config.num_layers
+    encoder_config.kv_channels = config.encoder_config.kv_channels
+    encoder_config.head_dim = config.encoder_config.kv_channels
+    encoder_config.vocab_size = 0
+    return encoder_config
+
+
+class VoxCPM2LocalEncoder(nn.Module):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__()
+        encoder_config = _get_local_encoder_backbone_config(config)
+        self.special_token = nn.Parameter(torch.randn(1, 1, 1, encoder_config.hidden_size))
+        self.in_proj = nn.Linear(config.feat_dim, encoder_config.hidden_size)
+        self.encoder = VoxCPM2BackboneModel(encoder_config)
+
+    def forward(self, audio_features: torch.Tensor) -> torch.Tensor:
+        batch_size, num_steps, _, _ = audio_features.shape
+        hidden_states = self.in_proj(audio_features)
+        special_tokens = self.special_token.expand(batch_size, num_steps, 1, -1)
+        hidden_states = torch.cat((special_tokens, hidden_states), dim=2)
+        hidden_states = hidden_states.reshape(batch_size * num_steps, hidden_states.shape[2], hidden_states.shape[3])
+        hidden_states = self.encoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state[:, 0]
+        return hidden_states.reshape(batch_size, num_steps, -1)
