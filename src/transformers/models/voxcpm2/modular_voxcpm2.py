@@ -14,7 +14,7 @@
 
 import copy
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 
 import torch
@@ -1867,6 +1867,85 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             stop_logits=torch.stack(generated_stop_logits, dim=1),
             num_generated_patches=len(generated_patches),
         )
+
+    @torch.inference_mode()
+    def _generate_audio_features_streaming(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        min_new_audio_patches: int = 4,
+        max_new_audio_patches: int = 2000,
+        num_inference_steps: int = 10,
+        guidance_scale: float = 2.0,
+        temperature: float = 1.0,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        generator: torch.Generator | None = None,
+    ) -> Generator[VoxCPM2GenerationOutput, None, None]:
+        self._validate_generation_inputs(
+            input_ids,
+            text_mask,
+            audio_features,
+            audio_mask,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            num_inference_steps,
+        )
+        if input_ids.shape[1] + max_new_audio_patches > self.config.max_cache_length:
+            raise ValueError(
+                "The prompt length plus `max_new_audio_patches` cannot exceed "
+                f"`config.max_cache_length` ({self.config.max_cache_length})"
+            )
+        if generator is not None and generator.device.type != audio_features.device.type:
+            raise ValueError("The generation `generator` and model inputs must use the same device type")
+
+        (
+            lm_hidden_states,
+            residual_hidden_states,
+            conditioning_features,
+            base_past_key_values,
+            residual_past_key_values,
+        ) = self._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
+
+        for patch_index in range(max_new_audio_patches):
+            generated_features = self._sample_audio_patch(
+                lm_hidden_states,
+                residual_hidden_states,
+                conditioning_features,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                temperature=temperature,
+                sway_sampling_coefficient=sway_sampling_coefficient,
+                use_cfg_zero_star=use_cfg_zero_star,
+                generator=generator,
+            )
+            stop_logits, stop_flags = self._get_stop_flags(lm_hidden_states)
+            num_generated_patches = patch_index + 1
+            yield VoxCPM2GenerationOutput(
+                latent_features=generated_features.transpose(1, 2).contiguous(),
+                audio_features=generated_features.unsqueeze(1),
+                stop_logits=stop_logits.unsqueeze(1),
+                num_generated_patches=num_generated_patches,
+            )
+
+            if num_generated_patches >= min_new_audio_patches and stop_flags.all():
+                break
+            if num_generated_patches == max_new_audio_patches:
+                break
+
+            (
+                lm_hidden_states,
+                residual_hidden_states,
+                base_past_key_values,
+                residual_past_key_values,
+            ) = self._update_generation_cache(
+                generated_features,
+                base_past_key_values,
+                residual_past_key_values,
+            )
+            conditioning_features = generated_features
 
     @torch.inference_mode()
     def generate(
