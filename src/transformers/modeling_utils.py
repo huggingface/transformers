@@ -4130,6 +4130,11 @@ class PreTrainedModel(
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
             _ = kwargs.pop(name, None)
 
+        for name in ["tp_plan", "tp_size"]:
+            if name in kwargs:
+                _ = kwargs.pop(name)
+                raise ValueError(f"`{name}` is no longer accepted by `from_pretrained`, use `distributed_config` instead")
+
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
