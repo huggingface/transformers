@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from transformers import DacFeatureExtractor
 from transformers.models.voxcpm2.processing_voxcpm2 import VoxCPM2Processor
+from transformers.testing_utils import require_torch
 
 from .test_tokenization_voxcpm2 import get_tiny_voxcpm2_tokenizer
 
@@ -31,3 +34,49 @@ def get_tiny_voxcpm2_processor() -> VoxCPM2Processor:
     )
     feature_extractor = DacFeatureExtractor(sampling_rate=16000, hop_length=1, return_attention_mask=True)
     return VoxCPM2Processor(feature_extractor, tokenizer, audio_patch_size=4)
+
+
+@require_torch
+def test_processor_packs_all_generation_modes():
+    processor = get_tiny_voxcpm2_processor()
+    prompt_audio = np.arange(5, dtype=np.float32)
+    reference_audio = np.arange(3, dtype=np.float32)
+    target_ids = processor.tokenizer("A", add_special_tokens=False).input_ids
+    continuation_ids = processor.tokenizer("BA", add_special_tokens=False).input_ids
+
+    zero_shot = processor(text="A", return_tensors="pt")
+    continuation = processor(
+        text="A",
+        audio=prompt_audio,
+        prompt_text="B",
+        sampling_rate=16000,
+        return_tensors="pt",
+    )
+    reference = processor(
+        text="A",
+        reference_audio=reference_audio,
+        sampling_rate=16000,
+        return_tensors="pt",
+    )
+    combined = processor(
+        text="A",
+        audio=prompt_audio,
+        prompt_text="B",
+        reference_audio=reference_audio,
+        sampling_rate=16000,
+        return_tensors="pt",
+    )
+
+    audio_start = processor.audio_start_token_id
+    reference_start = processor.reference_audio_start_token_id
+    reference_end = processor.reference_audio_end_token_id
+    assert zero_shot.input_ids.tolist() == [target_ids + [audio_start]]
+    assert continuation.input_ids.tolist() == [continuation_ids + [audio_start, 0, 0]]
+    assert reference.input_ids.tolist() == [[reference_start, 0, reference_end] + target_ids + [audio_start]]
+    assert combined.input_ids.tolist() == [
+        [reference_start, 0, reference_end] + continuation_ids + [audio_start, 0, 0]
+    ]
+
+    for model_inputs in (zero_shot, continuation, reference, combined):
+        assert model_inputs.attention_mask.bool().all()
+        assert (model_inputs.text_mask + model_inputs.audio_mask == 1).all()
