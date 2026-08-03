@@ -1566,6 +1566,9 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.base_lm.embed_tokens
 
+    def set_input_embeddings(self, value: nn.Module):
+        self.base_lm.embed_tokens = value
+
 
 __all__ = [
     "VoxCPM2AudioVAEConfig",
