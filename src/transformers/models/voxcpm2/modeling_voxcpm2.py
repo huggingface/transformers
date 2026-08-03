@@ -2074,9 +2074,13 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         text_mask: torch.Tensor,
-        audio_features: torch.FloatTensor,
-        audio_mask: torch.Tensor,
+        audio_features: torch.FloatTensor | None = None,
+        audio_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
         generation_config: GenerationConfig | None = None,
         min_new_audio_patches: int | None = None,
         max_new_audio_patches: int | None = None,
@@ -2092,6 +2096,17 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
     ) -> Generator[torch.Tensor | VoxCPM2GenerationOutput, None, None]:
         r"""Streams waveform chunks from a mixed text-audio prompt."""
         del attention_mask
+        if audio_mask is None:
+            raise ValueError("`audio_mask` is required for VoxCPM2 generation")
+        audio_features = self._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            audio_features=audio_features,
+            prompt_input_values=prompt_input_values,
+            prompt_attention_mask=prompt_attention_mask,
+            reference_input_values=reference_input_values,
+            reference_attention_mask=reference_attention_mask,
+        )
         (
             min_new_audio_patches,
             max_new_audio_patches,
