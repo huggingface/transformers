@@ -55,3 +55,30 @@ def _load_checkpoint_file(checkpoint_path: Path) -> dict[str, torch.Tensor]:
     if not isinstance(state_dict, dict) or not all(isinstance(value, torch.Tensor) for value in state_dict.values()):
         raise ValueError(f"{checkpoint_path} does not contain a tensor state dictionary")
     return state_dict
+
+
+def _load_source_state_dicts(input_path: str | Path) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    input_path = Path(input_path)
+    model_path = next(
+        (
+            input_path / filename
+            for filename in ("model.safetensors", "pytorch_model.bin")
+            if (input_path / filename).is_file()
+        ),
+        None,
+    )
+    if model_path is None:
+        raise FileNotFoundError(f"No model checkpoint found in {input_path}")
+
+    audio_vae_path = next(
+        (
+            input_path / filename
+            for filename in ("audiovae.safetensors", "audiovae.pth")
+            if (input_path / filename).is_file()
+        ),
+        None,
+    )
+    if audio_vae_path is None:
+        raise FileNotFoundError(f"No AudioVAE checkpoint found in {input_path}")
+
+    return _load_checkpoint_file(model_path), _load_checkpoint_file(audio_vae_path)
