@@ -219,7 +219,6 @@ def mamba_selective_scan(
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
     deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
 
-    # TODO: check these out
     if use_mambapy and pscan is not None:
         all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
 
