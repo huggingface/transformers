@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torch.func import jvp
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -955,6 +956,76 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
             torch.stack((t_samples, t_samples)),
         )
         return r_samples.squeeze(), t_samples.squeeze()
+
+    def compute_loss(
+        self,
+        target: torch.Tensor,
+        mu: torch.Tensor,
+        conditioning: torch.Tensor | None = None,
+        target_mask: torch.Tensor | None = None,
+        progress: float = 0.0,
+    ) -> torch.Tensor:
+        batch_size = target.shape[0]
+        if self.training_cfg_rate > 0:
+            keep_conditioning = torch.rand(batch_size, device=target.device) > self.training_cfg_rate
+            mu = mu * keep_conditioning.view(-1, 1)
+
+        if conditioning is None:
+            conditioning = torch.zeros_like(target)
+
+        noise_probability = self.noise_cond_prob_range[0] + progress * (
+            self.noise_cond_prob_range[1] - self.noise_cond_prob_range[0]
+        )
+        noisy_conditioning = torch.rand(batch_size, device=target.device) > 1.0 - noise_probability
+        conditioning = conditioning + (
+            noisy_conditioning.view(-1, 1, 1) * torch.randn_like(conditioning) * self.noise_cond_scale
+        )
+
+        ratio_r_neq_t = (
+            self.ratio_r_neq_t_range[0]
+            + progress * (self.ratio_r_neq_t_range[1] - self.ratio_r_neq_t_range[0])
+            if self.mean_mode
+            else 0.0
+        )
+        r_samples, t_samples = self.sample_r_t(target, ratio_r_neq_t=ratio_r_neq_t)
+        detached_r_samples = r_samples.detach().clone()
+        detached_t_samples = t_samples.detach().clone()
+
+        noise = torch.randn_like(target)
+        interpolated_states = (
+            1 - detached_t_samples.view(-1, 1, 1)
+        ) * target + detached_t_samples.view(-1, 1, 1) * noise
+        target_velocity = noise - target
+
+        def model_function(sample: torch.Tensor, r_timestep: torch.Tensor, t_timestep: torch.Tensor) -> torch.Tensor:
+            return self.estimator(
+                sample,
+                mu,
+                t_timestep,
+                conditioning,
+                delta_timestep=t_timestep - r_timestep,
+            )
+
+        if self.mean_mode:
+            r_velocity = torch.zeros_like(r_samples)
+            t_velocity = torch.ones_like(t_samples)
+            with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False):
+                predicted_velocity, velocity_derivative = jvp(
+                    model_function,
+                    (interpolated_states, r_samples, t_samples),
+                    (target_velocity, r_velocity, t_velocity),
+                )
+            target_velocity = target_velocity - (
+                detached_t_samples - detached_r_samples
+            ).view(-1, 1, 1) * velocity_derivative
+        else:
+            predicted_velocity = model_function(interpolated_states, r_samples, t_samples)
+
+        losses = F.mse_loss(predicted_velocity, target_velocity.detach(), reduction="none").mean(dim=1)
+        if target_mask is None:
+            return losses.mean()
+        weights = self.adaptive_loss_weighting(losses, target_mask.squeeze(1))
+        return (weights * losses).sum() / torch.clamp(target_mask.sum(), min=1.0)
 
 
 __all__ = [
