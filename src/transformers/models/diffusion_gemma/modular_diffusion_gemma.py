@@ -682,7 +682,6 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     supports_gradient_checkpointing = True
     _can_record_outputs = None  # override

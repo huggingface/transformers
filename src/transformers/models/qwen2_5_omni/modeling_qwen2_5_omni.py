@@ -2080,7 +2080,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         "attentions": Qwen2_5OmniAttention,
     }
 
-    _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)

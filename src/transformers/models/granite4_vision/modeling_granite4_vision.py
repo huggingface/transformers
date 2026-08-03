@@ -516,7 +516,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
@@ -525,6 +524,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,

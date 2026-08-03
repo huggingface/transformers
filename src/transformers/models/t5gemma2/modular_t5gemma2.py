@@ -466,9 +466,6 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
     _no_split_modules = [
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
     ]
     # Recording is declared on the text encoder/decoder classes; None avoids inheriting the gemma3 dict
     _can_record_outputs = None
