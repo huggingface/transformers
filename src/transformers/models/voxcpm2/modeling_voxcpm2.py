@@ -1482,6 +1482,55 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             latent_features.shape[-1],
         )
 
+    def _align_generation_audio_features(
+        self,
+        input_ids: torch.LongTensor,
+        audio_mask: torch.Tensor,
+        reference_features: torch.Tensor | None = None,
+        prompt_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if input_ids.ndim != 2 or input_ids.shape[0] != 1:
+            raise ValueError("VoxCPM2 generation currently supports a batch size of 1")
+        if audio_mask.shape != input_ids.shape:
+            raise ValueError("`audio_mask` must have the same shape as `input_ids`")
+        if not torch.all((audio_mask == 0) | (audio_mask == 1)):
+            raise ValueError("`audio_mask` must contain only zeros and ones")
+
+        feature_parts = []
+        for name, features in (("reference", reference_features), ("prompt", prompt_features)):
+            if features is None:
+                continue
+            if (
+                features.ndim != 4
+                or features.shape[0] != 1
+                or features.shape[2] != self.patch_size
+                or features.shape[3] != self.feat_dim
+            ):
+                raise ValueError(
+                    f"`{name}_features` must have shape (1, num_patches, {self.patch_size}, {self.feat_dim})"
+                )
+            feature_parts.append(features)
+
+        audio_vae_parameter = next(self.audio_vae.parameters())
+        aligned_features = torch.zeros(
+            input_ids.shape[0],
+            input_ids.shape[1],
+            self.patch_size,
+            self.feat_dim,
+            dtype=feature_parts[0].dtype if feature_parts else audio_vae_parameter.dtype,
+            device=audio_vae_parameter.device,
+        )
+        num_audio_positions = int(audio_mask.sum().item())
+        num_audio_patches = sum(features.shape[1] for features in feature_parts)
+        if num_audio_positions != num_audio_patches:
+            raise ValueError(
+                f"`audio_mask` contains {num_audio_positions} audio positions, but received {num_audio_patches} patches"
+            )
+        if feature_parts:
+            audio_features = torch.cat([features.to(aligned_features.device) for features in feature_parts], dim=1)
+            aligned_features[audio_mask.to(device=aligned_features.device, dtype=torch.bool)] = audio_features[0]
+        return aligned_features
+
     def _validate_generation_inputs(
         self,
         input_ids: torch.LongTensor,
