@@ -249,6 +249,37 @@ def test_generation_input_validation():
             max_new_audio_patches=2,
             num_inference_steps=1,
         )
+
+
+@require_torch
+def test_generation_prefill_matches_full_backbones():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 2, 3]])
+    text_mask = torch.tensor([[1, 1, 0]])
+    audio_mask = 1 - text_mask
+    audio_features = torch.randn(1, 3, 2, 4)
+
+    lm_hidden_states, residual_hidden_states, conditioning_features, base_cache, residual_cache = (
+        model._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
+    )
+
+    encoded_features = model.enc_to_lm_proj(model.feat_encoder(audio_features))
+    text_embeddings = model.base_lm.embed_tokens(input_ids)
+    inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings + audio_mask.unsqueeze(-1) * encoded_features
+    base_states = model.base_lm(inputs_embeds=inputs_embeds).last_hidden_state
+    expected_encoded_states = model.fsq_layer(base_states) * audio_mask.unsqueeze(-1)
+    expected_encoded_states += base_states * text_mask.unsqueeze(-1)
+    residual_inputs = model.fusion_concat_proj(
+        torch.cat((expected_encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+    )
+    expected_residual_states = model.residual_lm(inputs_embeds=residual_inputs).last_hidden_state
+
+    torch.testing.assert_close(lm_hidden_states, expected_encoded_states[:, -1], rtol=0, atol=0)
+    torch.testing.assert_close(residual_hidden_states, expected_residual_states[:, -1], rtol=0, atol=0)
+    torch.testing.assert_close(conditioning_features, audio_features[:, -1], rtol=0, atol=0)
+    assert base_cache is not residual_cache
+    assert base_cache.get_seq_length() == input_ids.shape[1]
+    assert residual_cache.get_seq_length() == input_ids.shape[1]
     with pytest.raises(ValueError, match="greater than"):
         model._validate_generation_inputs(
             input_ids,
