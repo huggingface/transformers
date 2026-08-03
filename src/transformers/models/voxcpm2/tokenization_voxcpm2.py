@@ -28,10 +28,7 @@ class VoxCPM2Tokenizer(LlamaTokenizer):
             prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self),
             split=False,
         )
-        han_characters = pre_tokenizers.Split(
-            Regex(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0002a6df]"),
-            behavior="isolated",
-        )
+        han_characters = pre_tokenizers.Split(Regex(r"\p{Han}"), behavior="isolated")
         self.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence([metaspace, han_characters])
 
 
