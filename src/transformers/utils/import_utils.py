@@ -47,6 +47,24 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
+def _compile_constant(fn):
+    """Mark `fn`'s result as a trace-time constant, so `torch.compile` inlines it instead of tracing it.
+
+    This is `torch._dynamo.assume_constant_result`, spelled without importing torch: this module is what
+    decides whether torch is installed, so it must never import it (and doing so would pull torch into
+    `import transformers`, which is deliberately torch-free).
+
+    Apply it *under* `@lru_cache`, not above: dynamo steps past the cache wrapper and only reads the
+    marker on the function it actually traces.
+
+    Only for helpers whose answer is fixed for the lifetime of the process — an install probe, a hardware
+    capability, an environment variable. Never for a runtime query such as `is_cuda_stream_capturing`,
+    where inlining a value that legitimately changes would silently bake a transient into the graph.
+    """
+    fn._dynamo_marked_constant = True
+    return fn
+
+
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str]:
     """Check if `pkg_name` exist, and optionally try to get its version"""
     spec = importlib.util.find_spec(pkg_name)
@@ -75,7 +93,6 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # No version + no __file__ means a namespace package (PEP 420) shadowing on sys.path, not a real install.
             if package_version == "N/A" and getattr(package, "__file__", None) is None:
                 package_exists = False
-        logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
         return package_exists, package_version
@@ -244,6 +261,7 @@ def is_cuda_platform() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def get_cuda_runtime_version() -> tuple[int, int]:
     """Deprecated. Return the CUDA runtime version as (major, minor).
 
@@ -302,6 +320,7 @@ def is_habana_gaudi1() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_mps_available(min_version: str | None = None) -> bool:
     if is_torch_available():
         import torch
@@ -572,6 +591,7 @@ def is_torch_tpu_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -980,6 +1000,7 @@ def is_datasets_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_detectron2_available() -> bool:
     # We need this try/except block because otherwise after uninstalling the library, it stays available for some reason
     # i.e. `import detectron2` and `import detectron2.modeling` still work, even though the library is uninstalled
@@ -1044,6 +1065,7 @@ def is_torchcodec_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_ninja_available() -> bool:
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -1147,6 +1169,7 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     warnings.warn(
         "`is_flash_attn_greater_or_equal_2_10` is deprecated and will be removed in v5.8. "
@@ -1427,6 +1450,7 @@ def is_sudachi_projection_available() -> bool:
 
 
 @lru_cache
+@_compile_constant
 def is_jumanpp_available() -> bool:
     return _is_package_available("rhoknp")[0] and shutil.which("jumanpp") is not None
 
@@ -1507,6 +1531,8 @@ def torch_only_method(fn: Callable) -> Callable:
     return wrapper
 
 
+# Deliberately not `@_compile_constant`: `torch.use_deterministic_algorithms()` can flip this at
+# any point, so its result is not fixed for the lifetime of the process.
 def is_torch_deterministic() -> bool:
     """
     Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
@@ -1610,6 +1636,8 @@ def is_jit_tracing() -> bool:
         return False
 
 
+# Deliberately not `@_compile_constant`: the answer flips during CUDA graph capture, so inlining
+# it at trace time would bake a transient into the graph.
 def is_cuda_stream_capturing() -> bool:
     try:
         import torch
@@ -1711,6 +1739,7 @@ def is_in_notebook() -> bool:
         return False
 
 
+@_compile_constant
 def is_sagemaker_dp_enabled() -> bool:
     # Get the sagemaker specific env variable.
     sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
@@ -1725,6 +1754,7 @@ def is_sagemaker_dp_enabled() -> bool:
     return _is_package_available("smdistributed")[0]
 
 
+@_compile_constant
 def is_sagemaker_mp_enabled() -> bool:
     # Get the sagemaker specific mp parameters from smp_options variable.
     smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
