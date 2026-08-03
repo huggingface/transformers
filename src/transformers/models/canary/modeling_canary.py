@@ -197,6 +197,56 @@ class CanaryAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class CanaryPositionalEmbedding(nn.Module):
+    """
+    Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
+    NeMo's `FixedPositionalEncoding` and the table is indexed by `position_ids`. The conversion script permutes the
+    checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
+    """
+
+    def __init__(self, length: int, channels: int):
+        super().__init__()
+        max_timescale = 10000 ** ((channels - 2) / channels)
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
+        if channels % 2 != 0:
+            raise ValueError("CanaryPositionalEmbedding needs even channels input")
+        position_embedding = self.compute_default_singular_positional_embedding()
+        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+
+    def compute_default_singular_positional_embedding(self) -> torch.Tensor:
+        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
+        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
+
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return self.positional_embedding[position_ids]
+
+
+@auto_docstring
+class CanaryPreTrainedModel(PreTrainedModel):
+    config: CanaryConfig
+    base_model_prefix = "model"
+    main_input_name = "input_features"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, CanaryPositionalEmbedding):
+            position_embeddings = module.compute_default_singular_positional_embedding()
+            init.copy_(module.positional_embedding, position_embeddings)
+
+
 class CanaryDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: CanaryConfig, layer_idx: int | None = None):
         super().__init__()
@@ -287,56 +337,6 @@ class CanaryDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         return hidden_states
-
-
-class CanaryPositionalEmbedding(nn.Module):
-    """
-    Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
-    NeMo's `FixedPositionalEncoding` and the table is indexed by `position_ids`. The conversion script permutes the
-    checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
-    """
-
-    def __init__(self, length: int, channels: int):
-        super().__init__()
-        max_timescale = 10000 ** ((channels - 2) / channels)
-        self.length = length
-        self.channels = channels
-        self.max_timescale = max_timescale
-        if channels % 2 != 0:
-            raise ValueError("CanaryPositionalEmbedding needs even channels input")
-        position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
-
-    def compute_default_singular_positional_embedding(self) -> torch.Tensor:
-        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
-        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
-
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return self.positional_embedding[position_ids]
-
-
-@auto_docstring
-class CanaryPreTrainedModel(PreTrainedModel):
-    config: CanaryConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, CanaryPositionalEmbedding):
-            position_embeddings = module.compute_default_singular_positional_embedding()
-            init.copy_(module.positional_embedding, position_embeddings)
 
 
 class CanaryDecoder(CanaryPreTrainedModel):

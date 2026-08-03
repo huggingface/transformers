@@ -22,6 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -67,6 +68,7 @@ class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF01
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
     r"""
@@ -85,7 +87,7 @@ class CanaryProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        audio: AudioInput | None = None,
+        audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         output_labels: bool = False,
         **kwargs: Unpack[CanaryProcessorKwargs],
@@ -96,10 +98,7 @@ class CanaryProcessor(ProcessorMixin):
         output_labels (`bool`, *optional*, defaults to `False`):
             Whether to also return the tokenized `text` as `labels` for training.
         """
-        if audio is None:
-            raise ValueError("You need to specify an `audio` input to process.")
 
-        # Check only if passed explicitly as another value since by default we'll use `pt`
         if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

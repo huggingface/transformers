@@ -39,7 +39,6 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 from ..whisper.modeling_whisper import (
     WhisperAttention,
     WhisperDecoder,
-    WhisperDecoderLayer,
     WhisperModel,
     WhisperPreTrainedModel,
 )
@@ -59,10 +58,6 @@ class CanaryAttention(WhisperAttention):
     def __init__(self, **super_kwargs):
         super().__init__(**super_kwargs)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-
-
-class CanaryDecoderLayer(WhisperDecoderLayer):
-    pass
 
 
 class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
@@ -114,7 +109,6 @@ class CanaryDecoder(WhisperDecoder):
         super().__init__(config)
         self.max_source_positions = None
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -210,7 +204,6 @@ class CanaryModel(WhisperModel):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = CanaryDecoder(config.decoder_config)
-        self.post_init()
 
     def _mask_input_features(self):
         raise AttributeError("Not needed for Canary")
