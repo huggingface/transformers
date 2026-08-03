@@ -888,3 +888,28 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+def capture_calibration_inputs(
+    model: PreTrainedModel,
+    calibration_dataset: list[dict[str, Any]],
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
+) -> dict[str, list[dict]]:
+    """Capture per-component forward inputs for post-training quantization calibration.
+
+    Reuses `decompose_for_generation`'s capture: each generate-style sample in `calibration_dataset` is
+    run through the decomposition, and every component's forward kwargs are collected. Returns
+    `{component_name: [forward_inputs, ...]}` — one list per component (same keys
+    `decompose_for_generation` produces), which the exporter feeds to that component's quantization
+    calibration. This is the input/output-capture "trick" applied to calibration: the user provides one
+    generate-level dataset, and each single-graph component gets its own inferred calibration set.
+    """
+    calibration: dict[str, list[dict]] = {}
+    for sample in calibration_dataset:
+        components = decompose_for_generation(
+            model, sample, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+        for name, (_submodel, forward_inputs) in components.items():
+            calibration.setdefault(name, []).append(forward_inputs)
+    return calibration

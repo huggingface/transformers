@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import MutableMapping
 from typing import TYPE_CHECKING
@@ -25,7 +26,7 @@ from packaging import version
 from ..utils import logging
 from ..utils.import_utils import _is_package_available, is_torch_available
 from .configs import ExportConfigMixin
-from .utils import decompose_for_generation
+from .utils import capture_calibration_inputs, decompose_for_generation
 
 
 logger = logging.get_logger(__name__)
@@ -168,6 +169,14 @@ class HfExporter(ABC):
                 classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
                 stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
+        Quantization calibration: when a single `config` is passed (not a per-component dict) and it
+        carries a `quantizer`, its `calibration_dataset` is read as **generate** kwarg dicts (same level
+        as `sample_inputs` here) and fanned out — each sample is run through the decomposition to produce
+        a per-component calibration set that replaces each component's `config.calibration_dataset`
+        (per-graph forward kwargs). Leave it `None` to fall back to a single pass on each component's own
+        sample inputs (see [`DynamoConfig.calibration_dataset`]). A per-component `config` dict is left
+        untouched — set each component's `calibration_dataset` to its own forward kwargs directly.
+
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
             [`~exporters.utils.decompose_for_generation`]. Values are whatever
@@ -189,13 +198,28 @@ class HfExporter(ABC):
                     f"Expected one entry per component: {sorted(components)}."
                 )
             configs = config
+            calibration = {}
         else:
             configs = dict.fromkeys(components, config)
+            # a single config's `calibration_dataset` is generate-level here: fan it out into a
+            # per-component (forward-level) calibration set via the decomposition capture
+            calibration = {}
+            if getattr(config, "calibration_dataset", None):
+                calibration = capture_calibration_inputs(
+                    model,
+                    config.calibration_dataset,
+                    generation_config=generation_config,
+                    multi_token_decode=multi_token_decode,
+                )
 
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():
+            component_config = configs[name]
+            component_calibration = calibration.get(name)
+            if component_calibration is not None:
+                component_config = dataclasses.replace(component_config, calibration_dataset=component_calibration)
             try:
-                exported[name] = self.export(submodel, subinputs, config=configs[name])
+                exported[name] = self.export(submodel, subinputs, config=component_config)
             except Exception as e:
                 raise RuntimeError(
                     f"{type(self).__name__}.export failed on component '{name}' "

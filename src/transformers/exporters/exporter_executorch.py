@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda` /
+   `prepare_for_qnn` move the model to the target device/dtype and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -139,7 +139,7 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs, config)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
@@ -222,7 +222,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -240,7 +240,37 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """On-device inference via the Qualcomm QNN (HTP/NPU) backend.
+
+    **Unverified in this repo's CI** — the Qualcomm AI Engine Direct SDK isn't installed here (the
+    `executorch.backends.qualcomm` package won't even import without it), so this path can't be
+    exercised in-tree; it follows the QNN export recipe and should be validated on Qualcomm hardware.
+
+    The model is traced on CPU (like XNNPACK), then delegated to the HTP via `QnnPartitioner`. Pass a
+    `QnnQuantizer` through `config.quantizer` for HTP int8/16 (the generic PT2E step quantizes the graph
+    before this lowering); with no quantizer the HTP compiler spec runs fp16 (`use_fp16=True`). The
+    `executorch.backends.qualcomm` imports are local because that package raises on import without the
+    SDK — a module-level import would break the ExecuTorch exporter for the XNNPACK/CUDA backends too.
+    """
+    from executorch.backends.qualcomm.partition.qnn_partitioner import QnnPartitioner
+    from executorch.backends.qualcomm.serialization.qc_schema import QcomChipset
+    from executorch.backends.qualcomm.utils.utils import (
+        generate_htp_compiler_spec,
+        generate_qnn_executorch_compiler_spec,
+    )
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+    backend_options = generate_htp_compiler_spec(use_fp16=config.quantizer is None)
+    compiler_specs = generate_qnn_executorch_compiler_spec(
+        soc_model=getattr(QcomChipset, config.soc_model), backend_options=backend_options
+    )
+    partitioner = [QnnPartitioner(compiler_specs)]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -262,6 +292,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "qnn": prepare_for_qnn,
 }
 
 

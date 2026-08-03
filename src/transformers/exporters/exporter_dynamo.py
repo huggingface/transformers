@@ -125,7 +125,59 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
+        if config.quantizer is not None:
+            exported_program = self._quantize(exported_program, config, sample_inputs, dynamic_shapes)
+
         return exported_program
+
+    def _quantize(
+        self,
+        exported_program: ExportedProgram,
+        config: DynamoConfig,
+        sample_inputs: MutableMapping[str, Any],
+        dynamic_shapes: Any,
+    ) -> ExportedProgram:
+        """Post-training quantize the exported graph with PT2E, then re-export it.
+
+        Backend-agnostic: the recipe is the standard PT2E flow, identical for every model, and the only
+        backend-specific input is `config.quantizer` (`XNNPACKQuantizer`, `X86InductorQuantizer`, a vendor
+        `QnnQuantizer`, …). `prepare_pt2e` inserts observers, `config.calibration_dataset` (forward-kwarg
+        dicts) drives their statistics, and `convert_pt2e` folds them into `quantize`/`dequantize` ops.
+        Those two work on a `GraphModule`, so the converted graph is re-exported — with the same inputs and
+        dynamic-shape spec — back into an `ExportedProgram` that any downstream backend consumes (inductor
+        int8, ExecuTorch lowering, ONNX QDQ).
+        """
+        from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
+
+        prepared = prepare_pt2e(exported_program.module(), config.quantizer)
+
+        # default to a single calibration pass on the export's own sample inputs
+        calibration_dataset = config.calibration_dataset
+        if not calibration_dataset:
+            logger.warning_once(
+                "Quantizing with no `calibration_dataset`; calibrating on the single sample input. Observer "
+                "statistics from one sample can hurt accuracy — set a representative `config.calibration_dataset` "
+                "(for generative models, `export_for_generation` fans a generate-level one out per component)."
+            )
+            calibration_dataset = [sample_inputs]
+
+        forward_keys = set(sample_inputs)  # traced forward signature (output flags already stripped)
+        for sample in calibration_dataset:
+            # keep only the traced forward kwargs (drop any captured generation flags), and deep-copy:
+            # a calibration forward writes the cache in place, so this stops it from mutating the
+            # caller's tensors — or `sample_inputs`, which the re-export below reuses
+            inputs = {name: copy.deepcopy(value) for name, value in sample.items() if name in forward_keys}
+            prepared(**inputs)
+
+        converted = convert_pt2e(prepared)
+        return torch.export.export(
+            converted,
+            args=(),
+            kwargs=copy.deepcopy(dict(sample_inputs)),
+            strict=config.strict,
+            dynamic_shapes=dynamic_shapes,
+            prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
+        )
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────

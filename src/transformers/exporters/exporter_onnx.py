@@ -942,6 +942,29 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
+def _quantized_decomposed_dequantize_per_channel(
+    input,
+    scales,
+    zero_points,
+    axis: int,
+    quant_min: int,
+    quant_max: int,
+    dtype: int,
+    out_dtype: int = -1,
+):
+    """ONNX translation for `quantized_decomposed.dequantize_per_channel`.
+
+    onnxscript's torchlib registers only the per-*tensor* `quantized_decomposed` ops, so a PT2E graph
+    with per-channel weights (e.g. `X86InductorQuantizer`) has no ONNX function for the per-channel
+    dequant and fails to translate. ONNX `DequantizeLinear` handles it natively via `axis` (1-D
+    scale/zero-point along the channel axis); the zero-point must share the input's integer dtype.
+    """
+    if zero_points is not None:
+        zero_points = op.CastLike(zero_points, input)
+        return op.DequantizeLinear(input, scales, zero_points, axis=axis)
+    return op.DequantizeLinear(input, scales, axis=axis)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -956,6 +979,19 @@ if is_onnxscript_available():
             operator.floordiv: _operator_floordiv,
         }
     )
+
+    # The `quantized_decomposed` ops (torch's built-in decomposed-quant lib, not `torchao`) are only
+    # registered once that lib is imported; import it so the per-channel dequant overload resolves as a
+    # table key (onnxscript covers only the per-tensor variants). The entry is inert unless a
+    # quantized graph actually contains the op, so it costs nothing when quantization is unused.
+    try:
+        import torch.ao.quantization.fx._decomposed  # noqa: F401
+
+        _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
+            _quantized_decomposed_dequantize_per_channel
+        )
+    except (ImportError, AttributeError):
+        pass
 
 
 # ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
