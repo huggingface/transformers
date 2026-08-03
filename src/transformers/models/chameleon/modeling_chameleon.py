@@ -934,11 +934,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(pixel_values, return_dict=True)
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_features = mm_encoder_outputs["images"].pooler_output
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

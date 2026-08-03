@@ -314,12 +314,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, high_res_pixel_values, return_dict=True
             )
 
-        if mm_encoder_outputs.get("images") is not None:
+        if mm_encoder_outputs.get("image") is not None:
             if input_ids is None:
                 image_attention_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -328,7 +328,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             else:
                 image_attention_mask = input_ids == self.config.image_token_id
             image_attention_mask = image_attention_mask.unsqueeze(-1).to(inputs_embeds.device)
-            image_features = mm_encoder_outputs["images"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
+            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
@@ -346,7 +346,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             past_key_values=lm_output.past_key_values,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 

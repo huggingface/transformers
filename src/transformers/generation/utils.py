@@ -20,6 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
@@ -147,6 +148,7 @@ GENERATION_MODES_MAPPING = {
 }
 
 MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "mm_encoder_outputs",  # pre-encoded multimodal `ModelOutput`
     "pixel_values",
     "pixel_mask",
     "input_features",
@@ -522,7 +524,6 @@ class GenerationMixin(ContinuousMixin):
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        mm_encoder_outputs: dict | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
@@ -631,9 +632,6 @@ class GenerationMixin(ContinuousMixin):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["mm_encoder_outputs"] = mm_encoder_outputs
 
         # 6. Move the tensors the forward consumes onto the model device, right before the call.
         # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
@@ -809,13 +807,19 @@ class GenerationMixin(ContinuousMixin):
         )
         return attention_mask
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel",
         inputs_tensor: torch.Tensor,
         model_kwargs,
         model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
+        """
+        Optionally encoder any inputs if required by model architecture, and passes `encoder_output`/`mm_encoder_output`
+        down the line to model's `forward`. For decoder-only models this is a no-op
+        # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
+        `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
+        """
         if self.config.is_encoder_decoder:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
@@ -871,7 +875,7 @@ class GenerationMixin(ContinuousMixin):
         self: "GenerativePreTrainedModel",
         model_kwargs,
     ) -> torch.FloatTensor:
-        # Prepare image/video hidden states if the model support the given modality so we don't re-compute it
+        """Prepares image/video hidden states if model support this modality"""
         if not any(key in self.input_modalities for key in ["image", "video"]):
             return model_kwargs
 
@@ -879,7 +883,7 @@ class GenerationMixin(ContinuousMixin):
         for modality in ["image", "video"]:
             if (
                 modality in self.input_modalities
-                and model_kwargs["mm_encoder_outputs"].get(f"{modality}s") is None
+                and model_kwargs["mm_encoder_outputs"].get(f"{modality}") is None
                 and hasattr(self.base_model, f"get_{modality}_features")
             ):
                 encoder_fn = getattr(self.base_model, f"get_{modality}_features")
@@ -887,10 +891,12 @@ class GenerationMixin(ContinuousMixin):
                 required_args = [
                     name for name, param in fn_signature.items() if param.default is inspect.Parameter.empty
                 ]
+                # Dont drop encoder-args after using them for now, some models explicitly define `output_hidden_states`
+                # in signature which we cannpt simply drop. Fix those models and allow remote code to adapt first
                 if all(model_kwargs.get(n) is not None for n in required_args):
                     encoder_kwargs = {argument: model_kwargs.get(argument, None) for argument in set(fn_signature)}
                     encoder_kwargs["return_dict"] = True
-                    model_kwargs["mm_encoder_outputs"][f"{modality}s"] = encoder_fn(**encoder_kwargs)
+                    model_kwargs["mm_encoder_outputs"][f"{modality}"] = encoder_fn(**encoder_kwargs)
 
         return model_kwargs
 
@@ -953,6 +959,62 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
+    def _expand_multimodal_outputs(
+        self: "GenerativePreTrainedModel",
+        mm_encoder_output: ModelOutput | None,
+        expand_size: int = 1,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+    ):
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                return inputs * repeat_times
+
+        # Early exit is mm outputs aren't found
+        if mm_encoder_output is None:
+            return mm_encoder_output
+
+        for modality in ["image", "video"]:
+            modalily_outputs = mm_encoder_output.get(modality)
+            if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
+                continue
+
+            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+            token_id_key = f"{modality}_token_id"
+            if input_ids is None or input_ids.numel() == 0:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(
+                        getattr(self.config, token_id_key),
+                        dtype=torch.long,
+                        device=inputs_embeds.device,
+                    )
+                )
+                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+            else:
+                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
+            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
+            num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
+            num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
+
+            # 2. Find offsets to split encoder output into separate groups per text. In a single batch
+            # we might get a text with single image and another with two images, so the most reliable
+            # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
+            offsets = [0] + [
+                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
+            ]
+            modalily_outputs.pooler_output = [
+                out
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
+            ]
+
+            # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
+            if isinstance(modalily_outputs.pooler_output, torch.Tensor):
+                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+        return mm_encoder_output
+
     def _expand_inputs_for_generation(
         self: "GenerativePreTrainedModel",
         expand_size: int = 1,
@@ -966,48 +1028,13 @@ class GenerationMixin(ContinuousMixin):
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        # Infer the length per sample from pooler output and interleave per sample with images
-        # IMPORTANT to expand mm data before expanding text ids/embeds!
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            else:
-                return inputs * repeat_times
-
-        def _expand_multimodal_outputs(model_outputs, token_id_key):
-            if model_outputs is None or model_outputs.pooler_output is None:
-                return
-
-            if input_ids is None or input_ids.numel() == 0:
-                special_image_mask = model_kwargs["inputs_embeds"] == self.get_input_embeddings()(
-                    torch.tensor(
-                        getattr(self.config, token_id_key),
-                        dtype=torch.long,
-                        device=model_kwargs["inputs_embeds"].device,
-                    )
-                )
-                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
-            else:
-                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
-            num_image_tokens_in_text = torch.tensor(num_image_tokens_in_text).cumsum(-1)
-            num_image_tokens_in_vision = [len(out) for out in model_outputs.pooler_output]
-            num_image_tokens_in_vision = torch.tensor(num_image_tokens_in_vision).cumsum(-1)
-            offsets = [0] + [
-                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
-            ]
-            expanded_pooler_output = [
-                out
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(model_outputs.pooler_output[start:end], expand_size)
-            ]
-
-            if isinstance(model_outputs.pooler_output, torch.Tensor):
-                model_outputs.pooler_output = torch.stack(expanded_pooler_output, dim=0)
-            else:
-                model_outputs.pooler_output = expanded_pooler_output
-
-        _expand_multimodal_outputs(model_kwargs.get("mm_encoder_outputs", {}).get("images"), "image_token_id")
-        _expand_multimodal_outputs(model_kwargs.get("mm_encoder_outputs", {}).get("videos"), "video_token_id")
+        # IMPORTANT - expand before input ids becaus ethe hlper counts placeholders within encoded text!
+        self._expand_multimodal_outputs(
+            model_kwargs.get("mm_encoder_outputs"),
+            expand_size=expand_size,
+            input_ids=input_ids,
+            inputs_embeds=model_kwargs.get("inputs_embeds"),
+        )
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
@@ -2670,7 +2697,7 @@ class GenerationMixin(ContinuousMixin):
 
         if not (model_kwargs.get("encoder_outputs") or model_kwargs.get("mm_encoder_outputs")):
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+            model_kwargs = self._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 

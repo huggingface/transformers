@@ -518,7 +518,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 
@@ -528,7 +528,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_image_features(self):
         raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self):
+    def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
 

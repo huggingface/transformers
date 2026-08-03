@@ -517,18 +517,18 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
-        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["videos"] = self.get_video_features(
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             image_mask, _ = self.get_placeholder_mask(
@@ -536,8 +536,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if mm_encoder_outputs.get("videos") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["videos"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             _, video_mask = self.get_placeholder_mask(

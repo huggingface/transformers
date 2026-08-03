@@ -661,8 +661,8 @@ class Granite4VisionModel(LlavaNextModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -673,9 +673,9 @@ class Granite4VisionModel(LlavaNextModel):
         # Build deepstack injection map and scatter initial image embeddings
         deepstack_features = None
         vision_mask = None
-        if mm_encoder_outputs.get("images") is not None:
+        if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["images"].deepstack_features):
+            for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
                 if not isinstance(packed_features, torch.Tensor):
                     packed_features = torch.cat(packed_features, dim=0)
                 packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -704,8 +704,8 @@ class Granite4VisionModel(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            deepstack_features=mm_encoder_outputs["images"].deepstack_features
-            if mm_encoder_outputs.get("images") is not None
+            deepstack_features=mm_encoder_outputs["image"].deepstack_features
+            if mm_encoder_outputs.get("image") is not None
             else None,
         )
 

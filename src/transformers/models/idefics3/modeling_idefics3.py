@@ -663,12 +663,12 @@ class Idefics3Model(Idefics3PreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("images")) or pixel_values is not None:
-            if mm_encoder_outputs.get("images") is None:
-                mm_encoder_outputs["images"] = self.get_image_features(
+        if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
+            if mm_encoder_outputs.get("image") is None:
+                mm_encoder_outputs["image"] = self.get_image_features(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
-            image_hidden_states = mm_encoder_outputs["images"].pooler_output
+            image_hidden_states = mm_encoder_outputs["image"].pooler_output
         elif isinstance(mm_encoder_outputs, torch.Tensor):
             image_hidden_states = mm_encoder_outputs
         else:
@@ -893,7 +893,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             **kwargs,
         )
 
-        if mm_encoder_outputs and mm_encoder_outputs.get("images") or (use_cache and not is_first_iteration):
+        if mm_encoder_outputs and mm_encoder_outputs.get("image") or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

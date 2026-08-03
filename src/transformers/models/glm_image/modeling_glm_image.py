@@ -1277,14 +1277,14 @@ class GlmImageModel(GlmImagePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-            mm_encoder_outputs["images"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, source_grids, return_dict=True, **kwargs
             )
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_ids = self.get_image_tokens(mm_encoder_outputs["images"].pooler_output)
+        if mm_encoder_outputs.get("image") is not None:
+            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
             image_ids = image_ids.view(-1).to(input_ids.device)
             special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
             input_ids = input_ids.masked_scatter(special_image_mask, image_ids)

@@ -257,16 +257,16 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
                 return_dict=True,
             )
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_features = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(
@@ -290,7 +290,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 

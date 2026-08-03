@@ -231,11 +231,11 @@ class PerceptionLMModel(LlavaModel):
 
         image_features = None
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_features = mm_encoder_outputs["images"].pooler_output.to(
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(
                 inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             special_image_mask, _ = self.get_placeholder_mask(
@@ -244,11 +244,11 @@ class PerceptionLMModel(LlavaModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         video_features = None
-        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["videos"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
 
-        if mm_encoder_outputs.get("videos") is not None:
-            video_features = mm_encoder_outputs["videos"].pooler_output.to(
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = mm_encoder_outputs["video"].pooler_output.to(
                 inputs_embeds.device, dtype=inputs_embeds.dtype
             )
             _, special_video_mask = self.get_placeholder_mask(
@@ -270,8 +270,8 @@ class PerceptionLMModel(LlavaModel):
             hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("videos") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
 

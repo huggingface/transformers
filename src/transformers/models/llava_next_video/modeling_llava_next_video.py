@@ -532,8 +532,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -541,8 +541,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 return_dict=True,
             )
 
-        if mm_encoder_outputs.get("images") is not None:
-            image_features = torch.cat(mm_encoder_outputs["images"].pooler_output, dim=0).to(
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask, _ = self.get_placeholder_mask(
@@ -550,16 +550,16 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        if mm_encoder_outputs.get("videos") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["videos"] = self.get_video_features(
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             )
 
-        if mm_encoder_outputs.get("videos") is not None:
-            video_features = [feature.flatten(0, 1) for feature in mm_encoder_outputs["videos"].pooler_output]
+        if mm_encoder_outputs.get("video") is not None:
+            video_features = [feature.flatten(0, 1) for feature in mm_encoder_outputs["video"].pooler_output]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
@@ -584,8 +584,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("images") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("videos") is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
     @merge_with_config_defaults

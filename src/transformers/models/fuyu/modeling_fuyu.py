@@ -182,11 +182,11 @@ class FuyuModel(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and image_patches is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(image_patches, return_dict=True)
+        if mm_encoder_outputs.get("image") is None and image_patches is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(image_patches, return_dict=True)
 
-        if mm_encoder_outputs.get("images") is not None:
-            patch_embeddings = mm_encoder_outputs["images"].last_hidden_state.to(
+        if mm_encoder_outputs.get("image") is not None:
+            patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
             special_image_mask = self.get_placeholder_mask(

@@ -1686,14 +1686,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         ```"""
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None:
-            mm_encoder_outputs["images"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+        if mm_encoder_outputs.get("image") is None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
             )
 
-        language_model_inputs = mm_encoder_outputs["images"].pooler_output
-        qformer_outputs = mm_encoder_outputs["images"].qformer_outputs
-        vision_outputs = mm_encoder_outputs["images"].vision_outputs
+        language_model_inputs = mm_encoder_outputs["image"].pooler_output
+        qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["image"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

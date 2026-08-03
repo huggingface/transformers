@@ -930,7 +930,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -950,7 +950,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
+        model_kwargs = super()._maybe_prepare_encoder_kwargs_for_generation(
             None, model_kwargs, model_input_name, generation_config
         )
         model_kwargs.pop("inputs_embeds", None)

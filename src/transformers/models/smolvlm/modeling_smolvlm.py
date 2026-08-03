@@ -605,14 +605,12 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
-        if mm_encoder_outputs.get("images") is None and pixel_values is not None:
-            mm_encoder_outputs["images"] = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            )
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
 
-        if mm_encoder_outputs.get("images") is not None:
+        if mm_encoder_outputs.get("image") is not None:
             image_hidden_states = (
-                mm_encoder_outputs["images"].pooler_output
+                mm_encoder_outputs["image"].pooler_output
                 if not isinstance(mm_encoder_outputs, torch.Tensor)
                 else mm_encoder_outputs
             )
@@ -638,7 +636,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs.get("images"),
+            image_hidden_states=mm_encoder_outputs.get("image"),
         )
 
 
@@ -846,7 +844,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if mm_encoder_outputs and mm_encoder_outputs.get("images") or (use_cache and not is_first_iteration):
+        if mm_encoder_outputs and mm_encoder_outputs.get("image") or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
