@@ -135,7 +135,7 @@ class AXK1IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): [[-0.5234, -0.0388, -0.3574], [-0.4980, -0.2119, -0.0713], [-0.8359, 0.0669, -0.4219]],
                 ("xpu", None): [[-0.5469, -0.0574, -0.3691], [-0.3301, -0.3770, 0.2012], [-0.8320, 0.0732, -0.4492]],
             }
-        )
+        )  # fmt: skip
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
 
         with torch.no_grad():
