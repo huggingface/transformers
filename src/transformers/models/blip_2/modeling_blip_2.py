@@ -419,8 +419,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "Blip2EncoderLayer",
         "Blip2TextEmbeddings",
         "Blip2VisionEmbeddings",
-        "T5Block",
-        "OPTDecoderLayer",
     ]
     _skip_keys_device_placement = ["past_key_values"]
 

@@ -833,7 +833,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

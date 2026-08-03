@@ -2068,7 +2068,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
     input_modalities = ("image", "video", "audio", "text")
 
-    _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
