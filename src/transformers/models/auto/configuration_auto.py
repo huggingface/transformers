@@ -387,6 +387,12 @@ class AutoConfig:
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
+        if has_remote_code and "model_type" not in config_dict:
+            # Older custom-code checkpoints may not have a model type. Once their config class becomes native,
+            # use the registered class name so they can load without executing remote code.
+            config_class_name = config_dict["auto_map"]["AutoConfig"].rsplit(".", 1)[-1]
+            if inferred_model_type := config_class_to_model_type(config_class_name):
+                config_dict["model_type"] = inferred_model_type
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
             "transformers."

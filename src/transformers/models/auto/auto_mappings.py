@@ -375,6 +375,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
         ("mimo_v2_flash", "MiMoV2FlashConfig"),
+        ("minicpm", "MiniCPMConfig"),
         ("minicpm3", "MiniCPM3Config"),
         ("minicpmv4_6", "MiniCPMV4_6Config"),
         ("minicpmv4_6_vision", "MiniCPMV4_6VisionConfig"),
