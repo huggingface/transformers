@@ -1200,6 +1200,38 @@ def test_conditional_flow_matching_euler_steps():
 
 
 @require_torch
+def test_conditional_flow_matching_generator():
+    model = VoxCPM2ConditionalFlowMatching(get_tiny_voxcpm2_config()).eval()
+    mu = torch.randn(2, 16)
+    conditioning = torch.randn(2, 4, 2)
+
+    first_output = model(
+        mu,
+        num_inference_steps=1,
+        patch_size=2,
+        conditioning=conditioning,
+        generator=torch.Generator().manual_seed(7),
+    )
+    repeated_output = model(
+        mu,
+        num_inference_steps=1,
+        patch_size=2,
+        conditioning=conditioning,
+        generator=torch.Generator().manual_seed(7),
+    )
+    different_output = model(
+        mu,
+        num_inference_steps=1,
+        patch_size=2,
+        conditioning=conditioning,
+        generator=torch.Generator().manual_seed(8),
+    )
+
+    torch.testing.assert_close(first_output, repeated_output, rtol=0, atol=0)
+    assert not torch.equal(first_output, different_output)
+
+
+@require_torch
 def test_conditional_flow_matching_loss():
     config = VoxCPM2Config(
         lm_config={
