@@ -44,3 +44,20 @@ class VoxCPM2ScalarQuantizationLayer(nn.Module):
         else:
             hidden_states = quantized_states
         return self.out_proj(hidden_states)
+
+
+class VoxCPM2Snake1d(nn.Module):
+    """
+    A 1-dimensional Snake activation function module.
+    """
+
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1, hidden_dim, 1))
+
+    def forward(self, hidden_states):
+        shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(shape[0], shape[1], -1)
+        hidden_states = hidden_states + (self.alpha + 1e-9).reciprocal() * torch.sin(self.alpha * hidden_states).pow(2)
+        hidden_states = hidden_states.reshape(shape)
+        return hidden_states

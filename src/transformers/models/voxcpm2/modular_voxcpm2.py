@@ -20,6 +20,7 @@ from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
+from ..dac.modeling_dac import Snake1d
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
 
 
@@ -445,6 +446,10 @@ class VoxCPM2ScalarQuantizationLayer(nn.Module):
         else:
             hidden_states = quantized_states
         return self.out_proj(hidden_states)
+
+
+class VoxCPM2Snake1d(Snake1d):
+    pass
 
 
 __all__ = [
