@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_minicpm import *
+    from .modeling_minicpm import *
 else:
     import sys
 

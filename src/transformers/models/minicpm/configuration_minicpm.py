@@ -46,11 +46,11 @@ class MiniCPMConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MiniCPMConfig
+    >>> from transformers import MiniCPMConfig, MiniCPMModel
 
     >>> configuration = MiniCPMConfig()
-    >>> configuration.hidden_size
-    4096
+    >>> model = MiniCPMModel(configuration)
+    >>> configuration = model.config
     ```
     """
 
@@ -88,7 +88,7 @@ class MiniCPMConfig(PreTrainedConfig):
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
     pretraining_tp: int | None = 1
-    tie_word_embeddings: bool = False
+    tie_word_embeddings: bool = True
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
