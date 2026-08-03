@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 
 import torch
 import torch.nn.functional as F
@@ -84,3 +85,20 @@ class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
         if self.causal_trim > 0:
             hidden_states = hidden_states[..., : -self.causal_trim]
         return hidden_states
+
+
+class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
+    def __init__(self, embedding_dim: int):
+        super().__init__()
+        if embedding_dim < 4 or embedding_dim % 2 != 0:
+            raise ValueError("`embedding_dim` must be an even integer greater than 2.")
+        self.embedding_dim = embedding_dim
+
+    def forward(self, timesteps: torch.Tensor, scale: float = 1000.0) -> torch.Tensor:
+        if timesteps.ndim == 0:
+            timesteps = timesteps.unsqueeze(0)
+        half_dim = self.embedding_dim // 2
+        exponent = math.log(10000) / (half_dim - 1)
+        frequencies = torch.exp(torch.arange(half_dim, dtype=timesteps.dtype, device=timesteps.device) * -exponent)
+        embeddings = scale * timesteps.unsqueeze(1) * frequencies.unsqueeze(0)
+        return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
