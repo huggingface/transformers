@@ -1748,6 +1748,54 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             )
             conditioning_features = generated_features
 
+    def _resolve_generation_parameters(
+        self,
+        generation_config: GenerationConfig | None,
+        min_new_audio_patches: int | None,
+        max_new_audio_patches: int | None,
+        guidance_scale: float | None,
+        temperature: float | None,
+        return_dict_in_generate: bool | None,
+        generation_kwargs: dict,
+    ) -> tuple[int, int, float, float, bool]:
+        generation_config = copy.deepcopy(self.generation_config if generation_config is None else generation_config)
+        unused_kwargs = generation_config.update(**generation_kwargs)
+        if unused_kwargs:
+            raise ValueError(f"Unsupported generation arguments: {sorted(unused_kwargs)}")
+
+        min_new_audio_patches = (
+            generation_config.min_new_tokens
+            if min_new_audio_patches is None and generation_config.min_new_tokens is not None
+            else min_new_audio_patches
+        )
+        min_new_audio_patches = 4 if min_new_audio_patches is None else min_new_audio_patches
+        max_new_audio_patches = (
+            generation_config.max_new_tokens
+            if max_new_audio_patches is None and generation_config.max_new_tokens is not None
+            else max_new_audio_patches
+        )
+        max_new_audio_patches = 2000 if max_new_audio_patches is None else max_new_audio_patches
+        guidance_scale = (
+            generation_config.guidance_scale
+            if guidance_scale is None and generation_config.guidance_scale is not None
+            else guidance_scale
+        )
+        guidance_scale = (
+            self.config.dit_config.cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
+        )
+        temperature = generation_config.temperature if temperature is None else temperature
+        temperature = 1.0 if temperature is None else temperature
+        return_dict_in_generate = (
+            generation_config.return_dict_in_generate if return_dict_in_generate is None else return_dict_in_generate
+        )
+        return (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            bool(return_dict_in_generate),
+        )
+
     @torch.inference_mode()
     def generate(
         self,
@@ -1793,38 +1841,20 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
                 Whether to return [`VoxCPM2GenerationOutput`] instead of the waveform tensor.
         """
         del attention_mask
-        if generation_config is None:
-            generation_config = copy.deepcopy(self.generation_config)
-        else:
-            generation_config = copy.deepcopy(generation_config)
-        unused_kwargs = generation_config.update(**kwargs)
-        if unused_kwargs:
-            raise ValueError(f"Unsupported generation arguments: {sorted(unused_kwargs)}")
-
-        min_new_audio_patches = (
-            generation_config.min_new_tokens
-            if min_new_audio_patches is None and generation_config.min_new_tokens is not None
-            else min_new_audio_patches
-        )
-        min_new_audio_patches = 4 if min_new_audio_patches is None else min_new_audio_patches
-        max_new_audio_patches = (
-            generation_config.max_new_tokens
-            if max_new_audio_patches is None and generation_config.max_new_tokens is not None
-            else max_new_audio_patches
-        )
-        max_new_audio_patches = 2000 if max_new_audio_patches is None else max_new_audio_patches
-        guidance_scale = (
-            generation_config.guidance_scale
-            if guidance_scale is None and generation_config.guidance_scale is not None
-            else guidance_scale
-        )
-        guidance_scale = (
-            self.config.dit_config.cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
-        )
-        temperature = generation_config.temperature if temperature is None else temperature
-        temperature = 1.0 if temperature is None else temperature
-        return_dict_in_generate = (
-            generation_config.return_dict_in_generate if return_dict_in_generate is None else return_dict_in_generate
+        (
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+        ) = self._resolve_generation_parameters(
+            generation_config,
+            min_new_audio_patches,
+            max_new_audio_patches,
+            guidance_scale,
+            temperature,
+            return_dict_in_generate,
+            kwargs,
         )
 
         generation_output = self._generate_audio_features(
