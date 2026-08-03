@@ -840,6 +840,12 @@ class VoxCPM2AudioVAE(nn.Module):
         right_padding -= input_values.shape[-1]
         return F.pad(input_values, (0, right_padding))
 
+    def encode(self, input_values: torch.Tensor, sampling_rate: int | None = None) -> torch.Tensor:
+        if input_values.ndim == 2:
+            input_values = input_values.unsqueeze(1)
+        input_values = self.preprocess(input_values, sampling_rate)
+        return self.encoder(input_values)["mu"]
+
 
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
