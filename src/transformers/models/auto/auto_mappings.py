@@ -1158,6 +1158,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("videoprism", "VideoPrismProcessor"),
         ("vilt", "ViltProcessor"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+        ("voxcpm2", "VoxCPM2Processor"),
         ("voxtral", "VoxtralProcessor"),
         ("voxtral_realtime", "VoxtralRealtimeProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
