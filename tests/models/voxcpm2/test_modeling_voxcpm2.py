@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from transformers import VoxCPM2Config, is_torch_available
 from transformers.testing_utils import require_torch
 
@@ -23,6 +25,7 @@ if is_torch_available():
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2ScalarQuantizationLayer,
+        VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
     )
 
@@ -150,3 +153,21 @@ def test_causal_transposed_convolution_matches_reference():
         zero_trim_input, zero_trim_layer.weight, zero_trim_layer.bias
     )
     torch.testing.assert_close(zero_trim_output, expected_zero_trim_output, rtol=0, atol=0)
+
+
+@require_torch
+def test_sinusoidal_timestep_embedding_matches_reference():
+    layer = VoxCPM2SinusoidalPositionEmbedding(8)
+    assert not layer.state_dict()
+
+    for timesteps in (torch.tensor(0.25), torch.tensor([0.0, 0.25, 1.0])):
+        output = layer(timesteps)
+        normalized_timesteps = timesteps.reshape(-1)
+        exponent = math.log(10000) / 3
+        frequencies = torch.exp(torch.arange(4, dtype=timesteps.dtype) * -exponent)
+        embeddings = 1000.0 * normalized_timesteps.unsqueeze(1) * frequencies.unsqueeze(0)
+        expected_output = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    assert layer(torch.tensor(0.5)).shape == (1, 8)
+    assert layer(torch.tensor([0.5, 1.0])).shape == (2, 8)
