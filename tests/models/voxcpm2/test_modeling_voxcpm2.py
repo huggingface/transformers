@@ -62,6 +62,28 @@ def test_pretrained_model_metadata():
 
 
 @require_torch
+def test_pretrained_model_initialization():
+    model = VoxCPM2PreTrainedModel(VoxCPM2Config())
+    convolution = torch.nn.utils.parametrizations.weight_norm(VoxCPM2CausalConv1d(2, 3, 3))
+    with torch.no_grad():
+        convolution.parametrizations.weight.original0.zero_()
+        convolution.parametrizations.weight.original1.zero_()
+
+    model._init_weights(convolution)
+
+    weight_magnitude = convolution.parametrizations.weight.original0
+    weight_vector = convolution.parametrizations.weight.original1
+    expected_magnitude = torch.linalg.vector_norm(weight_vector, dim=(1, 2), keepdim=True)
+    torch.testing.assert_close(weight_magnitude, expected_magnitude)
+    assert torch.count_nonzero(weight_vector)
+
+    condition = VoxCPM2SampleRateConditionLayer(input_dim=4, num_sample_rate_buckets=3)
+    model._init_weights(condition)
+    torch.testing.assert_close(condition.scale_embed.weight, torch.ones_like(condition.scale_embed.weight))
+    torch.testing.assert_close(condition.bias_embed.weight, torch.zeros_like(condition.bias_embed.weight))
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
