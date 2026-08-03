@@ -25,6 +25,7 @@ if is_torch_available():
         VoxCPM2Attention,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
+        VoxCPM2DecoderLayer,
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
@@ -253,3 +254,48 @@ def test_attention_matches_reference():
         expected_output = expected_output.transpose(1, 2).reshape(1, 4, 8)
         expected_output = layer.o_proj(expected_output)
         torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+
+@require_torch
+def test_decoder_layer_residual_scaling():
+    for use_mup in (False, True):
+        config = VoxCPM2TextConfig(
+            vocab_size=32,
+            hidden_size=6,
+            intermediate_size=12,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            kv_channels=4,
+            scale_depth=1.4,
+            use_mup=use_mup,
+            rope_parameters=None,
+        )
+        layer = VoxCPM2DecoderLayer(config, layer_idx=0)
+        expected_keys = {
+            "self_attn.q_proj.weight",
+            "self_attn.k_proj.weight",
+            "self_attn.v_proj.weight",
+            "self_attn.o_proj.weight",
+            "mlp.gate_proj.weight",
+            "mlp.up_proj.weight",
+            "mlp.down_proj.weight",
+            "input_layernorm.weight",
+            "post_attention_layernorm.weight",
+        }
+        assert set(layer.state_dict()) == expected_keys
+
+        layer.input_layernorm = torch.nn.Identity()
+        layer.post_attention_layernorm = torch.nn.Identity()
+        layer.self_attn = torch.nn.Identity()
+        layer.self_attn.forward = lambda hidden_states, **kwargs: (hidden_states, None)
+        layer.mlp = torch.nn.Identity()
+
+        hidden_states = torch.randn(1, 3, 6)
+        output = layer(hidden_states, position_embeddings=None, is_causal=False)
+        expected_scale = 1.4 / math.sqrt(2) if use_mup else 1.0
+        expected_output = hidden_states + hidden_states * expected_scale
+        expected_output = expected_output + expected_output * expected_scale
+        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+        assert layer.residual_scale == expected_scale
