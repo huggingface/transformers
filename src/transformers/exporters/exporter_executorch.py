@@ -36,10 +36,14 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import operator
+from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Any
+from contextlib import nullcontext
+from dataclasses import dataclass, field
+from typing import Any, Callable, ContextManager, Optional
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
@@ -87,6 +91,42 @@ if is_executorch_available():
 logger = logging.get_logger(__name__)
 
 
+@dataclass
+class GraphSpec:
+    """One graph in a (possibly multi-method) export.
+
+    ``module``/``sample_inputs`` are traced by the exporter, unless ``exported_program`` is
+    already supplied. ``mode`` selects the trace path: ``"hf"`` uses the transformers-aware
+    ``DynamoExporter.export`` + fx-fixes (raw HuggingFace models); ``"plain"`` uses bare
+    ``torch.export`` with NO fx-fixes (pre-surgered / already-quantized modules whose q/dq nodes
+    must not be rewritten). ``role="calibrate"`` marks a graph consumed by the lower hook but
+    never emitted into the ``.pte``.
+    """
+
+    module: Any = None
+    sample_inputs: Any = None
+    dynamic_shapes: Any = None
+    role: str = "deploy"
+    mode: str = "hf"
+    exported_program: Optional["ExportedProgram"] = None
+
+
+@dataclass
+class BackendExportPlan:
+    """Generic contract a backend's prepare may return to drive a multi-method export.
+
+    All fields are backend-agnostic. Simple backends set only ``method_set`` (often one entry)
+    and ``partitioner``; everything else is a no-op default that reproduces the single-method path.
+    """
+
+    method_set: "OrderedDict[str, GraphSpec]"
+    partitioner: Any = None
+    constant_methods: dict = field(default_factory=dict)
+    lower: Optional[Callable[["OrderedDict[str, ExportedProgram]", Any], "EdgeProgramManager"]] = None
+    backend_config: Any = None
+    lowering_context: Optional[ContextManager] = None
+
+
 class ExecutorchExporter(DynamoExporter):
     """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
 
@@ -110,7 +150,15 @@ class ExecutorchExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: ExecutorchConfig | dict[str, Any],
     ) -> ExecutorchProgramManager:
-        """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
+        """Export a model to ExecuTorch, applying backend preparation and torch op patches.
+
+        Generic multi-graph flow: a backend's prepare returns either the legacy
+        ``(model, sample_inputs, partitioner)`` tuple (single-method, N=1) or a
+        ``BackendExportPlan`` declaring an ordered set of graphs to trace and lower together as
+        a multi-method program. The loop below traces each graph the normal way (or plainly, for
+        pre-surgered modules that aren't ``PreTrainedModel``s), optionally hands the collected
+        ``{name: ExportedProgram}`` to a backend ``lower`` hook, and serialises once.
+        """
         if isinstance(config, dict):
             config = ExecutorchConfig(**config)
         elif type(config) is not ExecutorchConfig:
@@ -120,14 +168,50 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        prepared = prepare_for_backend(model, sample_inputs, config)
+        plan = prepared if isinstance(prepared, BackendExportPlan) else BackendExportPlan(
+            method_set=OrderedDict(forward=GraphSpec(module=prepared[0], sample_inputs=prepared[1], mode="hf")),
+            partitioner=prepared[2],
+        )
 
+        # ── Backend-owns-lowering path (e.g. QNN) ──
+        # The graphs are pre-surgered + already-quantized (q/dq baked in). Trace each with PLAIN
+        # torch.export — byte-for-byte the backend's native trace — with NO HF op-patches and NO
+        # fx-fixes (either would rewrite the q/dq nodes). The backend's `lower` hook owns to_edge
+        # (it manages its own context, e.g. QnnManagerContext), then we serialise once.
+        if plan.lower is not None:
+            programs: "OrderedDict[str, ExportedProgram]" = OrderedDict()
+            for name, spec in plan.method_set.items():
+                if spec.role == "calibrate":
+                    continue  # consumed by the lower hook, never emitted
+                programs[name] = spec.exported_program if spec.exported_program is not None else (
+                    torch.export.export(
+                        spec.module, spec.sample_inputs, dynamic_shapes=spec.dynamic_shapes, strict=True
+                    )
+                )
+            edge_program_manager: EdgeProgramManager = plan.lower(programs, config)
+            return edge_program_manager.to_executorch(
+                *((plan.backend_config,) if plan.backend_config is not None else ())
+            )
+
+        # ── Generic HF path (xnnpack / cuda / multi-graph encoder-decoder) ──
+        # HF-aware tracing + fx-fixes + the generic to_edge, all under the transformers
+        # ExecuTorch patches (needed by both tracing and to_edge/to_executorch).
         with apply_patches("executorch"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-            apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+            programs = OrderedDict()
+            for name, spec in plan.method_set.items():
+                if spec.role == "calibrate":
+                    continue
+                method_config = dataclasses.replace(config, dynamic_shapes=spec.dynamic_shapes)
+                ep = super().export(spec.module, spec.sample_inputs, config=method_config)
+                apply_fx_program_fixes("executorch", ep)
+                apply_fx_node_fixes("executorch", ep.graph_module)
+                programs[name] = ep
+            edge_program_manager = to_edge_transform_and_lower(
+                dict(programs) if len(programs) > 1 else next(iter(programs.values())),
+                partitioner=plan.partitioner,
+                constant_methods=plan.constant_methods or None,
+                compile_config=_get_edge_compile_config(),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
@@ -171,7 +255,7 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
 # To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig = None):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner.
 
     XNNPACK's partitioner/lowering passes segfault on CUDA-typed EPs — the state and graph
@@ -191,7 +275,7 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, sample_inputs, partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig = None):
     """GPU inference via the ExecuTorch CUDA backend.
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
@@ -215,6 +299,23 @@ _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
 }
+
+
+def _register_optional_backends() -> None:
+    """Register backends whose prepare depends on optional ExecuTorch backend packages
+    (imported lazily so the module still imports without them). QNN returns a
+    ``BackendExportPlan`` (multi-method) from its prepare, like any other backend."""
+    if not is_executorch_available():
+        return
+    try:
+        from .exporter_executorch_qnn import prepare_for_qnn
+    except ImportError as exc:  # QNN backend package not built / SDK absent
+        logger.debug("QNN ExecuTorch backend unavailable, skipping registration: %s", exc)
+        return
+    _BACKEND_PREPARE["qnn"] = prepare_for_qnn
+
+
+_register_optional_backends()
 
 
 # ── Stage 2: Torch patches ────────────────────────────────────────────────────
