@@ -1497,6 +1497,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         temperature: float,
         sway_sampling_coefficient: float,
         use_cfg_zero_star: bool,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         diffusion_hidden_states = torch.cat(
             (
@@ -1505,6 +1506,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             ),
             dim=-1,
         )
+        generation_kwargs = {"generator": generator} if generator is not None else {}
         generated_features = self.feat_decoder(
             mu=diffusion_hidden_states,
             num_inference_steps=num_inference_steps,
@@ -1514,6 +1516,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             cfg_value=guidance_scale,
             sway_sampling_coefficient=sway_sampling_coefficient,
             use_cfg_zero_star=use_cfg_zero_star,
+            **generation_kwargs,
         )
         return generated_features.transpose(1, 2).contiguous()
 
