@@ -119,6 +119,7 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_sdpa = True
     _supports_attention_backend = True
+    _keep_in_fp32_modules_strict = ["audio_vae"]
 
     @torch.no_grad()
     def _init_weights(self, module):
