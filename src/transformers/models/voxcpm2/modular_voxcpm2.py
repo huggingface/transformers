@@ -463,6 +463,16 @@ class VoxCPM2CausalConv1d(nn.Conv1d):
         return super().forward(hidden_states)
 
 
+class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
+    def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.causal_trim = padding * 2 - output_padding
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = super().forward(hidden_states)
+        return hidden_states[..., : -self.causal_trim]
+
+
 __all__ = [
     "VoxCPM2AudioVAEConfig",
     "VoxCPM2CfmConfig",
