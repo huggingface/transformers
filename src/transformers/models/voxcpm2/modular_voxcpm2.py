@@ -15,6 +15,7 @@
 import copy
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -28,7 +29,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ..dac.modeling_dac import Snake1d
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
 from ..minicpm4.modeling_minicpm4 import (
@@ -42,6 +43,35 @@ from ..minicpm4.modeling_minicpm4 import (
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class VoxCPM2ModelOutput(ModelOutput):
+    r"""
+    Output type for [`VoxCPM2Model`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Sum of the diffusion and stop-prediction losses.
+        diffusion_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Flow-matching loss for the target audio latents.
+        stop_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Stop-prediction loss over the sequence.
+        stop_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 2)`, *optional*):
+            Logits for the continue and stop classes.
+        latent_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, sequence_length * patch_size)`,
+            *optional*): Target audio latent features.
+        generated_latent_features (`torch.FloatTensor` of shape
+            `(batch_size, feature_dim, sequence_length * patch_size)`, *optional*):
+            Audio latent features sampled by the flow-matching decoder.
+    """
+
+    loss: torch.FloatTensor | None = None
+    diffusion_loss: torch.FloatTensor | None = None
+    stop_loss: torch.FloatTensor | None = None
+    stop_logits: torch.FloatTensor | None = None
+    latent_features: torch.FloatTensor | None = None
+    generated_latent_features: torch.FloatTensor | None = None
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -1443,5 +1473,6 @@ __all__ = [
     "VoxCPM2Config",
     "VoxCPM2DiTConfig",
     "VoxCPM2EncoderConfig",
+    "VoxCPM2ModelOutput",
     "VoxCPM2TextConfig",
 ]

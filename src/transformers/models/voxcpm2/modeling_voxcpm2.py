@@ -21,6 +21,7 @@
 import copy
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -36,7 +37,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import ModelOutput, TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_voxcpm2 import (
@@ -47,6 +48,35 @@ from .configuration_voxcpm2 import (
     VoxCPM2EncoderConfig,
     VoxCPM2TextConfig,
 )
+
+
+@dataclass
+class VoxCPM2ModelOutput(ModelOutput):
+    r"""
+    Output type for [`VoxCPM2Model`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Sum of the diffusion and stop-prediction losses.
+        diffusion_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Flow-matching loss for the target audio latents.
+        stop_loss (`torch.FloatTensor` of shape `()`, *optional*):
+            Stop-prediction loss over the sequence.
+        stop_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 2)`, *optional*):
+            Logits for the continue and stop classes.
+        latent_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, sequence_length * patch_size)`,
+            *optional*): Target audio latent features.
+        generated_latent_features (`torch.FloatTensor` of shape
+            `(batch_size, feature_dim, sequence_length * patch_size)`, *optional*):
+            Audio latent features sampled by the flow-matching decoder.
+    """
+
+    loss: torch.FloatTensor | None = None
+    diffusion_loss: torch.FloatTensor | None = None
+    stop_loss: torch.FloatTensor | None = None
+    stop_logits: torch.FloatTensor | None = None
+    latent_features: torch.FloatTensor | None = None
+    generated_latent_features: torch.FloatTensor | None = None
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
@@ -1233,3 +1263,6 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
             return losses.mean()
         weights = self.adaptive_loss_weighting(losses, target_mask.squeeze(1))
         return (weights * losses).sum() / torch.clamp(target_mask.sum(), min=1.0)
+
+
+__all__ = ["VoxCPM2ModelOutput"]
