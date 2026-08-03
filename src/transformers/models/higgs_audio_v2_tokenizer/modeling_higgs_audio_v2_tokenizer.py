@@ -50,7 +50,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]  # trf-ignore: TRF022
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
     @torch.no_grad()
