@@ -399,6 +399,8 @@ class VoxCPM2Config(PreTrainedConfig):
         Token marking the beginning of reference audio context.
     reference_audio_end_token_id (`int`, *optional*, defaults to 104):
         Token marking the end of reference audio context.
+    sample_rate (`int`, *optional*):
+        Sampling rate of generated waveforms. Defaults to `audio_vae_config.out_sample_rate`.
 
     Example:
 
@@ -435,6 +437,7 @@ class VoxCPM2Config(PreTrainedConfig):
     audio_end_token_id: int = 102
     reference_audio_start_token_id: int = 103
     reference_audio_end_token_id: int = 104
+    sample_rate: int | None = None
 
     def __post_init__(self, **kwargs):
         if self.lm_config is None:
@@ -456,6 +459,11 @@ class VoxCPM2Config(PreTrainedConfig):
             self.audio_vae_config = VoxCPM2AudioVAEConfig()
         elif isinstance(self.audio_vae_config, dict):
             self.audio_vae_config = VoxCPM2AudioVAEConfig(**self.audio_vae_config)
+
+        if self.sample_rate is None:
+            self.sample_rate = self.audio_vae_config.out_sample_rate
+        elif self.sample_rate != self.audio_vae_config.out_sample_rate:
+            raise ValueError("`sample_rate` must match `audio_vae_config.out_sample_rate`")
 
         if (legacy_max_length := kwargs.pop("max_length", None)) is not None:
             self.max_cache_length = legacy_max_length
