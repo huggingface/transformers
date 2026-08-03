@@ -291,6 +291,30 @@ def test_generation_audio_extraction_uses_attention_mask():
 
 
 @require_torch
+def test_generation_audio_encoding_applies_role_specific_padding():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_values = torch.tensor([[[1.0, 2.0, 3.0, 0.0]]])
+    attention_mask = torch.tensor([[1, 1, 1, 0]])
+
+    left_padded_features = model._encode_generation_audio_features(input_values, attention_mask, "left")
+    right_padded_features = model._encode_generation_audio_features(input_values, attention_mask, "right")
+
+    manual_left_padding = torch.nn.functional.pad(input_values[..., :3], (1, 0))
+    expected_left_features = model.audio_vae.encode(manual_left_padding, sampling_rate=16000)
+    expected_left_features = expected_left_features.transpose(1, 2).reshape(1, 1, 2, 4)
+    manual_right_padding = torch.nn.functional.pad(input_values[..., :3], (0, 1))
+    expected_right_features = model.audio_vae.encode(manual_right_padding, sampling_rate=16000)
+    expected_right_features = expected_right_features.transpose(1, 2).reshape(1, 1, 2, 4)
+
+    torch.testing.assert_close(left_padded_features, expected_left_features, rtol=0, atol=0)
+    torch.testing.assert_close(right_padded_features, expected_right_features, rtol=0, atol=0)
+    assert not torch.equal(left_padded_features, right_padded_features)
+
+    with pytest.raises(ValueError, match="padding_side"):
+        model._encode_generation_audio_features(input_values, attention_mask, "middle")
+
+
+@require_torch
 def test_generation_prefill_matches_full_backbones():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 2, 3]])
