@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -20,9 +21,11 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -35,6 +38,8 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    eager_attention_forward,
+    rotate_half,
 )
 
 
@@ -49,10 +54,11 @@ class MiniCPMConfig(LlamaConfig):
         `scale_depth / sqrt(num_hidden_layers)`.
     dim_model_base (`int`, *optional*, defaults to 256):
         Base model dimension used to scale hidden states before the language model head.
-    mup_denominator (`int`, *optional*, defaults to 32):
+    mup_denominator (`int`, *optional*):
         Width denominator used by compatible speculative decoding heads.
     sparse_config (`dict`, *optional*):
-        Configuration for the optional InfLLM-v2 sparse attention implementation.
+        Configuration for OpenBMB's optional InfLLM-v2 sparse attention implementation. Native Transformers support
+        is currently limited to dense attention and raises an error if this is set.
 
     Example:
 
@@ -67,7 +73,8 @@ class MiniCPMConfig(LlamaConfig):
 
     model_type = "minicpm"
 
-    # Defaults match the openbmb/MiniCPM4-8B checkpoint.
+    # Architecture dimensions match MiniCPM4-8B. Compatibility fields omitted by MiniCPM4-0.5B keep their official
+    # constructor defaults.
     vocab_size: int = 73448
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -77,14 +84,14 @@ class MiniCPMConfig(LlamaConfig):
     max_position_embeddings: int = 32768
     initializer_range: float = 0.1
     rms_norm_eps: float = 1e-6
-    pad_token_id: int | None = 2
+    pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
     scale_emb: int | float = 12
     scale_depth: int | float | None = 1.4
     dim_model_base: int | None = 256
-    mup_denominator: int | None = 32
+    mup_denominator: int | None = None
     sparse_config: dict | None = None
 
     def __post_init__(self, **kwargs):
@@ -108,15 +115,95 @@ class MiniCPMRMSNorm(LlamaRMSNorm):
 
 
 class MiniCPMRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
+    @torch.no_grad()
+    @dynamic_rope_update
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            if self.rope_type == "longrope":
+                rope_parameters = self.config.rope_parameters
+                head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
+                dim = int(head_dim * rope_parameters.get("partial_rotary_factor", 1.0))
+                factor_name = (
+                    "long_factor"
+                    if position_ids.max().item() + 1 > rope_parameters["original_max_position_embeddings"]
+                    else "short_factor"
+                )
+                ext_factors = torch.tensor(rope_parameters[factor_name], dtype=torch.float32, device=x.device)
+                inv_freq_shape = torch.arange(0, dim, 2, dtype=torch.int64, device=x.device).float() / dim
+                base_inv_freq = 1.0 / (rope_parameters["rope_theta"] ** inv_freq_shape)
+                freqs = position_ids.float().unsqueeze(-1) * (1.0 / ext_factors)
+                freqs = freqs * base_inv_freq
+            else:
+                inv_freq_expanded = self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).float()
+                position_ids_expanded = position_ids[:, None, :].float()
+                freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos, sin
 
 
 class MiniCPMMLP(LlamaMLP):
     pass
 
 
+def apply_rotary_pos_emb(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply rotary embeddings in float32 and restore the query and key dtypes."""
+    query_dtype, key_dtype = query.dtype, key.dtype
+    query, key = query.float(), key.float()
+    cos, sin = cos.unsqueeze(unsqueeze_dim), sin.unsqueeze(unsqueeze_dim)
+    query = (query * cos) + (rotate_half(query) * sin)
+    key = (key * cos) + (rotate_half(key) * sin)
+    return query.to(query_dtype), key.to(key_dtype)
+
+
 class MiniCPMAttention(LlamaAttention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class MiniCPMDecoderLayer(LlamaDecoderLayer):
@@ -165,6 +252,11 @@ class MiniCPMPreTrainedModel(LlamaPreTrainedModel):
 @auto_docstring
 class MiniCPMModel(LlamaModel):
     def __init__(self, config: MiniCPMConfig):
+        if config.sparse_config is not None:
+            raise NotImplementedError(
+                "MiniCPM InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
+                "use dense attention."
+            )
         super().__init__(config)
         self.embed_tokens = MiniCPMScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
@@ -214,7 +306,7 @@ class MiniCPMForCausalLM(LlamaForCausalLM):
 
         hidden_states = outputs.last_hidden_state / self.config.logits_scaling
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
 
         loss = None
         if labels is not None:

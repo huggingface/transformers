@@ -118,22 +118,33 @@ class MiniCPMRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
+    @dynamic_rope_update
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            if self.rope_type == "longrope":
+                rope_parameters = self.config.rope_parameters
+                head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
+                dim = int(head_dim * rope_parameters.get("partial_rotary_factor", 1.0))
+                factor_name = (
+                    "long_factor"
+                    if position_ids.max().item() + 1 > rope_parameters["original_max_position_embeddings"]
+                    else "short_factor"
+                )
+                ext_factors = torch.tensor(rope_parameters[factor_name], dtype=torch.float32, device=x.device)
+                inv_freq_shape = torch.arange(0, dim, 2, dtype=torch.int64, device=x.device).float() / dim
+                base_inv_freq = 1.0 / (rope_parameters["rope_theta"] ** inv_freq_shape)
+                freqs = position_ids.float().unsqueeze(-1) * (1.0 / ext_factors)
+                freqs = freqs * base_inv_freq
+            else:
+                inv_freq_expanded = self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).float()
+                position_ids_expanded = position_ids[:, None, :].float()
+                freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos, sin
 
 
 class MiniCPMMLP(nn.Module):
@@ -157,32 +168,6 @@ def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -220,6 +205,22 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+def apply_rotary_pos_emb(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply rotary embeddings in float32 and restore the query and key dtypes."""
+    query_dtype, key_dtype = query.dtype, key.dtype
+    query, key = query.float(), key.float()
+    cos, sin = cos.unsqueeze(unsqueeze_dim), sin.unsqueeze(unsqueeze_dim)
+    query = (query * cos) + (rotate_half(query) * sin)
+    key = (key * cos) + (rotate_half(key) * sin)
+    return query.to(query_dtype), key.to(key_dtype)
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -273,7 +274,6 @@ class MiniCPMAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -361,6 +361,11 @@ class MiniCPMPreTrainedModel(PreTrainedModel):
 class MiniCPMModel(MiniCPMPreTrainedModel):
     def __init__(self, config: MiniCPMConfig):
         super().__init__(config)
+        if config.sparse_config is not None:
+            raise NotImplementedError(
+                "MiniCPM InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
+                "use dense attention."
+            )
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = MiniCPMScaledWordEmbedding(
@@ -489,7 +494,7 @@ class MiniCPMForCausalLM(MiniCPMPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state / self.config.logits_scaling
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
 
         loss = None
         if labels is not None:

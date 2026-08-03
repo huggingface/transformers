@@ -28,7 +28,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import MiniCPMForCausalLM, MiniCPMModel
+    from transformers import MiniCPMConfig, MiniCPMForCausalLM, MiniCPMModel
+    from transformers.models.minicpm.modeling_minicpm import MiniCPMRotaryEmbedding, apply_rotary_pos_emb
 
 
 class MiniCPMModelTester(CausalLMModelTester):
@@ -72,6 +73,81 @@ class MiniCPMModelTest(CausalLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(logits, expected_logits)
 
+    def test_rope_uses_float32(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        rotary_emb = MiniCPMRotaryEmbedding(config)
+        position_ids = torch.arange(3).unsqueeze(0)
+        cos, sin = rotary_emb(torch.empty((), dtype=torch.bfloat16), position_ids)
+
+        self.assertEqual(cos.dtype, torch.float32)
+        self.assertEqual(sin.dtype, torch.float32)
+
+        query = torch.randn(1, config.num_attention_heads, 3, config.head_dim).to(torch.bfloat16)
+        key = torch.randn(1, config.num_key_value_heads, 3, config.head_dim).to(torch.bfloat16)
+        rotated_query, rotated_key = apply_rotary_pos_emb(query, key, cos, sin)
+
+        def rotate_half(hidden_states):
+            first_half, second_half = hidden_states.chunk(2, dim=-1)
+            return torch.cat((-second_half, first_half), dim=-1)
+
+        cos, sin = cos.unsqueeze(1), sin.unsqueeze(1)
+        expected_query = (query.float() * cos + rotate_half(query.float()) * sin).to(query.dtype)
+        expected_key = (key.float() * cos + rotate_half(key.float()) * sin).to(key.dtype)
+        torch.testing.assert_close(rotated_query, expected_query, rtol=0, atol=0)
+        torch.testing.assert_close(rotated_key, expected_key, rtol=0, atol=0)
+
+    def test_longrope_matches_upstream_operation_order(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.max_position_embeddings = 8
+        factor_count = config.head_dim // 2
+        short_factors = [0.9977997, 1.0146583, 1.0349680, 1.0594292]
+        long_factors = [1.1, 1.2, 1.3, 1.4]
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10_000.0,
+            "short_factor": [short_factors[index % len(short_factors)] for index in range(factor_count)],
+            "long_factor": [long_factors[index % len(long_factors)] for index in range(factor_count)],
+            "original_max_position_embeddings": 8,
+            "factor": 1.0,
+            "attention_factor": 1.0,
+        }
+        rotary_emb = MiniCPMRotaryEmbedding(config)
+        position_ids = torch.tensor([[0, 1, 7]])
+        cos, sin = rotary_emb(torch.empty((), dtype=torch.bfloat16), position_ids)
+
+        ext_factors = torch.tensor(config.rope_parameters["short_factor"], dtype=torch.float32)
+        inv_freq_shape = torch.arange(0, config.head_dim, 2, dtype=torch.int64).float() / config.head_dim
+        base_inv_freq = 1.0 / (config.rope_parameters["rope_theta"] ** inv_freq_shape)
+        freqs = position_ids.float().unsqueeze(-1) * (1.0 / ext_factors)
+        freqs = freqs * base_inv_freq
+        embeddings = torch.cat((freqs, freqs), dim=-1)
+
+        torch.testing.assert_close(cos, embeddings.cos(), rtol=0, atol=0)
+        torch.testing.assert_close(sin, embeddings.sin(), rtol=0, atol=0)
+
+    def test_logits_are_float32(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiniCPMForCausalLM(config).to(device=torch_device, dtype=torch.bfloat16).eval()
+
+        with torch.no_grad():
+            logits = model(**inputs).logits
+
+        self.assertEqual(logits.dtype, torch.float32)
+
+    def test_sparse_attention_is_not_silently_ignored(self):
+        config = MiniCPMConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            sparse_config={"block_size": 64},
+        )
+
+        with self.assertRaisesRegex(NotImplementedError, "sparse attention is not implemented"):
+            MiniCPMModel(config)
+
     def test_checkpoint_weight_names(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = MiniCPMForCausalLM(config)
@@ -112,3 +188,5 @@ class MiniCPMModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertEqual(type(config).__name__, "MiniCPMConfig")
         self.assertTrue(config.tie_word_embeddings)
+        self.assertIsNone(config.pad_token_id)
+        self.assertIsNone(config.mup_denominator)
