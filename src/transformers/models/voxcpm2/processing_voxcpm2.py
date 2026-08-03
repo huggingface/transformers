@@ -149,5 +149,18 @@ class VoxCPM2Processor(ProcessorMixin):
             tensor_type=return_tensors,
         )
 
+    @property
+    def model_input_names(self):
+        return [
+            "input_ids",
+            "attention_mask",
+            "text_mask",
+            "audio_mask",
+            "prompt_input_values",
+            "prompt_attention_mask",
+            "reference_input_values",
+            "reference_attention_mask",
+        ]
+
 
 __all__ = ["VoxCPM2Processor"]
