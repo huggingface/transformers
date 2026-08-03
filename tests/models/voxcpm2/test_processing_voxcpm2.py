@@ -15,8 +15,9 @@
 import numpy as np
 import pytest
 
-from transformers import DacFeatureExtractor
+from transformers import AutoFeatureExtractor, AutoProcessor, AutoTokenizer, DacFeatureExtractor, VoxCPM2Config
 from transformers.models.voxcpm2.processing_voxcpm2 import VoxCPM2Processor
+from transformers.models.voxcpm2.tokenization_voxcpm2 import VoxCPM2Tokenizer
 from transformers.testing_utils import require_torch
 
 from .test_tokenization_voxcpm2 import get_tiny_voxcpm2_tokenizer
@@ -123,3 +124,22 @@ def test_processor_preserves_audio_lengths_and_validates_inputs():
             prompt_text="B",
             sampling_rate=16000,
         )
+
+
+def test_processor_auto_class_round_trip(tmp_path):
+    processor = get_tiny_voxcpm2_processor()
+    VoxCPM2Config().save_pretrained(tmp_path)
+    processor.save_pretrained(tmp_path)
+
+    restored_tokenizer = AutoTokenizer.from_pretrained(tmp_path)
+    restored_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_path)
+    restored_processor = AutoProcessor.from_pretrained(tmp_path)
+
+    assert isinstance(restored_tokenizer, VoxCPM2Tokenizer)
+    assert isinstance(restored_feature_extractor, DacFeatureExtractor)
+    assert isinstance(restored_processor, VoxCPM2Processor)
+    assert restored_processor.audio_patch_size == 4
+    assert (
+        restored_processor(text="A", return_tensors="np").input_ids.tolist()
+        == processor(text="A", return_tensors="np").input_ids.tolist()
+    )
