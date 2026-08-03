@@ -349,6 +349,55 @@ def test_generation_audio_feature_alignment_preserves_prompt_order():
 
 
 @require_torch
+def test_generation_audio_feature_preparation_supports_raw_and_precomputed_inputs():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.ones(1, 4, dtype=torch.long)
+    audio_mask = torch.tensor([[0, 1, 0, 1]])
+    reference_values = torch.tensor([[[1.0, 2.0, 3.0, 0.0]]])
+    prompt_values = torch.tensor([[[4.0, 5.0, 6.0, 0.0]]])
+    attention_mask = torch.tensor([[1, 1, 1, 0]])
+
+    prepared_features = model._prepare_generation_audio_features(
+        input_ids,
+        audio_mask,
+        prompt_input_values=prompt_values,
+        prompt_attention_mask=attention_mask,
+        reference_input_values=reference_values,
+        reference_attention_mask=attention_mask,
+    )
+    reference_features = model._encode_generation_audio_features(reference_values, attention_mask, "right")
+    prompt_features = model._encode_generation_audio_features(prompt_values, attention_mask, "left")
+    expected_features = model._align_generation_audio_features(
+        input_ids,
+        audio_mask,
+        reference_features=reference_features,
+        prompt_features=prompt_features,
+    )
+    torch.testing.assert_close(prepared_features, expected_features, rtol=0, atol=0)
+
+    precomputed_features = torch.randn(1, 4, 2, 4)
+    returned_features = model._prepare_generation_audio_features(input_ids, audio_mask, precomputed_features)
+    assert returned_features is precomputed_features
+
+    zero_shot_features = model._prepare_generation_audio_features(input_ids[:, :2], torch.zeros(1, 2))
+    assert torch.count_nonzero(zero_shot_features) == 0
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        model._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            precomputed_features,
+            prompt_input_values=prompt_values,
+        )
+    with pytest.raises(ValueError, match="requires"):
+        model._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            prompt_attention_mask=attention_mask,
+        )
+
+
+@require_torch
 def test_generation_prefill_matches_full_backbones():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 2, 3]])
