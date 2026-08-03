@@ -27,6 +27,7 @@ if is_torch_available():
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
+        VoxCPM2TimestepEmbedding,
     )
 
 
@@ -171,3 +172,32 @@ def test_sinusoidal_timestep_embedding_matches_reference():
 
     assert layer(torch.tensor(0.5)).shape == (1, 8)
     assert layer(torch.tensor([0.5, 1.0])).shape == (2, 8)
+
+
+@require_torch
+def test_timestep_projection_matches_reference():
+    layer = VoxCPM2TimestepEmbedding(4, 6, output_dim=5)
+    assert list(layer.state_dict()) == [
+        "linear_1.weight",
+        "linear_1.bias",
+        "linear_2.weight",
+        "linear_2.bias",
+    ]
+    assert layer.linear_1.weight.shape == (6, 4)
+    assert layer.linear_2.weight.shape == (5, 6)
+
+    hidden_states = torch.randn(3, 4, requires_grad=True)
+    output = layer(hidden_states)
+
+    reference_input = hidden_states.detach().clone().requires_grad_()
+    expected_output = torch.nn.functional.linear(reference_input, layer.linear_1.weight, layer.linear_1.bias)
+    expected_output = torch.nn.functional.silu(expected_output)
+    expected_output = torch.nn.functional.linear(expected_output, layer.linear_2.weight, layer.linear_2.bias)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    expected_output.sum().backward()
+    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
+
+    default_output_layer = VoxCPM2TimestepEmbedding(4, 6)
+    assert default_output_layer(torch.randn(2, 4)).shape == (2, 6)
