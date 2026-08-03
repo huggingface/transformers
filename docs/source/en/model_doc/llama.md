@@ -127,6 +127,10 @@ visualizer("Plants create energy through a process known as")
     - update_post_processor
     - save_vocabulary
 
+## LlamaTokenizerFast
+
+[[autodoc]] LlamaTokenizerFast
+
 ## LlamaModel
 
 [[autodoc]] LlamaModel

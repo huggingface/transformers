@@ -99,6 +99,10 @@ print(f"Predicted label: {predicted_label}")
 
 [[autodoc]] DistilBertTokenizer
 
+## DistilBertTokenizerFast
+
+[[autodoc]] DistilBertTokenizerFast
+
 ## DistilBertModel
 
 [[autodoc]] DistilBertModel

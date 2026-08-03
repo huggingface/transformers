@@ -159,3 +159,7 @@ visualizer("""def func(a, b):
     - update_post_processor
     - save_vocabulary
 
+## CodeLlamaTokenizerFast
+
+[[autodoc]] CodeLlamaTokenizerFast
+
