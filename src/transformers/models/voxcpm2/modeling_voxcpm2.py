@@ -28,6 +28,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.func import jvp
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -85,10 +86,55 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
-    _no_split_modules = ["VoxCPM2DecoderLayer", "VoxCPM2CausalDecoderBlock"]
+    _no_split_modules = [
+        "VoxCPM2DecoderLayer",
+        "VoxCPM2CausalEncoderBlock",
+        "VoxCPM2CausalDecoderBlock",
+        "ParametrizedVoxCPM2CausalConv1d",
+        "ParametrizedVoxCPM2CausalConvTranspose1d",
+    ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_sdpa = True
     _supports_attention_backend = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        has_parametrized_weight = hasattr(module, "parametrizations") and hasattr(module.parametrizations, "weight")
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)) and has_parametrized_weight:
+            std = self.config.get_text_config().initializer_range or 0.02
+            weight_magnitude = module.parametrizations.weight.original0
+            weight_vector = module.parametrizations.weight.original1
+            init.normal_(weight_vector, mean=0.0, std=std)
+            norm_dimensions = tuple(range(1, weight_vector.ndim))
+            init.copy_(
+                weight_magnitude,
+                torch.linalg.vector_norm(weight_vector, dim=norm_dimensions, keepdim=True),
+            )
+            if module.bias is not None:
+                init.zeros_(module.bias)
+
+        if isinstance(module, VoxCPM2Snake1d):
+            init.ones_(module.alpha)
+        elif isinstance(module, VoxCPM2LocalEncoder):
+            init.normal_(module.special_token, mean=0.0, std=1.0)
+        elif isinstance(module, VoxCPM2SampleRateConditionLayer):
+            if module.conditioning_type == "scale_bias":
+                init.ones_(module.scale_embed.weight)
+                init.zeros_(module.bias_embed.weight)
+            elif module.conditioning_type == "scale_bias_init":
+                init.normal_(module.scale_embed.weight, mean=1.0, std=1.0)
+                init.normal_(module.bias_embed.weight, mean=0.0, std=1.0)
+            else:
+                init.normal_(module.cond_embed.weight, mean=0.0, std=1.0)
+        elif isinstance(module, VoxCPM2AudioDecoder) and module.sr_bin_boundaries is not None:
+            boundaries = torch.tensor(
+                self.config.audio_vae_config.sr_bin_boundaries,
+                device=module.sr_bin_boundaries.device,
+                dtype=module.sr_bin_boundaries.dtype,
+            )
+            init.copy_(module.sr_bin_boundaries, boundaries)
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
