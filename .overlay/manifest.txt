@@ -1,0 +1,18 @@
+# Files that exist only on the dev branch. `pr-sync build` strips exactly these to
+# produce the upstream PR head.
+#
+# Adding a new dev-only file? Add its path here. Forgetting to is the mistake this
+# manifest exists to catch, and `pr-sync verify` invariant 3 will name the file.
+#
+# Literal paths only, one per line. Globs are rejected: `git ls-tree -- 'scripts/x_*'`
+# matches nothing and still exits 0, so a glob would expand to the empty set silently
+# and the file would ship. `.overlay` lists itself; the tooling is dev-only too.
+
+.overlay
+ap_testcase
+scripts/check_apertus1p5_processor_parity.py
+scripts/check_apertus1p5_pruning_crosscheck.py
+scripts/check_apertus1p5_vision_tokenizer_parity.py
+scripts/check_wavtokenizer_parity.py
+tests/models/apertus1p5/test_conversion_apertus1p5.py
+tests/models/wavtokenizer/test_conversion_wavtokenizer.py
