@@ -108,7 +108,7 @@ class GitEmbeddings(nn.Module):
             embeddings = inputs_embeds
 
         position_embeddings = self.position_embeddings(position_ids)
-        embeddings += position_embeddings
+        embeddings = embeddings + position_embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)

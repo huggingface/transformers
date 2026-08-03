@@ -950,6 +950,7 @@ class Kosmos2TextTransformer(Kosmos2PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if image_embeds is not None:
+            inputs_embeds = inputs_embeds.clone()
             inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.to(
                 inputs_embeds.device, inputs_embeds.dtype
             ).view(-1, image_embeds.size(-1))

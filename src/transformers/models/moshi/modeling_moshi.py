@@ -734,7 +734,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
             inputs_embeds = torch.cat(inputs_embeds, dim=1)
 
-        inputs_embeds += self.input_projections(last_hidden_state, codebook_idx)
+        inputs_embeds = inputs_embeds + self.input_projections(last_hidden_state, codebook_idx)
 
         causal_mask = None
         if attention_mask is not None:

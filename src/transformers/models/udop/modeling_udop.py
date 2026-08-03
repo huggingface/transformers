@@ -203,7 +203,7 @@ def combine_image_text_embeddings(
         image_embeddings, 1, ocr_points.unsqueeze(-1).repeat(1, 1, image_embeddings.size(-1))
     )
     repeated_vision_embeds[target_seg] = 0.0
-    inputs_embeds += repeated_vision_embeds
+    inputs_embeds = inputs_embeds + repeated_vision_embeds
 
     patch_inds = torch.full_like(image_embeddings[:, :, 0], True).bool()
     ind = torch.cat(
@@ -1159,7 +1159,7 @@ class UdopStack(UdopPreTrainedModel):
             input_shape = inputs_embeds.size()[:-1]
 
         if not self.is_decoder and bbox is not None:
-            inputs_embeds += self.cell_2d_embedding(bbox)
+            inputs_embeds = inputs_embeds + self.cell_2d_embedding(bbox)
 
         batch_size, seq_length = input_shape
 

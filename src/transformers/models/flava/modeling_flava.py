@@ -1730,7 +1730,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
-                mim_labels[bool_masked_pos.ne(True)] = self.ce_ignore_index
+                mim_labels = mim_labels.masked_fill(bool_masked_pos.ne(True), self.ce_ignore_index)
 
                 sequence_for_image = sequence_for_image[:, -mim_labels.size(1) :, :]
                 masked_tokens = mim_labels.ne(self.ce_ignore_index)
@@ -1794,7 +1794,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
-                mim_labels[bool_masked_pos.ne(True)] = self.ce_ignore_index
+                mim_labels = mim_labels.masked_fill(bool_masked_pos.ne(True), self.ce_ignore_index)
 
                 masked_tokens = mim_labels.ne(self.ce_ignore_index)
                 mim_labels_filtered = mim_labels[masked_tokens]

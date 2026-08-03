@@ -1859,6 +1859,50 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def test_forward_does_not_mutate_inputs(self):
+        """`forward` must not write into the tensors it is handed.
+
+        Callers keep their own reference to `inputs_embeds`, `pixel_values`, labels and masks and reuse
+        them: to run the same batch twice, to take gradients with respect to an embedding, or simply to
+        read the labels back afterwards. An in-place write corrupts all three.
+
+        The oracle is the tensor version counter rather than the values, because several of these writes
+        happen to be numerically inert on the inputs a `ModelTester` produces (`clamp_` on labels that are
+        already in range, a multiply by an all-ones mask) while still bumping the version, breaking autograd
+        and corrupting the caller's tensor for inputs that are not.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                class_config, class_inputs_dict = config, inputs_dict
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    class_config, class_inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(
+                        model_class
+                    )
+                model = model_class(copy.deepcopy(class_config)).to(torch_device).eval()
+
+                return_labels = model_class.__name__ not in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                ]
+                inputs = self._prepare_for_class(class_inputs_dict, model_class, return_labels=return_labels)
+
+                with torch.no_grad():
+                    self.assert_inputs_untouched(model, inputs)
+
+    def assert_inputs_untouched(self, model, inputs):
+        """Call `model`, assert it did not write into any tensor in `inputs`, and return its output."""
+        versions = {k: v._version for k, v in inputs.items() if isinstance(v, torch.Tensor)}
+        outputs = model(**inputs)
+        for name, version in versions.items():
+            self.assertEqual(
+                inputs[name]._version,
+                version,
+                msg=f"{model.__class__.__name__} wrote into the caller's `{name}` tensor in place",
+            )
+        return outputs
+
     def test_training(self):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
@@ -2942,7 +2986,9 @@ class ModelTesterMixin(ExportTesterMixin):
                 inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
-                model(**inputs)[0]
+                # `inputs_embeds` is routinely kept and reused by the caller (gradient attribution, soft
+                # prompts), so the model must not write into it.
+                self.assert_inputs_untouched(model, inputs)[0]
 
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -1299,7 +1299,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
             decoder_attention_mask = (
-                decoder_attention_mask
+                decoder_attention_mask.clone()
                 if decoder_attention_mask is not None
                 else decoder_input_ids.ne(self.config.pad_token_id).float()
             )
