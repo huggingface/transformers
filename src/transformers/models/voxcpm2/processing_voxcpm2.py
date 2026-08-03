@@ -44,5 +44,17 @@ class VoxCPM2Processor(ProcessorMixin):
         self.reference_audio_end_token_id = tokenizer.convert_tokens_to_ids(reference_audio_end_token)
         super().__init__(feature_extractor, tokenizer)
 
+    def _validate_generation_inputs(self, text, audio, prompt_text, reference_audio):
+        if not isinstance(text, str):
+            raise TypeError(
+                "`text` must be a single string because VoxCPM2 generation currently supports batch size 1"
+            )
+        if prompt_text is not None and not isinstance(prompt_text, str):
+            raise TypeError("`prompt_text` must be a string")
+        if (audio is None) != (prompt_text is None):
+            raise ValueError("`audio` and `prompt_text` must be provided together")
+        if audio is None and reference_audio is None and not text:
+            raise ValueError("`text` cannot be empty for zero-shot generation")
+
 
 __all__ = ["VoxCPM2Processor"]
