@@ -14,6 +14,7 @@
 
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.models.voxcpm2.tokenization_voxcpm2 import VoxCPM2Tokenizer
+from transformers.testing_utils import require_torch
 
 
 def get_tiny_voxcpm2_tokenizer() -> VoxCPM2Tokenizer:
@@ -51,3 +52,24 @@ def test_chinese_characters_are_split_before_bpe_merges():
     assert (
         tokenizer("AB", add_special_tokens=False).input_ids == base_tokenizer("AB", add_special_tokens=False).input_ids
     )
+
+
+@require_torch
+def test_chinese_splitting_preserves_batch_padding_and_tensor_conversion():
+    tokenizer = get_tiny_voxcpm2_tokenizer()
+    expected_input_ids = [[4, 5, 6], [3, 3, 12]]
+    expected_attention_mask = [[1, 1, 1], [0, 0, 1]]
+
+    list_batch = tokenizer(["你好", "AB"], add_special_tokens=False, padding=True)
+    assert list_batch.input_ids == expected_input_ids
+    assert list_batch.attention_mask == expected_attention_mask
+
+    for tensor_type in ("np", "pt"):
+        tensor_batch = tokenizer(
+            ["你好", "AB"],
+            add_special_tokens=False,
+            padding=True,
+            return_tensors=tensor_type,
+        )
+        assert tensor_batch.input_ids.tolist() == expected_input_ids
+        assert tensor_batch.attention_mask.tolist() == expected_attention_mask
