@@ -1323,4 +1323,51 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         return (weights * losses).sum() / torch.clamp(target_mask.sum(), min=1.0)
 
 
-__all__ = ["VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
+def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    ralm_config = _get_tslm_config(config)
+    ralm_config.num_hidden_layers = config.residual_lm_num_layers
+    ralm_config.vocab_size = 0
+    ralm_config.no_rope = config.residual_lm_no_rope
+    return ralm_config
+
+
+@auto_docstring
+class VoxCPM2Model(VoxCPM2PreTrainedModel):
+    def __init__(self, config: VoxCPM2Config):
+        super().__init__(config)
+        config.lm_config._attn_implementation = config._attn_implementation
+
+        self.feat_dim = config.feat_dim
+        self.patch_size = config.patch_size
+
+        self.base_lm = VoxCPM2BackboneModel(_get_tslm_config(config))
+        self.residual_lm = VoxCPM2BackboneModel(_get_ralm_config(config))
+        self.feat_encoder = VoxCPM2LocalEncoder(config)
+        self.feat_decoder = VoxCPM2ConditionalFlowMatching(config)
+
+        self.fsq_layer = VoxCPM2ScalarQuantizationLayer(config)
+        self.enc_to_lm_proj = nn.Linear(config.encoder_config.hidden_dim, config.lm_config.hidden_size)
+        self.lm_to_dit_proj = nn.Linear(config.lm_config.hidden_size, config.dit_config.hidden_dim)
+        self.res_to_dit_proj = nn.Linear(config.lm_config.hidden_size, config.dit_config.hidden_dim)
+        self.fusion_concat_proj = nn.Linear(config.lm_config.hidden_size * 2, config.lm_config.hidden_size)
+
+        self.stop_proj = nn.Linear(config.lm_config.hidden_size, config.lm_config.hidden_size)
+        self.stop_actn = nn.SiLU()
+        self.stop_head = nn.Linear(config.lm_config.hidden_size, 2, bias=False)
+        self.stop_loss = nn.CrossEntropyLoss(reduction="none")
+
+        self.audio_vae = VoxCPM2AudioVAE(config.audio_vae_config)
+        self.chunk_size = self.audio_vae.chunk_size
+        self._decode_chunk_size = self.audio_vae.decode_chunk_size
+        self._encode_sample_rate = self.audio_vae.sample_rate
+        self.sample_rate = self.audio_vae.out_sample_rate
+
+        self.audio_start_token = config.audio_start_token_id
+        self.audio_end_token = config.audio_end_token_id
+        self.ref_audio_start_token = config.reference_audio_start_token_id
+        self.ref_audio_end_token = config.reference_audio_end_token_id
+
+        self.post_init()
+
+
+__all__ = ["VoxCPM2Model", "VoxCPM2ModelOutput", "VoxCPM2PreTrainedModel"]
