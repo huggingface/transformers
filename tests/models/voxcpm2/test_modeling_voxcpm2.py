@@ -28,6 +28,7 @@ if is_torch_available():
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
+        VoxCPM2CausalEncoderBlock,
         VoxCPM2CausalResidualUnit,
         VoxCPM2ConditionalFlowMatching,
         VoxCPM2DecoderLayer,
@@ -148,6 +149,24 @@ def test_causal_residual_unit_matches_reference():
     hidden_states = torch.randn(2, 4, 19, requires_grad=True)
     output = layer(hidden_states)
     expected_output = hidden_states + layer.block(hidden_states)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    output.sum().backward()
+    assert hidden_states.grad is not None
+
+
+@require_torch
+def test_causal_encoder_block_matches_reference():
+    layer = VoxCPM2CausalEncoderBlock(output_dim=8, input_dim=4, stride=3, groups=2)
+    state_keys = set(layer.state_dict())
+    assert len(state_keys) == 28
+    assert "block.0.block.1.parametrizations.weight.original0" in state_keys
+    assert "block.4.parametrizations.weight.original1" in state_keys
+
+    hidden_states = torch.randn(2, 4, 31, requires_grad=True)
+    output = layer(hidden_states)
+    expected_output = layer.block(hidden_states)
+    assert output.shape == (2, 8, 10)
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 
     output.sum().backward()
