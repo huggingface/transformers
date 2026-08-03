@@ -823,6 +823,36 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         self.mean_mode = config.dit_config.mean_mode
         self.estimator = VoxCPM2LocalDiT(config)
 
+    @torch.inference_mode()
+    def forward(
+        self,
+        mu: torch.Tensor,
+        num_inference_steps: int,
+        patch_size: int,
+        conditioning: torch.Tensor,
+        temperature: float = 1.0,
+        cfg_value: float = 1.0,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+    ) -> torch.Tensor:
+        if self.solver != "euler":
+            raise ValueError(f"Unsupported flow-matching solver: {self.solver}")
+        sample = torch.randn(
+            (mu.shape[0], self.in_channels, patch_size), device=mu.device, dtype=mu.dtype
+        ) * temperature
+        timestep_span = torch.linspace(1, 0, num_inference_steps + 1, device=mu.device, dtype=mu.dtype)
+        timestep_span = timestep_span + sway_sampling_coefficient * (
+            torch.cos(torch.pi / 2 * timestep_span) - 1 + timestep_span
+        )
+        return self.solve_euler(
+            sample=sample,
+            timestep_span=timestep_span,
+            mu=mu,
+            conditioning=conditioning,
+            cfg_value=cfg_value,
+            use_cfg_zero_star=use_cfg_zero_star,
+        )
+
     def optimized_scale(self, positive_states: torch.Tensor, negative_states: torch.Tensor) -> torch.Tensor:
         dot_product = torch.sum(positive_states * negative_states, dim=1, keepdim=True)
         squared_norm = torch.sum(negative_states**2, dim=1, keepdim=True) + 1e-8
