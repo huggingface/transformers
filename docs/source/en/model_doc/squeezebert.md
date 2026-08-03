@@ -70,6 +70,10 @@ This model was contributed by [forresti](https://huggingface.co/forresti).
     - get_special_tokens_mask
     - save_vocabulary
 
+## SqueezeBertTokenizerFast
+
+[[autodoc]] SqueezeBertTokenizerFast
+
 ## SqueezeBertModel
 
 [[autodoc]] SqueezeBertModel

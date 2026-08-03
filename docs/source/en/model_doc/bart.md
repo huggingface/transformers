@@ -96,6 +96,10 @@ print(f"The predicted token is: {predicted_token}")
 [[autodoc]] BartTokenizer
     - all
 
+## BartTokenizerFast
+
+[[autodoc]] BartTokenizerFast
+
 ## BartModel
 
 [[autodoc]] BartModel

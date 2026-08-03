@@ -230,6 +230,10 @@ dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'x
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
+## MarkupLMTokenizerFast
+
+[[autodoc]] MarkupLMTokenizerFast
+
 
 ## MarkupLMProcessor
 
