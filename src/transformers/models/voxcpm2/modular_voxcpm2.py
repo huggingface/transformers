@@ -633,6 +633,45 @@ class VoxCPM2NoiseBlock(nn.Module):
         return hidden_states + noise * self.linear(hidden_states)
 
 
+class VoxCPM2CausalDecoderBlock(nn.Module):
+    def __init__(
+        self,
+        input_dim: int = 16,
+        output_dim: int = 8,
+        stride: int = 1,
+        groups: int = 1,
+        use_noise_block: bool = False,
+    ):
+        super().__init__()
+        layers = [
+            VoxCPM2Snake1d(input_dim),
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConvTranspose1d(
+                    input_dim,
+                    output_dim,
+                    kernel_size=2 * stride,
+                    stride=stride,
+                    padding=math.ceil(stride / 2),
+                    output_padding=stride % 2,
+                )
+            ),
+        ]
+        if use_noise_block:
+            layers.append(VoxCPM2NoiseBlock(output_dim))
+        layers.extend(
+            [
+                VoxCPM2CausalResidualUnit(output_dim, dilation=1, groups=groups),
+                VoxCPM2CausalResidualUnit(output_dim, dilation=3, groups=groups),
+                VoxCPM2CausalResidualUnit(output_dim, dilation=9, groups=groups),
+            ]
+        )
+        self.block = nn.Sequential(*layers)
+        self.input_channels = input_dim
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.block(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
