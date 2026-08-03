@@ -309,6 +309,16 @@ class AllReduceParallel(TensorParallelLayer):
         return output.to_local()
 
 
+class MlaKvAProjParallel(TensorParallelLayer):
+    """All-reduce the rotary branch gradient of an MLA KV-A projection."""
+
+    def transform_output_post_forward(self, module, output, mesh):
+        rope_dim = module.config.qk_rope_head_dim
+        pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
+        rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
+        return torch.cat([pass_output, rope_output], dim=-1)
+
+
 class SequenceParallel(TensorParallelLayer):
     def __init__(self, *, sequence_dim: int = 1, use_local_output: bool = True):
         self.sequence_dim = sequence_dim
@@ -445,6 +455,7 @@ if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
         @staticmethod
         def backward(ctx, grad):
+            grad = grad.contiguous()
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
@@ -584,6 +595,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "all_reduce": AllReduceParallel(),
+            "mla_kv_a_proj": MlaKvAProjParallel(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "moe_tp_experts": MoEExpertsParallel(output_layouts=Replicate()),
             "moe_identity_expert": MoeIdentityParallel(),
@@ -610,6 +622,8 @@ def apply_tensor_parallelism(model, tp_mesh):
                 ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            if style_name == "mla_kv_a_proj":
+                module.config = model.config.get_text_config()
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
 
     return model
