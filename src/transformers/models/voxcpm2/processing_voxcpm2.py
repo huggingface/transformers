@@ -21,9 +21,6 @@ from ...processing_utils import ProcessorMixin
 class VoxCPM2Processor(ProcessorMixin):
     """Builds mixed text and audio prompts for VoxCPM2 generation."""
 
-    feature_extractor_class = "DacFeatureExtractor"
-    tokenizer_class = "VoxCPM2Tokenizer"
-
     def __init__(
         self,
         feature_extractor,
