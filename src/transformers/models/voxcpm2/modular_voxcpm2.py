@@ -832,6 +832,14 @@ class VoxCPM2AudioVAE(nn.Module):
         self.chunk_size = config.hop_length
         self.decode_chunk_size = config.decode_hop_length
 
+    def preprocess(self, input_values: torch.Tensor, sampling_rate: int | None = None) -> torch.Tensor:
+        sampling_rate = self.sample_rate if sampling_rate is None else sampling_rate
+        if sampling_rate != self.sample_rate:
+            raise ValueError(f"VoxCPM2 AudioVAE expects {self.sample_rate} Hz audio, but received {sampling_rate} Hz")
+        right_padding = math.ceil(input_values.shape[-1] / self.hop_length) * self.hop_length
+        right_padding -= input_values.shape[-1]
+        return F.pad(input_values, (0, right_padding))
+
 
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
