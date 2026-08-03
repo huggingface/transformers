@@ -301,6 +301,93 @@ class VoxCPM2SampleRateConditionLayer(nn.Module):
         return self.out_layer(hidden_states)
 
 
+class VoxCPM2AudioDecoder(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        if config.depthwise:
+            layers = [
+                _apply_voxcpm2_weight_norm(
+                    VoxCPM2CausalConv1d(
+                        config.latent_dim,
+                        config.latent_dim,
+                        kernel_size=7,
+                        padding=3,
+                        groups=config.latent_dim,
+                    )
+                ),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=1)),
+            ]
+        else:
+            layers = [
+                _apply_voxcpm2_weight_norm(
+                    VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=7, padding=3)
+                )
+            ]
+
+        for stride_index, stride in enumerate(config.decoder_rates):
+            input_dim = config.decoder_dim // 2**stride_index
+            output_dim = config.decoder_dim // 2 ** (stride_index + 1)
+            groups = output_dim if config.depthwise else 1
+            layers.append(
+                VoxCPM2CausalDecoderBlock(
+                    input_dim,
+                    output_dim,
+                    stride,
+                    groups=groups,
+                    use_noise_block=config.use_noise_block,
+                )
+            )
+
+        layers.extend(
+            [
+                VoxCPM2Snake1d(output_dim),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(output_dim, 1, kernel_size=7, padding=3)),
+                nn.Tanh(),
+            ]
+        )
+
+        if config.sr_bin_boundaries is None:
+            self.model = nn.Sequential(*layers)
+            self.sr_bin_boundaries = None
+        else:
+            self.model = nn.ModuleList(layers)
+            self.register_buffer(
+                "sr_bin_boundaries", torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True
+            )
+            num_sample_rate_buckets = len(config.sr_bin_boundaries) + 1
+            conditioning_layers = []
+            for layer in self.model:
+                if isinstance(layer, VoxCPM2CausalDecoderBlock):
+                    conditioning_layers.append(
+                        VoxCPM2SampleRateConditionLayer(
+                            input_dim=layer.input_channels,
+                            num_sample_rate_buckets=num_sample_rate_buckets,
+                            conditioning_type=config.cond_type,
+                            conditioning_dim=config.cond_dim,
+                            use_output_layer=config.cond_out_layer,
+                        )
+                    )
+                else:
+                    conditioning_layers.append(None)
+            self.sr_cond_model = nn.ModuleList(conditioning_layers)
+
+    def get_sample_rate_ids(self, sample_rate: torch.Tensor) -> torch.Tensor:
+        return torch.bucketize(sample_rate, self.sr_bin_boundaries)
+
+    def forward(self, hidden_states: torch.Tensor, sample_rate: torch.Tensor | None = None) -> torch.Tensor:
+        if self.sr_bin_boundaries is None:
+            return self.model(hidden_states)
+        if sample_rate is None:
+            raise ValueError("`sample_rate` must be provided when sample-rate conditioning is enabled")
+
+        sample_rate_ids = self.get_sample_rate_ids(sample_rate)
+        for layer, conditioning_layer in zip(self.model, self.sr_cond_model):
+            if conditioning_layer is not None:
+                hidden_states = conditioning_layer(hidden_states, sample_rate_ids)
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
