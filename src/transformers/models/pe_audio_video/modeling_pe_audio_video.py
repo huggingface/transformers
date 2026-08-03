@@ -584,6 +584,7 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None = None,
@@ -592,6 +593,18 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | PeAudioVideoEncoderOutput:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        """
         inputs_embeds, padding_mask, audio_output, video_output = self.embedder(
             input_values,
             pixel_values_videos,
@@ -876,6 +889,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return self.video_plus_text_head(video_plus_text_embeds)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -887,6 +901,20 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return_loss=False,
         **kwargs,
     ) -> PeAudioVideoOutput:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+        """
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
             raise ValueError(
                 "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
