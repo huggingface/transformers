@@ -1162,11 +1162,18 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         cfg_value: float = 1.0,
         sway_sampling_coefficient: float = 1.0,
         use_cfg_zero_star: bool = True,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         if self.solver != "euler":
             raise ValueError(f"Unsupported flow-matching solver: {self.solver}")
         sample = (
-            torch.randn((mu.shape[0], self.in_channels, patch_size), device=mu.device, dtype=mu.dtype) * temperature
+            torch.randn(
+                (mu.shape[0], self.in_channels, patch_size),
+                generator=generator,
+                device=mu.device,
+                dtype=mu.dtype,
+            )
+            * temperature
         )
         timestep_span = torch.linspace(1, 0, num_inference_steps + 1, device=mu.device, dtype=mu.dtype)
         timestep_span = timestep_span + sway_sampling_coefficient * (
