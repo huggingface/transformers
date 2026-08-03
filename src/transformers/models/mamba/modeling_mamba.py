@@ -118,6 +118,10 @@ def mamba_inner_fn(
     D: torch.Tensor | None = None,
     delta_bias: torch.Tensor | None = None,
     delta_softplus: bool = True,
+    b_rms_weight: torch.Tensor | None = None,
+    c_rms_weight: torch.Tensor | None = None,
+    dt_rms_weight: torch.Tensor | None = None,
+    b_c_dt_rms_eps: float = 1e-6,
     **kwargs,
 ):
     return None

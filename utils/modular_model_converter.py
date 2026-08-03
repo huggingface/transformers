@@ -83,6 +83,7 @@ NAMES_TO_NEVER_REPLACE = (
     "mamba_inner_fn",
     "mamba_selective_state_update",
     "mamba_selective_scan",
+    "is_mambapy_available",
     "mamba2_split_conv1d_scan_combined",
     "mamba2_selective_state_update",
     "mamba2_chunk_scan",
