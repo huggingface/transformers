@@ -192,13 +192,17 @@ def test_text_to_audio_pipeline_zero_shot():
         model=model,
         processor=processor,
         device=-1,
+        min_new_tokens=1,
+        max_new_tokens=1,
     )
 
     output = speech_generator(
         "A",
-        generate_kwargs={"min_new_tokens": 1, "max_new_tokens": 1, "num_inference_steps": 1},
+        generate_kwargs={"num_inference_steps": 1},
     )
 
+    assert speech_generator.generation_config.min_new_tokens == 1
+    assert speech_generator.generation_config.max_new_tokens == 1
     assert isinstance(output["audio"], np.ndarray)
     assert output["audio"].shape == (model.patch_size * model._decode_chunk_size,)
     assert output["sampling_rate"] == model.config.sample_rate
