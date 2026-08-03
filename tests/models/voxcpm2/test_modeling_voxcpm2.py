@@ -29,6 +29,7 @@ if is_torch_available():
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2DecoderLayer,
+        VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
         VoxCPM2RMSNorm,
         VoxCPM2RotaryEmbedding,
@@ -474,3 +475,78 @@ def test_local_encoder_matches_reference_layout():
 
     output.sum().backward()
     assert model.special_token.grad is not None
+
+
+@require_torch
+def test_local_dit_matches_reference_layout():
+    config = VoxCPM2Config(
+        lm_config={
+            "vocab_size": 32,
+            "hidden_size": 8,
+            "intermediate_size": 16,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 4,
+            "kv_channels": 4,
+            "use_mup": False,
+            "no_rope": True,
+            "rope_parameters": None,
+        },
+        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 2, "kv_channels": 4},
+        feat_dim=4,
+        audio_vae_config={"latent_dim": 4},
+    )
+    config.lm_config._attn_implementation = "sdpa"
+    model = VoxCPM2LocalDiT(config)
+
+    layer_keys = {
+        f"decoder.layers.{layer_index}.{name}"
+        for layer_index in range(2)
+        for name in (
+            "self_attn.q_proj.weight",
+            "self_attn.k_proj.weight",
+            "self_attn.v_proj.weight",
+            "self_attn.o_proj.weight",
+            "mlp.gate_proj.weight",
+            "mlp.up_proj.weight",
+            "mlp.down_proj.weight",
+            "input_layernorm.weight",
+            "post_attention_layernorm.weight",
+        )
+    }
+    projection_keys = {
+        f"{name}.{parameter}"
+        for name in (
+            "in_proj",
+            "cond_proj",
+            "out_proj",
+            "time_mlp.linear_1",
+            "time_mlp.linear_2",
+            "delta_time_mlp.linear_1",
+            "delta_time_mlp.linear_2",
+        )
+        for parameter in ("weight", "bias")
+    }
+    assert set(model.state_dict()) == {"decoder.norm.weight", *projection_keys, *layer_keys}
+
+    sample = torch.randn(2, 4, 3)
+    mu = torch.randn(2, 16)
+    timestep = torch.tensor([0.2, 0.7])
+    conditioning = torch.randn(2, 4, 2)
+    delta_timestep = torch.tensor([0.1, 0.1])
+    output = model(sample, mu, timestep, conditioning, delta_timestep)
+
+    sample_hidden_states = model.in_proj(sample.transpose(1, 2))
+    conditioning_hidden_states = model.cond_proj(conditioning.transpose(1, 2))
+    timestep_hidden_states = model.time_mlp(model.time_embeddings(timestep))
+    timestep_hidden_states += model.delta_time_mlp(model.time_embeddings(delta_timestep))
+    mu_hidden_states = mu.reshape(2, 2, 8)
+    decoder_input = torch.cat(
+        (mu_hidden_states, timestep_hidden_states.unsqueeze(1), conditioning_hidden_states, sample_hidden_states),
+        dim=1,
+    )
+    assert decoder_input.shape == (2, 8, 8)
+    decoder_output = model.decoder(inputs_embeds=decoder_input, is_causal=False).last_hidden_state
+    expected_output = model.out_proj(decoder_output[:, 5:]).transpose(1, 2).contiguous()
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
