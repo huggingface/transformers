@@ -31,6 +31,7 @@ from torch.func import jvp
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1667,6 +1668,120 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             stop_logits=torch.stack(generated_stop_logits, dim=1),
             num_generated_patches=len(generated_patches),
         )
+
+    @torch.inference_mode()
+    def generate(
+        self,
+        input_ids: torch.LongTensor,
+        text_mask: torch.Tensor,
+        audio_features: torch.FloatTensor,
+        audio_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        min_new_audio_patches: int | None = None,
+        max_new_audio_patches: int | None = None,
+        num_inference_steps: int = 10,
+        guidance_scale: float | None = None,
+        temperature: float | None = None,
+        sway_sampling_coefficient: float = 1.0,
+        use_cfg_zero_star: bool = True,
+        decoder_context_patches: int = 3,
+        generator: torch.Generator | None = None,
+        return_dict_in_generate: bool | None = None,
+        **kwargs,
+    ) -> torch.Tensor | VoxCPM2GenerationOutput:
+        r"""
+        Generates a waveform from a mixed text-audio prompt.
+
+        `VoxCPM2Processor` prepares `input_ids`, modality masks, and aligned audio features. The returned waveform uses
+        `config.sample_rate` (48 kHz for the released checkpoint).
+
+        Args:
+            min_new_audio_patches (`int`, *optional*):
+                Minimum number of autoregressive audio patches. Defaults to 4, matching the effective minimum of the
+                original VoxCPM2 generation loop.
+            max_new_audio_patches (`int`, *optional*):
+                Maximum number of autoregressive audio patches. Defaults to 2000.
+            num_inference_steps (`int`, *optional*, defaults to 10):
+                Number of Euler flow-matching steps per generated patch.
+            guidance_scale (`float`, *optional*):
+                Classifier-free guidance scale. Defaults to the released flow-matching configuration value.
+            decoder_context_patches (`int`, *optional*, defaults to 3):
+                Number of trailing continuation patches decoded as context and cropped from the returned waveform.
+            generator (`torch.Generator`, *optional*):
+                Device-matched random generator used for diffusion sampling.
+            return_dict_in_generate (`bool`, *optional*):
+                Whether to return [`VoxCPM2GenerationOutput`] instead of the waveform tensor.
+        """
+        del attention_mask
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+        else:
+            generation_config = copy.deepcopy(generation_config)
+        unused_kwargs = generation_config.update(**kwargs)
+        if unused_kwargs:
+            raise ValueError(f"Unsupported generation arguments: {sorted(unused_kwargs)}")
+
+        min_new_audio_patches = (
+            generation_config.min_new_tokens
+            if min_new_audio_patches is None and generation_config.min_new_tokens is not None
+            else min_new_audio_patches
+        )
+        min_new_audio_patches = 4 if min_new_audio_patches is None else min_new_audio_patches
+        max_new_audio_patches = (
+            generation_config.max_new_tokens
+            if max_new_audio_patches is None and generation_config.max_new_tokens is not None
+            else max_new_audio_patches
+        )
+        max_new_audio_patches = 2000 if max_new_audio_patches is None else max_new_audio_patches
+        guidance_scale = (
+            generation_config.guidance_scale
+            if guidance_scale is None and generation_config.guidance_scale is not None
+            else guidance_scale
+        )
+        guidance_scale = (
+            self.config.dit_config.cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
+        )
+        temperature = generation_config.temperature if temperature is None else temperature
+        temperature = 1.0 if temperature is None else temperature
+        return_dict_in_generate = (
+            generation_config.return_dict_in_generate if return_dict_in_generate is None else return_dict_in_generate
+        )
+
+        generation_output = self._generate_audio_features(
+            input_ids=input_ids,
+            text_mask=text_mask,
+            audio_features=audio_features,
+            audio_mask=audio_mask,
+            min_new_audio_patches=min_new_audio_patches,
+            max_new_audio_patches=max_new_audio_patches,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            temperature=temperature,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+            generator=generator,
+        )
+
+        decoder_context = self._prepare_decoder_context(
+            audio_features,
+            audio_mask,
+            decoder_context_patches=decoder_context_patches,
+        )
+        decoder_context = decoder_context.to(generation_output.audio_features.dtype)
+        decoder_features = torch.cat((decoder_context, generation_output.audio_features), dim=1)
+        decoder_features = decoder_features.reshape(decoder_features.shape[0], -1, decoder_features.shape[-1])
+        decoder_features = decoder_features.transpose(1, 2).contiguous()
+        audio_vae_dtype = next(self.audio_vae.parameters()).dtype
+        audio = self.audio_vae.decode(decoder_features.to(audio_vae_dtype)).squeeze(1)
+        context_samples = decoder_context.shape[1] * self.patch_size * self._decode_chunk_size
+        if context_samples > 0:
+            audio = audio[:, context_samples:]
+
+        if not return_dict_in_generate:
+            return audio
+        generation_output.audio = audio
+        return generation_output
 
     @can_return_tuple
     @auto_docstring
