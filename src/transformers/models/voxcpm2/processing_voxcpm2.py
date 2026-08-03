@@ -14,6 +14,7 @@
 
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 
 
@@ -104,6 +105,49 @@ class VoxCPM2Processor(ProcessorMixin):
             f"{prefix}_input_values": input_values,
             f"{prefix}_attention_mask": padding_mask,
         }, num_patches
+
+    def __call__(
+        self,
+        text,
+        audio=None,
+        prompt_text=None,
+        reference_audio=None,
+        sampling_rate=None,
+        return_tensors="pt",
+    ):
+        self._validate_generation_inputs(text, audio, prompt_text, reference_audio)
+        text_to_tokenize = f"{prompt_text}{text}" if prompt_text is not None else text
+        text_token_ids = self.tokenizer(text_to_tokenize, add_special_tokens=False).input_ids
+
+        prompt_inputs = {}
+        prompt_audio_patches = 0
+        if audio is not None:
+            prompt_inputs, prompt_audio_patches = self._prepare_audio(
+                audio,
+                prefix="prompt",
+                sampling_rate=sampling_rate,
+                return_tensors=return_tensors,
+            )
+
+        reference_inputs = {}
+        reference_audio_patches = 0
+        if reference_audio is not None:
+            reference_inputs, reference_audio_patches = self._prepare_audio(
+                reference_audio,
+                prefix="reference",
+                sampling_rate=sampling_rate,
+                return_tensors=return_tensors,
+            )
+
+        sequence_inputs = self._build_generation_sequence(
+            text_token_ids,
+            prompt_audio_patches=prompt_audio_patches,
+            reference_audio_patches=reference_audio_patches,
+        )
+        return BatchFeature(
+            data={**sequence_inputs, **prompt_inputs, **reference_inputs},
+            tensor_type=return_tensors,
+        )
 
 
 __all__ = ["VoxCPM2Processor"]
