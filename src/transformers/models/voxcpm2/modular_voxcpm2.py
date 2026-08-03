@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -440,6 +441,12 @@ class VoxCPM2Config(PreTrainedConfig):
 
     def get_text_config(self, *args, **kwargs):
         return self.lm_config
+
+
+def _get_tslm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.lm_config, VoxCPM2TextConfig):
+        raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+    return copy.deepcopy(config.lm_config)
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
