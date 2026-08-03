@@ -35,6 +35,7 @@ if is_torch_available():
         VoxCPM2DecoderLayer,
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
+        VoxCPM2NoiseBlock,
         VoxCPM2RMSNorm,
         VoxCPM2RotaryEmbedding,
         VoxCPM2ScalarQuantizationLayer,
@@ -202,6 +203,23 @@ def test_audio_encoder_matches_reference():
 
     output["mu"].sum().backward()
     assert input_values.grad is not None
+
+
+@require_torch
+def test_decoder_noise_block_matches_reference():
+    layer = VoxCPM2NoiseBlock(4)
+    assert set(layer.state_dict()) == {
+        "linear.parametrizations.weight.original0",
+        "linear.parametrizations.weight.original1",
+    }
+
+    hidden_states = torch.randn(2, 4, 9)
+    torch.manual_seed(7)
+    noise = torch.randn(2, 1, 9)
+    expected_output = hidden_states + noise * layer.linear(hidden_states)
+    torch.manual_seed(7)
+    output = layer(hidden_states)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 
 
 @require_torch
