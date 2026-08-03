@@ -457,6 +457,20 @@ def _get_ralm_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     return ralm_config
 
 
+def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
+    if not isinstance(config.encoder_config, VoxCPM2EncoderConfig):
+        raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
+    encoder_config = _get_tslm_config(config)
+    encoder_config.hidden_size = config.encoder_config.hidden_dim
+    encoder_config.intermediate_size = config.encoder_config.ffn_dim
+    encoder_config.num_attention_heads = config.encoder_config.num_heads
+    encoder_config.num_hidden_layers = config.encoder_config.num_layers
+    encoder_config.kv_channels = config.encoder_config.kv_channels
+    encoder_config.head_dim = config.encoder_config.kv_channels
+    encoder_config.vocab_size = 0
+    return encoder_config
+
+
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
     def __init__(self, config: VoxCPM2Config):
         super().__init__()
