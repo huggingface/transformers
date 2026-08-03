@@ -133,7 +133,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
 @auto_docstring
 class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
-    _no_split_modules = []
+    _no_split_modules = AttributeError()
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 

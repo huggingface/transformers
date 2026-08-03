@@ -106,7 +106,7 @@ class DeepseekVLAligner(nn.Module):
 
 
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
-    _no_split_modules = []
+    _no_split_modules = AttributeError()
 
     def _init_weights(self, module):
         raise AttributeError("No need to inherit!")
