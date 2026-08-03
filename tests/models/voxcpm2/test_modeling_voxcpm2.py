@@ -39,6 +39,7 @@ if is_torch_available():
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
         VoxCPM2NoiseBlock,
+        VoxCPM2PreTrainedModel,
         VoxCPM2RMSNorm,
         VoxCPM2RotaryEmbedding,
         VoxCPM2SampleRateConditionLayer,
@@ -47,6 +48,16 @@ if is_torch_available():
         VoxCPM2Snake1d,
         VoxCPM2TimestepEmbedding,
     )
+
+
+@require_torch
+def test_pretrained_model_metadata():
+    model = VoxCPM2PreTrainedModel(VoxCPM2Config())
+
+    assert model.main_input_name == "input_ids"
+    assert model.input_modalities == ("audio", "text")
+    assert model._supports_sdpa
+    assert "VoxCPM2DecoderLayer" in model._no_split_modules
 
 
 @require_torch
