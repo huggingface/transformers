@@ -25,6 +25,7 @@ if is_torch_available():
 
     from transformers.models.voxcpm2.modeling_voxcpm2 import (
         VoxCPM2Attention,
+        VoxCPM2AudioDecoder,
         VoxCPM2AudioEncoder,
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
@@ -264,6 +265,37 @@ def test_sample_rate_conditioning_matches_reference():
     assert concat_layer(hidden_states, sample_rate_ids).shape == hidden_states.shape
     with pytest.raises(ValueError, match="use_output_layer"):
         VoxCPM2SampleRateConditionLayer(4, 3, conditioning_type="concat")
+
+
+@require_torch
+def test_audio_decoder_matches_reference():
+    config = VoxCPM2AudioVAEConfig(
+        encoder_dim=4,
+        encoder_rates=(2, 3),
+        latent_dim=3,
+        decoder_dim=16,
+        decoder_rates=(3, 2),
+        depthwise=True,
+        sr_bin_boundaries=(10, 20),
+    )
+    model = VoxCPM2AudioDecoder(config)
+    assert len(model.state_dict()) == 71
+    torch.testing.assert_close(model.state_dict()["sr_bin_boundaries"], torch.tensor([10, 20], dtype=torch.int32))
+
+    sample_rate = torch.tensor([8, 25], dtype=torch.int32)
+    torch.testing.assert_close(model.get_sample_rate_ids(sample_rate), torch.tensor([0, 2]))
+    hidden_states = torch.randn(2, 3, 4)
+    output = model(hidden_states, sample_rate)
+    expected_output = hidden_states
+    for layer in model.model:
+        expected_output = layer(expected_output)
+    assert output.shape == (2, 1, 24)
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
+
+    unconditioned_config = VoxCPM2AudioVAEConfig(**{**config.to_dict(), "sr_bin_boundaries": None})
+    unconditioned_model = VoxCPM2AudioDecoder(unconditioned_config)
+    assert isinstance(unconditioned_model.model, torch.nn.Sequential)
+    assert unconditioned_model(hidden_states).shape == (2, 1, 24)
 
 
 @require_torch
