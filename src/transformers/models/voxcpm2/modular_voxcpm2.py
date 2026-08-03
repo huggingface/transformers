@@ -2161,9 +2161,13 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         text_mask: torch.Tensor,
-        audio_features: torch.FloatTensor,
-        audio_mask: torch.Tensor,
+        audio_features: torch.FloatTensor | None = None,
+        audio_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        prompt_input_values: torch.Tensor | None = None,
+        prompt_attention_mask: torch.Tensor | None = None,
+        reference_input_values: torch.Tensor | None = None,
+        reference_attention_mask: torch.Tensor | None = None,
         generation_config: GenerationConfig | None = None,
         min_new_audio_patches: int | None = None,
         max_new_audio_patches: int | None = None,
@@ -2180,8 +2184,9 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         r"""
         Generates a waveform from a mixed text-audio prompt.
 
-        `VoxCPM2Processor` prepares `input_ids`, modality masks, and aligned audio features. The returned waveform uses
-        `config.sample_rate` (48 kHz for the released checkpoint).
+        `VoxCPM2Processor` prepares `input_ids`, modality masks, and optional raw prompt or reference waveforms.
+        Precomputed aligned `audio_features` are also accepted. The returned waveform uses `config.sample_rate` (48
+        kHz for the released checkpoint).
 
         Args:
             min_new_audio_patches (`int`, *optional*):
@@ -2201,6 +2206,17 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
                 Whether to return [`VoxCPM2GenerationOutput`] instead of the waveform tensor.
         """
         del attention_mask
+        if audio_mask is None:
+            raise ValueError("`audio_mask` is required for VoxCPM2 generation")
+        audio_features = self._prepare_generation_audio_features(
+            input_ids,
+            audio_mask,
+            audio_features=audio_features,
+            prompt_input_values=prompt_input_values,
+            prompt_attention_mask=prompt_attention_mask,
+            reference_input_values=reference_input_values,
+            reference_attention_mask=reference_attention_mask,
+        )
         (
             min_new_audio_patches,
             max_new_audio_patches,
