@@ -589,6 +589,29 @@ def test_streaming_audio_features_match_non_streaming_generation():
 
 
 @require_torch
+def test_generation_parameter_resolution():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config())
+
+    defaults = model._resolve_generation_parameters(None, None, None, None, None, None, {})
+    assert defaults == (4, 2000, 2.0, 1.0, False)
+
+    generation_config = GenerationConfig(
+        min_new_tokens=2,
+        max_new_tokens=3,
+        guidance_scale=1.5,
+        temperature=0.7,
+        return_dict_in_generate=True,
+    )
+    resolved = model._resolve_generation_parameters(generation_config, None, None, None, None, None, {})
+    assert resolved == (2, 3, 1.5, 0.7, True)
+
+    updated = model._resolve_generation_parameters(None, None, None, None, None, None, {"max_new_tokens": 6})
+    assert updated[1] == 6
+    with pytest.raises(ValueError, match="Unsupported generation arguments"):
+        model._resolve_generation_parameters(None, None, None, None, None, None, {"not_supported": True})
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
