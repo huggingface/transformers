@@ -39,6 +39,7 @@ if is_torch_available():
         VoxCPM2LocalDiT,
         VoxCPM2LocalEncoder,
         VoxCPM2Model,
+        VoxCPM2ModelOutput,
         VoxCPM2NoiseBlock,
         VoxCPM2PreTrainedModel,
         VoxCPM2RMSNorm,
@@ -154,6 +155,58 @@ def test_model_constructor_and_state_dict_layout():
     replacement_embeddings = torch.nn.Embedding(32, 8)
     model.set_input_embeddings(replacement_embeddings)
     assert model.get_input_embeddings() is replacement_embeddings
+
+
+@require_torch
+def test_model_training_forward_and_diagnostic_sampling():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 2, 3]])
+    text_mask = torch.tensor([[1, 1, 0]])
+    audio_mask = 1 - text_mask
+    audio_features = torch.randn(1, 3, 2, 4, requires_grad=True)
+    loss_mask = torch.tensor([[0, 0, 1]], dtype=torch.float32)
+    labels = torch.tensor([[0, 0, 1]])
+
+    torch.manual_seed(7)
+    output = model(
+        input_ids=input_ids,
+        text_mask=text_mask,
+        audio_features=audio_features,
+        audio_mask=audio_mask,
+        loss_mask=loss_mask,
+        labels=labels,
+        sample_generate=True,
+        num_inference_steps=2,
+    )
+
+    assert isinstance(output, VoxCPM2ModelOutput)
+    assert output.loss.ndim == 0
+    assert output.diffusion_loss.ndim == 0
+    assert output.stop_loss.ndim == 0
+    torch.testing.assert_close(output.loss, output.diffusion_loss + output.stop_loss)
+    assert output.stop_logits.shape == (1, 3, 2)
+    assert output.latent_features.shape == (1, 4, 6)
+    assert output.generated_latent_features.shape == (1, 4, 6)
+    expected_latent_features = audio_features.reshape(1, 6, 4).transpose(1, 2).contiguous()
+    torch.testing.assert_close(output.latent_features, expected_latent_features)
+
+    output.loss.backward()
+    assert audio_features.grad is not None
+    assert model.stop_head.weight.grad is not None
+
+    tuple_output = model(
+        input_ids=input_ids,
+        text_mask=text_mask,
+        audio_features=audio_features.detach(),
+        audio_mask=audio_mask,
+        return_dict=False,
+    )
+    assert isinstance(tuple_output, tuple)
+    assert tuple_output[0].shape == (1, 3, 2)
+    assert tuple_output[1].shape == (1, 4, 6)
+
+    with pytest.raises(ValueError, match="loss_mask"):
+        model(input_ids, text_mask, audio_features.detach(), audio_mask, labels=labels)
 
 
 @require_torch
