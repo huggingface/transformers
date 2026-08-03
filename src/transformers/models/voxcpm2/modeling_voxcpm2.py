@@ -193,6 +193,22 @@ class VoxCPM2AudioEncoder(nn.Module):
         }
 
 
+class VoxCPM2NoiseBlock(nn.Module):
+    def __init__(self, hidden_dim: int):
+        super().__init__()
+        self.linear = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1, bias=False)
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        noise = torch.randn(
+            (hidden_states.shape[0], 1, hidden_states.shape[2]),
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        return hidden_states + noise * self.linear(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
