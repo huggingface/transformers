@@ -315,6 +315,40 @@ def test_generation_audio_encoding_applies_role_specific_padding():
 
 
 @require_torch
+def test_generation_audio_feature_alignment_preserves_prompt_order():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config())
+    input_ids = torch.ones(1, 5, dtype=torch.long)
+    reference_features = torch.stack((torch.ones(2, 4), torch.full((2, 4), 2.0))).unsqueeze(0)
+    prompt_features = torch.full((1, 1, 2, 4), 3.0)
+
+    aligned_features = model._align_generation_audio_features(
+        input_ids,
+        audio_mask=torch.tensor([[0, 1, 1, 0, 1]]),
+        reference_features=reference_features,
+        prompt_features=prompt_features,
+    )
+
+    torch.testing.assert_close(aligned_features[0, 1], reference_features[0, 0])
+    torch.testing.assert_close(aligned_features[0, 2], reference_features[0, 1])
+    torch.testing.assert_close(aligned_features[0, 4], prompt_features[0, 0])
+    assert torch.count_nonzero(aligned_features[0, [0, 3]]) == 0
+
+    zero_shot_features = model._align_generation_audio_features(
+        input_ids[:, :2],
+        audio_mask=torch.zeros(1, 2),
+    )
+    assert zero_shot_features.shape == (1, 2, 2, 4)
+    assert torch.count_nonzero(zero_shot_features) == 0
+
+    with pytest.raises(ValueError, match="received 2 patches"):
+        model._align_generation_audio_features(
+            input_ids,
+            audio_mask=torch.tensor([[0, 1, 0, 0, 0]]),
+            reference_features=reference_features,
+        )
+
+
+@require_torch
 def test_generation_prefill_matches_full_backbones():
     model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
     input_ids = torch.tensor([[1, 2, 3]])
