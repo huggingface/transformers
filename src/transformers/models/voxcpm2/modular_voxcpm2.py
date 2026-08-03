@@ -909,6 +909,18 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
 
         return sample
 
+    def adaptive_loss_weighting(
+        self,
+        losses: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        power: float = 0.0,
+        epsilon: float = 1e-3,
+    ) -> torch.Tensor:
+        weights = 1.0 / (losses + epsilon).pow(power)
+        if mask is not None:
+            weights = weights * mask
+        return weights.detach()
+
 
 __all__ = [
     "VoxCPM2AudioVAEConfig",
