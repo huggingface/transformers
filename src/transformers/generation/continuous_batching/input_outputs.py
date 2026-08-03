@@ -392,13 +392,14 @@ class ContinuousBatchingIOs:
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], seqlen_k)
 
-            # We extend the read and write indices for the cache, or fill the block table for decode-only batches
-            # if self.use_block_table:
-            #     self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
-            # else:
-            self.cache.extend_read_and_write_indices(
-                state.request_id, past_length, query_length, read_index, write_index
-            )
+            # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
+            # write the cache itself
+            if self.use_block_table:
+                self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
+            else:
+                self.cache.extend_read_and_write_indices(
+                    state.request_id, past_length, query_length, read_index, write_index
+                )
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:

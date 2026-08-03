@@ -24,6 +24,7 @@ from ...generation.configuration_utils import CompileConfig, ContinuousBatchingC
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
+from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
 from .requests import logger
 from .utils import WorkloadHints
 
@@ -121,13 +122,15 @@ def ensure_decode_fast_path_is_available(
 ) -> None:
     """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
     available, and no user-provided max blocks per request, set it to the fallback default."""
-    # TODO: the decode fast path is temporarily disabled with the sector-based cache rework: force it off. Remove
-    # this block once the fast path is restored in flash_paged.py.
-    if cb_config.max_blocks_per_request != 0:
+    # The block table path needs to be supported by every attention type to be available
+    all_types_support_block_table = all(
+        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table for attn_type in group_layers_by_attn_type(config)
+    )
+    if cb_config.max_blocks_per_request != 0 and not all_types_support_block_table:
         if user_requested:
             logger.warning(
-                "The decode fast path is temporarily disabled with the sector-based cache rework: forcing "
-                "max_blocks_per_request to 0."
+                f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available because "
+                "some of the model's attention types do not support kernel block tables."
             )
         cb_config.max_blocks_per_request = 0
 

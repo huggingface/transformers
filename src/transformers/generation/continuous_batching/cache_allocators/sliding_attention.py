@@ -26,6 +26,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
     """
 
     supports_block_sharing = False
+    supports_block_table = False
 
     def __init__(
         self,
@@ -174,3 +175,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
+
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns the K and V cache views for a block table update."""
+        raise NotImplementedError("Not implemented for sliding attention cache allocator")

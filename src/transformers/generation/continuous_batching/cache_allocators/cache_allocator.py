@@ -116,8 +116,9 @@ class CacheAllocator(ABC):
     [  BLOCK 0  |  BLOCK 1  |  BLOCK 2  |  ...  |  BLOCK N  ]
     """
 
-    # This attribute depends on the attention type
+    # These attributes depend on the attention type
     supports_block_sharing: bool
+    supports_block_table: bool
     rows_per_token: int
     # These attributes are only known once the cache tensor is registered
     blocks_per_sector: int
@@ -326,3 +327,7 @@ class CacheAllocator(ABC):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Writes the new key and value states in the cache for the given layer and retrieves the KV states needed for
         the attention computation, as indicated by the read and write indices."""
+
+    @abstractmethod
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns the K and V cache views for a block table update."""

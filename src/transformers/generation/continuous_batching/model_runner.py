@@ -260,7 +260,7 @@ class ModelRunner:
             total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
             # Exit here if the decode fast path is not available
-            if self.cache.max_blocks_per_request == 0:
+            if self.cache.max_decode_fast_path_length <= 0:
                 continue
 
             # Warm up the decode path

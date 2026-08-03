@@ -24,6 +24,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
     """Cache allocator for a group of full attention layers."""
 
     supports_block_sharing = True
+    supports_block_table = True
     # One row for the keys and one for the values of each token
     rows_per_token = 2
 
@@ -213,3 +214,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         key_states_with_cache = torch.index_select(k_cache, 0, read_index)
         value_states_with_cache = torch.index_select(v_cache, 0, read_index)
         return key_states_with_cache, value_states_with_cache
+
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns the K and V cache views for a block table update."""
+        return self._kv_page_views[layer_idx]

@@ -161,18 +161,19 @@ class OffloadingManager:
         boolean indicating if offloading was successful."""
         scheduler = self.scheduler
         starved = scheduler.starved_requests
-        if not starved:
-            return False  # offloading failed: no request to offload
 
-        # First, we evict all cached blocks: better to un-cache non-referenced blocks rather than offloading requests
-        self.cache.evict_cached_blocks()
+        # Before offloading anything, we evict all cached blocks, and try re-scheduling if there was actual eviction.
+        # It's better to un-cache block that may be used in the future than offloading requests that are active now.
+        cached_blocks_evicted = self.cache.evict_cached_blocks()
+        if not starved:
+            return cached_blocks_evicted
         # Then, we count the blocks needed for each request (computed once but used multiple times)
         list_blocks_needed = [
             {
-                    name: allocator.needs_new_blocks(state.request_id, state.current_len(), request_len)
-                    for name, allocator in self.cache.cache_allocators.items()
+                name: allocator.needs_new_blocks(state.request_id, state.current_len(), request_len)
+                for name, allocator in self.cache.cache_allocators.items()
             }
-            for state , request_len in scheduler.starved_requests
+            for state, request_len in scheduler.starved_requests
         ]
 
         # Offload request until all the remaining starved request can be scheduled
@@ -180,7 +181,6 @@ class OffloadingManager:
         offloaded: list[RequestState] = []
         offloaded_block_tables: dict[str, dict[str, list[int]]] = {}
         while starved and num_active - len(offloaded) > 1:
-
             # Stop when all the remaining starved requests can be scheduled
             num_storable = self.cache.count_storable_requests(list_blocks_needed)
             if num_storable == len(starved):
