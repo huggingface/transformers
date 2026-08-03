@@ -1671,6 +1671,36 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
             residual_outputs.past_key_values,
         )
 
+    def _sample_audio_patch(
+        self,
+        lm_hidden_states: torch.Tensor,
+        residual_hidden_states: torch.Tensor,
+        conditioning_features: torch.Tensor,
+        num_inference_steps: int,
+        guidance_scale: float,
+        temperature: float,
+        sway_sampling_coefficient: float,
+        use_cfg_zero_star: bool,
+    ) -> torch.Tensor:
+        diffusion_hidden_states = torch.cat(
+            (
+                self.lm_to_dit_proj(lm_hidden_states),
+                self.res_to_dit_proj(residual_hidden_states),
+            ),
+            dim=-1,
+        )
+        generated_features = self.feat_decoder(
+            mu=diffusion_hidden_states,
+            num_inference_steps=num_inference_steps,
+            patch_size=self.patch_size,
+            conditioning=conditioning_features.transpose(1, 2).contiguous(),
+            temperature=temperature,
+            cfg_value=guidance_scale,
+            sway_sampling_coefficient=sway_sampling_coefficient,
+            use_cfg_zero_star=use_cfg_zero_star,
+        )
+        return generated_features.transpose(1, 2).contiguous()
+
     @can_return_tuple
     @auto_docstring
     def forward(
