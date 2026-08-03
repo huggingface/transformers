@@ -54,6 +54,17 @@ if is_torch_available():
 MAX_CACHE_LEN = 16
 
 
+def _qnn_available() -> bool:
+    """The QNN backend needs the Qualcomm AI Engine Direct SDK; `executorch.backends.qualcomm` raises on
+    import without it (missing `bsdtar`/SDK), so probe with a broad except."""
+    try:
+        import executorch.backends.qualcomm  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
 @slow
 @require_torch
 @require_torchao
@@ -255,3 +266,30 @@ class QuantizationExportTest(unittest.TestCase):
                 self.assertLess(
                     os.path.getsize(os.path.join(tmp, "q.pte")), os.path.getsize(os.path.join(tmp, "f.pte"))
                 )
+
+    # ──────────────────────────── QNN (Qualcomm HTP) ────────────────────────────
+
+    @unittest.skipUnless(_qnn_available(), "requires the Qualcomm AI Engine Direct (QNN) SDK")
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_qnn_export(self):
+        """QNN (HTP) export of the decode component, PT2E-quantized with a `QnnQuantizer` via the generic
+        `config.quantizer` recipe (HTP int8). Skipped unless the Qualcomm QNN SDK is installed; runs on
+        Qualcomm hardware."""
+        from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
+
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        decode_model, decode_inputs = self._decode_component()
+        program = ExecutorchExporter().export(
+            decode_model,
+            copy.deepcopy(decode_inputs),
+            ExecutorchConfig(
+                backend="qnn",
+                dynamic=False,
+                soc_model="SM8650",
+                quantizer=QnnQuantizer(),
+                calibration_dataset=[copy.deepcopy(decode_inputs)],
+            ),
+        )
+        self.assertIsNotNone(program)
