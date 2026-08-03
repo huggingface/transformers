@@ -672,6 +672,59 @@ class VoxCPM2CausalDecoderBlock(nn.Module):
         return self.block(hidden_states)
 
 
+class VoxCPM2SampleRateConditionLayer(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        num_sample_rate_buckets: int,
+        conditioning_type: str = "scale_bias",
+        conditioning_dim: int = 128,
+        use_output_layer: bool = False,
+    ):
+        super().__init__()
+        self.conditioning_type = conditioning_type
+        output_layer_input_dim = input_dim
+
+        if conditioning_type in ("scale_bias", "scale_bias_init"):
+            self.scale_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            self.bias_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            if conditioning_type == "scale_bias":
+                nn.init.ones_(self.scale_embed.weight)
+                nn.init.zeros_(self.bias_embed.weight)
+            else:
+                nn.init.normal_(self.scale_embed.weight, mean=1.0)
+                nn.init.normal_(self.bias_embed.weight)
+        elif conditioning_type == "add":
+            self.cond_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+            nn.init.normal_(self.cond_embed.weight)
+        elif conditioning_type == "concat":
+            if not use_output_layer:
+                raise ValueError("`use_output_layer` must be enabled for concatenated sample-rate conditioning")
+            self.cond_embed = nn.Embedding(num_sample_rate_buckets, conditioning_dim)
+            output_layer_input_dim = input_dim + conditioning_dim
+        else:
+            raise ValueError(f"Invalid sample-rate conditioning type: {conditioning_type}")
+
+        if use_output_layer:
+            self.out_layer = nn.Sequential(
+                VoxCPM2Snake1d(output_layer_input_dim),
+                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(output_layer_input_dim, input_dim, kernel_size=1)),
+            )
+        else:
+            self.out_layer = nn.Identity()
+
+    def forward(self, hidden_states: torch.Tensor, sample_rate_ids: torch.LongTensor) -> torch.Tensor:
+        if self.conditioning_type in ("scale_bias", "scale_bias_init"):
+            hidden_states = hidden_states * self.scale_embed(sample_rate_ids).unsqueeze(-1)
+            hidden_states = hidden_states + self.bias_embed(sample_rate_ids).unsqueeze(-1)
+        elif self.conditioning_type == "add":
+            hidden_states = hidden_states + self.cond_embed(sample_rate_ids).unsqueeze(-1)
+        else:
+            conditioning = self.cond_embed(sample_rate_ids).unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
+            hidden_states = torch.cat((hidden_states, conditioning), dim=1)
+        return self.out_layer(hidden_states)
+
+
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
     def __init__(self, embedding_dim: int):
         super().__init__()
