@@ -57,6 +57,7 @@ def test_pretrained_model_metadata():
     assert model.main_input_name == "input_ids"
     assert model.input_modalities == ("audio", "text")
     assert model._supports_sdpa
+    assert not model.supports_gradient_checkpointing
     assert "VoxCPM2DecoderLayer" in model._no_split_modules
 
 
