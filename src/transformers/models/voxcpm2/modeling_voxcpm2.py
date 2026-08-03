@@ -94,13 +94,20 @@ class VoxCPM2GenerationOutput(ModelOutput):
         latent_features (`torch.FloatTensor` of shape
             `(batch_size, feature_dim, generated_length * patch_size)`):
             Generated AudioVAE latent features before waveform decoding.
+        audio_features (`torch.FloatTensor` of shape
+            `(batch_size, generated_length, patch_size, feature_dim)`):
+            Generated AudioVAE features grouped into autoregressive patches.
         stop_logits (`torch.FloatTensor` of shape `(batch_size, generated_length, 2)`):
             Continue and stop logits collected at each generated audio patch.
+        num_generated_patches (`int`):
+            Number of autoregressive audio patches generated.
     """
 
     audio_sequences: torch.FloatTensor | None = None
     latent_features: torch.FloatTensor | None = None
+    audio_features: torch.FloatTensor | None = None
     stop_logits: torch.FloatTensor | None = None
+    num_generated_patches: int | None = None
 
 
 @auto_docstring
