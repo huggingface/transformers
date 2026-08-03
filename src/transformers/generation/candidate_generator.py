@@ -1549,6 +1549,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             attention_mask=self.assistant_kwargs["attention_mask"][:, -tgt_length:],
             past_key_values=self.assistant_kwargs.get("past_key_values"),
         )
+        print(n_last_matches)
 
         with torch.no_grad():
             outputs = self.assistant_model(
