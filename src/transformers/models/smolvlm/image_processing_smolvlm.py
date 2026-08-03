@@ -533,6 +533,14 @@ class SmolVLMImageProcessor(TorchvisionBackend):
                 num_rows = math.ceil(resized_height / max_height)
                 num_cols = math.ceil(resized_width / max_width)
                 num_patches = num_rows * num_cols + 1
+            else:
+                # The image fits in a single tile: `split_images` returns it unchanged,
+                # with `num_splits_h = num_splits_w = 0`.
+                num_patches = 1
+        else:
+            # No splitting: `_preprocess` squares the image to `max_image_size`,
+            # which is a single tile.
+            num_patches = 1
 
         return num_patches, num_rows, num_cols
 
