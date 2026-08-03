@@ -857,6 +857,9 @@ class VoxCPM2AudioVAE(nn.Module):
                 sample_rate = sample_rate.unsqueeze(0)
         return self.decoder(latent_features, sample_rate)
 
+    def streaming_decode(self) -> "VoxCPM2StreamingAudioDecoder":
+        return VoxCPM2StreamingAudioDecoder(self)
+
 
 class VoxCPM2StreamingAudioDecoder:
     def __init__(self, audio_vae: VoxCPM2AudioVAE):
