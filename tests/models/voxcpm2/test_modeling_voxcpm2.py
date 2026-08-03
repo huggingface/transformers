@@ -14,6 +14,8 @@
 
 import math
 
+import pytest
+
 from transformers import VoxCPM2Config, VoxCPM2TextConfig, is_torch_available
 from transformers.testing_utils import require_torch
 
@@ -23,6 +25,7 @@ if is_torch_available():
 
     from transformers.models.voxcpm2.modeling_voxcpm2 import (
         VoxCPM2Attention,
+        VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2DecoderLayer,
@@ -346,3 +349,67 @@ def test_rotary_embedding_matches_reference():
     expected_angles = torch.cat((frequencies, frequencies), dim=-1)
     torch.testing.assert_close(cosine, expected_angles.cos(), rtol=0, atol=0)
     torch.testing.assert_close(sine, expected_angles.sin(), rtol=0, atol=0)
+
+
+@require_torch
+def test_transformer_backbone_embeddings_and_cache():
+    config = VoxCPM2TextConfig(
+        vocab_size=32,
+        hidden_size=8,
+        intermediate_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=4,
+        kv_channels=4,
+        use_mup=False,
+        no_rope=True,
+        rope_parameters=None,
+    )
+    config._attn_implementation = "sdpa"
+    model = VoxCPM2BackboneModel(config).eval()
+
+    layer_keys = {
+        f"layers.{layer_index}.{name}"
+        for layer_index in range(2)
+        for name in (
+            "self_attn.q_proj.weight",
+            "self_attn.k_proj.weight",
+            "self_attn.v_proj.weight",
+            "self_attn.o_proj.weight",
+            "mlp.gate_proj.weight",
+            "mlp.up_proj.weight",
+            "mlp.down_proj.weight",
+            "input_layernorm.weight",
+            "post_attention_layernorm.weight",
+        )
+    }
+    expected_keys = {"embed_tokens.weight", "norm.weight", *layer_keys}
+    assert set(model.state_dict()) == expected_keys
+
+    input_ids = torch.tensor([[1, 2, 3, 4]])
+    inputs_embeds = model.embed_tokens(input_ids)
+    token_output = model(input_ids=input_ids).last_hidden_state
+    embedding_output = model(inputs_embeds=inputs_embeds).last_hidden_state
+    torch.testing.assert_close(token_output, embedding_output, rtol=0, atol=0)
+
+    changed_embeds = inputs_embeds.clone()
+    changed_embeds[:, -1] += 10
+    changed_causal_output = model(inputs_embeds=changed_embeds).last_hidden_state
+    torch.testing.assert_close(changed_causal_output[:, :-1], embedding_output[:, :-1], rtol=0, atol=0)
+    bidirectional_output = model(inputs_embeds=inputs_embeds, is_causal=False).last_hidden_state
+    changed_bidirectional_output = model(inputs_embeds=changed_embeds, is_causal=False).last_hidden_state
+    assert not torch.allclose(changed_bidirectional_output[:, :-1], bidirectional_output[:, :-1])
+
+    prefill = model(inputs_embeds=inputs_embeds[:, :3], use_cache=True)
+    cached_output = model(
+        inputs_embeds=inputs_embeds[:, 3:], past_key_values=prefill.past_key_values, use_cache=True
+    ).last_hidden_state
+    torch.testing.assert_close(cached_output, embedding_output[:, -1:], rtol=1e-5, atol=1e-6)
+
+    residual_config = VoxCPM2TextConfig(**{**config.to_dict(), "vocab_size": 0})
+    residual_config._attn_implementation = "sdpa"
+    residual_model = VoxCPM2BackboneModel(residual_config)
+    assert set(residual_model.state_dict()) == expected_keys - {"embed_tokens.weight"}
+    with pytest.raises(ValueError, match="inputs_embeds.*vocab_size"):
+        residual_model(input_ids=input_ids)
