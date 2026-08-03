@@ -336,6 +336,20 @@ def test_generation_audio_patch_sampling():
         "use_cfg_zero_star": False,
     }
 
+    generator = torch.Generator().manual_seed(7)
+    model._sample_audio_patch(
+        lm_hidden_states,
+        residual_hidden_states,
+        conditioning_features,
+        num_inference_steps=3,
+        guidance_scale=2.5,
+        temperature=0.8,
+        sway_sampling_coefficient=0.4,
+        use_cfg_zero_star=False,
+        generator=generator,
+    )
+    assert flow_matcher.call[-1]["generator"] is generator
+
 
 @require_torch
 def test_generation_cache_update_matches_full_recomputation():
