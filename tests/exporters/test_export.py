@@ -71,6 +71,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "OpenAIPrivacyFilterForTokenClassification": (
             "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
         ),
+        "GraniteSpeechNarForCTC": (
+            "`forward` runs non-autoregressive CTC greedy decoding (`torch.unique_consecutive` plus "
+            "slicing `logits[:length]` by data-dependent per-sample lengths derived from "
+            "`input_features_mask.sum(dim=1)`), producing variable-length token sequences. This hits a "
+            "data-dependent guard (`GuardOnDataDependentSymNode`) and is inherently not exportable."
+        ),
     },
     # Every backend, generate path only.
     "generate": {

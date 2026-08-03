@@ -193,6 +193,7 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
+    from .granite_speech_nar import *
     from .granite_speech_plus import *
     from .granite_swa import *
     from .granitemoe import *
