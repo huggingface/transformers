@@ -422,7 +422,8 @@ components = exporter.export_for_generation(model, inputs, config=config, multi_
 
 The query axis only stays symbolic under a dynamic-shape export (`dynamic=True`); a static export
 freezes it at the captured length, giving a fixed multi-token graph. It composes with the static KV
-cache below — the merged decode simply writes its tokens at consecutive cache positions.
+cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the
+cache handles where they land internally.
 
 ### Static KV cache
 
@@ -524,12 +525,13 @@ own arena. What that takes is the only per-backend part left:
 
 The loop is the same shape on every backend — it's the *same* graph throughout. Start from an empty
 fixed-size cache, feed the whole prompt once (empty cache → prefill), then one token at a time
-(populated cache → decode). The cache's write position advances via its counters, so there's no
-`cache_position` to thread through — each call passes `input_ids`, a causal `attention_mask`,
-`position_ids`, and the cache, and gets back logits for every query position. How the cache is set up
-differs per runtime (a `StaticCache` object for Dynamo, raw device buffers for ONNX Runtime, caller
-arrays in C++ for ExecuTorch), so each tab builds its own below. The Dynamo and ONNX Runtime tabs
-update the cache in place; ExecuTorch's in-place path is C++ (its Python runtime can't, as noted above).
+(populated cache → decode). Each call passes `input_ids`, a causal `attention_mask`, and `position_ids`
+(advanced by the number of new tokens each step), plus the cache, and gets back logits for every query
+position. Where each token lands in the cache is tracked internally by the static cache, so there's
+nothing extra to thread through the call. How the cache is set up differs per runtime (a `StaticCache`
+object for Dynamo, raw device buffers for ONNX Runtime, caller arrays in C++ for ExecuTorch), so each
+tab builds its own below. The Dynamo and ONNX Runtime tabs update the cache in place; ExecuTorch's
+in-place path is C++ (its Python runtime can't, as noted above).
 
 <hfoptions id="decode-loop">
 <hfoption id="Dynamo">
