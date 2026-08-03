@@ -142,3 +142,11 @@ def test_causal_transposed_convolution_matches_reference():
     output.sum().backward()
     expected_output.sum().backward()
     torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
+
+    zero_trim_layer = VoxCPM2CausalConvTranspose1d(2, 3, kernel_size=3)
+    zero_trim_input = torch.randn(1, 2, 5)
+    zero_trim_output = zero_trim_layer(zero_trim_input)
+    expected_zero_trim_output = torch.nn.functional.conv_transpose1d(
+        zero_trim_input, zero_trim_layer.weight, zero_trim_layer.bias
+    )
+    torch.testing.assert_close(zero_trim_output, expected_zero_trim_output, rtol=0, atol=0)
