@@ -27,6 +27,7 @@ if is_torch_available():
         VoxCPM2Attention,
         VoxCPM2AudioDecoder,
         VoxCPM2AudioEncoder,
+        VoxCPM2AudioVAE,
         VoxCPM2BackboneModel,
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
@@ -296,6 +297,34 @@ def test_audio_decoder_matches_reference():
     unconditioned_model = VoxCPM2AudioDecoder(unconditioned_config)
     assert isinstance(unconditioned_model.model, torch.nn.Sequential)
     assert unconditioned_model(hidden_states).shape == (2, 1, 24)
+
+
+@require_torch
+def test_audio_vae_encode_decode():
+    config = VoxCPM2AudioVAEConfig(
+        encoder_dim=4,
+        encoder_rates=(2, 3),
+        latent_dim=3,
+        decoder_dim=16,
+        decoder_rates=(3, 2),
+        depthwise=True,
+        sr_bin_boundaries=(10000, 20000),
+        sample_rate=16000,
+        out_sample_rate=24000,
+    )
+    model = VoxCPM2AudioVAE(config)
+    assert len(model.state_dict()) == 136
+    assert model.chunk_size == 6
+    assert model.decode_chunk_size == 6
+
+    input_values = torch.randn(2, 13)
+    latent_features = model.encode(input_values, sampling_rate=16000)
+    assert latent_features.shape == (2, 3, 3)
+    output_values = model.decode(latent_features)
+    assert output_values.shape == (2, 1, 18)
+
+    with pytest.raises(ValueError, match="expects 16000 Hz"):
+        model.encode(input_values, sampling_rate=8000)
 
 
 @require_torch
