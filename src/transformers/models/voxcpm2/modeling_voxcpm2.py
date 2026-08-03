@@ -1418,6 +1418,41 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.base_lm.embed_tokens = value
 
+    def _extract_generation_audio(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if not isinstance(input_values, torch.Tensor):
+            raise TypeError("Raw audio inputs must be PyTorch tensors")
+        if input_values.ndim == 2:
+            input_values = input_values.unsqueeze(1)
+        if input_values.ndim != 3 or input_values.shape[1] != 1:
+            raise ValueError("Raw audio inputs must have shape (batch_size, 1, num_samples)")
+        if input_values.shape[0] != 1:
+            raise ValueError("VoxCPM2 generation currently supports one audio sample at a time")
+
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                input_values.shape[0],
+                input_values.shape[-1],
+                dtype=torch.long,
+                device=input_values.device,
+            )
+        if attention_mask.shape != (input_values.shape[0], input_values.shape[-1]):
+            raise ValueError("The raw audio attention mask must match the batch and sample dimensions")
+        if not torch.all((attention_mask == 0) | (attention_mask == 1)):
+            raise ValueError("The raw audio attention mask must contain only zeros and ones")
+
+        valid_indices = attention_mask[0].nonzero(as_tuple=False).flatten()
+        if valid_indices.numel() == 0:
+            raise ValueError("Raw audio inputs must contain at least one unmasked sample")
+        first_valid_index = valid_indices[0].item()
+        last_valid_index = valid_indices[-1].item()
+        if last_valid_index - first_valid_index + 1 != valid_indices.numel():
+            raise ValueError("The unmasked raw audio samples must form one contiguous span")
+        return input_values[..., first_valid_index : last_valid_index + 1]
+
     def _validate_generation_inputs(
         self,
         input_ids: torch.LongTensor,
