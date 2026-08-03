@@ -648,6 +648,7 @@ Parameters:
         ```
 """
 
+        print(actual_preprocess_docstring)
         self.assertEqual(actual_preprocess_docstring, expected_preprocess_docstring)
 
         actual_class_docstring = DummyForTestImageProcessorFast.__doc__

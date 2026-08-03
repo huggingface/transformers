@@ -3542,7 +3542,7 @@ def _is_processor_class(func, parent_class):
 
 # Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
 # Order matters: check ImageProcessorKwargs before ProcessorKwargs.
-_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "VideosKwargs", "ProcessingKwargs", "TextKwargs", "AudioKwargs"})
 _BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
 
 
@@ -3667,7 +3667,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         ):
             continue
 
-        if kwarg_param.annotation.__args__[0].__name__ in BASIC_KWARGS_TYPES:
+        if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
@@ -4264,6 +4264,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     is_processor = False
     is_config = False
     is_image_processor = False
+    is_video_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
