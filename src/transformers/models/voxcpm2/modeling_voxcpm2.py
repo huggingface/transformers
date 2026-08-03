@@ -102,3 +102,17 @@ class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
         frequencies = torch.exp(torch.arange(half_dim, dtype=timesteps.dtype, device=timesteps.device) * -exponent)
         embeddings = scale * timesteps.unsqueeze(1) * frequencies.unsqueeze(0)
         return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+
+
+class VoxCPM2TimestepEmbedding(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int | None = None):
+        super().__init__()
+        output_dim = output_dim if output_dim is not None else hidden_dim
+        self.linear_1 = nn.Linear(input_dim, hidden_dim)
+        self.act = nn.SiLU()
+        self.linear_2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        return self.linear_2(hidden_states)
