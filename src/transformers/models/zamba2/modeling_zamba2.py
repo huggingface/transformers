@@ -563,7 +563,6 @@ def mamba2_chunk_scan(
     return_final_states: bool = False,
     **kwargs,
 ):
-    input_dtype = hidden_states.dtype
     batch_size, sequence_length, num_heads, head_dim = hidden_states.shape
     num_groups = B.shape[2]
 
@@ -639,8 +638,6 @@ def mamba2_chunk_scan(
     # Cutting off padded chunks
     if pad_size > 0:
         output = output[:, :sequence_length]
-
-    output = output.to(input_dtype)
 
     if return_final_states:
         return output, final_state
