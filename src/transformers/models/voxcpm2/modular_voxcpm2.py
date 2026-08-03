@@ -13,16 +13,21 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ..dac.modeling_dac import Snake1d
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
+from ..minicpm4.modeling_minicpm4 import MiniCPM4Attention, apply_rotary_pos_emb, eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -504,6 +509,52 @@ class VoxCPM2TimestepEmbedding(nn.Module):
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         return self.linear_2(hidden_states)
+
+
+class VoxCPM2Attention(MiniCPM4Attention):
+    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        is_causal: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states.contiguous(),
+            key_states.contiguous(),
+            value_states.contiguous(),
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            is_causal=is_causal,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
 
 
 __all__ = [
