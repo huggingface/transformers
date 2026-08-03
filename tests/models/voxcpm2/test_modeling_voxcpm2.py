@@ -26,6 +26,7 @@ if is_torch_available():
         VoxCPM2CausalConv1d,
         VoxCPM2CausalConvTranspose1d,
         VoxCPM2DecoderLayer,
+        VoxCPM2RMSNorm,
         VoxCPM2ScalarQuantizationLayer,
         VoxCPM2SinusoidalPositionEmbedding,
         VoxCPM2Snake1d,
@@ -299,3 +300,16 @@ def test_decoder_layer_residual_scaling():
         expected_output = expected_output + expected_output * expected_scale
         torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
         assert layer.residual_scale == expected_scale
+
+
+@require_torch
+def test_rms_normalization_matches_reference():
+    layer = VoxCPM2RMSNorm(6, eps=1e-5)
+    with torch.no_grad():
+        layer.weight.copy_(torch.tensor([0.5, 0.75, 1.0, 1.25, 1.5, 2.0]))
+
+    assert list(layer.state_dict()) == ["weight"]
+    hidden_states = torch.randn(2, 3, 6)
+    variance = hidden_states.float().pow(2).mean(dim=-1, keepdim=True)
+    expected_output = layer.weight * (hidden_states * torch.rsqrt(variance + layer.variance_epsilon))
+    torch.testing.assert_close(layer(hidden_states), expected_output, rtol=0, atol=0)
