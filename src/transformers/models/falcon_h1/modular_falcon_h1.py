@@ -51,6 +51,9 @@ from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    mamba2_chunk_scan,
+    mamba2_selective_state_update,
+    mamba2_split_conv1d_scan_combined,
 )
 from .configuration_falcon_h1 import FalconH1Config
 
@@ -196,7 +199,7 @@ class FalconH1Mixer(BambaMixer):
             kwargs | {} if self.time_step_limit == (0.0, float("inf")) else kwargs | {"dt_limit": self.time_step_limit}
         )
         if self.training and cache_params is None:
-            fused_output = falcon_h1_split_conv1d_scan_combined(  # noqa F821
+            fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
@@ -275,7 +278,7 @@ class FalconH1Mixer(BambaMixer):
             D = self.D[:, None, ...].expand(-1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
 
-            scan_output = falcon_h1_selective_state_update(  # noqa F821
+            scan_output = mamba2_selective_state_update(
                 recurrent_state,
                 hidden_states,
                 dt,
@@ -297,7 +300,7 @@ class FalconH1Mixer(BambaMixer):
         # Chunk form
         else:
             output_final_state = cache_params is not None
-            scan_result = falcon_h1_chunk_scan(  # noqa F821
+            scan_result = mamba2_chunk_scan(
                 hidden_states.view(batch_size, seq_len, -1, self.head_dim),
                 dt,
                 A,

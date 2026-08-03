@@ -166,7 +166,6 @@ def causal_conv1d_fn(
 @use_kernel_func_from_hub_with_fallback(
     "mamba_split_conv1d_scan_combined",
     "mamba_ssm",
-    internal_path="ops.triton.ssd_combined",
 )
 def mamba2_split_conv1d_scan_combined(
     zxbcdt: torch.Tensor,
@@ -195,7 +194,6 @@ def mamba2_split_conv1d_scan_combined(
 @use_kernel_func_from_hub_with_fallback(
     "selective_state_update",
     "mamba_ssm",
-    internal_path="ops.triton.selective_state_update",
 )
 def mamba2_selective_state_update(
     state: torch.Tensor,
@@ -261,7 +259,6 @@ def mamba2_selective_state_update(
 @use_kernel_func_from_hub_with_fallback(
     "mamba_chunk_scan_combined",
     "mamba_ssm",
-    internal_path="ops.triton.ssd_combined",
 )
 def mamba2_chunk_scan(
     hidden_states: torch.Tensor,
@@ -510,7 +507,7 @@ class Mamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1:
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,

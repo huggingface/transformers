@@ -61,6 +61,18 @@ _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
 _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
 
+# Maps from func name to the internal module path
+_KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_gated_delta_rule": "ops.gated_delta_rule",
+    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
+    "selective_state_update": "ops.triton.selective_state_update",
+    "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
+    "mamba_inner_fn": "ops.selective_scan_interface",
+    "selective_scan_fn": "ops.selective_scan_interface",
+}
+
+
 if is_kernels_available():
     from kernels import (
         CUDAProperties,
@@ -756,6 +768,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
 
     # Allow internal path prefix if given to resolve non __init__ imports
+    internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
     full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
 
     def decorator(torch_function: Callable) -> Callable:

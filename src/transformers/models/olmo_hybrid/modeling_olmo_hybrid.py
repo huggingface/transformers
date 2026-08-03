@@ -361,7 +361,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
-@use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
+@use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla")
 def torch_chunk_gated_delta_rule(
     query,
     key,
@@ -443,7 +443,7 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla", internal_path="ops.gated_delta_rule")
+@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla")
 def torch_recurrent_gated_delta_rule(
     query,
     key,

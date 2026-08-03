@@ -103,7 +103,6 @@ def causal_conv1d_fn(
 @use_kernel_func_from_hub_with_fallback(
     "mamba_inner_fn",
     "mamba_ssm",
-    internal_path="ops.selective_scan_interface",
 )
 def mamba_inner_fn(
     xz: torch.Tensor,
@@ -127,7 +126,6 @@ def mamba_inner_fn(
 @use_kernel_func_from_hub_with_fallback(
     "selective_state_update",
     "mamba_ssm",
-    internal_path="ops.triton.selective_state_update",
 )
 def mamba_selective_state_update(
     state: torch.Tensor,
@@ -177,7 +175,6 @@ def mamba_selective_state_update(
 @use_kernel_func_from_hub_with_fallback(
     "selective_scan_fn",
     "mamba_ssm",
-    internal_path="ops.selective_scan_interface",
 )
 def mamba_selective_scan(
     hidden_states: torch.Tensor,
@@ -399,7 +396,7 @@ class MambaMixer(nn.Module):
             recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1:
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
