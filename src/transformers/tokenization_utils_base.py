@@ -64,7 +64,6 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 
 
@@ -217,8 +216,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above). Note that this
             parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
-            initialization.
+            The number of input sequences represented by each encoding (`None` for unknown, `1` for a single sequence and `2` for a pair of sequences).
     """
 
     def __init__(
@@ -331,10 +329,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             `list[str]`: The list of tokens at that index.
         """
         if not self._encodings:
-            raise ValueError(
-                "tokens() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("tokens() is not available when using Python based tokenizers")
         return self._encodings[batch_index].tokens
 
     def sequence_ids(self, batch_index: int = 0) -> list[int | None]:
@@ -355,10 +350,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             sequence.
         """
         if not self._encodings:
-            raise ValueError(
-                "sequence_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("sequence_ids() is not available when using Python based tokenizers")
         return self._encodings[batch_index].sequence_ids
 
     def word_ids(self, batch_index: int = 0) -> list[int | None]:
@@ -374,10 +366,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError(
-                "word_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("word_ids() is not available when using Python based tokenizers")
         return self._encodings[batch_index].word_ids
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: int | None = None) -> int:
@@ -403,7 +392,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                 sequence.
 
         Returns:
-            `int`: Index of the word in the input sequence.
+            `int`: Index of the input sequence containing the token (`0` for the first sequence or `1` for the second sequence of a pair).
         """
 
         if not self._encodings:
@@ -434,7 +423,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_token_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the token in the sequence.
             token_index (`int`, *optional*):
                 If a batch index is provided in *batch_or_token_index*, this can be the index of the token in the
@@ -483,10 +472,10 @@ class BatchEncoding(UserDict, Generic[_V]):
                 Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the word in the sequence.
             word_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_word_index*, this can be the index of the word in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided word index belongs to.
 
         Returns:
@@ -527,7 +516,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_token_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the token in the sequence.
             token_index (`int`, *optional*):
                 If a batch index is provided in *batch_or_token_index*, this can be the index of the token or tokens in
@@ -565,13 +554,13 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_char_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
-                the word in the sequence
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
+                the character in the sequence
             char_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_char_index*, this can be the index of the character in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided character index belongs to.
 
 
@@ -607,21 +596,21 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_word_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the word in the sequence
             word_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_word_index*, this can be the index of the word in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided word index belongs to.
 
         Returns:
-            `CharSpan` or `list[CharSpan]`: Span(s) of the associated character or characters in the string. CharSpan
-            are NamedTuple with:
+            `CharSpan`: Span of the associated character or characters in the string. CharSpan
+            is a NamedTuple with:
 
-                - start: index of the first character associated to the token in the original string
-                - end: index of the character following the last character associated to the token in the original
+                - start: index of the first character associated to the word in the original string
+                - end: index of the character following the last character associated to the word in the original
                   string
         """
 
@@ -650,18 +639,18 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_char_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the character in the original string.
             char_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the character in the
+                If a batch index is provided in *batch_or_char_index*, this can be the index of the character in the
                 original string.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided character index belongs to.
 
 
         Returns:
-            `int` or `list[int]`: Index or indices of the associated encoded token(s).
+            `int`: Index of the word containing the character.
         """
 
         if not self._encodings:
@@ -681,7 +670,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
-            prepend_batch_axis (`int`, *optional*, defaults to `False`):
+            prepend_batch_axis (`bool`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
         """
         if tensor_type is None:
@@ -1092,8 +1081,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
-        self.response_schema = kwargs.pop("response_schema", None)
         self.response_template = kwargs.pop("response_template", None)
+        kwargs.pop("response_schema", None)  # Silently drop the legacy response parser if present
 
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
@@ -1692,7 +1681,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
-        if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+        if "tokenizer_file" in vocab_files and vocab_files["tokenizer_file"] not in "\n".join(remote_files):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
@@ -2070,8 +2059,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             save_directory, tokenizer_config, filename_prefix, save_jinja_files
         )
 
-        if getattr(self, "response_schema", None) is not None:
-            tokenizer_config["response_schema"] = self.response_schema
         if getattr(self, "response_template", None) is not None:
             tokenizer_config["response_template"] = self.response_template
 
@@ -3350,15 +3337,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def parse_response(
         self,
         response: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor,
-        schema: list | dict | None = None,
+        schema: dict | None = None,
         *,
         prefix: str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
-        This method is intended for use with chat models, and will read the tokenizer's `response_template` attribute
-        (preferred) or the legacy `response_schema` attribute to control parsing. Either can be overridden by
-        passing a `schema` argument directly.
+        This method is intended for use with chat models, and will read the tokenizer's `response_template`
+        attribute to control parsing, unless a `schema` argument is passed directly.
 
         Accepts either a single sequence or a batch. A single sequence (a string, or a 1D sequence of token
         ids) returns a single parsed message `dict`; a batch (a list of strings, a list of token-id sequences,
@@ -3370,47 +3357,33 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (`str` / `list[int]` / 1D array / 1D tensor) or a batch (`list[str]` / `list[list[int]]` /
                 2D array / 2D tensor). Note that this should contain only model output, not any preceding
                 prompt text (that goes in `prefix`).
-            schema (`Union[list, dict]`, *optional*):
-                A response template (preferred, new-style) or legacy response schema dict that indicates the
-                expected output format and how parsing should be performed. If not provided, the tokenizer's
-                `response_template` or `response_schema` attribute will be used (in that order).
+            schema (`dict`, *optional*):
+                A response template that indicates the expected output format and how parsing should be
+                performed. If not provided, the tokenizer's `response_template` attribute will be used.
             prefix (`str`, token ids, 1D/2D tensor, or a list of these):
                 The prompt that came before generation. This is necessary because many chat templates
                 pre-write part of the message, so we need to see the prompt to parse correctly. For a batched
                 `response`, pass either a single prefix (broadcast to every item) or one prefix per item.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                When passed, tool-call arguments are cast using the calling tool's JSON schema:
+                `"7"` becomes `7` for an integer parameter but stays `"7"` for a string one.
 
         Returns:
             A parsed message `dict` for a single sequence, or a `list` of such dicts for a batch.
         """
 
-        use_new_template = False
         if schema is None:
-            if getattr(self, "response_template", None) is not None:
-                schema = self.response_template
-                use_new_template = True
-            elif getattr(self, "response_schema", None) is not None:
-                schema = self.response_schema
-            else:
-                raise AttributeError(
-                    "This tokenizer does not have a `response_template` (or legacy `response_schema`) "
-                    "for parsing chat responses!"
-                )
-        else:
-            # Explicit schema argument: new-style response templates are identified by a top-level
-            # `version` key (the canonical marker), falling back to `fields` for templates that omit
-            # it. Legacy `response_schema` dicts have neither.
-            use_new_template = isinstance(schema, dict) and ("version" in schema or "fields" in schema)
+            schema = getattr(self, "response_template", None)
+            if schema is None:
+                raise AttributeError("This tokenizer does not have a `response_template` for parsing chat responses!")
 
-        if prefix is not None and not use_new_template:
+        if prefix is None:
             raise ValueError(
-                "`prefix=` is only supported with new-style `response_template` specs, not legacy `response_schema`."
-            )
-        if prefix is None and use_new_template:
-            raise ValueError(
-                "`parse_response` requires `prefix=` (the prompt that came before generation) when parsing with a "
-                "new-style `response_template`, because chat templates often pre-write part of the assistant message "
-                "(e.g. an opening `<think>` tag) that the parser must see to parse correctly. If you're sure you "
-                "don't need the prefix, you can pass an empty string or list."
+                "`parse_response` requires `prefix=` (the prompt that came before generation), because chat "
+                "templates often pre-write part of the assistant message (e.g. an opening `<think>` tag) that the "
+                "parser must see to parse correctly. If you're sure you don't need the prefix, you can pass an "
+                "empty string or list."
             )
 
         if isinstance(response, str):
@@ -3421,35 +3394,29 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             decoded = self.decode(response)
             responses, batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
 
-        if prefix is None:
-            # Reachable only on the legacy path (new-style + None already raised above); `prefixes` is
-            # unused by `recursive_parse`, so the placeholder is harmless.
-            prefixes: list[str | None] = [None] * len(responses)
+        if isinstance(prefix, str):
+            prefix_texts, prefix_batched = [prefix], False
+        elif isinstance(prefix, (list, tuple)) and not prefix:
+            # An empty list is the explicit opt-out (no prefix context); broadcast "" to every response.
+            prefix_texts, prefix_batched = [""], False
+        elif isinstance(prefix, (list, tuple)) and isinstance(prefix[0], str):
+            prefix_texts, prefix_batched = list(prefix), True
         else:
-            if isinstance(prefix, str):
-                prefix_texts, prefix_batched = [prefix], False
-            elif isinstance(prefix, (list, tuple)) and not prefix:
-                # An empty list is the explicit opt-out (no prefix context); broadcast "" to every response.
-                prefix_texts, prefix_batched = [""], False
-            elif isinstance(prefix, (list, tuple)) and isinstance(prefix[0], str):
-                prefix_texts, prefix_batched = list(prefix), True
-            else:
-                decoded = self.decode(prefix)
-                prefix_texts, prefix_batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
-            if not prefix_batched:
-                prefixes = prefix_texts * len(responses)  # broadcast the single prefix to every response
-            elif len(prefix_texts) != len(responses):
-                raise ValueError(
-                    f"Got {len(responses)} response(s) but {len(prefix_texts)} prefix(es); `prefix` must be "
-                    "`None`, a single sequence (broadcast to every response), or one prefix per response."
-                )
-            else:
-                prefixes = prefix_texts
+            decoded = self.decode(prefix)
+            prefix_texts, prefix_batched = ([decoded], False) if isinstance(decoded, str) else (decoded, True)
+        if not prefix_batched:
+            prefixes = prefix_texts * len(responses)  # broadcast the single prefix to every response
+        elif len(prefix_texts) != len(responses):
+            raise ValueError(
+                f"Got {len(responses)} response(s) but {len(prefix_texts)} prefix(es); `prefix` must be "
+                "a single sequence (broadcast to every response), or one prefix per response."
+            )
+        else:
+            prefixes = prefix_texts
 
-        if use_new_template:
-            parsed = [_template_parse_response(text, schema, prefix=pfx) for text, pfx in zip(responses, prefixes)]
-        else:
-            parsed = [recursive_parse(text, schema) for text in responses]
+        parsed = [
+            _template_parse_response(text, schema, prefix=pfx, tools=tools) for text, pfx in zip(responses, prefixes)
+        ]
         return parsed if batched else parsed[0]
 
     def get_response_parser(
@@ -3457,6 +3424,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         response_template: dict | None = None,
         *,
         prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """Return a stateful [`~utils.chat_parsing.ResponseParser`] for incrementally
         parsing a streamed response. Uses the tokenizer's `response_template` attribute unless
@@ -3466,7 +3434,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         the state implied by the chat-prompt context (right-truncated past the spec's `start_anchor`), so
         generated chunks fed via `stream.feed()` are classified correctly even when the chat template
         emitted assistant-turn content (e.g., `<think>\\n`) that the model continues from. Omitting it
-        raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out."""
+        raises; if the stream truly starts from a clean assistant turn, pass `prefix=""` to opt out.
+
+        `tools` (`list[Union[Dict, Callable]]`, *optional*): tools available to the model, in the
+        same format as `apply_chat_template` accepts. When set, tool-call arguments are cast using
+        the calling tool's JSON schema as each region closes, so streaming `region_close` events
+        carry typed arguments.
+        """
         template = response_template if response_template is not None else getattr(self, "response_template", None)
         if template is None:
             raise AttributeError(
@@ -3478,7 +3452,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError(
                     "`prefix=` must be a single sequence (str, list[int], or 1D tensor) for `get_response_parser`."
                 )
-        return ResponseParser(template, prefix=prefix)
+        return ResponseParser(template, prefix=prefix, tools=tools)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

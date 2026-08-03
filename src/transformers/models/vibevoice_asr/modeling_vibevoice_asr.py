@@ -422,7 +422,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         outputs = self.language_model(

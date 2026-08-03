@@ -225,20 +225,15 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
     """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: Cosmos3EdgeTextConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
+        config: Cosmos3EdgeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
         base = config.rope_parameters["rope_theta"]
         dim = config.head_dim
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
-        indices = torch.arange(inv_freq.shape[0], device=device)
+        indices = torch.arange(inv_freq.shape[0])
         mrope_section = config.rope_parameters["mrope_section"]
         height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
         width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
@@ -250,7 +245,7 @@ class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
                 inv_freq * width_mask,
             )
         )
-        return inv_freq, 1.0
+        return inv_freq.to(device), 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -1529,13 +1524,13 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
 
     valid_processor_kwargs = ProcessingKwargs
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         """Expand an image placeholder to one text token per projected 2×2 patch group."""
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         """Expand a video into timestamped, frame-level vision segments."""
         grid_thw = video_inputs["video_grid_thw"][video_idx]
         merge_length = self.video_processor.merge_size**2

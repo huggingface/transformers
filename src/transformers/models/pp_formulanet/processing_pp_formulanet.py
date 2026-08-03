@@ -29,12 +29,19 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+# Don't copy default values from Nougat!
+class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
+
+
 @auto_docstring
 class PPFormulaNetProcessor(ProcessorMixin):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
+
+    valid_processor_kwargs = PPFormulaNetProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -57,7 +64,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -70,7 +77,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
+            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

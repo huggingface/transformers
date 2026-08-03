@@ -48,6 +48,13 @@ if is_mistral_common_available():
         get_one_valid_tokenizer_file,
     )
 
+    _MAP_SPECIAL_TOKENS: dict[str, str] = {
+        "bos_token": SpecialTokens.bos.value,
+        "eos_token": SpecialTokens.eos.value,
+        "pad_token": SpecialTokens.pad.value,
+        "unk_token": SpecialTokens.unk.value,
+    }
+
 
 if is_torch_available():
     import torch
@@ -172,13 +179,6 @@ def _maybe_remove_lang(text: str | list[str], skip_special_tokens: bool) -> str 
     return [re.sub(r"^lang:[a-z]{2}", "", string) for string in text]
 
 
-_MAP_SPECIAL_TOKENS = {
-    "bos_token": SpecialTokens.bos.value,
-    "eos_token": SpecialTokens.eos.value,
-    "pad_token": SpecialTokens.pad.value,
-    "unk_token": SpecialTokens.unk.value,
-}
-
 _VALID_INIT_KWARGS = {"_from_auto", "backend", "files_loaded"}
 
 
@@ -222,7 +222,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     def __init__(
         self,
         tokenizer_path: str | os.PathLike | Path,
-        mode: ValidationMode = ValidationMode.test,
+        mode: "str | ValidationMode" = "test",
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
@@ -304,7 +304,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         )
 
     @property
-    def mode(self) -> ValidationMode:
+    def mode(self) -> "ValidationMode":
         """
         `ValidationMode`: The mode used by the tokenizer. Possible values are:
             - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
@@ -1034,7 +1034,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = True,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: "ReasoningEffort | None" = None,
         **kwargs,
     ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
@@ -1422,7 +1422,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         cls,
         pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
-        mode: str | ValidationMode = ValidationMode.test,
+        mode: "str | ValidationMode" = "test",
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1587,7 +1587,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         return (str(save_directory / self._tokenizer_path.name),)
 
     @staticmethod
-    def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
+    def _get_validation_mode(mode: "str | ValidationMode") -> "ValidationMode":
         """Get the validation mode from a string or a ValidationMode."""
         _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are {', '.join([vm.value for vm in list(ValidationMode)])}."
         if isinstance(mode, str):

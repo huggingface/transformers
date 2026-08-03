@@ -359,7 +359,7 @@ class AlignVisionFinalBlockLayer(nn.Module):
 
 class AlignVisionBlock(nn.Module):
     r"""
-    This corresponds to the block module of original the EfficientNet vision encoder implementation.
+    This corresponds to the block module of the original EfficientNet vision encoder implementation.
 
     Args:
         config ([`AlignVisionConfig`]):

@@ -914,7 +914,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         """
         position = torch.arange(0, sequence_length, dtype=dtype, device=device).unsqueeze(1)
         index = torch.arange(0, embedding_dim, 2, dtype=dtype, device=device).unsqueeze(0)
-        div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
+        div_term = torch.exp(index * (-torch.log(torch.full((), 10000.0, device=device)) / embedding_dim))
         pos_encoding = position * div_term
         pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
         pos_encoding = pos_encoding.unsqueeze(dim=0).repeat(batch_size, 1, 1)
