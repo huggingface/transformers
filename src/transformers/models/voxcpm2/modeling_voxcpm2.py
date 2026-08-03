@@ -117,6 +117,7 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
+    output_modalities = ("audio",)
     _no_split_modules = [
         "VoxCPM2DecoderLayer",
         "VoxCPM2CausalEncoderBlock",
