@@ -85,6 +85,20 @@ def test_processor_packs_all_generation_modes():
 
 
 @require_torch
+def test_processor_accepts_singleton_text_batch():
+    processor = get_tiny_voxcpm2_processor()
+
+    string_inputs = processor(text="A", return_tensors="pt")
+    list_inputs = processor(text=["A"], return_tensors="pt")
+
+    for input_name in ("input_ids", "attention_mask", "text_mask", "audio_mask"):
+        np.testing.assert_array_equal(string_inputs[input_name], list_inputs[input_name])
+
+    with pytest.raises(TypeError, match="batch size 1"):
+        processor(text=["A", "B"], return_tensors="pt")
+
+
+@require_torch
 def test_processor_preserves_audio_lengths_and_validates_inputs():
     processor = get_tiny_voxcpm2_processor()
     processor.feature_extractor.hop_length = 4
