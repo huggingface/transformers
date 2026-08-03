@@ -34,7 +34,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..moonshine.modeling_moonshine import MoonshineForConditionalGeneration
+from ..moonshine.modeling_moonshine import MoonshineForConditionalGeneration, shift_tokens_right
 from ..qwen2_5_omni.modeling_qwen2_5_omni import SinusoidsPositionEmbedding
 from ..whisper.modeling_whisper import (
     WhisperAttention,
@@ -209,7 +209,7 @@ class CanaryModel(WhisperModel):
         raise AttributeError("Not needed for Canary")
 
     def freeze_encoder(self):
-        self.encoder.requires_grad_(False)
+        raise AttributeError("Not needed for Canary")
 
     @can_return_tuple
     def get_audio_features(
@@ -331,6 +331,12 @@ class CanaryForConditionalGeneration(MoonshineForConditionalGeneration):
         >>> generated_ids = model.generate(**inputs)
         >>> transcription = processor.decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
         outputs = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -347,7 +353,14 @@ class CanaryForConditionalGeneration(MoonshineForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.decoder_config.vocab_size)
+            shift_labels = kwargs.pop("shift_labels", labels)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.decoder_config.vocab_size,
+                shift_labels=shift_labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

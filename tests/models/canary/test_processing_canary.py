@@ -84,14 +84,11 @@ class CanaryProcessorTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             processor.apply_transcription_request(audio=[self._audio()], source_language=["en", "de"])
 
-    def test_call_requires_audio(self):
-        processor = self.get_processor()
-        with self.assertRaises(ValueError):
-            processor(audio=None, text="text")
-
     def test_call_output_labels(self):
         processor = self.get_processor()
         outputs = processor(audio=self._audio(), text="hello world", output_labels=True)
         self.assertIn("input_features", outputs)
         self.assertIn("decoder_input_ids", outputs)
         self.assertIn("labels", outputs)
+        # the decoder inputs are already right-shifted with respect to `labels`
+        self.assertListEqual(outputs["decoder_input_ids"][..., 1:].tolist(), outputs["labels"][..., :-1].tolist())

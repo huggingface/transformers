@@ -142,7 +142,7 @@ class CanaryAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # Scaling is susceptible to floating point arithmetics' imprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. canary is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
@@ -482,13 +482,6 @@ class CanaryModel(CanaryPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Canary encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder.requires_grad_(False)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -554,6 +547,22 @@ class CanaryModel(CanaryPreTrainedModel):
             if kwargs.get(output_flag) is None:
                 kwargs[output_flag] = getattr(self.config, output_flag, False)
         return self.encoder(input_features=input_features, attention_mask=attention_mask, **kwargs)
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 @auto_docstring(
@@ -624,6 +633,12 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(**inputs)
         >>> transcription = processor.decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
         outputs = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -640,7 +655,14 @@ class CanaryForConditionalGeneration(CanaryPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.decoder_config.vocab_size)
+            shift_labels = kwargs.pop("shift_labels", labels)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.decoder_config.vocab_size,
+                shift_labels=shift_labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

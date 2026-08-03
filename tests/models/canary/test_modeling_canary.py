@@ -397,10 +397,6 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Canary is not fed right-shifted `decoder_input_ids`; the loss shifts `labels`")
-    def test_encoder_decoder_loss_no_double_shift(self):
-        pass
-
     # Overridden because the head count comes from the decoder sub-config (mirrors `DiaModelTest`).
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values

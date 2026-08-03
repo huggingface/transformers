@@ -103,27 +103,33 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 ### Training
 
-Canary can be trained with the loss outputted by the model. Build the decoder sequence from the multitask prompt followed by the target text, and mask the prompt in the labels.
+Canary can be trained with the loss outputted by the model. Put the target transcript in the assistant turn and pass `output_labels=True`. Padding positions are masked automatically.
 
 ```python
-import torch
-
 model.train()
-audio = ds[0]["audio"]["array"]
 transcription = "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
 
-prompt = processor.apply_transcription_request(audio=audio, source_language="en").to(model.device)
-target_ids = processor(audio=audio, text=transcription)["decoder_input_ids"].to(model.device)
-decoder_input_ids = torch.cat([prompt["decoder_input_ids"], target_ids], dim=1)
-labels = decoder_input_ids.clone()
-labels[:, : prompt["decoder_input_ids"].shape[1]] = -100
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "audio", "audio": ds[0]["audio"]["array"]},
+                {"type": "text", "source_language": "en", "target_language": "en", "punctuation": True},
+            ],
+        },
+        {"role": "assistant", "content": transcription},
+    ]
+]
 
-outputs = model(
-    input_features=prompt["input_features"],
-    attention_mask=prompt["attention_mask"],
-    decoder_input_ids=decoder_input_ids,
-    labels=labels,
-)
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    processor_kwargs={"output_labels": True},
+).to(model.device)
+
+outputs = model(**inputs)
 outputs.loss.backward()
 ```
 

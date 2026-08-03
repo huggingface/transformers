@@ -71,14 +71,6 @@ class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF01
 @requires(backends=("torch",))
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
-    r"""
-    Constructs a Canary processor which wraps a [`ParakeetFeatureExtractor`] and a [`TokenizersBackend`] tokenizer.
-
-    The multitask decoder prompt (the `canary2` format) is produced by a chat template through
-    [`~CanaryProcessor.apply_transcription_request`]; [`~CanaryProcessor.__call__`] only runs the feature extractor on
-    the audio and tokenizes the resulting prompt into `decoder_input_ids`.
-    """
-
     valid_processor_kwargs = CanaryProcessorKwargs
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
@@ -96,18 +88,25 @@ class CanaryProcessor(ProcessorMixin):
         text (`str`, `list[str]`, *optional*):
             The decoder prompt(s) produced by the chat template. It is tokenized into `decoder_input_ids`.
         output_labels (`bool`, *optional*, defaults to `False`):
-            Whether to also return the tokenized `text` as `labels` for training.
+            Whether to return labels for training.
         """
 
         if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
+        model_inputs = BatchFeature(data=model_inputs, tensor_type="pt")
         if text is not None:
-            model_inputs["decoder_input_ids"] = model_inputs.pop("input_ids")
+            input_ids = model_inputs.pop("input_ids")
             if output_labels:
-                model_inputs["labels"] = model_inputs["decoder_input_ids"]
-        return BatchFeature(data=model_inputs, tensor_type="pt")
+                # the decoder inputs are already right-shifted with respect to `labels`
+                model_inputs["decoder_input_ids"] = input_ids[..., :-1]
+                labels = input_ids[..., 1:].clone()
+                labels[labels == self.tokenizer.pad_token_id] = -100
+                model_inputs["labels"] = labels
+            else:
+                model_inputs["decoder_input_ids"] = input_ids
+        return model_inputs
 
     def apply_transcription_request(
         self,
