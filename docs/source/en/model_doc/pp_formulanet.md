@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-PP-FormulaNet_plus-L using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-FormulaNet_plus-L using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">

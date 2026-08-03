@@ -91,7 +91,7 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
             # `inv_freq` depends on the head dim, which varies by layer type, so initialise
             # from a config resolved for this layer type rather than the global one.
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type, device=device)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
             self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -833,7 +833,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

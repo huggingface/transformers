@@ -462,7 +462,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config: Exaone4_5_Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
+    _no_split_modules = ["Exaone4_5_VisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
