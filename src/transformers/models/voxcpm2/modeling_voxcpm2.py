@@ -1546,6 +1546,25 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel):
         stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
         return stop_logits, stop_logits.argmax(dim=-1).bool()
 
+    def _prepare_decoder_context(
+        self,
+        audio_features: torch.Tensor,
+        audio_mask: torch.Tensor,
+        decoder_context_patches: int,
+    ) -> torch.Tensor:
+        if decoder_context_patches < 0:
+            raise ValueError("`decoder_context_patches` must be non-negative")
+        if decoder_context_patches == 0 or not audio_mask[0, -1].bool():
+            return audio_features[:, :0]
+
+        trailing_audio_patches = 0
+        for is_audio in audio_mask[0].flip(0).bool():
+            if not is_audio:
+                break
+            trailing_audio_patches += 1
+        context_length = min(decoder_context_patches, trailing_audio_patches)
+        return audio_features[:, -context_length:]
+
     @can_return_tuple
     @auto_docstring
     def forward(
