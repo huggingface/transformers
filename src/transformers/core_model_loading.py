@@ -1772,14 +1772,22 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     weight_conversions = weight_conversions[::-1]
+    # Reverse all Transforms
+    reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
 
-    # Reverse all Transform to correctly match keys
-    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
     # If we are still here, we need to create the (reverse) conversion mapping from scratch
-    renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
 
+    # Since we rename by first going through all renamings and only then through all converters, we need to potentially fix the
+    # scope_prefix of sub-levels transforms, if top-level renamings changed them - otherwise it won't match correctly
+    # Note that we do not need to change the scope_prefix of renamings themselves, since they are applied in reverse order (i.e. sub-levels first)
+    top_level_renamings = [renaming for renaming in renamings if renaming.scope_prefix is None]
+    for transform in converters:
+        if transform.scope_prefix is not None:
+            transform.scope_prefix = rename_source_key(transform.scope_prefix, top_level_renamings, [])[0]
+
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
