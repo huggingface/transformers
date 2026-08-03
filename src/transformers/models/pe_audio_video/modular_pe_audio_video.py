@@ -382,7 +382,6 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     def forward(

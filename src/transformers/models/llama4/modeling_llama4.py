@@ -509,7 +509,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

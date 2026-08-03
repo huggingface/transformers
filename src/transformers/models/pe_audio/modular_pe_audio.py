@@ -121,7 +121,6 @@ class PeAudioEncoderOutput(BaseModelOutputWithPooling):
 class PeAudioEncoder(PeAudioVideoEncoder):
     base_model_prefix = "audio_model.audio_encoder"
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     def forward(

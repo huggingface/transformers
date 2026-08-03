@@ -102,7 +102,6 @@ class PeVideoEncoder(PeAudioVideoEncoder):
         super().__init__(config)
         self.embedder = PeVideoEncoderEmbedder(config)
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     def forward(
