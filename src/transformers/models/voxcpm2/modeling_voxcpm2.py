@@ -40,6 +40,7 @@ from ...utils import TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_voxcpm2 import (
+    VoxCPM2AudioVAEConfig,
     VoxCPM2CfmConfig,
     VoxCPM2Config,
     VoxCPM2DiTConfig,
@@ -162,6 +163,34 @@ class VoxCPM2CausalEncoderBlock(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.block(hidden_states)
+
+
+class VoxCPM2AudioEncoder(nn.Module):
+    def __init__(self, config: VoxCPM2AudioVAEConfig):
+        super().__init__()
+        hidden_dim = config.encoder_dim
+        layers = [_apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(1, hidden_dim, kernel_size=7, padding=3))]
+        for stride in config.encoder_rates:
+            hidden_dim *= 2
+            groups = hidden_dim // 2 if config.depthwise else 1
+            layers.append(VoxCPM2CausalEncoderBlock(output_dim=hidden_dim, stride=stride, groups=groups))
+
+        self.fc_mu = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
+        )
+        self.fc_logvar = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
+        )
+        self.block = nn.Sequential(*layers)
+        self.encoder_dim = hidden_dim
+
+    def forward(self, input_values: torch.Tensor) -> dict[str, torch.Tensor]:
+        hidden_states = self.block(input_values)
+        return {
+            "hidden_state": hidden_states,
+            "mu": self.fc_mu(hidden_states),
+            "logvar": self.fc_logvar(hidden_states),
+        }
 
 
 class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
