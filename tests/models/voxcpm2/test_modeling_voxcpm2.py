@@ -338,6 +338,46 @@ def test_generation_audio_patch_sampling():
 
 
 @require_torch
+def test_generation_cache_update_matches_full_recomputation():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
+    input_ids = torch.tensor([[1, 2, 3]])
+    text_mask = torch.tensor([[1, 1, 0]])
+    audio_mask = 1 - text_mask
+    audio_features = torch.randn(1, 3, 2, 4)
+    generated_features = torch.randn(1, 2, 4)
+
+    _, _, _, base_cache, residual_cache = model._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
+    lm_hidden_states, residual_hidden_states, base_cache, residual_cache = model._update_generation_cache(
+        generated_features, base_cache, residual_cache
+    )
+
+    encoded_features = model.enc_to_lm_proj(model.feat_encoder(audio_features))
+    text_embeddings = model.base_lm.embed_tokens(input_ids)
+    prompt_embeddings = text_mask.unsqueeze(-1) * text_embeddings + audio_mask.unsqueeze(-1) * encoded_features
+    base_prompt_states = model.base_lm(inputs_embeds=prompt_embeddings).last_hidden_state
+    mixed_base_prompt_states = model.fsq_layer(base_prompt_states) * audio_mask.unsqueeze(-1)
+    mixed_base_prompt_states += base_prompt_states * text_mask.unsqueeze(-1)
+    encoded_patch = model.enc_to_lm_proj(model.feat_encoder(generated_features.unsqueeze(1)))
+    full_base_inputs = torch.cat((prompt_embeddings, encoded_patch), dim=1)
+    expected_lm_hidden_states = model.base_lm(inputs_embeds=full_base_inputs).last_hidden_state[:, -1]
+    expected_lm_hidden_states = model.fsq_layer(expected_lm_hidden_states)
+
+    residual_prompt_inputs = model.fusion_concat_proj(
+        torch.cat((mixed_base_prompt_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
+    )
+    residual_patch_input = model.fusion_concat_proj(
+        torch.cat((expected_lm_hidden_states, encoded_patch[:, 0]), dim=-1)
+    ).unsqueeze(1)
+    full_residual_inputs = torch.cat((residual_prompt_inputs, residual_patch_input), dim=1)
+    expected_residual_hidden_states = model.residual_lm(inputs_embeds=full_residual_inputs).last_hidden_state[:, -1]
+
+    torch.testing.assert_close(lm_hidden_states, expected_lm_hidden_states, rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(residual_hidden_states, expected_residual_hidden_states, rtol=1e-5, atol=1e-6)
+    assert base_cache.get_seq_length() == input_ids.shape[1] + 1
+    assert residual_cache.get_seq_length() == input_ids.shape[1] + 1
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
