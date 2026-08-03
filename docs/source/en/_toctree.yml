@@ -763,6 +763,8 @@
         title: MiMo-V2-Flash
       - local: model_doc/minicpm3
         title: MiniCPM3
+      - local: model_doc/minicpm
+        title: MiniCPM4
       - local: model_doc/minimax
         title: MiniMax
       - local: model_doc/minimax_m2
