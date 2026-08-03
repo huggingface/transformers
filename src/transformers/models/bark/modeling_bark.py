@@ -666,7 +666,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
             history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
-        Returns: Returns:
+        Returns:
             `tuple(torch.FloatTensor)`:
             - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
             - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.

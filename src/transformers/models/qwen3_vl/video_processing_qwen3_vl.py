@@ -76,7 +76,7 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         patch_size (`int`, *optional*, defaults to 16):
-            The spacial patch size of the vision encoder.
+            The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
@@ -125,7 +125,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:

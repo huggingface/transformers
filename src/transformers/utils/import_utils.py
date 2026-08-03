@@ -1259,7 +1259,8 @@ def is_optimum_quanto_available():
 
 @lru_cache
 def is_quark_available() -> bool:
-    return _is_package_available("quark")[0]
+    is_available, quark_version = _is_package_available("quark", return_version=True)
+    return is_available and version.parse(quark_version) >= version.parse("0.12")
 
 
 @lru_cache
