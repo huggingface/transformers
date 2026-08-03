@@ -210,6 +210,44 @@ def test_model_training_forward_and_diagnostic_sampling():
 
 
 @require_torch
+def test_generation_input_validation():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config())
+    input_ids = torch.ones(1, 3, dtype=torch.long)
+    text_mask = torch.ones_like(input_ids)
+    audio_features = torch.zeros(1, 3, 2, 4)
+    audio_mask = torch.zeros_like(input_ids)
+
+    model._validate_generation_inputs(
+        input_ids, text_mask, audio_features, audio_mask, min_length=0, max_length=2, num_inference_steps=1
+    )
+
+    with pytest.raises(ValueError, match="batch size of 1"):
+        model._validate_generation_inputs(
+            input_ids.repeat(2, 1),
+            text_mask.repeat(2, 1),
+            audio_features.repeat(2, 1, 1, 1),
+            audio_mask.repeat(2, 1),
+            min_length=0,
+            max_length=2,
+            num_inference_steps=1,
+        )
+    with pytest.raises(ValueError, match="patches with shape"):
+        model._validate_generation_inputs(
+            input_ids,
+            text_mask,
+            torch.zeros(1, 3, 3, 4),
+            audio_mask,
+            min_length=0,
+            max_length=2,
+            num_inference_steps=1,
+        )
+    with pytest.raises(ValueError, match="greater than"):
+        model._validate_generation_inputs(
+            input_ids, text_mask, audio_features, audio_mask, min_length=2, max_length=2, num_inference_steps=1
+        )
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
