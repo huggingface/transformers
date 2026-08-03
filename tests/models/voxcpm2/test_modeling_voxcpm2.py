@@ -392,6 +392,30 @@ def test_generation_stop_prediction():
 
 
 @require_torch
+def test_generation_decoder_context_uses_trailing_audio_only():
+    model = VoxCPM2Model(get_tiny_voxcpm2_config())
+    audio_features = torch.arange(1 * 5 * 2 * 4).reshape(1, 5, 2, 4)
+
+    context = model._prepare_decoder_context(
+        audio_features, audio_mask=torch.tensor([[1, 0, 0, 1, 1]]), decoder_context_patches=3
+    )
+    torch.testing.assert_close(context, audio_features[:, -2:])
+
+    empty_context = model._prepare_decoder_context(
+        audio_features, audio_mask=torch.tensor([[1, 0, 0, 1, 0]]), decoder_context_patches=3
+    )
+    assert empty_context.shape == (1, 0, 2, 4)
+
+    zero_context = model._prepare_decoder_context(
+        audio_features, audio_mask=torch.ones(1, 5), decoder_context_patches=0
+    )
+    assert zero_context.shape == (1, 0, 2, 4)
+
+    with pytest.raises(ValueError, match="non-negative"):
+        model._prepare_decoder_context(audio_features, torch.ones(1, 5), decoder_context_patches=-1)
+
+
+@require_torch
 def test_scalar_quantization_matches_reference():
     config = VoxCPM2Config()
     config.lm_config.hidden_size = 2
