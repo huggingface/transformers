@@ -16,7 +16,7 @@
 import torch
 from torch import nn
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..utils import logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
@@ -166,7 +166,7 @@ class DecompressExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return None  # FIXME
+        return _IdentityOp()
 
 
 _FP8_DTYPE = torch.float8_e4m3fn
