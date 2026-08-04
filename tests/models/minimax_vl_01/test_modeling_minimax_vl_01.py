@@ -267,6 +267,88 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             self.assertEqual(decay.dtype, torch.float32)
             self.assertEqual(decay.device.type, torch.device(torch_device).type)
 
+    def test_text_lightning_attention_source_padding_and_fp32_cache(self):
+        config = MiniMaxVL01TextConfig(
+            vocab_size=97,
+            hidden_size=4,
+            intermediate_size=8,
+            num_hidden_layers=2,
+            num_attention_heads=1,
+            num_key_value_heads=1,
+            head_dim=4,
+            num_local_experts=2,
+            num_experts_per_tok=2,
+            layer_types=["linear_attention"] * 2,
+            block_size=2,
+        )
+        attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0).to(dtype=torch.float16)
+        with torch.no_grad():
+            identity = torch.eye(config.hidden_size, dtype=torch.float16)
+            attention.qkv_proj.weight.copy_(torch.cat((identity, 0.5 * identity, 0.25 * identity)))
+            attention.output_gate.weight.zero_()
+            attention.out_proj.weight.copy_(identity)
+            attention.norm.weight.fill_(1)
+
+        hidden_states = torch.tensor([[[1.0, 0.5, -0.5, 2.0], [2.0, -1.0, 0.25, 0.75]]], dtype=torch.float16)
+        attention_mask = torch.tensor([[1, 0]])
+        cache = MiniMaxVL01TextCache()
+
+        qkv_states = attention.act_fn(attention.qkv_proj(hidden_states)).reshape(1, 2, 1, 3 * config.head_dim)
+        query_states, key_states, value_states = torch.split(qkv_states, config.head_dim, dim=-1)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+        value_states = value_states.masked_fill(~attention_mask[:, None, :, None].bool(), 0)
+
+        slope_rate = attention.get_slope_rate(device=hidden_states.device)
+        _, key_decay, diagonal_decay = attention.decay_factors(slope_rate)
+        attention_weights = torch.matmul(query_states, key_states.transpose(-1, -2)).float()
+        reference_attention = torch.matmul(attention_weights * diagonal_decay, value_states.float())
+        reference_attention = reference_attention.to(query_states.dtype).transpose(1, 2).reshape(1, 2, 4)
+        reference_output = attention.norm(reference_attention)
+        reference_output = torch.sigmoid(attention.output_gate(hidden_states)) * reference_output
+        reference_output = attention.out_proj(reference_output)
+        reference_cache = torch.matmul(
+            (key_states * key_decay).transpose(-1, -2).to(value_states.dtype), value_states
+        ).float()
+
+        output, recurrent_state = attention(
+            hidden_states,
+            position_embeddings=None,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+        )
+        torch.testing.assert_close(output, reference_output)
+        torch.testing.assert_close(recurrent_state, reference_cache)
+        self.assertEqual(recurrent_state.dtype, torch.float32)
+        self.assertEqual(cache.linear_cache[0].dtype, torch.float32)
+        self.assertGreater(output[0, 1].abs().max().item(), 0)
+
+        decode_hidden_states = torch.tensor([[[0.75, -0.25, 1.25, 0.5]]], dtype=torch.float16)
+        decode_qkv_states = attention.act_fn(attention.qkv_proj(decode_hidden_states)).reshape(1, 1, 1, 12)
+        decode_query, decode_key, decode_value = torch.split(decode_qkv_states, config.head_dim, dim=-1)
+        decode_query = decode_query.transpose(1, 2)
+        decode_key = decode_key.transpose(1, 2)
+        decode_value = decode_value.transpose(1, 2)
+        reference_cache = torch.exp(-slope_rate) * reference_cache + torch.matmul(
+            decode_key.transpose(-1, -2), decode_value
+        )
+        reference_attention = torch.matmul(decode_query, reference_cache.to(decode_query.dtype))
+        reference_attention = reference_attention.transpose(1, 2).reshape(1, 1, 4)
+        reference_output = attention.norm(reference_attention)
+        reference_output = torch.sigmoid(attention.output_gate(decode_hidden_states)) * reference_output
+        reference_output = attention.out_proj(reference_output)
+
+        output, recurrent_state = attention(
+            decode_hidden_states,
+            position_embeddings=None,
+            attention_mask=None,
+            past_key_values=cache,
+        )
+        torch.testing.assert_close(output, reference_output)
+        torch.testing.assert_close(recurrent_state, reference_cache)
+        self.assertEqual(recurrent_state.dtype, torch.float32)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
