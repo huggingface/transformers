@@ -4515,3 +4515,46 @@ def force_serialization_as_bin_files():
         yield
     finally:
         PreTrainedModel.save_pretrained = original_save
+
+
+def scoped_kernels(test):
+    """
+    Decorator that treats a kernels test as isolated instance in which we remove the kernelization
+    side effects from the models (as they are attached on a class level).
+
+    We guarantee this in any case even if the test fails.
+    """
+    _MISSING = object()
+
+    @require_kernels
+    @require_torch_accelerator
+    @functools.wraps(test)
+    def wrapper(*args, **kwargs):
+        from kernels import use_kernel_mapping
+        from kernels.layer import layer as kernel_layer
+
+        changed = {}
+        original_replace = kernel_layer._replace_forward
+
+        def tracked_replace(module, layer):
+            changed.setdefault(
+                id(module),
+                (module, module.__dict__.get("forward", _MISSING)),
+            )
+            original_replace(module, layer)
+
+        with (
+            use_kernel_mapping({}, inherit_mapping=True),
+            patch.object(kernel_layer, "_replace_forward", tracked_replace),
+            patch.dict("os.environ", {"USE_HUB_KERNELS": "YES"}),
+        ):
+            try:
+                return test(*args, **kwargs)
+            finally:
+                for module, forward in reversed(list(changed.values())):
+                    if forward is _MISSING:
+                        module.__dict__.pop("forward", None)
+                    else:
+                        module.__dict__["forward"] = forward
+
+    return wrapper

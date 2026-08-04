@@ -29,6 +29,7 @@ from unittest import mock
 import _pytest
 import pytest
 
+from transformers import PreTrainedModel
 from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
@@ -36,7 +37,7 @@ from transformers.testing_utils import (
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
-from transformers.utils import enable_tf32
+from transformers.utils import ENV_VARS_TRUE_VALUES, enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
 
@@ -200,6 +201,10 @@ sys.path.insert(1, git_repo_path)
 # they become normal warnings - i.e. the tests still need to test the current functionality
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+# we patch `from_pretrained` temporarily to be controlled via env variables
+_from_pretrained_kernels_patch = None
+_original_from_pretrained = PreTrainedModel.from_pretrained.__func__
+
 
 def pytest_configure(config):
     # Shared directory for the read-only cache fallback events. The controller creates it and
@@ -260,6 +265,32 @@ def pytest_configure(config):
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     register_network_debug_plugin(config)
+
+    # Kernels related patching
+    global _from_pretrained_kernels_patch, _original_from_pretrained
+    os.environ["USE_HUB_KERNELS"] = "0"  # Disable kernels for tests by default
+
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # Manipulate default as per env variables
+        kwargs.setdefault("use_kernels", os.environ.get("USE_HUB_KERNELS", "NO").upper() in ENV_VARS_TRUE_VALUES)
+        return _original_from_pretrained(cls, *args, **kwargs)
+
+    _from_pretrained_kernels_patch = mock.patch.object(
+        PreTrainedModel,
+        "from_pretrained",
+        from_pretrained,
+    )
+    _from_pretrained_kernels_patch.start()
+
+
+def pytest_unconfigure(config):
+    # Disable default kwargs per env for kernels activation
+    global _from_pretrained_kernels_patch
+
+    if _from_pretrained_kernels_patch is not None:
+        _from_pretrained_kernels_patch.stop()
+        _from_pretrained_kernels_patch = None
 
 
 def pytest_collection_modifyitems(items):

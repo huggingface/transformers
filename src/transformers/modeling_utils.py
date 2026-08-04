@@ -4122,7 +4122,7 @@ class PreTrainedModel(
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
-        use_kernels = kwargs.pop("use_kernels", False)
+        use_kernels = kwargs.pop("use_kernels", True)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 

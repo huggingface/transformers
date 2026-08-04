@@ -107,6 +107,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     run_first,
     run_test_using_subprocess,
+    scoped_kernels,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -5777,8 +5778,7 @@ class ModelTesterMixin(ExportTesterMixin):
                             is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
                             self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
-    @require_kernels
-    @require_torch_accelerator
+    @scoped_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -5788,6 +5788,20 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # Using kernels should not raise a `ValueError`
             model.use_kernels = True
+
+    @scoped_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """Check whether activating kernels and then running through some input leads to an (value) error"""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+
+            # Using kernels should not raise a `ValueError`
+            model.use_kernels = True
+
+            model.eval()
+            model(**inputs)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):

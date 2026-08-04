@@ -396,7 +396,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertFalse(hub_kernels_pkg._kernels_enabled)
+                self.assertFalse(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
@@ -409,7 +409,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertTrue(hub_kernels_pkg._kernels_enabled)
+                self.assertTrue(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
