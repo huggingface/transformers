@@ -58,8 +58,6 @@ from .configuration_cosmos3_edge import Cosmos3EdgeConfig, Cosmos3EdgeTextConfig
 class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
     """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Cosmos3EdgeTextConfig, device=None):
         super().__init__()
@@ -592,8 +590,6 @@ class Cosmos3EdgeEncoder(nn.Module):
 
 
 class VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim

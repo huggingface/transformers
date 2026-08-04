@@ -1126,8 +1126,6 @@ class Emu3PreTrainedModel(PreTrainedModel):
 
 
 class Emu3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Emu3Config, device=None):
         super().__init__()

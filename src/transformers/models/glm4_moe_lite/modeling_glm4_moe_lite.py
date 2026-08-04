@@ -46,8 +46,6 @@ from .configuration_glm4_moe_lite import Glm4MoeLiteConfig
 
 
 class Glm4MoeLiteRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4MoeLiteConfig, device=None):
         super().__init__()

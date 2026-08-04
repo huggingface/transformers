@@ -137,8 +137,6 @@ class TimesFm2_5RMSNorm(nn.Module):
 
 
 class TimesFm2_5RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: TimesFm2_5Config, device=None):
         super().__init__()
