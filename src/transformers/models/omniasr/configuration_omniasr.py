@@ -175,10 +175,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
         of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
     conv_bias (`bool`, *optional*, defaults to `True`):
         Whether the 1D convolutional layers have a bias.
-    feat_extract_norm (`str`, *optional*, defaults to `"layer"`):
-        The norm to be applied to 1D convolutional layers in the feature encoder. One of `"group"` for group
-        normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-        convolutional layers.
     num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
         Number of convolutional positional embeddings. Defines the kernel size of the 1D convolutional positional
         embeddings layer.
@@ -195,22 +191,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
         The dropout ratio for activations inside the feed-forward layer.
     feat_extract_activation (`str`, *optional*, defaults to `"gelu"`):
         The non-linear activation function in the 1D convolutional layers of the feature encoder.
-    apply_spec_augment (`bool`, *optional*, defaults to `False`):
-        Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder.
-    mask_time_length (`int`, *optional*, defaults to 10):
-        Length of vector span along the time axis.
-    mask_time_prob (`float`, *optional*, defaults to 0.0):
-        Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. Only relevant
-        if `apply_spec_augment=True`.
-    mask_time_min_masks (`int`, *optional*, defaults to 2):
-        The minimum number of masks of length `mask_time_length` generated along the time axis.
-    mask_feature_length (`int`, *optional*, defaults to 64):
-        Length of vector span along the feature axis.
-    mask_feature_prob (`float`, *optional*, defaults to 0.0):
-        Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. Only
-        relevant if `apply_spec_augment=True`.
-    mask_feature_min_masks (`int`, *optional*, defaults to 2):
-        The minimum number of masks of length `mask_feature_length` generated along the feature axis.
 
     Example:
 
@@ -235,7 +215,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
     conv_kernel: list[int] | tuple[int, ...] = (10, 3, 3, 3, 3, 2, 2)
     conv_stride: list[int] | tuple[int, ...] = (5, 2, 2, 2, 2, 2, 2)
     conv_bias: bool = True
-    feat_extract_norm: str = "layer"
     num_attention_heads: int = 16
     num_hidden_layers: int = 24
     num_conv_pos_embeddings: int = 128
@@ -250,17 +229,9 @@ class OmniASREncoderConfig(PreTrainedConfig):
     feat_extract_activation: str = "gelu"
     layer_norm_eps: float = 1e-5
     hidden_act: str = "gelu"
-    apply_spec_augment: bool = False
-    mask_time_length: int = 10
-    mask_time_prob: float | int = 0.0
-    mask_time_min_masks: int = 2
-    mask_feature_length: int = 64
-    mask_feature_prob: float | int = 0.0
-    mask_feature_min_masks: int = 2
 
     def __post_init__(self, **kwargs):
         self.num_feat_extract_layers = len(self.conv_dim)
-        self.do_stable_layer_norm = False
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -284,8 +255,6 @@ class OmniASRCTCConfig(PreTrainedConfig):
     r"""
     encoder_config (`Union[dict, OmniASREncoderConfig]`, *optional*):
         The config object or dictionary of the encoder.
-    unk_token_id (`int`, *optional*, defaults to 3):
-        The id of the *unknown* token.
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
         instance of [`OmniASRForCTC`].
@@ -315,7 +284,6 @@ class OmniASRCTCConfig(PreTrainedConfig):
 
     encoder_config: dict | PreTrainedConfig | None = None
     vocab_size: int = 10288
-    unk_token_id: int = 3
     ctc_loss_reduction: str = "mean"
     ctc_zero_infinity: bool = False
     # TODO check token ids, took from Wav2Vec2
@@ -357,8 +325,6 @@ class OmniASRConfig(PreTrainedConfig):
         https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
     num_language_embeddings (`int`, *optional*, defaults to 1694):
         Number of language embeddings in the language embedding table.
-    unk_token_id (`int`, *optional*, defaults to 3):
-        The id of the *unknown* token.
     num_special_tokens (`int`, *optional*, defaults to 1):
         Number of special tokens in the vocabulary.
     language_embedding_probability (`float`, *optional*, defaults to 0.5):
@@ -399,7 +365,6 @@ class OmniASRConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     encoder_stacking: int = 1
     num_language_embeddings: int = 1694
-    unk_token_id: int = 3
     num_special_tokens: int = 1
     language_embedding_probability: float | int = 0.5
     language_token_id: int = 9218

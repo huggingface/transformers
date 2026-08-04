@@ -41,10 +41,12 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether or not [`~OmniASRFeatureExtractor.__call__`] should return `attention_mask`. OmniASR needs the
+            mask to know which frames are padding, so batched inputs are only encoded correctly when it is returned.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-            improve the performance for some models, *e.g.*,
-            [wav2vec2-lv60](https://huggingface.co/models?search=lv60).
+            Whether or not to normalize each audio sample to zero mean and unit variance. This is applied per sample,
+            before padding, to match the [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23).
     """
 
     model_input_names = ["input_values", "attention_mask"]
@@ -54,7 +56,7 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
         feature_size=1,
         sampling_rate=16000,
         padding_value=0.0,
-        return_attention_mask=False,
+        return_attention_mask=True,
         do_normalize=True,
         **kwargs,
     ):
@@ -66,10 +68,10 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
         self,
         audio: AudioInput,
         sampling_rate: int | None = None,
-        padding: bool | str | PaddingStrategy = False,
+        padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         truncation: bool = False,
-        return_attention_mask: bool | None = True,
+        return_attention_mask: bool | None = None,
         return_tensors: str | TensorType | None = "pt",
         **kwargs,
     ) -> BatchFeature:
@@ -85,16 +87,21 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
+                - `False` or `'do_not_pad'`: No padding. Since `return_tensors="pt"` is required, this only works for a
+                  single sequence or for sequences that already share the same length.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, the value of
+                `self.return_attention_mask` is used.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `"pt"`):
+                Only `"pt"` is supported, i.e. returning PyTorch `torch.Tensor` objects.
         """
 
         if sampling_rate is not None:
@@ -121,27 +128,25 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(
                     f"Only mono-channel audio is supported for input to {self}, got shape: {example.shape}"
                 )
+            if self.do_normalize:
+                # Zero mean and unit variance per example, before padding, as in the original implementation:
+                # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L162
+                # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23
+                # Normalizing the padded batch instead would make each example's statistics depend on the other
+                # examples in the batch and on the amount of padding.
+                with torch.no_grad():
+                    example = layer_norm(example, example.shape)
             audio[idx] = example
 
         encoded_inputs = BatchFeature({"input_values": audio})
-        if padding:
-            padded_inputs = self.pad(
-                encoded_inputs,
-                padding=padding,
-                max_length=max_length,
-                truncation=truncation,
-                return_attention_mask=return_attention_mask,
-            )
-
-        # TODO: move to modeling?
-        if self.do_normalize:
-            # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L162
-            # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23
-            input_values = padded_inputs.get("input_values")
-            with torch.no_grad():
-                padded_inputs["input_values"] = layer_norm(input_values, input_values.shape)
-
-        return padded_inputs
+        return self.pad(
+            encoded_inputs,
+            padding=padding,
+            max_length=max_length,
+            truncation=truncation,
+            return_attention_mask=return_attention_mask,
+            return_tensors=return_tensors,
+        )
 
 
 __all__ = ["OmniASRFeatureExtractor"]

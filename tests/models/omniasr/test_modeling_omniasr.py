@@ -85,11 +85,11 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
     def test_ctc_300m_v2_model_integration_batched(self):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_ctc_batch-py
-        NOTE: only compare transcripts because of differences in batch padding
         """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_batch.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["pred_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(3)
@@ -98,6 +98,9 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
+        encoder_lengths = model._get_feat_extract_output_lengths(inputs["attention_mask"].sum(-1))
+        for idx, length in enumerate(encoder_lengths.tolist()):
+            torch.testing.assert_close(predicted_ids[idx, :length].cpu(), EXPECTED_TOKEN_IDS[idx, :length])
         predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
@@ -170,6 +173,8 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_batch_llm.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
+        EXPECTED_TOKEN_IDS = raw_data["pred_ids"]
+        EXPECTED_HYPOTHESIS_LENS = raw_data["hypothesis_lens"]
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(3)
@@ -191,5 +196,42 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 max_new_tokens=256,
             )
 
+        # The audio context is left-padded, so each sample decodes exactly as it would on its own. Compare each
+        # hypothesis over its own length; what follows it is padding.
+        for idx, length in enumerate(EXPECTED_HYPOTHESIS_LENS):
+            torch.testing.assert_close(
+                generated_ids[idx, :length].cpu(), torch.tensor(EXPECTED_TOKEN_IDS[idx][:length])
+            )
+
         predicted_transcripts = self.processor.decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    def test_llm_300m_v2_generate_is_padding_invariant(self):
+        """
+        Batching must not change what a sample transcribes to. The shortest and longest clips of the dataset are
+        paired so that the short one carries ~6x its own length in padding: without the audio `attention_mask`
+        reaching the encoder, and without the audio being left-padded, it decodes to a shorter, degraded hypothesis.
+        """
+        samples = self._load_datasamples(6)
+        shortest, longest = min(samples, key=len), max(samples, key=len)
+        model = OmniASRForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, torch_dtype=self.dtype, device_map="auto"
+        )
+
+        def generate(batch):
+            inputs = self.processor(
+                batch,
+                sampling_rate=self.processor.feature_extractor.sampling_rate,
+                language=["eng_Latn"] * len(batch),
+                padding=True,
+            )
+            inputs.to(model.device, dtype=self.dtype)
+            with torch.no_grad():
+                return model.generate(**inputs, max_new_tokens=200)
+
+        alone = generate([shortest])[0].cpu()
+        batched = generate([shortest, longest])[0].cpu()
+        torch.testing.assert_close(batched[: alone.shape[0]], alone)
+        # everything past the hypothesis is padding
+        self.assertTrue(bool((batched[alone.shape[0] :] == model.config.pad_token_id).all()))

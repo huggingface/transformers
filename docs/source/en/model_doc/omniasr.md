@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-11-12 and added to Hugging Face Transformers on 2026-07-10.*
+*This model was released on 2025-11-12 and added to Hugging Face Transformers on 2026-08-04.*
 
 # OmniASR
 
@@ -147,17 +147,18 @@ transcription = processor.decode(generated_ids, skip_special_tokens=True)
 print(transcription)
 ```
 
-## OmniASRConfig
 
-[[autodoc]] OmniASRConfig
+## OmniASREncoderConfig
+
+[[autodoc]] OmniASREncoderConfig
 
 ## OmniASRCTCConfig
 
 [[autodoc]] OmniASRCTCConfig
 
-## OmniASRLLMConfig
+## OmniASRConfig
 
-[[autodoc]] OmniASRLLMConfig
+[[autodoc]] OmniASRConfig
 
 ## OmniASRFeatureExtractor
 

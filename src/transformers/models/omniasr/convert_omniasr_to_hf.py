@@ -249,6 +249,27 @@ def param_count(model):
     return sum(p[1].numel() for p in model.named_parameters())
 
 
+def _get_pos_conv(hf_model):
+    """Locate the positional convolution, whichever OmniASR class wraps the speech encoder."""
+    for name, module in hf_model.named_modules():
+        if name.endswith("pos_conv_embed"):
+            return module.conv
+    raise ValueError(f"Could not find `pos_conv_embed` in {hf_model.__class__.__name__}.")
+
+
+def apply_weight_norm(hf_model):
+    """
+    The original checkpoints store the positional convolution weight-normalised, whereas OmniASR keeps a plain
+    convolution. Applying weight norm creates the `weight_g`/`weight_v` slots the original values are copied into;
+    `remove_weight_norm` folds them back into `conv.weight` once the copy is done.
+    """
+    torch.nn.utils.weight_norm(_get_pos_conv(hf_model), name="weight", dim=2)
+
+
+def remove_weight_norm(hf_model):
+    torch.nn.utils.remove_weight_norm(_get_pos_conv(hf_model), name="weight")
+
+
 @torch.no_grad()
 def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     if not torch.cuda.is_available():
@@ -388,14 +409,17 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # 2) Initialize Transformers model
     conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
-    feat_extract_norm = "layer" if original_config.encoder_config.feature_extractor_layer_norm_convs else "group"
+    if not original_config.encoder_config.feature_extractor_layer_norm_convs:
+        raise ValueError(
+            "OmniASR only implements layer-normed feature extractor convolutions, but the original config has "
+            "`feature_extractor_layer_norm_convs=False`."
+        )
     encoder_config = OmniASREncoderConfig(
         hidden_size=original_config.encoder_config.model_dim,
         conv_dim=conv_dim,
         conv_kernel=conv_kernel,
         conv_stride=conv_stride,
         conv_bias=original_config.encoder_config.feature_extractor_bias,
-        feat_extract_norm=feat_extract_norm,
         attention_dropout=original_config.encoder_config.attn_dropout_p,
         num_hidden_layers=original_config.encoder_config.num_encoder_layers,
         num_attention_heads=original_config.encoder_config.num_encoder_attn_heads,
@@ -405,15 +429,9 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         intermediate_size=original_config.encoder_config.ffn_inner_dim,
         layerdrop=original_config.encoder_config.layer_drop_p,
-        # NOTE (ebezzam) do we keep specaugment params?
-        apply_spec_augment=original_config.use_masking,
-        mask_time_length=original_config.temporal_mask_span_len,
-        mask_time_prob=original_config.max_temporal_mask_prob,
-        mask_time_min_masks=original_config.min_num_temporal_mask_spans,
-        mask_feature_length=original_config.spatial_mask_span_len,
-        mask_feature_prob=original_config.max_spatial_mask_prob,
-        mask_feature_min_masks=original_config.min_num_spatial_mask_spans,
     )
+    # NOTE: the upstream masking (SpecAugment) parameters are dropped because they are for training and are more
+    # appropriate as a data augmentation step in the data collator, not as part of the model.
 
     if "CTC" in model_card:
         config = OmniASRCTCConfig(
@@ -422,7 +440,6 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
             bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
             eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
-            unk_token_id=pipeline.tokenizer.vocab_info.unk_idx,
         )
         hf_model = OmniASRForCTC(config)
     elif "LLM" in model_card:
@@ -473,7 +490,6 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,
             eos_token_id=original_config_llm.eos_idx,
-            unk_token_id=original_config_llm.unk_idx,
             # TODO better handlnig?
             num_special_tokens=original_config_llm.n_special_tokens,
             language_embedding_probability=original_config_llm.lang_embeddings_p,
@@ -491,7 +507,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     hf_model.to(device).to(dtype)
 
     # 3) Convert weights
-    hf_model.apply_weight_norm()
+    apply_weight_norm(hf_model)
     print(f"Total parameters (original): {param_count(original_model)}")
     print(f"Total parameters (HF)      : {param_count(hf_model)}")
 
@@ -506,7 +522,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     else:
         encoder_convert_list = get_encoder_convert_list(target_attr="encoder")
     hf_model = _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list)
-    hf_model.remove_weight_norm()
+    remove_weight_norm(hf_model)
 
     # 4) Prepare processor (feature extraction and tokenizer)
     feature_extractor = OmniASRFeatureExtractor(
@@ -516,8 +532,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         sampling_rate=16000,
         padding_value=0,
         do_normalize=True,
-        # TODO always layer or group?
-        return_attention_mask=(encoder_config.feat_extract_norm == "layer"),
+        return_attention_mask=True,
     )
 
     # -- create Transformers-compatible tokenizer
