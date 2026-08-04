@@ -1965,9 +1965,13 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
             if guidance_scale is None and generation_config.guidance_scale is not None
             else guidance_scale
         )
-        guidance_scale = (
-            self.config.dit_config.cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
-        )
+        dit_config = self.config.dit_config
+        if not isinstance(dit_config, VoxCPM2DiTConfig):
+            raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+        cfm_config = dit_config.cfm_config
+        if not isinstance(cfm_config, VoxCPM2CfmConfig):
+            raise TypeError("`cfm_config` must be a `VoxCPM2CfmConfig` instance")
+        guidance_scale = cfm_config.inference_cfg_rate if guidance_scale is None else guidance_scale
         temperature = generation_config.temperature if temperature is None else temperature
         temperature = 1.0 if temperature is None else temperature
         return_dict_in_generate = (
