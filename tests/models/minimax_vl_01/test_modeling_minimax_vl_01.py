@@ -236,6 +236,37 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         last_layer_slope = last_layer_attention.get_slope_rate(device=torch_device)
         torch.testing.assert_close(last_layer_slope.flatten(), base**exponent * 1e-5)
 
+    def test_text_lightning_attention_decay_factors_preserve_float32_device(self):
+        config = MiniMaxVL01TextConfig(
+            vocab_size=97,
+            hidden_size=32,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_local_experts=2,
+            num_experts_per_tok=2,
+            layer_types=["linear_attention"] * 2,
+            block_size=4,
+        )
+        attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0)
+        slope_rate = attention.get_slope_rate(device=torch_device)
+        query_decay, key_decay, diagonal_decay = attention.decay_factors(slope_rate)
+
+        positions = torch.arange(1, config.block_size + 1, dtype=torch.float32, device=torch_device)
+        expected_query = torch.exp(-slope_rate * positions[:, None])
+        expected_key = torch.exp(-slope_rate * (config.block_size - positions[:, None]))
+        diagonal = slope_rate * (positions[:, None] - positions[None, :])[None, None]
+        expected_diagonal = torch.exp(torch.where(diagonal >= 0, -diagonal, float("-inf")))
+
+        torch.testing.assert_close(query_decay, expected_query)
+        torch.testing.assert_close(key_decay, expected_key)
+        torch.testing.assert_close(diagonal_decay, expected_diagonal)
+        for decay in (query_decay, key_decay, diagonal_decay):
+            self.assertEqual(decay.dtype, torch.float32)
+            self.assertEqual(decay.device.type, torch.device(torch_device).type)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):

@@ -142,6 +142,20 @@ class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
         rate = rate * factor
         return rate[:, None, None]
 
+    def decay_factors(self, slope_rate):
+        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
+
+        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
+        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
+
+        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
+        diagonal_decay = diagonal_decay[None, None, :, :]
+        diagonal_decay = slope_rate * diagonal_decay
+        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
+        diagonal_decay = torch.exp(diagonal_decay)
+
+        return query_decay, key_decay, diagonal_decay
+
 
 class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
     pass
