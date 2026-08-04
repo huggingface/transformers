@@ -769,6 +769,8 @@
         title: MiniMax-M2
       - local: model_doc/minimax_m3_vl
         title: MiniMax-M3-VL
+      - local: model_doc/minimax_vl_01
+        title: MiniMax-VL-01
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
