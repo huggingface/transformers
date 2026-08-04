@@ -17,12 +17,13 @@ import random
 from inspect import signature
 from unittest.mock import patch
 
+from transformers.testing_utils import scoped_kernels_class
+
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
     floats_tensor,
     ids_tensor,
     is_torch_available,
-    scoped_kernels_class,
     torch_device,
 )
 
