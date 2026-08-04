@@ -15,7 +15,7 @@
 import re
 import unittest
 
-from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
+from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision, slow
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -54,6 +54,7 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B", revision="refs/pr/14"
         )
 
+    @slow
     @require_av
     def test_apply_chat_template_video_duration_filled_when_missing(self):
         processor = self._get_real_processor()
@@ -78,6 +79,7 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertRegex(decoded, r'"video_duration": \d+(\.\d+)?')
         self.assertIn(self.videos_input_name, out_dict)
 
+    @slow
     @require_av
     def test_apply_chat_template_video_duration_kept_when_provided(self):
         processor = self._get_real_processor()
@@ -100,6 +102,7 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertIn('"video_duration": 3.5', decoded)
 
+    @slow
     @require_av
     def test_apply_chat_template_video_duration_mixed(self):
         processor = self._get_real_processor()
