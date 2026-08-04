@@ -68,7 +68,7 @@ class Qwen3NextRMSNormGated(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states, gate=None):
+    def forward(self, hidden_states, gate: torch.Tensor):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -226,26 +226,27 @@ def torch_chunk_gated_delta_rule(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes linear attention using the gated delta rule, by chunking along the sequence dimension.
     Args:
-        query: Query tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
-        key: Key tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
-        value: Value tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
-        g: Log-decay tensor of shape [batch_size, sequence_length, num_heads]: the recurrent state is multiplied
+        query: Query tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
+        key: Key tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
+        value: Value tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]. num_v_heads can be equal
+            to num_k_heads, same for v_head_dim and k_head_dim.
+        g: Log-decay tensor of shape [batch_size, sequence_length, num_v_heads]: the recurrent state is multiplied
             by exp(g) at each step, so entries must be <= 0.
-        beta: Beta tensor of shape [batch_size, sequence_length, num_heads]
+        beta: Beta tensor of shape [batch_size, sequence_length, num_v_heads]
         chunk_size: Size of the chunks along the sequence dimension.
-        initial_state: The recurrent state, an optional tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
+        initial_state: The recurrent state, an optional tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
         use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
     Returns:
-        - The output tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
-        - Either None or the new recurrent state tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
+        - The output tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]
+        - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
-    v_head_dim = value.shape[-1]
+    batch_size, sequence_length, _, k_head_dim = key.shape
+    num_v_heads, v_head_dim = value.shape[-2:]
     log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
-    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, log_decay)
     ]
@@ -261,7 +262,7 @@ def torch_chunk_gated_delta_rule(
     query = F.pad(query, (0, 0, 0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -2
     key = F.pad(key, (0, 0, 0, pad_size))
     value = F.pad(value, (0, 0, 0, pad_size))
-    beta = F.pad(beta, (0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -1
+    beta = F.pad(beta, (0, pad_size))
     log_decay = F.pad(log_decay, (0, pad_size))
 
     total_sequence_length = sequence_length + pad_size
@@ -273,8 +274,8 @@ def torch_chunk_gated_delta_rule(
     k_beta = key * beta.unsqueeze(-1)
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
-    query, key, value, k_beta, v_beta = [
-        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
+    query, key, k_beta, v_beta = [
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, k_beta, v_beta)
     ]
     log_decay = log_decay.reshape(log_decay.shape[0], log_decay.shape[1], -1, chunk_size)
 
@@ -315,7 +316,7 @@ def torch_chunk_gated_delta_rule(
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
-        recurrent_state_shape = (batch_size, num_heads, k_head_dim, v_head_dim)
+        recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=new_values.dtype, device=new_values.device)
     else:
         last_recurrent_state = initial_state.to(new_values)
@@ -339,7 +340,7 @@ def torch_chunk_gated_delta_rule(
     # Reshape the output to the orignal shape: flatten the chunk dimension, then drop padding
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
     core_attn_out = core_attn_out[:, :, :sequence_length]
-    # Convert back to the original shape [batch_size, sequence_length, num_heads, v_head_dim] and dtype
+    # Convert back to the original shape [batch_size, sequence_length, num_v_heads, v_head_dim] and dtype
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
 
@@ -359,11 +360,11 @@ def torch_recurrent_gated_delta_rule(
     chunked.
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
-    v_head_dim = value.shape[-1]
+    batch_size, sequence_length, _, k_head_dim = key.shape
+    num_v_heads, v_head_dim = value.shape[-2:]
     log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
-    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, log_decay)
     ]
@@ -378,7 +379,7 @@ def torch_recurrent_gated_delta_rule(
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
-        recurrent_state_shape = (batch_size, num_heads, k_head_dim, v_head_dim)
+        recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=value.dtype, device=value.device)
     else:
         last_recurrent_state = initial_state.to(value)
@@ -400,7 +401,7 @@ def torch_recurrent_gated_delta_rule(
 
     # Discard the final state if not requested
     last_recurrent_state = None if not output_final_state else last_recurrent_state
-    # Convert back to the original shape [batch_size, sequence_length, num_heads, v_head_dim] and dtype
+    # Convert back to the original shape [batch_size, sequence_length, num_v_heads, v_head_dim] and dtype
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
 
