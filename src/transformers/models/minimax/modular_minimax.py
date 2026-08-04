@@ -225,10 +225,10 @@ class MiniMaxLightningAttention(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def get_slope_rate(self, device=None):
+    def get_slope_rate(self):
         base = 1 / (2 ** (8 / self.num_attention_heads))
-        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
-        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
+        exponent = torch.arange(self.num_attention_heads) + 1
+        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
 
         rate = base**exponent
         rate = rate * factor

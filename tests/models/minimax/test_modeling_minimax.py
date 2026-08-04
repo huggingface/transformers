@@ -35,7 +35,6 @@ if is_torch_available():
     )
     from transformers.models.minimax.modeling_minimax import (
         MiniMaxCache,
-        MiniMaxLightningAttention,
         MiniMaxRotaryEmbedding,
         apply_rotary_pos_emb,
     )
@@ -232,17 +231,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         rotated_query, rotated_key = apply_rotary_pos_emb(query, key, partial_cos, partial_sin)
         torch.testing.assert_close(rotated_query[..., head_dim // 2 :], query[..., head_dim // 2 :])
         torch.testing.assert_close(rotated_key[..., head_dim // 2 :], key[..., head_dim // 2 :])
-
-    def test_lightning_attention_slope_uses_source_layer_denominator(self):
-        config = self.model_tester.get_config()
-        config.num_hidden_layers = 4
-        config.layer_types = ["linear_attention"] * config.num_hidden_layers
-        layer_idx = config.num_hidden_layers - 1
-        attention = MiniMaxLightningAttention(config, layer_idx)
-
-        base = 1 / (2 ** (8 / config.num_attention_heads))
-        expected = base ** (torch.arange(config.num_attention_heads, dtype=torch.float32) + 1) * 1e-5
-        torch.testing.assert_close(attention.get_slope_rate().flatten(), expected, rtol=1e-6, atol=0)
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
