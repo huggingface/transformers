@@ -871,6 +871,7 @@ def create_causal_mask(
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
@@ -906,6 +907,10 @@ def create_causal_mask(
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention.
     # It allows to use decoder-only models with bi-directional attention as well
@@ -917,6 +922,7 @@ def create_causal_mask(
             past_key_values=past_key_values,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
@@ -943,7 +949,9 @@ def create_causal_mask(
 
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
+    allow_is_causal_skip = allow_is_causal_skip and not (
+        getattr(past_key_values, "is_compileable", False) and q_length == 1
+    )
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -996,6 +1004,7 @@ def create_bidirectional_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    allow_is_bidirectional_skip: bool = True,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1022,6 +1031,10 @@ def create_bidirectional_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
+            `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
+            `True`.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the full layers
     if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
@@ -1045,8 +1058,6 @@ def create_bidirectional_mask(
     mask_factory_function = bidirectional_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
-    # Allow skipping the mask creation except we have additional masking operators (and/or masks)
-    allow_is_bidirectional_skip = True
     # Defaulting to using non-vmap based mask creations except when detecting
     # users passing custom mask functions (as we cannot guarantee that they
     # are properly index-based as required by our implementation).
@@ -1098,6 +1109,7 @@ def create_sliding_window_causal_mask(
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1134,6 +1146,10 @@ def create_sliding_window_causal_mask(
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1145,6 +1161,7 @@ def create_sliding_window_causal_mask(
             past_key_values=past_key_values,
             or_mask_function=or_mask_function,
             and_mask_function=and_mask_function,
+            allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
@@ -1174,7 +1191,9 @@ def create_sliding_window_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
+    allow_is_causal_skip = allow_is_causal_skip and not (
+        getattr(past_key_values, "is_compileable", False) and q_length == 1
+    )
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1228,6 +1247,7 @@ def create_bidirectional_sliding_window_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    allow_is_bidirectional_skip: bool = True,
     **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
@@ -1254,6 +1274,10 @@ def create_bidirectional_sliding_window_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
+            `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
+            `True`.
     """
     # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
     if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
@@ -1282,7 +1306,6 @@ def create_bidirectional_sliding_window_mask(
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     use_vmap = False
-    allow_is_bidirectional_skip = True
 
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
@@ -1325,6 +1348,7 @@ def create_chunked_causal_mask(
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
@@ -1357,6 +1381,10 @@ def create_chunked_causal_mask(
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
+            plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
+            another mask. Defaults to `True`.
     """
     if layer_idx is None:
         # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
@@ -1399,7 +1427,9 @@ def create_chunked_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling and decoding (but for prefill, we still allow skip to optimize the perfs since
     # prefill is not compiled)
-    allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and q_length == 1)
+    allow_is_causal_skip = allow_is_causal_skip and not (
+        getattr(past_key_values, "is_compileable", False) and q_length == 1
+    )
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,

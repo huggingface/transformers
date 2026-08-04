@@ -1,12 +1,12 @@
 import sys
 from contextlib import contextmanager
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
-from transformers.testing_utils import run_test_using_subprocess
+from transformers.testing_utils import require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _is_package_available,
     clear_import_cache,
@@ -255,3 +255,41 @@ def test_broken_torchaudio_does_not_break_import():
             pass
         else:
             raise AssertionError("rnnt_loss must raise ImportError when torchaudio is unavailable")
+
+
+@require_torch
+@run_test_using_subprocess
+def test_import_without_torch_distributed():
+    """
+    Checks that Transformers can still be imported and used when PyTorch was built with USE_DISTRIBUTED=0
+    (e.g. AMD's Windows ROCm 7.2.1 wheels). This make sure that distributed guarding works correctly.
+    """
+
+    import torch
+
+    # Forget transformers, so that importing it below actually re-runs its module-scope imports.
+    for name in list(sys.modules):
+        if name.startswith("transformers"):
+            del sys.modules[name]
+
+    # Emulate USE_DISTRIBUTED=0 by temporarily faking torch.distributed availability to False.
+    dist_modules_to_remove = [
+        name
+        for name in list(sys.modules)
+        if name.startswith(
+            (
+                "torch.distributed.tensor",
+                "torch.distributed.checkpoint",
+                "torch.distributed.fsdp",
+                "torch.distributed._composable",
+            )
+        )
+    ]
+
+    with (
+        patch.object(torch.distributed, "is_available", return_value=False),
+        patch.dict(sys.modules, {"torch._C._distributed_c10d": None}),
+        patch.dict(sys.modules, dict.fromkeys(dist_modules_to_remove, DEFAULT)),
+    ):
+        # If transformers import errors out, it means that the distributed guarding is not working correctly.
+        from transformers import AutoImageProcessor  # noqa: F401

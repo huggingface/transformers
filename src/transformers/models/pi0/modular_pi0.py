@@ -321,7 +321,7 @@ class PI0TimestepEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         sinusoid_freq = self.compute_freqs(config)
-        self.register_buffer("sinusoid_freq", sinusoid_freq, persistent=False)
+        self.sinusoid_freq = nn.Buffer(sinusoid_freq, persistent=False)
 
     @staticmethod
     def compute_freqs(config):
@@ -413,7 +413,9 @@ class PI0Model(PI0PreTrainedModel):
         special_image_mask = (
             (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
         )
-        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
+        inputs_embeds = inputs_embeds.masked_scatter(
+            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        )
 
         return inputs_embeds
 
