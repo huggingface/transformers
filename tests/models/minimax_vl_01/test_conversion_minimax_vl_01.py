@@ -276,7 +276,7 @@ class MiniMaxVL01ConversionTest(unittest.TestCase):
         self.assertEqual(manifest_digest, RELEASED_CHECKPOINT_KEY_MANIFEST_SHA256)
 
         config = _released_config()
-        self.assertEqual(config.text_config.model_type, "minimax")
+        self.assertEqual(config.text_config.model_type, "minimax_vl_01_text")
         with torch.device("meta"):
             model = MiniMaxVL01ForConditionalGeneration(config)
 

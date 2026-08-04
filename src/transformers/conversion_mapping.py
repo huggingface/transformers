@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 _MODEL_TO_CONVERSION_PATTERN = {
     # Mixtral-style MoE
     "minimax": "mixtral",
+    "minimax_vl_01_text": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "afmoe": "qwen2_moe",
