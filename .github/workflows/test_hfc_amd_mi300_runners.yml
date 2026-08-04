@@ -12,5 +12,5 @@ permissions:
 jobs:
   test_runners:
     name: Test MI300 Runner Groups
-    uses: huggingface/hf-workflows/.github/workflows/test_amd_mi300_runners.yaml@test/amd-mi300-runners
+    uses: huggingface/hf-workflows/.github/workflows/test_amd_mi300_runners.yaml@main
     secrets: inherit
