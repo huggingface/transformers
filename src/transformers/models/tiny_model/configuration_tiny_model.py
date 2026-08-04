@@ -52,7 +52,6 @@ class TinyModelConfig(PreTrainedConfig):
     lm_head_bias: bool = True
     initializer_range: float = 0.02
     embedding_initializer_range: float = 1e-4
-    use_cache: bool = False
     bos_token_id: int | None = 9_996
     eos_token_id: int | list[int] | None = 9_997
     pad_token_id: int | None = 9_998

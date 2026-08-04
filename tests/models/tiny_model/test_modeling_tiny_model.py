@@ -41,7 +41,7 @@ class TinyModelConfigTest(unittest.TestCase):
         self.assertTrue(config.mlp_bias)
         self.assertTrue(config.lm_head_bias)
         self.assertFalse(config.tie_word_embeddings)
-        self.assertFalse(config.use_cache)
+        self.assertFalse(hasattr(config, "use_cache"))
         self.assertEqual(config.bos_token_id, 9_996)
         self.assertEqual(config.eos_token_id, 9_997)
         self.assertEqual(config.pad_token_id, 9_998)

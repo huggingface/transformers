@@ -123,7 +123,6 @@ class TinyModelPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TinyModelDecoderLayer"]
     _supports_attention_backend = True
     _supports_sdpa = True
-    _can_compile_fullgraph = True
 
 
 @auto_docstring
