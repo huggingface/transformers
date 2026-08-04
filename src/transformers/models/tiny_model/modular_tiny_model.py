@@ -21,14 +21,15 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 
@@ -254,6 +255,46 @@ class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
     @classmethod
     def _supports_default_dynamic_cache(cls) -> bool:
         return False
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutput:
+        if use_cache:
+            raise ValueError("TinyModel does not support key/value caching; set `use_cache=False`.")
+        if past_key_values is not None:
+            raise ValueError("TinyModel does not support `past_key_values`.")
+
+        outputs: BaseModelOutput = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(outputs.last_hidden_state[:, slice_indices, :]).contiguous()
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = [

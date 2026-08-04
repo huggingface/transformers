@@ -233,3 +233,32 @@ class TinyModelForCausalLMTest(unittest.TestCase):
 
     def test_dynamic_cache_is_not_advertised(self):
         self.assertFalse(TinyModelForCausalLM._supports_default_dynamic_cache())
+
+    def test_forward_returns_raw_logits_and_loss(self):
+        torch.manual_seed(6)
+        model = TinyModelForCausalLM(self.get_config()).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, labels=input_ids)
+            hidden_states = model.model(input_ids=input_ids).last_hidden_state
+            expected_logits = model.lm_head(hidden_states)
+
+        torch.testing.assert_close(outputs.logits, expected_logits, rtol=0, atol=0)
+        self.assertEqual(outputs.logits.shape, (2, 4, 32))
+        self.assertTrue(torch.isfinite(outputs.loss))
+
+    def test_logits_to_keep(self):
+        model = TinyModelForCausalLM(self.get_config()).eval()
+        outputs = model(input_ids=torch.tensor([[1, 2, 3, 4]]), logits_to_keep=1)
+
+        self.assertEqual(outputs.logits.shape, (1, 1, 32))
+
+    def test_cache_inputs_are_rejected(self):
+        model = TinyModelForCausalLM(self.get_config())
+        input_ids = torch.tensor([[1, 2, 3]])
+
+        with self.assertRaisesRegex(ValueError, "does not support key/value caching"):
+            model(input_ids=input_ids, use_cache=True)
+        with self.assertRaisesRegex(ValueError, "does not support `past_key_values`"):
+            model(input_ids=input_ids, past_key_values=object())
