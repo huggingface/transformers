@@ -21,9 +21,6 @@
 from ...processing_utils import ProcessorMixin
 
 
-# ── Processor ─────────────────────────────────────────────────────────────────
-
-
 class Step3p7Processor(ProcessorMixin):
     """Processor for Step-3.7-Flash.
 

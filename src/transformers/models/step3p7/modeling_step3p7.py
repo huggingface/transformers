@@ -105,14 +105,9 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        dim_freqs = []
-        for i in range(2):
-            dim_pos = position_ids[:, :, i][:, None, :].float()
-            with maybe_autocast(device_type=device_type, enabled=False):
-                dim_freqs.append((inv_freq_expanded.float() @ dim_pos.float()).transpose(1, 2))
-        freqs = torch.cat(dim_freqs, dim=-1)
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
         sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
@@ -251,7 +246,7 @@ class Step3p7VisionAttention(nn.Module):
         return self.out_proj(attn_output), attn_weights
 
 
-class Step3p7VisionEncoderLayer(nn.Module):
+class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
     """Vision encoder layer with layer scale (``lambda_1``/``lambda_2``, naming convention shared with
     :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`) and RoPE-aware 2-D
     attention via ``position_embeddings`` forwarding.
@@ -274,14 +269,23 @@ class Step3p7VisionEncoderLayer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        attn_out, _ = self.self_attn(
-            self.layernorm_before(hidden_states),
+        residual = hidden_states
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
-        hidden_states = self.lambda_1 * attn_out + hidden_states
-        return self.lambda_2 * self.mlp(self.layernorm_after(hidden_states)) + hidden_states
+        hidden_states = self.lambda_1 * hidden_states
+        hidden_states = hidden_states + residual
+
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.lambda_2 * hidden_states
+        hidden_states = hidden_states + residual
+        return hidden_states
 
 
 class Step3p7VisionEmbeddings(nn.Module):
@@ -544,11 +548,6 @@ class Step3p7RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-def _swiglu_clamp(gate: torch.Tensor, up: torch.Tensor, act_fn: Callable, limit: float) -> torch.Tensor:
-    """Step3p7 order: SiLU then clamp (DeepseekV4 clamps before SiLU)."""
-    return act_fn(gate).clamp(max=limit) * up.clamp(min=-limit, max=limit)
-
-
 class Step3p7MLP(nn.Module):
     def __init__(self, config, intermediate_size=None, swiglu_limit=None):
         super().__init__()
@@ -562,7 +561,9 @@ class Step3p7MLP(nn.Module):
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
     def forward(self, x) -> torch.Tensor:
-        return self.down_proj(_swiglu_clamp(self.gate_proj(x), self.up_proj(x), self.act_fn, self.limit))
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(gate * up)
 
 
 class Step3p7Experts(nn.Module):
@@ -599,7 +600,9 @@ class Step3p7Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        return _swiglu_clamp(gate, up, self.act_fn, self.limit)
+        gate = self.act_fn(gate).clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
+        return gate * up
 
 
 class Step3p7TopKRouter(nn.Module):
@@ -633,7 +636,7 @@ class Step3p7SparseMoeBlock(nn.Module):
         self.shared_experts = Step3p7MLP(
             config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
         )
-        self.routed_scaling_factor = getattr(config, "moe_router_scaling_factor", 1.0)
+        self.routed_scaling_factor = config.moe_router_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -760,10 +763,10 @@ class Step3p7Attention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1)
-        attn_output = (
-            attn_output.view(*attn_output.shape[:-1], self.num_heads, self.head_dim)
-            * gate_states.unsqueeze(-1).sigmoid()
-        ).view(*attn_output.shape)
+        output_shape = attn_output.shape
+        attn_output = attn_output.view(*output_shape[:-1], self.num_heads, self.head_dim)
+        attn_output = attn_output * gate_states.unsqueeze(-1).sigmoid()
+        attn_output = attn_output.view(*output_shape)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -772,7 +775,12 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Step3p7Attention(config, layer_idx, config.num_attention_heads_per_layer[layer_idx])
+        # Inherited `LlamaAttention.__init__` reads `config.num_attention_heads` unconditionally --
+        # ambiguous here (per-layer). Resolve it first, then restore `config` identity so
+        # `set_attn_implementation` still reaches this module.
+        layer_config = config.per_layer_config[layer_idx]
+        self.self_attn = Step3p7Attention(layer_config, layer_idx, layer_config.num_attention_heads)
+        self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
         swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
@@ -849,11 +857,12 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         if config.num_nextn_predict_layers:
-            # Checkpoints append `num_nextn_predict_layers` unmodeled speculative-decoding layers right
-            # after the real ones. Ignore them on load instead of reporting them as unexpected keys.
+            # Checkpoints append `num_nextn_predict_layers` MTP layers; ignore them as unexpected keys
+            # on regular load. Matches loosely on `layers.<N>.` (not anchored to this model's module
+            # path) so it also works as `MtpModel.from_pretrained`'s discovery pattern over raw keys.
             mtp_layers = range(config.num_hidden_layers, config.num_hidden_layers + config.num_nextn_predict_layers)
-            pattern = rf"language_model\.layers\.({'|'.join(map(str, mtp_layers))})\."
-            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | {pattern}
+            patterns = {rf"(^|\.)layers\.{i}\." for i in mtp_layers}
+            self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or []) | patterns
 
         # Initialize weights and apply final processing
         self.post_init()
