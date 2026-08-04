@@ -1,0 +1,50 @@
+name: Model Lint
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    paths:
+      - 'src/transformers/models/**'
+      - 'tests/models/**/test_tokenization_*.py'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint changed model files
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The linter diffs against the base ref, so it needs both sides of the branch point.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the model linter
+        run: python -m pip install --upgrade "transformers-mlinter>=0.1.2"
+
+      - name: Collect findings
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          python utils/collect_mlinter_findings.py --base-ref "origin/$BASE_REF"
+
+      - name: Record the PR number
+        run: echo "${{ github.event.pull_request.number }}" > mlinter-pr-number.txt
+
+      # The review is posted by a separate workflow_run job: this job runs untrusted PR code and
+      # therefore has no write access to the pull request.
+      - uses: actions/upload-artifact@v5
+        with:
+          name: mlinter-findings
+          path: |
+            mlinter-findings.json
+            mlinter-pr-number.txt
+          if-no-files-found: warn
+          retention-days: 3
