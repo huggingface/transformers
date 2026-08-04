@@ -75,7 +75,7 @@ class DbrxFFNConfig(PreTrainedConfig):
     moe_num_experts: int = 4
     moe_top_k: int = 1
     moe_jitter_eps: float | int | None = None
-    moe_loss_weight: float= 0.01
+    moe_loss_weight: float = 0.01
     moe_normalize_expert_weights: float | None = 1.0
 
     def __post_init__(self, **kwargs):
