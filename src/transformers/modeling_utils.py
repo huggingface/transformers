@@ -4222,12 +4222,19 @@ class PreTrainedModel(
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        if gguf_file is not None and quantization_config is None:
+            # GGUF weights are quantized data, so they are loaded through a quantizer like any other
+            # quantized checkpoint. It decides per tensor whether the bytes stay packed.
+            from .utils.quantization_config import GgufConfig
+
+            quantization_config = GgufConfig(gguf_file=gguf_file)
+
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
         )
 
         if gguf_file:
-            if hf_quantizer is not None:
+            if hf_quantizer.quantization_config.quant_method != "gguf":
                 raise ValueError(
                     "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
                 )
@@ -4265,11 +4272,7 @@ class PreTrainedModel(
         )
 
         if gguf_file:
-            # Raw tensors keyed by their GGUF names; renaming and conversion are `WeightTransform`s
-            # contributed below, so the standard loading pipeline handles them like any checkpoint.
-            from .integrations.gguf import load_gguf_state_dict
-
-            state_dict = load_gguf_state_dict(checkpoint_files[0], config=config)
+            hf_quantizer.gguf_file = checkpoint_files[0]  # now resolved to a local path
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4309,13 +4312,32 @@ class PreTrainedModel(
                     use_kernels=use_kernels,
                 )
 
+        if gguf_file:
+            from .integrations.gguf import is_gguf_arch_supported, load_gguf_state_dict
+
+            if is_gguf_arch_supported(checkpoint_files[0]):
+                # Read the checkpoint only now that the modules exist and the quantizer has swapped
+                # the ones whose weights stay in GGUF blocks: it can then answer *which* tensors stay
+                # packed from the modules themselves, instead of guessing from tensor names.
+                state_dict = load_gguf_state_dict(
+                    checkpoint_files[0], dtype=dtype, keep_packed=hf_quantizer.keep_packed
+                )
+            else:
+                # No mapping for this architecture yet: fall back to the legacy loader, which renames
+                # and dequantizes everything itself.
+                from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+                state_dict = load_gguf_checkpoint(
+                    checkpoint_files[0], return_tensors=True, model_to_load=model, torch_dtype=dtype
+                )["tensors"]
+
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
-        if gguf_file:
+        if gguf_file and is_gguf_arch_supported(checkpoint_files[0]):
             from .integrations.gguf import get_gguf_conversion_mapping, read_gguf_architecture
 
             gguf_arch = read_gguf_architecture(checkpoint_files[0])

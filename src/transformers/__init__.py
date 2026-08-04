@@ -263,6 +263,7 @@ _import_structure = {
         "FourOverSixConfig",
         "FPQuantConfig",
         "GemmaQuantizationConfig",
+        "GgufConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -791,6 +792,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
+    from .utils.quantization_config import GgufConfig as GgufConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig

@@ -29,6 +29,7 @@ from ..utils.quantization_config import (
     FourOverSixConfig,
     FPQuantConfig,
     GemmaQuantizationConfig,
+    GgufConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -57,6 +58,7 @@ from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
+from .quantizer_gguf import GgufHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
@@ -90,6 +92,7 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    "gguf": GgufHfQuantizer,
     # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
     # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
     # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
@@ -102,6 +105,7 @@ AUTO_QUANTIZER_MAPPING = {
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
+    "gguf": GgufConfig,
     "awq": AwqConfig,
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
