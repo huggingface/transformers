@@ -21,37 +21,32 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
 @strict
 class CanaryDecoderConfig(PreTrainedConfig):
-    r"""
-    max_target_positions (`int`, *optional*, defaults to 1024):
-        The maximum sequence length that the decoder might ever be used with.
-    """
-
     model_type = "canary_decoder"
 
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_attention_heads",
-        "num_hidden_layers": "decoder_layers",
-    }
-
     vocab_size: int = 16384
-    d_model: int = 1024
-    decoder_layers: int = 8
-    decoder_attention_heads: int = 8
-    decoder_ffn_dim: int = 4096
-    decoder_layerdrop: float | int = 0.0
-    activation_function: str = "relu"
-    max_target_positions: int = 1024
-    dropout: float | int = 0.1
-    attention_dropout: float | int = 0.1
-    activation_dropout: float | int = 0.1
-    scale_embedding: bool = False
-    initializer_range: float = 0.02
-    use_cache: bool = True
-    is_encoder_decoder: bool = True
+    hidden_size: int = 1024
+    num_hidden_layers: int = 8
+    num_attention_heads: int = 8
+    num_key_value_heads: int | None = None
+    intermediate_size: int = 4096
+    hidden_act: str = "relu"
+    max_position_embeddings: int = 1024
     pad_token_id: int | None = 2
-    bos_token_id: int | None = 4
     eos_token_id: int | None = 3
+    bos_token_id: int | None = 4
+    is_encoder_decoder: bool = True
+    use_cache: bool = True
+    initializer_range: float = 0.02
+    attention_dropout: float | int = 0.0
+    attention_bias: bool = True
+    head_dim: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="harshaljanjani/canary-1b-v2-hf")
@@ -113,6 +108,8 @@ class CanaryConfig(PreTrainedConfig):
             self.decoder_config = CanaryDecoderConfig(**self.decoder_config)
         elif self.decoder_config is None:
             self.decoder_config = CanaryDecoderConfig()
+
+        self.vocab_size = self.decoder_config.vocab_size
         super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):

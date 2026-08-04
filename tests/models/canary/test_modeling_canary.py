@@ -51,7 +51,7 @@ class CanaryModelTester:
         subsampling_conv_channels=16,
         decoder_seq_length=4,
         vocab_size=99,
-        max_target_positions=40,
+        max_position_embeddings=40,
         decoder_start_token_id=7,
         pad_token_id=2,
         bos_token_id=4,
@@ -72,7 +72,7 @@ class CanaryModelTester:
         self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
         self.vocab_size = vocab_size
-        self.max_target_positions = max_target_positions
+        self.max_position_embeddings = max_position_embeddings
         self.decoder_start_token_id = decoder_start_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
@@ -91,11 +91,11 @@ class CanaryModelTester:
         )
         decoder_config = CanaryDecoderConfig(
             vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            decoder_layers=self.num_hidden_layers,
-            decoder_attention_heads=self.num_attention_heads,
-            decoder_ffn_dim=self.intermediate_size,
-            max_target_positions=self.max_target_positions,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            max_position_embeddings=self.max_position_embeddings,
             pad_token_id=self.pad_token_id,
         )
         return CanaryConfig(
@@ -195,6 +195,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
     # Overridden for the same subsampling reason as `test_hidden_states_output` (mirrors `WhisperModelTest`).
@@ -231,6 +232,7 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
+            self._set_subconfig_attributes(config, "output_attentions", True)
             model = model_class(config)
             model.to(torch_device)
             model.eval()

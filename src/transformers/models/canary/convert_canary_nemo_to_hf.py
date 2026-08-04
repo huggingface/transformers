@@ -68,35 +68,33 @@ DECODER_HIDDEN_DIM_INPUT_KEYS = (
     "q_proj.weight",
     "self_attn.k_proj.weight",
     "self_attn.v_proj.weight",
-    "fc1.weight",
+    "mlp.fc1.weight",
 )
 
 DECODER_HIDDEN_DIM_OUTPUT_KEYS = (
-    "out_proj.weight",
-    "out_proj.bias",
-    "fc2.weight",
-    "fc2.bias",
-    "layer_norm.weight",
-    "layer_norm.bias",
-    "layernorm_embedding.weight",
-    "layernorm_embedding.bias",
+    "o_proj.weight",
+    "o_proj.bias",
+    "mlp.fc2.weight",
+    "mlp.fc2.bias",
+    "norm.weight",
+    "norm.bias",
 )
 
 NEMO_TO_HF_DECODER_MAPPING = {
     r"^transf_decoder\._embedding\.token_embedding\.": r"decoder.embed_tokens.",
-    r"^transf_decoder\._embedding\.layer_norm\.": r"decoder.layernorm_embedding.",
-    r"^transf_decoder\._decoder\.final_layer_norm\.": r"decoder.layer_norm.",
-    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_1\.": r"decoder.layers.\1.self_attn_layer_norm.",
-    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_2\.": r"decoder.layers.\1.encoder_attn_layer_norm.",
-    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_3\.": r"decoder.layers.\1.final_layer_norm.",
+    r"^transf_decoder\._embedding\.layer_norm\.": r"decoder.embedding_layernorm.",
+    r"^transf_decoder\._decoder\.final_layer_norm\.": r"decoder.norm.",
+    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_1\.": r"decoder.layers.\1.input_layernorm.",
+    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_2\.": r"decoder.layers.\1.post_attention_layernorm.",
+    r"^transf_decoder\._decoder\.layers\.(\d+)\.layer_norm_3\.": r"decoder.layers.\1.final_layernorm.",
     r"^transf_decoder\._decoder\.layers\.(\d+)\.first_sub_layer\.": r"decoder.layers.\1.self_attn.",
     r"^transf_decoder\._decoder\.layers\.(\d+)\.second_sub_layer\.": r"decoder.layers.\1.encoder_attn.",
-    r"^transf_decoder\._decoder\.layers\.(\d+)\.third_sub_layer\.dense_in\.": r"decoder.layers.\1.fc1.",
-    r"^transf_decoder\._decoder\.layers\.(\d+)\.third_sub_layer\.dense_out\.": r"decoder.layers.\1.fc2.",
+    r"^transf_decoder\._decoder\.layers\.(\d+)\.third_sub_layer\.dense_in\.": r"decoder.layers.\1.mlp.fc1.",
+    r"^transf_decoder\._decoder\.layers\.(\d+)\.third_sub_layer\.dense_out\.": r"decoder.layers.\1.mlp.fc2.",
     r"query_net": r"q_proj",
     r"key_net": r"k_proj",
     r"value_net": r"v_proj",
-    r"out_projection": r"out_proj",
+    r"out_projection": r"o_proj",
 }
 
 
@@ -118,15 +116,13 @@ def convert_decoder_config(nemo_config) -> CanaryConfig:
         encoder_config=encoder_config.to_dict(),
         decoder_config=CanaryDecoderConfig(
             vocab_size=head_config["num_classes"],
-            d_model=decoder_config["hidden_size"],
-            decoder_layers=decoder_config["num_layers"],
-            decoder_attention_heads=decoder_config["num_attention_heads"],
-            decoder_ffn_dim=decoder_config["inner_size"],
-            activation_function=decoder_config["hidden_act"],
-            max_target_positions=decoder_config["max_sequence_length"],
-            dropout=decoder_config["embedding_dropout"],
+            hidden_size=decoder_config["hidden_size"],
+            num_hidden_layers=decoder_config["num_layers"],
+            num_attention_heads=decoder_config["num_attention_heads"],
+            intermediate_size=decoder_config["inner_size"],
+            hidden_act=decoder_config["hidden_act"],
+            max_position_embeddings=decoder_config["max_sequence_length"],
             attention_dropout=decoder_config["attn_score_dropout"],
-            activation_dropout=decoder_config["ffn_dropout"],
         ),
     )
 
@@ -210,7 +206,7 @@ def main(hf_repo_id, output_dir, push_to_repo_id=None):
 
     config = convert_decoder_config(nemo_config)
     print(f"Converted config:\n{config}")
-    converted_state_dict = load_and_convert_state_dict(model_files, config.decoder_config.d_model)
+    converted_state_dict = load_and_convert_state_dict(model_files, config.decoder_config.hidden_size)
 
     print("Loading the checkpoint in a Canary model.")
     with torch.device("meta"):
