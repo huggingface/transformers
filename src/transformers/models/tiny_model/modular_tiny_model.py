@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="noanabeshima/tiny_model")
-@strict
+@strict(accept_kwargs=True)
 class TinyModelConfig(PreTrainedConfig):
     r"""
     attention_output_bias (`bool`, *optional*, defaults to `True`):
