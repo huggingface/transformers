@@ -117,8 +117,9 @@ class _IdentityOp(ConversionOps):
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks."""
 
-    def __init__(self, dim: int = 0):
+    def __init__(self, dim: int = 0, chunk_sizes: list[int] | None = None):
         self.dim = dim
+        self.chunk_sizes = chunk_sizes
 
     @torch.no_grad
     def convert(
@@ -127,8 +128,15 @@ class Chunk(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = target_patterns
-        sizes = len(targets)
-        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
+        one_chunk_size = tensor.shape[self.dim] // len(targets)
+        if int(one_chunk_size * len(targets)) != tensor.shape[self.dim]:
+            raise ValueError(
+                f"Failed to convert {kwargs.get('full_layer_name')}, tensor can't be chunked into {len(targets)} "
+                f"without losing information. Input tensor shape {tensor.shape} asked to chunk on dim={self.dim}"
+            )
+
+        sizes = [one_chunk_size] * len(targets) if self.chunk_sizes is None else self.chunk_sizes
+        chunks = tuple(chunk.contiguous() for chunk in torch.split(tensor, sizes, dim=self.dim))
         if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
@@ -426,14 +434,21 @@ class PermuteForRope(ConversionOps):
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
 
-    def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
+    def _apply(self, tensor: torch.Tensor, is_key: bool, is_norm: bool) -> torch.Tensor:
         dim0 = tensor.shape[0]
         config = self.config
         if self.subconfig_key is not None:
             config = getattr(self.config, self.subconfig_key, self.config)
-        n_heads = getattr(config, "num_attention_heads", 1)
-        half_head = dim0 // n_heads // 2
 
+        # ugly and not super reliable, prob we'll bake it in conversion but keep for now
+        if is_norm:
+            n_heads = 1
+        elif is_key:
+            n_heads = getattr(config, "num_key_value_heads", 1)
+        else:
+            n_heads = getattr(config, "num_attention_heads", 1)
+
+        half_head = dim0 // n_heads // 2
         head_shape = (2, half_head) if self.inverse else (half_head, 2)
         if tensor.ndim == 2:
             tensor = tensor.view(n_heads, *head_shape, tensor.shape[1])
@@ -457,7 +472,6 @@ class PermuteForRope(ConversionOps):
         for key, tensors in input_dict.items():
             # Permute q and key weights if they match requested layer names
             if self.permute_layer_names is not None and not any(name in key for name in self.permute_layer_names):
-                # output[key] = tensors
                 outputs.append(tensors)
                 continue
 
@@ -465,7 +479,7 @@ class PermuteForRope(ConversionOps):
                 if len(tensors) != 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
                 tensors = tensors[0]
-            outputs.append(self._apply(tensors))
+            outputs.append(self._apply(tensors, is_key="k_proj" in key, is_norm="norm" in key))
         return dict(zip(target_patterns, outputs))
 
     @property

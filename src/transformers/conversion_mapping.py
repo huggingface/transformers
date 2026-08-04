@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
+    PermuteForRope,
     PrefixChange,
     Transpose,
     VisionUnfuseAndPermuteForRope,
@@ -142,33 +143,44 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "onyx_assistant": [
-            # WeightConverter(
-            #     source_patterns=["attn_k.weight"],
-            #     target_patterns=["self_attn.k_proj.weight"],
-            #     operations=[PermuteForRope()],
-            # ),
-            # WeightConverter(
-            #     source_patterns=["attn_q.weight"],
-            #     target_patterns=["self_attn.q_proj.weight"],
-            #     operations=[PermuteForRope()],
-            # ),
-            WeightRenaming(source_patterns=r"blk", target_patterns="layers"),
-            WeightRenaming(source_patterns=r"attn_q.weight", target_patterns="self_attn.q_proj.weight"),
-            WeightRenaming(source_patterns=r"attn_k.weight", target_patterns="self_attn.k_proj.weight"),
-            WeightRenaming(source_patterns=r"attn_v.weight", target_patterns="self_attn.v_proj.weight"),
-            WeightRenaming(source_patterns=r"attn_output.weight", target_patterns="self_attn.o_proj.weight"),
-            WeightRenaming(source_patterns=r"attn_q_norm.weight", target_patterns="self_attn.q_norm.weight"),
-            WeightRenaming(source_patterns=r"attn_k_norm.weight", target_patterns="self_attn.k_norm.weight"),
-            WeightRenaming(source_patterns=r"ffn_gate.weight", target_patterns="mlp.gate_proj.weight"),
-            WeightRenaming(source_patterns=r"ffn_down.weight", target_patterns="mlp.down_proj.weight"),
-            WeightRenaming(source_patterns=r"ffn_up.weight", target_patterns="mlp.up_proj.weight"),
-            WeightRenaming(source_patterns=r"ffn_norm.weight", target_patterns="feedforward_layernorm.weight"),
-            WeightRenaming(source_patterns=r"attn_norm.weight", target_patterns="attention_layernorm.weight"),
-            WeightRenaming(
-                source_patterns=r"enc.output_norm.weight", target_patterns="encoder.output_norm_enc.weight"
+            WeightConverter(
+                source_patterns="attention.wqkv.weight",
+                target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[
+                    Chunk(dim=0, chunk_sizes=[4096, 1024, 1024]),
+                    PermuteForRope(permute_layer_names=["self_attn.q_proj.weight", "self_attn.k_proj.weight"]),
+                ],
             ),
-            WeightRenaming(source_patterns=r"output_norm.weight", target_patterns="norm.weight"),
-            WeightRenaming(source_patterns=r"fc.weight", target_patterns="encoder.fc.weight"),
+            WeightConverter(
+                source_patterns="attention.q_norm.weight",
+                target_patterns="self_attn.q_norm.weight",
+                operations=[
+                    PermuteForRope(),
+                ],
+            ),
+            WeightConverter(
+                source_patterns="attention.k_norm.weight",
+                target_patterns="self_attn.k_norm.weight",
+                operations=[
+                    PermuteForRope(),
+                ],
+            ),
+            WeightRenaming(source_patterns=r"attention.wo.weight", target_patterns="self_attn.o_proj.weight"),
+            WeightRenaming(source_patterns=r"feed_forward.mlp.fc2_weight", target_patterns="mlp.down_proj.weight"),
+            WeightConverter(
+                source_patterns="feed_forward.mlp.fc1_weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(
+                source_patterns=r"feed_forward.mlp.layer_norm_weight", target_patterns="feedforward_layernorm.weight"
+            ),
+            WeightRenaming(
+                source_patterns=r"attention.input_layernorm.weight", target_patterns="attention_layernorm.weight"
+            ),
+            WeightRenaming(source_patterns=r"hidden_norm.weight", target_patterns="encoder.output_norm_enc.weight"),
+            WeightRenaming(source_patterns=r"norm.weight", target_patterns="norm.weight"),
+            WeightRenaming(source_patterns=r"W_c.weight", target_patterns="encoder.fc.weight"),
         ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),

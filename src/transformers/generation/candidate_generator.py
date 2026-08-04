@@ -1540,7 +1540,12 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # last hidden states of only the last validated token
         block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1), device=input_ids.device)[None, ...]
         input_mask_ids = torch.cat([input_ids[:, -1:], block_mask], dim=-1)
-        mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
+
+        # the assistant needs embedding without norm which we have merged in ckpt, workaround for now
+        # FIXME: the embed layer needs to be unmerged for dflash to work, otherwise we risk going OOM by loading the table twice!
+        embed_table = torch.load("/raid/raushan/onyx_early_v2/embed_table.pt")
+        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids.cpu(), embed_table).to("cuda")
+        # mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
         self.assistant_kwargs["past_key_values"] = self.assistant_model.update_cache_with_target_states(
@@ -1549,7 +1554,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             attention_mask=self.assistant_kwargs["attention_mask"][:, -tgt_length:],
             past_key_values=self.assistant_kwargs.get("past_key_values"),
         )
-        print(n_last_matches)
 
         with torch.no_grad():
             outputs = self.assistant_model(
