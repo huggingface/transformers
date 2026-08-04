@@ -286,7 +286,6 @@ def torch_chunk_gated_delta_rule(
     # Cumulative log-decay within each chunk (dim 3 is the position inside the chunk): cum_log_decay[..., t] is
     # the log of the total decay accumulated between the start of the chunk and position t
     cum_log_decay = log_decay.cumsum(dim=3)
-    cum_decay = cum_log_decay.exp()  # cumulative in the sense of the product: decay is never summed
 
     # First phase: compute intra-chunk quantities.
     # The pairwise decays: pairwise_decay[..., i, j] = exp(cum_log_decay_i - cum_log_decay_j) is the decay
@@ -311,7 +310,7 @@ def torch_chunk_gated_delta_rule(
     # keys reading the old state (k_cumdecay). In the update, the part of new_values that the old state already predicts
     # is subtracted out, so that only the correction is written to the recurrent state: this is the delta rule.
     new_values = ut_transform @ v_beta
-    k_cumdecay = ut_transform @ (k_beta * cum_decay.unsqueeze(-1))
+    k_cumdecay = ut_transform @ (k_beta * cum_log_decay.exp().unsqueeze(-1))
 
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
@@ -322,17 +321,18 @@ def torch_chunk_gated_delta_rule(
         last_recurrent_state = initial_state.to(new_values)
     core_attn_out = torch.zeros_like(new_values)
 
-    # Second phase: the sequential scan over chunks. Combine the read of the previous recurrent state (inter_chunk_attn)
-    # with the within-chunk attention (intra_chunk_attn), then decay + update the recurrent state
+    # Second phase: the sequential scan over chunks
     for i in range(num_chunks):
-        q_i, k_i, cum_log_decay_i = query[:, :, i], key[:, :, i], cum_log_decay[:, :, i]
-        v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
-        inter_chunk_attn = (q_i * cum_decay[:, :, i].unsqueeze(-1)) @ last_recurrent_state
+        q_i, k_i, new_values_i = query[:, :, i], key[:, :, i], new_values[:, :, i]
+        k_cumdecay_i, cum_log_decay_i = k_cumdecay[:, :, i], cum_log_decay[:, :, i]
+        # Compute attention output for the current chunk: add the read of the previous recurrent state
+        # (inter_chunk_attn) with the within-chunk attention (intra_chunk_attn)
+        v_new = new_values_i - k_cumdecay_i @ last_recurrent_state
+        inter_chunk_attn = (q_i * cum_log_decay_i.exp().unsqueeze(-1)) @ last_recurrent_state
         core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
-        # sum_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
-        sum_log_decay = cum_log_decay_i[:, :, -1]
-        state_decay = sum_log_decay.exp()[..., None, None]
-        key_decay = (sum_log_decay.unsqueeze(-1) - cum_log_decay_i).exp().unsqueeze(-1)
+        # Update the recurrent state: new recurrent state is decayed old state + update
+        state_decay = cum_log_decay_i[:, :, -1].exp()[..., None, None]  # product of decays over the whole chunk
+        key_decay = (cum_log_decay_i[:, :, -1:] - cum_log_decay_i).exp().unsqueeze(-1)  # partial products of decays
         last_recurrent_state = last_recurrent_state * state_decay + (k_i * key_decay).transpose(-1, -2) @ v_new
 
     # Discard the final state if not requested
@@ -444,7 +444,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(torch.ones(self.num_v_heads))
 
         A = torch.empty(self.num_v_heads).uniform_(0, 16)
-        self.A_log = nn.Parameter(torch.log(A))  # TODO: this is always used as a float, why not declare it as one
+        self.A_log = nn.Parameter(torch.log(A))
 
         self.norm = (
             Qwen3NextRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
