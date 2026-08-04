@@ -81,6 +81,10 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] MiniMaxVL01Config
 
+## MiniMaxVL01TextConfig
+
+[[autodoc]] MiniMaxVL01TextConfig
+
 ## MiniMaxVL01ImageProcessor
 
 [[autodoc]] MiniMaxVL01ImageProcessor
@@ -101,6 +105,11 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 [[autodoc]] MiniMaxVL01Model
     - forward
     - get_image_features
+
+## MiniMaxVL01TextModel
+
+[[autodoc]] MiniMaxVL01TextModel
+    - forward
 
 ## MiniMaxVL01ForConditionalGeneration
 
