@@ -1646,7 +1646,10 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         audio_features = audio_features.to(dtype=target_dtype)
         encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
 
-        embedding_scale = self.config.lm_config.scale_emb if self.config.lm_config.use_mup else 1.0
+        lm_config = self.config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
         text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
         text_mask = text_mask.to(dtype=text_embeddings.dtype)
         audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
