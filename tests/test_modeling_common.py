@@ -119,7 +119,6 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
-    is_kernels_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -605,18 +604,12 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
         # Kernels based implementations that need specific requirements, please see `is_xxx_loadable`
         # for more information, e.g. which hardware, nvcc, etc.
-        if (
-            dtype != torch.float32
-            and is_sonicmoe_loadable()
-        ):
+        if dtype != torch.float32 and is_sonicmoe_loadable():
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
         # TODO(@Ilyas) deepgemm needs % 64 weights otherwise it is rejected at runtime
-        if (
-            dtype == torch.bfloat16
-            and is_deepgemm_loadable()
-        ):
+        if dtype == torch.bfloat16 and is_deepgemm_loadable():
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
 

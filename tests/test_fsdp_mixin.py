@@ -153,7 +153,9 @@ def _deterministic_init_model_dir(rank, config, dtype):
         yield model_dir
 
 
-def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file, use_hub_kernels):
+def _fsdp_global_wrapper(
+    rank, test_name, func, func_args, func_kwargs, world_size, port, results_file, use_hub_kernels
+):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
@@ -579,7 +581,16 @@ class FSDPTesterMixin(ABC):
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
-                args=(test_name, test_impl, func_args, test_kwargs, self.fsdp_nproc_per_node, port, results_file, use_hub_kernels),
+                args=(
+                    test_name,
+                    test_impl,
+                    func_args,
+                    test_kwargs,
+                    self.fsdp_nproc_per_node,
+                    port,
+                    results_file,
+                    use_hub_kernels,
+                ),
                 nprocs=self.fsdp_nproc_per_node,
             )
 
