@@ -38,10 +38,8 @@ logger = logging.get_logger(__name__)
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
-# Minimum sonic-moe build-dependency versions. Below these the kernel does not load at all: older
-# CuteDSL lacks `cpasync.ReductionKind`, older TVM-FFI lacks the `map_dataclass_to_tuple` argument
-# CuteDSL passes at JIT time. No ceiling — every incompatibility seen so far has been a too-old
-# dependency, and a cap only disables the kernel silently whenever an upstream release lands.
+# Min sonic-moe build-dependency versions: older CuteDSL / TVM-FFI releases lack APIs the kernel
+# needs and fail at import or JIT time, so we refuse to load below them.
 SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.6.0", "apache-tvm-ffi": "0.1.10"}
 
 
