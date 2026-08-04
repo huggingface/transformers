@@ -876,6 +876,8 @@ class VoxCPM2RotaryEmbedding(nn.Module):
         with maybe_autocast(device_type=device_type, enabled=False):
             if self.rope_type == "longrope":
                 rope_parameters = self.config.rope_parameters
+                if rope_parameters is None:
+                    raise ValueError("LongRoPE requires `rope_parameters` to be configured")
                 head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
                 dim = int(head_dim * rope_parameters.get("partial_rotary_factor", 1.0))
                 factor_name = (
