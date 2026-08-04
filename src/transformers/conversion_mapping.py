@@ -481,6 +481,11 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "deepseek_v4": [
+            # General mid-key renames acting on several keys
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
+            WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
+            WeightRenaming(source_patterns=r"\.indexer\.compressor\.", target_patterns=r"\.compressor\.indexer\."),
+            # Leaf patterns
             WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
             WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
             WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="hc_head.hc_fn"),
@@ -494,57 +499,25 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.hc_ffn_fn$", target_patterns=r".ffn_hc.fn"),
             WeightRenaming(source_patterns=r"\.hc_ffn_base$", target_patterns=r".ffn_hc.base"),
             WeightRenaming(source_patterns=r"\.hc_ffn_scale$", target_patterns=r".ffn_hc.scale"),
-            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
-            WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
-            WeightRenaming(source_patterns=r"\.self_attn\.attn_sink$", target_patterns=r".self_attn.sinks"),
+            WeightRenaming(source_patterns=r"\.attn_sink$", target_patterns=r".sinks"),
             WeightRenaming(
-                source_patterns=r"\.indexer\.compressor\.norm\.", target_patterns=r".compressor.indexer.kv_norm."
+                source_patterns=r"\.indexer\.weights_proj\.",
+                target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
             ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.ape$",
-                target_patterns=r"layers.\1.self_attn.compressor.indexer.position_bias",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.",
-                target_patterns=r"layers.\1.self_attn.compressor.indexer.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.",
-                target_patterns=r"layers.\1.self_attn.compressor.indexer.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.indexer\.weights_proj\.",
-                target_patterns=r"layers.\1.self_attn.compressor.indexer.scorer.weights_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.norm\.",
-                target_patterns=r"layers.\1.self_attn.compressor.kv_norm.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.self_attn\.compressor\.ape$",
-                target_patterns=r"layers.\1.self_attn.compressor.position_bias",
-            ),
+            WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
+            WeightRenaming(source_patterns=r"\.norm\.", target_patterns=r"\.kv_norm\."),
+            WeightRenaming(source_patterns=r"\.ape$", target_patterns=r"\.position_bias"),
             WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
-            WeightRenaming(source_patterns=r"\.wq_b\.", target_patterns=r".q_b_proj."),
+            WeightRenaming(source_patterns=r"\.wq_b\.", target_patterns=r"\.q_b_proj\."),
             WeightRenaming(source_patterns=r"\.wkv\.", target_patterns=r".kv_proj."),
             WeightRenaming(source_patterns=r"\.wgate\.", target_patterns=r".gate_proj."),
             WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
             WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
-            WeightRenaming(source_patterns=r"\.self_attn\.q_norm\.", target_patterns=r".self_attn.q_a_norm."),
-            WeightRenaming(
-                source_patterns=r"\.mlp\.gate\.bias$", target_patterns=r".mlp.gate.e_score_correction_bias"
-            ),
-            WeightRenaming(
-                source_patterns=r"\.mlp\.shared_experts\.w1\.",
-                target_patterns=r".mlp.shared_experts.gate_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"\.mlp\.shared_experts\.w2\.",
-                target_patterns=r".mlp.shared_experts.down_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"\.mlp\.shared_experts\.w3\.", target_patterns=r".mlp.shared_experts.up_proj."
-            ),
+            WeightRenaming(source_patterns=r"\.q_norm\.", target_patterns=r".q_a_norm."),
+            WeightRenaming(source_patterns=r"\.gate\.bias$", target_patterns=r".gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
             WeightConverter(
                 source_patterns=[
                     r"\.experts.*.w1.weight",
