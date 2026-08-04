@@ -447,7 +447,7 @@ class ZayaRouter(nn.Module):
 
         self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_router_classes, config.rms_norm_eps)
 
-        self.register_buffer("balancing_biases", torch.zeros(self.num_router_classes, dtype=torch.float32))
+        self.balancing_biases = nn.Buffer(torch.zeros(self.num_router_classes, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
 
     def forward(

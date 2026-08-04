@@ -355,7 +355,7 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
 class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)

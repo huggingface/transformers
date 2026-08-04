@@ -225,10 +225,10 @@ class XcodecEuclideanCodebook(nn.Module):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.quantize
     def quantize(self, hidden_states):

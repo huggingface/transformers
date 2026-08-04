@@ -370,9 +370,12 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             )
 
         elif generation_mode == "audio":
-            # model supports only bs=1, so we will never get several audio outputs
-            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
-            return [audio]
+            # Batched generation returns one waveform per sample, while a single sample comes back as a lone
+            # `(num_samples,)` tensor that return as a list
+            audio_outputs = generated_outputs[1]
+            if not isinstance(audio_outputs, (list, tuple)):
+                audio_outputs = [audio_outputs]
+            return [audio.reshape(-1).detach().cpu().numpy() for audio in audio_outputs]
 
         else:
             raise ValueError(
