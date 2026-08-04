@@ -560,6 +560,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rt_detr_resnet", "RTDetrResNetConfig"),
         ("rt_detr_v2", "RTDetrV2Config"),
         ("rwkv", "RwkvConfig"),
+        ("rwkv7", "Rwkv7Config"),
         ("sam", "SamConfig"),
         ("sam2", "Sam2Config"),
         ("sam2_hiera_det_model", "Sam2HieraDetConfig"),
