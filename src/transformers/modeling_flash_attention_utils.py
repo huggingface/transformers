@@ -766,7 +766,11 @@ def _flash_attention_forward(
     #
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
+    is_fa_with_position_ids = kwargs.get("is_packed_sequence")
+    if is_fa_with_position_ids is None:
+        is_fa_with_position_ids = _is_packed_sequence(
+            position_ids, batch_size=query_states.size(0), query_length=query_length
+        )
     is_fa_with_varlen_kwargs = all(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
