@@ -33,7 +33,7 @@ Autoformerモデルは、「[Autoformer: Decomposition Transformers with Auto-Co
 
 Autoformerの使用を開始するのに役立つ公式のHugging Faceおよびコミュニティ（🌎で示されている）の参考資料の一覧です。ここに参考資料を提出したい場合は、気兼ねなくPull Requestを開いてください。私たちはそれをレビューいたします！参考資料は、既存のものを複製するのではなく、何か新しいことを示すことが理想的です。
 
-- HuggingFaceブログでAutoformerに関するブログ記事をチェックしてください：[はい、Transformersは時系列予測に効果的です（+ Autoformer）](https://huggingface.co/blog/autoformer)
+- HuggingFaceブログでAutoformerに関するブログ記事を確認してください：[はい、Transformersは時系列予測に効果的です（+ Autoformer）](https://huggingface.co/blog/autoformer)
 
 ## AutoformerConfig
 
