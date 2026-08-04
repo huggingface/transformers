@@ -892,8 +892,16 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # 3. pipeline's default generation config values
                 # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
                 # and returns all kwargs that were not used to update the generation config
+                #
+                # The model's generation config should take precedence over the pipeline's default. We thus start
+                # with the model's config and fill in unset (`None`) values with the pipeline's default config,
+                # before passing the merged config to `_prepare_generation_config`.
+                base_generation_config = copy.deepcopy(self.model.generation_config)
+                base_generation_config.update(
+                    **default_pipeline_generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
+                )
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, **kwargs
+                    generation_config=base_generation_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default

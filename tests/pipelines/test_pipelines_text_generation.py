@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -66,6 +67,28 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 {"generated_token_ids": ANY(list)},
             ],
         )
+
+    @require_torch
+    def test_pipeline_respects_model_generation_config(self):
+        """Regression test for #47752: pipeline should respect `model.generation_config` values."""
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        model_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model.generation_config.max_new_tokens = 500
+        model.generation_config.do_sample = False
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        # The pipeline should respect the model's generation_config, not override it with the pipeline default (256)
+        self.assertEqual(
+            generator.generation_config.max_new_tokens,
+            500,
+            "Pipeline should respect model.generation_config.max_new_tokens=500, "
+            f"got {generator.generation_config.max_new_tokens}",
+        )
+        self.assertFalse(generator.generation_config.do_sample)
 
     @require_torch
     def test_small_chat_model_pt(self):
@@ -551,6 +574,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertIn(logger_msg, cl.out)
 
         # The user only sets one -> no warning
+        # Clear `max_length` from the generation config so it does not conflict with `max_new_tokens`
+        text_generator.generation_config.max_length = None
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_new_tokens=1)
         self.assertNotIn(logger_msg, cl.out)
@@ -599,6 +624,10 @@ class TextGenerationPipelineTests(unittest.TestCase):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
 
     @require_torch
+    @unittest.skipIf(
+        os.environ.get("HF_TOKEN") is None,
+        "Test requires a gated model (google/gemma-3-270m-it) and an HF token to access it.",
+    )
     def test_pipeline_skip_special_tokens(self):
         """Tests that we can use `skip_special_tokens=False` to get the special tokens in the output"""
         model_id = "google/gemma-3-270m-it"
