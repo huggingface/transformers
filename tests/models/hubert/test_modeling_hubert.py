@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Hubert model."""
 
+import copy
 import math
 import unittest
 
@@ -317,6 +318,57 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_positional_conv_batch_norm_ignores_padding(self):
+        config = self.model_tester.get_config()
+        config.conv_pos_batch_norm = True
+        config.hidden_dropout = 0.0
+        config.num_hidden_layers = 0
+
+        hidden_states = torch.randn(2, 8, config.hidden_size, device=torch_device)
+        attention_mask = torch.ones(2, 8, dtype=torch.bool, device=torch_device)
+        attention_mask[0, 5:] = False
+        hidden_states = hidden_states.masked_fill(~attention_mask.unsqueeze(-1), 0.0)
+
+        padded_hidden_states = torch.cat(
+            [hidden_states, torch.zeros(2, 3, config.hidden_size, device=torch_device)], dim=1
+        )
+        padded_attention_mask = torch.cat(
+            [attention_mask, torch.zeros(2, 3, dtype=torch.bool, device=torch_device)], dim=1
+        )
+
+        for do_stable_layer_norm in (False, True):
+            for training in (False, True):
+                with self.subTest(do_stable_layer_norm=do_stable_layer_norm, training=training):
+                    config.do_stable_layer_norm = do_stable_layer_norm
+                    encoder = HubertModel(config).encoder.to(torch_device)
+                    encoder.pos_conv_embed.batch_norm.bias.data.fill_(0.5)
+                    padded_encoder = copy.deepcopy(encoder)
+                    encoder.train(training)
+                    padded_encoder.train(training)
+
+                    with torch.no_grad():
+                        output = encoder(hidden_states.clone(), attention_mask=attention_mask).last_hidden_state
+                        padded_output = padded_encoder(
+                            padded_hidden_states.clone(), attention_mask=padded_attention_mask
+                        ).last_hidden_state[:, : hidden_states.shape[1]]
+
+                    self.assertTrue(
+                        torch.allclose(output[attention_mask], padded_output[attention_mask], atol=1e-5, rtol=1e-5)
+                    )
+                    if training:
+                        self.assertTrue(
+                            torch.allclose(
+                                encoder.pos_conv_embed.batch_norm.running_mean,
+                                padded_encoder.pos_conv_embed.batch_norm.running_mean,
+                            )
+                        )
+                        self.assertTrue(
+                            torch.allclose(
+                                encoder.pos_conv_embed.batch_norm.running_var,
+                                padded_encoder.pos_conv_embed.batch_norm.running_var,
+                            )
+                        )
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
