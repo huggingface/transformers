@@ -14,14 +14,12 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal
 
 
 if TYPE_CHECKING:
-    from torch.distributed.tensor import DTensor
-
     from .configuration_utils import DistributedConfig
 
 
@@ -35,7 +33,7 @@ def _is_torch_distributed_initialized() -> bool:
     return torch.distributed.is_initialized()
 
 
-def is_dtensor(obj: object) -> TypeGuard[DTensor]:
+def is_dtensor(obj) -> bool:
     if not is_torch_distributed_available():
         return False
     from torch.distributed.tensor import DTensor
