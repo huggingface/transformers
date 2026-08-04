@@ -187,7 +187,7 @@ import datasets
 device = Accelerator().device
 
 # KeyDataset is a utility that returns the item in the dict returned by the dataset
-dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
+dataset = load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
@@ -217,7 +217,7 @@ Pass the `return_timestamps="word"` parameter to [`Pipeline`] to return when eac
 from transformers import pipeline
 
 pipeline = pipeline(task="automatic-speech-recognition", model="openai/whisper-large-v3")
-pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamp="word")
+pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac", return_timestamps="word")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.',
  'chunks': [{'text': ' I', 'timestamp': (0.0, 1.1)},
   {'text': ' have', 'timestamp': (1.1, 1.44)},
@@ -300,7 +300,7 @@ from datasets import load_dataset
 
 device = Accelerator().device
 
-dataset = datasets.load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
+dataset = load_dataset("stanfordnlp/imdb", name="plain_text", split="unsupervised")
 pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)

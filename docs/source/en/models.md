@@ -123,6 +123,8 @@ Parameters load in parallel and peak memory only depends on model size. Use `max
 
 ```py
 import json
+import os
+import tempfile
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     model.save_pretrained(tmp_dir, max_shard_size="50GB")
