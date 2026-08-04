@@ -421,13 +421,13 @@ class MiniMaxVL01Config(LlavaNextConfig):
 
         if isinstance(self.text_config, dict):
             migrated_text_config = _migrate_legacy_text_config(self.text_config)
-            self.text_config = AutoConfig.for_model(
-                migrated_text_config.pop("model_type", "minimax"), **migrated_text_config
-            )
+            text_model_type = migrated_text_config.pop("model_type", "minimax_vl_01_text")
+            if text_model_type not in {"minimax", "minimax_vl_01_text"}:
+                raise TypeError("`text_config` must contain a MiniMax or MiniMax-VL-01 text model type.")
+            self.text_config = MiniMaxVL01TextConfig(**migrated_text_config)
         elif self.text_config is None:
             layernorm_factor = 3.5565588200778455
-            self.text_config = AutoConfig.for_model(
-                "minimax",
+            self.text_config = MiniMaxVL01TextConfig(
                 vocab_size=200064,
                 hidden_size=6144,
                 intermediate_size=9216,
@@ -456,8 +456,12 @@ class MiniMaxVL01Config(LlavaNextConfig):
                     "partial_rotary_factor": 0.5,
                 },
             )
-        if not isinstance(self.text_config, PreTrainedConfig) or self.text_config.model_type != "minimax":
-            raise TypeError("`text_config` must be a dictionary or a native MiniMax configuration instance.")
+        elif isinstance(self.text_config, PreTrainedConfig) and self.text_config.model_type == "minimax":
+            native_text_config = self.text_config.to_dict()
+            native_text_config.pop("model_type", None)
+            self.text_config = MiniMaxVL01TextConfig(**native_text_config)
+        if not isinstance(self.text_config, MiniMaxVL01TextConfig):
+            raise TypeError("`text_config` must be a dictionary or a native MiniMax-VL-01 text configuration.")
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 

@@ -22,7 +22,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageTextToText,
     CLIPVisionConfig,
-    MiniMaxConfig,
     MiniMaxVL01Config,
     MiniMaxVL01ForConditionalGeneration,
     MiniMaxVL01Model,
@@ -51,7 +50,7 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniMaxVL01Model
     config_class = MiniMaxVL01Config
     conditional_generation_class = MiniMaxVL01ForConditionalGeneration
-    text_config_class = MiniMaxConfig
+    text_config_class = MiniMaxVL01TextConfig
     vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from huggingface_hub.errors import StrictDataclassFieldValidationError
 
-from transformers import AutoConfig, CLIPVisionConfig, MiniMaxConfig, MiniMaxVL01Config
+from transformers import AutoConfig, CLIPVisionConfig, MiniMaxConfig, MiniMaxVL01Config, MiniMaxVL01TextConfig
 
 
 def get_legacy_text_config():
@@ -84,7 +84,7 @@ class MiniMaxVL01ConfigTest(unittest.TestCase):
             image_grid_pinpoints=[[8, 8]],
         )
 
-        self.assertIsInstance(config.text_config, MiniMaxConfig)
+        self.assertIsInstance(config.text_config, MiniMaxVL01TextConfig)
         self.assertIsInstance(config.vision_config, CLIPVisionConfig)
         self.assertEqual(config.text_config.layer_types, ["linear_attention", "full_attention"])
         self.assertEqual(config.text_config.full_attn_alpha_factor, 3.5)
@@ -136,7 +136,7 @@ class MiniMaxVL01ConfigTest(unittest.TestCase):
             config = AutoConfig.from_pretrained(tmpdirname, trust_remote_code=False)
 
         self.assertIsInstance(config, MiniMaxVL01Config)
-        self.assertEqual(config.text_config.model_type, "minimax")
+        self.assertEqual(config.text_config.model_type, "minimax_vl_01_text")
         self.assertEqual(config.text_config.layer_types, ["linear_attention", "full_attention"])
 
     def test_native_config_round_trip_uses_auto_config(self):
