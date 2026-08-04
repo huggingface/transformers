@@ -655,6 +655,18 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     first = decode_calls[0]
     merged = copy.copy(first)
 
+    # Concatenation assumes single-token decode steps. When `use_cache` is off the steps re-run the whole
+    # growing sequence (query length > 1) — each is already a valid multi-token forward, so take the last.
+    def query_length(call: dict) -> int | None:
+        for key in ("input_ids", "inputs_embeds"):
+            value = call.get(key)
+            if value is not None:
+                return value.shape[1]
+        return None
+
+    if any(query_length(call) != 1 for call in decode_calls):
+        return copy.copy(decode_calls[-1])
+
     def concat_along(key: str, dim: int) -> None:
         values = [call[key] for call in decode_calls if call.get(key) is not None]
         if len(values) == len(decode_calls):
@@ -673,16 +685,31 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     # kv]` (a static cache passes the mask in explicitly). For the 4D case each single-token step is one
     # causal query row against the fixed-size cache, so concatenating along the query axis rebuilds the
     # correct `N`-token causal mask; taking just the last step would freeze the query axis at 1 and the
-    # exported decode could never run more than one token.
+    # exported decode could never run more than one token. Hybrid-attention models pass a dict
+    # `{attention_type: 4D mask}` instead of a single tensor — merge each entry the same way.
     masks = [call.get("attention_mask") for call in decode_calls]
     if all(mask is not None for mask in masks):
-        last_mask = masks[-1]
-        if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
-            merged["attention_mask"] = torch.cat(masks, dim=2)
-        else:
-            merged["attention_mask"] = last_mask
+        merged["attention_mask"] = _merge_step_masks(masks)
 
     return merged
+
+
+def _merge_step_masks(masks: list[Any]) -> Any:
+    """Merge one attention mask per decode step into a single multi-token mask.
+
+    A 4D causal mask `[batch, heads, query, kv]` is concatenated along the query axis (each step is one
+    causal row against the fixed cache); a 2D padding mask keeps the last step (it already spans the most
+    positions). A dict `{attention_type: mask}` (hybrid-attention models) is merged entry by entry, and a
+    `None` mask (an attention type the model leaves unmasked) is preserved as `None`.
+    """
+    last_mask = masks[-1]
+    if last_mask is None:
+        return None
+    if isinstance(last_mask, dict):
+        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
+    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
+        return torch.cat(masks, dim=2)
+    return last_mask
 
 
 def decompose_prefill_decode(

@@ -801,8 +801,8 @@ class InklingAudioModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
-        self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):

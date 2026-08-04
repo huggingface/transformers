@@ -90,7 +90,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         del self.topk_method
         self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)

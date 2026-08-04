@@ -120,6 +120,39 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                 )
         super()._validate_preprocess_kwargs(size=size, **kwargs)
 
+    def patchify(
+        self,
+        videos: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = videos.view(
+            batch_size,
+            num_frames,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+        flatten_patches = patches.reshape(
+            batch_size,
+            num_frames * grid_h * grid_w,
+            channel,
+            patch_size,
+            patch_size,
+        )
+
+        return flatten_patches, num_frames, grid_h, grid_w
+
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
@@ -162,7 +195,7 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                     max_size_per_side=size.max_height,
                 )
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )
@@ -184,13 +217,14 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
-            batch_size, time, channels, height, width = stacked_videos.shape
-            grid_h, grid_w = height // patch_size, width // patch_size
-            patches = stacked_videos.reshape(batch_size, time, channels, grid_h, patch_size, grid_w, patch_size)
-            patches = patches.permute(0, 1, 3, 5, 2, 4, 6)
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                merge_size=merge_size,
+            )
 
-            processed_videos_grouped[shape] = patches.reshape(batch_size, -1, channels, patch_size, patch_size)
-            processed_grids[shape] = [[time, grid_h, grid_w]] * batch_size
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)

@@ -97,8 +97,6 @@ class Xcodec2DecoderOutput(ModelOutput):
 
 
 class Xcodec2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Xcodec2Config, device=None):
         super().__init__()
@@ -113,8 +111,8 @@ class Xcodec2RotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -481,7 +479,7 @@ class Xcodec2DownSample1d(nn.Module):
         self.pad_right = kernel_size // 2
         self.stride = ratio
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -507,7 +505,7 @@ class Xcodec2UpSample1d(nn.Module):
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
 
         filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -675,9 +673,9 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         super().__init__()
         self.quantization_levels = list(config.quantization_levels)
         levels, basis, codebook = self._compute_buffers()
-        self.register_buffer("levels", levels, persistent=False)
-        self.register_buffer("basis", basis, persistent=False)
-        self.register_buffer("codebook", codebook, persistent=False)
+        self.levels = nn.Buffer(levels, persistent=False)
+        self.basis = nn.Buffer(basis, persistent=False)
+        self.codebook = nn.Buffer(codebook, persistent=False)
 
     def _compute_buffers(self, device=None):
         """Compute the levels, basis, and codebook buffers for the FSQ quantizer."""
@@ -760,7 +758,7 @@ class Xcodec2ISTFTHead(nn.Module):
         self.hop_length = config.hop_length
         self.padding = (self.n_fft - self.hop_length) // 2
         window = torch.hann_window(config.n_fft)
-        self.register_buffer("window", window, persistent=False)
+        self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states).transpose(1, 2)
