@@ -23,6 +23,7 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -140,6 +141,12 @@ class TinyModelPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TinyModelDecoderLayer"]
     _supports_attention_backend = True
     _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=self.config.embedding_initializer_range)
 
 
 @auto_docstring

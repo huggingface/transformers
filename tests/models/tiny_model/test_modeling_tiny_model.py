@@ -22,6 +22,7 @@ from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelAttention,
     TinyModelDecoderLayer,
     TinyModelMLP,
+    TinyModelPreTrainedModel,
     eager_attention_forward,
 )
 
@@ -140,3 +141,21 @@ class TinyModelDecoderLayerTest(unittest.TestCase):
         expected = post_attention + layer.mlp(post_attention)
 
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+class TinyModelPreTrainedModelTest(unittest.TestCase):
+    def test_embedding_initialization_uses_checkpoint_scale(self):
+        config = TinyModelConfig(
+            vocab_size=1_000,
+            hidden_size=16,
+            intermediate_size=64,
+            num_attention_heads=4,
+            embedding_initializer_range=1e-4,
+        )
+        model = TinyModelPreTrainedModel(config)
+        embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+
+        torch.manual_seed(4)
+        model._init_weights(embedding)
+
+        self.assertAlmostEqual(embedding.weight.std().item(), config.embedding_initializer_range, delta=5e-6)
