@@ -781,8 +781,6 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
-            # TODO: remove raise to force torch path
-            raise
             module = importlib.import_module(package)
             implementation = resolve_internal_import(module, full_path)
         except Exception:
