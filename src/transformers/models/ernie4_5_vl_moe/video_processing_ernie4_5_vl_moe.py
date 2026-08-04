@@ -481,7 +481,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
                     max_pixels=size["longest_edge"],
                 )
                 stacked_videos = self.resize(
-                    image=stacked_videos,
+                    stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )

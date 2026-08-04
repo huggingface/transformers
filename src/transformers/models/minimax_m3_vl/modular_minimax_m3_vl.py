@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -59,6 +60,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
 )
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 
 
@@ -1203,6 +1205,30 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
 
+class MiniMaxM3VLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
+    pass
+
+
+class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
+    size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 451584}
+
+    def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        size = kwargs.pop("size", None)
+        size = self.size if size is None else size
+        # The default size saved in offcial ckpt isn't correct and wasn't used prev!
+        # Override with the correct, new default value in that case
+        if size == [672, 672]:
+            size = self.size
+        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
+            size["shortest_edge"] = min_pixels
+            size.pop("min_pixels", None)
+        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
+            size["longest_edge"] = max_pixels
+            size.pop("max_pixels", None)
+        TorchvisionBackend.__init__(size=size, **kwargs)
+
+
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "videos_kwargs": {"do_resize": False, "return_metadata": True},
@@ -1273,4 +1299,5 @@ __all__ = [
     "MiniMaxM3VLProcessor",
     "MiniMaxM3VLTextModel",
     "MiniMaxM3VLVisionModel",
+    "MiniMaxM3VLImageProcessor",
 ]
