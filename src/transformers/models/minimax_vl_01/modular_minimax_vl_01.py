@@ -121,6 +121,13 @@ class MiniMaxVL01TextCache(MiniMaxCache):
             elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
                 self.layers[layer_idx].batch_repeat_interleave(repeats)
 
+    def batch_select_indices(self, indices: torch.Tensor):
+        for layer_idx in range(len(self)):
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
+                self.layers[layer_idx].batch_select_indices(indices)
+
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
     pass

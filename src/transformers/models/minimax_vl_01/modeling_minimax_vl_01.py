@@ -97,9 +97,9 @@ class MiniMaxVL01TextCache(DynamicCache):
 
     def batch_select_indices(self, indices: torch.Tensor):
         for layer_idx in range(len(self)):
-            if self.linear_cache[layer_idx] != []:
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
-            else:
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
                 self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, max_length: int):
