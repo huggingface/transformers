@@ -421,7 +421,7 @@ class DeepseekV3Attention(nn.Module):
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
-            - k_rope: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
