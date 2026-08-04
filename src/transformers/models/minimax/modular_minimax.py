@@ -181,17 +181,22 @@ class MiniMaxCache(DynamicCache):
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        seq_length = super().get_seq_length(layer_idx)
-        if seq_length > 0 or layer_idx != 0:
-            return seq_length
+    def _get_attention_layer_idx(self, layer_idx: int) -> int:
+        if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
+            return layer_idx
 
         # The released MiniMax-VL-01 layout begins with recurrent layers. DynamicCache creates empty placeholder
         # layers before the first full-attention layer, so layer 0 cannot provide the global sequence length.
         for attention_layer_idx in range(1, super().__len__()):
-            if (seq_length := super().get_seq_length(attention_layer_idx)) > 0:
-                return seq_length
-        return 0
+            if super().get_seq_length(attention_layer_idx) > 0:
+                return attention_layer_idx
+        return layer_idx
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        return super().get_mask_sizes(query_length, self._get_attention_layer_idx(layer_idx))
 
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
