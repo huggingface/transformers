@@ -108,6 +108,9 @@ class MiniMaxVL01TextCache(MiniMaxCache):
                 return attention_layer_idx
         return layer_idx
 
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return DynamicCache.get_seq_length(self, self._get_attention_layer_idx(layer_idx))
+
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
     pass

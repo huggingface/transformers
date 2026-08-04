@@ -138,6 +138,15 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(cache._get_attention_layer_idx(0), 7)
         self.assertEqual(cache._get_attention_layer_idx(7), 7)
 
+    def test_text_cache_sequence_length_uses_full_attention_layer(self):
+        cache = MiniMaxVL01TextCache()
+        key_states = torch.zeros(2, 2, 5, 8)
+        cache.update(key_states, key_states, layer_idx=7)
+
+        self.assertEqual(cache.get_seq_length(), 5)
+        self.assertEqual(cache.get_seq_length(layer_idx=7), 5)
+        self.assertEqual(cache.get_seq_length(layer_idx=3), 0)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
