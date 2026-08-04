@@ -154,7 +154,11 @@ class DacVectorQuantize(nn.Module):
     def decode_latents(self, hidden_states):
         batch_size, hidden_dim, sequence_length = hidden_states.shape
         encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
-        codebook = self.codebook.weight  # codebook: (N x D)
+
+        # Call the codebook instead of accessing codebook.weight to avoid issues with offloading which
+        # is only handled through the forward pass.
+        # codebook: (N x D)
+        codebook = self.codebook(torch.arange(self.codebook.num_embeddings, device=hidden_states.device))
 
         # L2 normalize encodings and codebook (ViT-VQGAN)
         encodings = F.normalize(encodings)
