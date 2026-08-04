@@ -439,10 +439,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
         # save mask value here. Need fp32 and fp16 mask values
-        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3), persistent=False)
-        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5), persistent=False)
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.self_mask_value_float16 = nn.Buffer(torch.tensor(-1e3), persistent=False)
+        self.self_mask_value_float32 = nn.Buffer(torch.tensor(-1e5), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -1130,8 +1130,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.dropout = config.local_attention_probs_dropout_prob
 
         # save mask value here
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,

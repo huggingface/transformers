@@ -356,9 +356,9 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         super().__init__()
         self.quantization_levels = list(config.quantization_levels)
         levels, basis, codebook = self._compute_buffers()
-        self.register_buffer("levels", levels, persistent=False)
-        self.register_buffer("basis", basis, persistent=False)
-        self.register_buffer("codebook", codebook, persistent=False)
+        self.levels = nn.Buffer(levels, persistent=False)
+        self.basis = nn.Buffer(basis, persistent=False)
+        self.codebook = nn.Buffer(codebook, persistent=False)
 
     def _compute_buffers(self, device=None):
         """Compute the levels, basis, and codebook buffers for the FSQ quantizer."""
@@ -441,7 +441,7 @@ class Xcodec2ISTFTHead(nn.Module):
         self.hop_length = config.hop_length
         self.padding = (self.n_fft - self.hop_length) // 2
         window = torch.hann_window(config.n_fft)
-        self.register_buffer("window", window, persistent=False)
+        self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states).transpose(1, 2)

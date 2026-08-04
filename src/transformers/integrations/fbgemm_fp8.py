@@ -109,7 +109,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -170,7 +170,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
         # Register input scale upper bound
-        self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
     def forward(self, hidden_states):
         """

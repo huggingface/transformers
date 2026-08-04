@@ -23,11 +23,6 @@ from ..utils.import_utils import is_torch_greater_or_equal
 
 logger = logging.get_logger(__name__)
 
-# The version-check helper transitively calls `importlib.util.find_spec`, which dynamo refuses to
-# trace. `assume_constant_result` makes dynamo evaluate it once at trace time and inline the bool
-# (same treatment as in `integrations/moe.py`).
-is_torch_greater_or_equal = torch._dynamo.assume_constant_result(is_torch_greater_or_equal)
-
 
 def get_experts_scheme(quantization_config):
     """Resolve which config group quantizes the MoE experts. Mixed configs quantize
