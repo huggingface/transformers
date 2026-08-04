@@ -91,7 +91,7 @@ class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         super().__init__(config)
         self.use_expert_bias = config.use_expert_bias
         if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
+            self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape

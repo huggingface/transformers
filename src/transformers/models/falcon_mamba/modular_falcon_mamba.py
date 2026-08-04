@@ -104,7 +104,7 @@ class FalconMambaWeightlessRMSNorm(NanoChatRMSNorm):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__(eps)
         # Dummy weights that are not used (only for imitating on kernels path)
-        self.register_buffer("weight", torch.ones(hidden_size, requires_grad=False), persistent=False)
+        self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
 
 class FalconMambaMixer(MambaMixer):

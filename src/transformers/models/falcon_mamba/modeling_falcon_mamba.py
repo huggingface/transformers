@@ -44,7 +44,7 @@ class FalconMambaWeightlessRMSNorm(torch.nn.Module):
         super().__init__()
         self.eps = eps
         # Dummy weights that are not used (only for imitating on kernels path)
-        self.register_buffer("weight", torch.ones(hidden_size, requires_grad=False), persistent=False)
+        self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)

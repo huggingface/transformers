@@ -655,15 +655,15 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns=r"\.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -760,28 +760,20 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns=r"\.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
             WeightConverter(
-                source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
-                target_patterns="mlp.gate_up_proj.weight",
-                operations=[Concatenate(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.shared_experts.gate_proj.weight",
-                    "mlp.shared_experts.up_proj.weight",
-                ],
-                target_patterns="mlp.shared_experts.gate_up_proj.weight",
+                source_patterns=[r"\.gate_proj.weight", r"\.up_proj.weight"],
+                target_patterns=r"\.gate_up_proj.weight",
                 operations=[Concatenate(dim=0)],
             ),
         ],

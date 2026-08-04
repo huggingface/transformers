@@ -583,7 +583,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         self.layer_idx = layer_idx
         self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
     def forward(
         self,
