@@ -62,7 +62,7 @@ class DbrxModelTester(CausalLMModelTester):
 
         # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here.
         # `ffn_config.hidden_size` is not set here on purpose: it always mirrors the model's `hidden_size` and
-        # is propagated by `DbrxConfig`. `ffn_config.ffn_hidden_size` is the larger MoE intermediate size.
+        # is propagated by `DbrxConfig`.
         self.ffn_config = {
             "ffn_hidden_size": 2 * self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
