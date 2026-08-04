@@ -158,7 +158,7 @@ class RTDetrLoss(nn.Module):
         self.eos_coef = config.eos_coefficient
         empty_weight = torch.ones(config.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
         self.alpha = config.focal_loss_alpha
         self.gamma = config.focal_loss_gamma
 

@@ -57,8 +57,6 @@ logger = logging.get_logger(__name__)
 
 
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
         super().__init__()
@@ -72,7 +70,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
             raise ValueError(f"Ernie 4.5 VL requires the `default` rope type, but found {self.rope_type} instead.")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
@@ -846,14 +844,12 @@ class Ernie4_5_VLMoePatchEmbed(nn.Module):
 
 
 class Ernie4_5_VLMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)

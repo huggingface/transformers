@@ -218,7 +218,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -267,8 +267,6 @@ class KyutaiSpeechToTextLinear(nn.Module):
 
 
 class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: KyutaiSpeechToTextConfig, device=None):
         super().__init__()
@@ -283,8 +281,8 @@ class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
