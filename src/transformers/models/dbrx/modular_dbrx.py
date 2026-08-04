@@ -148,8 +148,8 @@ class DbrxExpertGLU(nn.Module):
     def forward(
         self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
     ) -> torch.Tensor:
-        gate_proj = x.matmul(expert_w1.t())
-        up_proj = x.matmul(expert_v1.t())
+        gate_proj = x.matmul(expert_w1.T)
+        up_proj = x.matmul(expert_v1.T)
         gate_proj = self.activation_fn(gate_proj)
         intermediate_states = gate_proj * up_proj
         down_proj = intermediate_states.matmul(expert_w2)
