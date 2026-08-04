@@ -801,8 +801,8 @@ class InklingAudioModelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_audio_tokens = nn.Embedding((config.num_codebooks * config.codebook_size), config.hidden_size)
-        self.register_buffer(
-            "audio_tokens_offsets", torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
         )
 
     def forward(self, input_ids):
@@ -959,8 +959,8 @@ class InklingVisionModel(InklingPreTrainedModel):
                 (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             output_dim = config.text_hidden_size if i == config.num_hidden_layers - 1 else end_scale[3]
-            hw_fold = end_scale[1] // start_scale[1]
-            t_fold = end_scale[0] // start_scale[0]
+            hw_fold = int(end_scale[1] // start_scale[1])
+            t_fold = int(end_scale[0] // start_scale[0])
             self.encoder_layers.append(
                 InklingVisionEncoderLayer(
                     input_dim=start_scale[3] * shuffle_mult,

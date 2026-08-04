@@ -343,15 +343,13 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: NemotronAsrStreamingEncoderConfig, device=None):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
         inv_freq = self.compute_default_relative_positional_parameters(config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
