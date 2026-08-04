@@ -1797,6 +1797,62 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
+    @pytest.mark.torch_compile_test
+    def test_static_cache_no_recompile_with_smaller_length(self):
+        """
+        Tests that 2 subsequent calls to `generate` does not recompile when using a smaller length, i.e. we recreate a cache
+        of the correct previous shape.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._can_compile_fullgraph:
+                self.skipTest("This model doesn't support compilation without graph breaks")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
+            model = model_class(config).to(torch_device)
+            set_model_for_less_flaky_test(model)
+            model.eval()
+
+            if "blip" in model.__class__.__name__.lower():
+                self.skipTest("Blip overwrite `generate` for some reason making it interact weirdly")
+
+            compile_config = CompileConfig()
+            compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+            generation_kwargs = {
+                "use_cache": True,
+                "do_sample": False,
+                "compile_config": compile_config,
+                "cache_implementation": "static",
+            }
+
+            # prevent cached compilation from being used in the test
+            torch.compiler.reset()
+
+            # Perform a first `generate` call to trigger compilation
+            _ = model.generate(**inputs_dict, **generation_kwargs, max_new_tokens=5)
+            # Sanity checks
+            self.assertTrue(hasattr(model, "_compiled_call"))
+
+            # Uses a context manager to catch recompilation logs. If there is any recompilation, this test fails.
+            # Try/Finally is used to ensure that the log options are reset even if an error is raised.
+            try:
+                torch._logging.set_logs(recompiles_verbose=True)
+                logger = logging.get_logger("torch._dynamo.guards")
+                with CaptureLogger(logger) as cl:
+                    # 2nd call to `generate` with a smaller total size -> should use size of previous cache and not recompile
+                    _ = model.generate(**inputs_dict, **generation_kwargs, max_new_tokens=2)
+                    self.assertTrue(hasattr(model, "_compiled_call"))
+            finally:
+                torch._logging.set_logs()
+
+            has_recompilation = "Recompiling" in cl.out or ("guard" in cl.out and "failure" in cl.out)
+            if has_recompilation:
+                raise RuntimeError(
+                    f"`torch.compile` recompiled part of the forward pass in {model.__class__.__name__}. "
+                    "See the test logs for more details."
+                )
+
+    @pytest.mark.generate
     def test_generate_methods_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
