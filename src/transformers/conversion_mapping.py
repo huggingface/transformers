@@ -497,7 +497,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"\.self_attn\.attn_sink$", target_patterns=r".self_attn.sinks"),
-            WeightRenaming( source_patterns=r"\.indexer\.compressor\.norm\.", target_patterns=r".compressor.indexer.kv_norm."),
+            WeightRenaming(
+                source_patterns=r"\.indexer\.compressor\.norm\.", target_patterns=r".compressor.indexer.kv_norm."
+            ),
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.self_attn\.indexer\.compressor\.ape$",
                 target_patterns=r"layers.\1.self_attn.compressor.indexer.position_bias",
@@ -529,7 +531,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
             WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
             WeightRenaming(source_patterns=r"\.self_attn\.q_norm\.", target_patterns=r".self_attn.q_a_norm."),
-            WeightRenaming(source_patterns=r"\.mlp\.gate\.bias$", target_patterns=r".mlp.gate.e_score_correction_bias"),
+            WeightRenaming(
+                source_patterns=r"\.mlp\.gate\.bias$", target_patterns=r".mlp.gate.e_score_correction_bias"
+            ),
             WeightRenaming(
                 source_patterns=r"\.mlp\.shared_experts\.w1\.",
                 target_patterns=r".mlp.shared_experts.gate_proj.",
@@ -538,7 +542,9 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"\.mlp\.shared_experts\.w2\.",
                 target_patterns=r".mlp.shared_experts.down_proj.",
             ),
-            WeightRenaming(source_patterns=r"\.mlp\.shared_experts\.w3\.", target_patterns=r".mlp.shared_experts.up_proj."),
+            WeightRenaming(
+                source_patterns=r"\.mlp\.shared_experts\.w3\.", target_patterns=r".mlp.shared_experts.up_proj."
+            ),
             WeightConverter(
                 source_patterns=[
                     r"\.experts.*.w1.weight",
