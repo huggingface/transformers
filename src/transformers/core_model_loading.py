@@ -1400,14 +1400,14 @@ def rename_source_key(
     weight_converters: list[WeightConverter],
     base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
+    reverse: bool = False,
 ) -> tuple[str, str | None]:
     """
     Rename a checkpoint key by first applying all `WeightRenaming`s, then at most one `WeightConverter`.
-
-    A renaming and a converter may act on the same key in that order: the renaming normalises the
-    key into the namespace the converter expects. The reverse holds on the save path (converter
-    first, then renaming). There is no need for a converter-then-rename order because converters
-    act only on specific leaf patterns; no subsequent renamings should ever target their output.
+    This means that the `WeightConverter` must specify the final name for the key, but some `WeightRenaming`s can act on other
+    parts of that key beforehand. If `reverse` is True, i.e. when reverting all the `WeightTransform`s, the opposite is performed
+    to be coherent and correctly respect the `scope_prefix` of all `WeightTransform`s: first try to match 1 `WeightConverter`, and only
+    then try to apply all `WeightRenaming`s.
 
     Args:
         source_key (`str`):
@@ -1420,23 +1420,35 @@ def rename_source_key(
             Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
         meta_state_dict (`dict`, *optional*):
             Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
+        reverse (`bool`, *optional*):
+            This specifies if we are reverting all the `WeightTransform`s (saving back original format).
 
     Returns:
         `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
         (or `None` if no converter matched).
     """
     renamed_key = source_key
-    # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
-    # are coherent)
-    for renaming in weight_renamings:
-        renamed_key, _ = renaming.rename_source_key(renamed_key)
+    converter_source_pattern = None
+    # 1. If `reverse` is False: apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure
+    # they are coherent).
+    # Else, first apply the `WeightConverter` if any
+    first_iterable = weight_renamings if not reverse else weight_converters
+    for transform in first_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is True
+        if reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
+            break
 
-    # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
-    # the first match, as we assume only 1 converter can match any source key)
-    source_pattern = None
-    for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
-        if source_pattern is not None:
+    # 2. If `reverse` is False: apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
+    # the first match, as we assume only 1 converter can match any source key).
+    # Else, apply all the `WeightRenaming`s
+    second_iterable = weight_converters if not reverse else weight_renamings
+    for transform in second_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is False
+        if not reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
             break
 
     # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
@@ -1449,7 +1461,7 @@ def rename_source_key(
         elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
             renamed_key = f"{base_model_prefix}.{renamed_key}"
 
-    return renamed_key, source_pattern
+    return renamed_key, converter_source_pattern
 
 
 def convert_and_load_state_dict_in_model(
@@ -1776,21 +1788,13 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
     renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
-
-    # Since we rename by first going through all renamings and only then through all converters, we need to potentially fix the
-    # scope_prefix of sub-levels transforms, if top-level renamings changed them - otherwise it won't match correctly
-    # Note that we do not need to change the scope_prefix of renamings themselves, since they are applied in reverse order (i.e. sub-levels first)
-    top_level_renamings = [renaming for renaming in renamings if renaming.scope_prefix is None]
-    for transform in converters:
-        if transform.scope_prefix is not None:
-            transform.scope_prefix = rename_source_key(transform.scope_prefix, top_level_renamings, [])[0]
-
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters)
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
         if source_pattern is not None:
             new_converter = deepcopy(pattern_to_converter[source_pattern])
             # each target key gets its own converter instance
