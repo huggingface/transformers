@@ -38,9 +38,11 @@ logger = logging.get_logger(__name__)
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
-# Max sonic-moe build-dependency versions: newer CuteDSL / TVM-FFI releases haven't been validated
-# against the kernel and may break its dispatch, so we refuse to load past them.
-SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
+# Minimum sonic-moe build-dependency versions. Below these the kernel does not load at all: older
+# CuteDSL lacks `cpasync.ReductionKind`, older TVM-FFI lacks the `map_dataclass_to_tuple` argument
+# CuteDSL passes at JIT time. No ceiling — every incompatibility seen so far has been a too-old
+# dependency, and a cap only disables the kernel silently whenever an upstream release lands.
+SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.6.0", "apache-tvm-ffi": "0.1.10"}
 
 
 @torch._dynamo.assume_constant_result
@@ -72,7 +74,7 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             f"capability {major}.x. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
-    for distribution, max_version in SONICMOE_DEPENDENCIES.items():
+    for distribution, min_version in SONICMOE_DEPENDENCIES.items():
         # These are distribution (`pip install`) names, not import names, so resolve the version directly
         # via `importlib.metadata`. `_is_package_available` looks packages up through `find_spec`, which
         # can't resolve a distribution whose import name differs (e.g. `nvidia-cutlass-dsl` imports as
@@ -83,10 +85,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             return maybe_import_error(
                 f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
             )
-        if version.parse(installed) > version.parse(max_version):
+        if version.parse(installed) < version.parse(min_version):
             return maybe_import_error(
-                f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
-                f"but {installed} is installed.",
+                f"sonic-moe requires `{distribution}` >= {min_version}, but {installed} is installed.",
                 raise_error=raise_error,
             )
     return True
