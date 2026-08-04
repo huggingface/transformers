@@ -284,7 +284,7 @@ class TinyModelForCausalLMTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not support `past_key_values`"):
             model(input_ids=input_ids, past_key_values=object())
 
-    def test_matches_original_model_equations(self):
+    def test_matches_source_equations_on_contiguous_inputs(self):
         torch.manual_seed(7)
         model = TinyModelForCausalLM(self.get_config()).eval()
         input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])

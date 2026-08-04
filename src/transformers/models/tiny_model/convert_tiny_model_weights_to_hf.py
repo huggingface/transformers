@@ -24,9 +24,11 @@ from .configuration_tiny_model import TinyModelConfig
 from .modeling_tiny_model import TinyModelForCausalLM
 
 
+_NUM_ATTENTION_HEADS = 16
+
+
 def _convert_state_dict(
     state_dict: Mapping[str, torch.Tensor],
-    num_attention_heads: int = 16,
     expected_num_hidden_layers: int | None = None,
 ) -> tuple[TinyModelConfig, dict[str, torch.Tensor]]:
     if not isinstance(state_dict, Mapping):
@@ -109,10 +111,9 @@ def _convert_state_dict(
         raise ValueError(
             f"Expected the intermediate size to equal 4 * hidden_size ({4 * hidden_size}), got {intermediate_size}."
         )
-    if num_attention_heads <= 0 or hidden_size % num_attention_heads != 0:
+    if hidden_size % _NUM_ATTENTION_HEADS != 0:
         raise ValueError(
-            f"The hidden size ({hidden_size}) must be divisible by a positive number of attention heads, "
-            f"got {num_attention_heads}."
+            f"The hidden size ({hidden_size}) must be divisible by TinyModel's {_NUM_ATTENTION_HEADS} attention heads."
         )
 
     expected_shapes = {
@@ -146,7 +147,7 @@ def _convert_state_dict(
         hidden_size=hidden_size,
         intermediate_size=intermediate_size,
         num_hidden_layers=num_hidden_layers,
-        num_attention_heads=num_attention_heads,
+        num_attention_heads=_NUM_ATTENTION_HEADS,
         max_position_embeddings=max_position_embeddings,
         hidden_act="relu",
         attention_bias=False,
@@ -194,7 +195,6 @@ def _convert_state_dict(
 def convert_tiny_model_checkpoint(
     checkpoint_path: str | Path,
     output_dir: str | Path,
-    num_attention_heads: int = 16,
     expected_num_hidden_layers: int | None = None,
 ) -> TinyModelForCausalLM:
     state_dict = torch.load(
@@ -205,7 +205,6 @@ def convert_tiny_model_checkpoint(
     )
     config, converted_state_dict = _convert_state_dict(
         state_dict,
-        num_attention_heads=num_attention_heads,
         expected_num_hidden_layers=expected_num_hidden_layers,
     )
 
@@ -249,12 +248,6 @@ def main(args: list[str] | None = None) -> None:
     parser.add_argument("--checkpoint_path", type=Path, required=True, help="Path to an original TinyModel .pt file.")
     parser.add_argument("--output_dir", type=Path, required=True, help="Directory for the converted checkpoint.")
     parser.add_argument(
-        "--num_attention_heads",
-        type=int,
-        default=16,
-        help="Number of attention heads; this value cannot be inferred from the checkpoint tensors.",
-    )
-    parser.add_argument(
         "--expected_num_hidden_layers",
         type=int,
         help="Optional expected layer count used to detect a truncated checkpoint.",
@@ -264,7 +257,6 @@ def main(args: list[str] | None = None) -> None:
     convert_tiny_model_checkpoint(
         checkpoint_path=parsed_args.checkpoint_path,
         output_dir=parsed_args.output_dir,
-        num_attention_heads=parsed_args.num_attention_heads,
         expected_num_hidden_layers=parsed_args.expected_num_hidden_layers,
     )
 

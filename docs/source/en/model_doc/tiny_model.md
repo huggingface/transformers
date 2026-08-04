@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-08-05.*
 
 # TinyModel
 
@@ -21,8 +22,16 @@ It uses learned absolute positions, bias-free query/key/value projections, a bia
 feed-forward layers, and two residual connections per decoder block. It does not use normalization, dropout, tied
 embeddings, or key/value caching.
 
-The [original checkpoints](https://huggingface.co/noanabeshima/tiny_model) are distributed as PyTorch `.pt` state
-dictionaries. Convert one to a standard Transformers checkpoint before loading it:
+The original checkpoints are distributed as PyTorch `.pt` state dictionaries. The converter supports all three files
+from the pinned [checkpoint revision](https://huggingface.co/noanabeshima/tiny_model/tree/502a1f2453f61260c937f7807a1270a167faba07):
+
+| Checkpoint | Layers | SHA-256 |
+|---|---:|---|
+| `tiny_model.pt` | 4 | `dec406b1ad94cb345b2606d7f8cffa7c1114fcb60850e949eb17274cec30a8c3` |
+| `tiny_model_2L_1E.pt` | 2 | `04e8df0cd677a7060558e5c9eb3aaa30dbfe84e4ecc92bf17ef0e405dcf33baf` |
+| `tiny_model_2L_3E.pt` | 2 | `26dfc06da85d0e5d4de51a2e90108f9d585a81677bf4bac0ac079e780fda31f4` |
+
+Convert one to a standard Transformers checkpoint before loading it:
 
 ```bash
 python -m transformers.models.tiny_model.convert_tiny_model_weights_to_hf \
@@ -49,7 +58,10 @@ with torch.no_grad():
 ```
 
 The original implementation returns log-probabilities. [`TinyModelForCausalLM`] follows the Transformers convention
-and returns raw logits; use `torch.nn.functional.log_softmax(logits, dim=-1)` when comparing the two implementations.
+and returns raw logits. For a numerical comparison, load the native model with `dtype=torch.float32` and
+`attn_implementation="sdpa"`, then apply `torch.nn.functional.log_softmax(logits, dim=-1)`. Exact source-equation
+parity applies to contiguous, unmasked token sequences with the default positions. The native `attention_mask` and
+explicit `position_ids` arguments are standard Transformers API extensions.
 
 > [!NOTE]
 > The original text pipeline applies custom normalization and two token-ID remapping tables after a TinyStories GPT-2

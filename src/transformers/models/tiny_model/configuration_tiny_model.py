@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="noanabeshima/tiny_model")
-@strict(accept_kwargs=True)
+@strict
 class TinyModelConfig(PreTrainedConfig):
     r"""
     attention_output_bias (`bool`, *optional*, defaults to `True`):

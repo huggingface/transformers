@@ -34,24 +34,24 @@ def make_original_state_dict(num_hidden_layers=2):
         return (torch.arange(numel, dtype=torch.float32).reshape(shape) + offset).to(torch.bfloat16)
 
     state_dict = {
-        "embed.weight": tensor((10_000, 8), 1),
-        "pos_embed": tensor((1, 8, 8), 2),
-        "lm_head.weight": tensor((10_000, 8), 3),
+        "embed.weight": tensor((10_000, 16), 1),
+        "pos_embed": tensor((1, 8, 16), 2),
+        "lm_head.weight": tensor((10_000, 16), 3),
         "lm_head.bias": tensor((10_000,), 4),
     }
     for layer_idx in range(num_hidden_layers):
         prefix = f"torso.{layer_idx}"
         state_dict.update(
             {
-                f"{prefix}.attn.Q.weight": tensor((8, 8), 10 + layer_idx),
-                f"{prefix}.attn.K.weight": tensor((8, 8), 20 + layer_idx),
-                f"{prefix}.attn.V.weight": tensor((8, 8), 30 + layer_idx),
-                f"{prefix}.attn.O.weight": tensor((8, 8), 40 + layer_idx),
-                f"{prefix}.attn.O.bias": tensor((8,), 50 + layer_idx),
-                f"{prefix}.mlp.read_in.weight": tensor((32, 8), 60 + layer_idx),
-                f"{prefix}.mlp.read_in.bias": tensor((32,), 70 + layer_idx),
-                f"{prefix}.mlp.write_out.weight": tensor((8, 32), 80 + layer_idx),
-                f"{prefix}.mlp.write_out.bias": tensor((8,), 90 + layer_idx),
+                f"{prefix}.attn.Q.weight": tensor((16, 16), 10 + layer_idx),
+                f"{prefix}.attn.K.weight": tensor((16, 16), 20 + layer_idx),
+                f"{prefix}.attn.V.weight": tensor((16, 16), 30 + layer_idx),
+                f"{prefix}.attn.O.weight": tensor((16, 16), 40 + layer_idx),
+                f"{prefix}.attn.O.bias": tensor((16,), 50 + layer_idx),
+                f"{prefix}.mlp.read_in.weight": tensor((64, 16), 60 + layer_idx),
+                f"{prefix}.mlp.read_in.bias": tensor((64,), 70 + layer_idx),
+                f"{prefix}.mlp.write_out.weight": tensor((16, 64), 80 + layer_idx),
+                f"{prefix}.mlp.write_out.bias": tensor((16,), 90 + layer_idx),
             }
         )
     return state_dict
@@ -63,21 +63,20 @@ class TinyModelStateDictConversionTest(unittest.TestCase):
             with self.subTest(num_hidden_layers=num_hidden_layers):
                 config, converted = _convert_state_dict(
                     make_original_state_dict(num_hidden_layers),
-                    num_attention_heads=2,
                     expected_num_hidden_layers=num_hidden_layers,
                 )
 
                 self.assertEqual(config.vocab_size, 10_000)
-                self.assertEqual(config.hidden_size, 8)
-                self.assertEqual(config.intermediate_size, 32)
+                self.assertEqual(config.hidden_size, 16)
+                self.assertEqual(config.intermediate_size, 64)
                 self.assertEqual(config.num_hidden_layers, num_hidden_layers)
-                self.assertEqual(config.num_attention_heads, 2)
+                self.assertEqual(config.num_attention_heads, 16)
                 self.assertEqual(config.max_position_embeddings, 8)
                 self.assertEqual(len(converted), 4 + 9 * num_hidden_layers)
 
     def test_maps_every_tensor_without_transposing(self):
         original = make_original_state_dict()
-        _, converted = _convert_state_dict(original, num_attention_heads=2)
+        _, converted = _convert_state_dict(original)
 
         torch.testing.assert_close(
             converted["model.embed_positions.weight"], original["pos_embed"].squeeze(0), rtol=0, atol=0
@@ -98,34 +97,59 @@ class TinyModelStateDictConversionTest(unittest.TestCase):
     def test_rejects_missing_and_unexpected_keys(self):
         original = make_original_state_dict()
         del original["torso.1.attn.O.bias"]
-        original["torso.0.layer_norm.weight"] = torch.zeros(8, dtype=torch.bfloat16)
+        original["torso.0.layer_norm.weight"] = torch.zeros(16, dtype=torch.bfloat16)
 
         with self.assertRaisesRegex(ValueError, "torso.1.attn.O.bias.*torso.0.layer_norm.weight"):
-            _convert_state_dict(original, num_attention_heads=2)
+            _convert_state_dict(original)
 
     def test_rejects_noncontiguous_layers(self):
         original = make_original_state_dict()
         original = {key.replace("torso.1.", "torso.2."): value for key, value in original.items()}
 
         with self.assertRaisesRegex(ValueError, "contiguous from zero"):
-            _convert_state_dict(original, num_attention_heads=2)
+            _convert_state_dict(original)
+
+    def test_rejects_expected_layer_count_mismatch(self):
+        with self.assertRaisesRegex(ValueError, "Expected 4 decoder layers.*contains 2"):
+            _convert_state_dict(make_original_state_dict(), expected_num_hidden_layers=4)
+
+    def test_rejects_non_string_keys_and_non_tensor_values(self):
+        original = make_original_state_dict()
+        original[0] = torch.zeros(1, dtype=torch.bfloat16)
+        with self.assertRaisesRegex(TypeError, "keys must be strings"):
+            _convert_state_dict(original)
+
+        original = make_original_state_dict()
+        original["metadata"] = "not a tensor"
+        with self.assertRaisesRegex(TypeError, "values must be tensors.*metadata"):
+            _convert_state_dict(original)
 
     def test_rejects_wrong_dtype_and_shape(self):
         original = make_original_state_dict()
         original["lm_head.bias"] = original["lm_head.bias"].float()
         with self.assertRaisesRegex(ValueError, "bfloat16.*lm_head.bias"):
-            _convert_state_dict(original, num_attention_heads=2)
+            _convert_state_dict(original)
 
         original = make_original_state_dict()
-        original["torso.0.attn.Q.weight"] = torch.zeros((8, 7), dtype=torch.bfloat16)
-        with self.assertRaisesRegex(ValueError, r"torso\.0\.attn\.Q\.weight.*\(8, 8\).*\(8, 7\)"):
-            _convert_state_dict(original, num_attention_heads=2)
+        original["torso.0.attn.Q.weight"] = torch.zeros((16, 15), dtype=torch.bfloat16)
+        with self.assertRaisesRegex(ValueError, r"torso\.0\.attn\.Q\.weight.*\(16, 16\).*\(16, 15\)"):
+            _convert_state_dict(original)
+
+        original = make_original_state_dict()
+        original["pos_embed"] = torch.zeros((2, 8, 16), dtype=torch.bfloat16)
+        with self.assertRaisesRegex(ValueError, r"pos_embed.*\(1, max_position_embeddings, 16\).*"):
+            _convert_state_dict(original)
+
+        original = make_original_state_dict()
+        original["torso.0.mlp.read_in.weight"] = torch.zeros((63, 16), dtype=torch.bfloat16)
+        with self.assertRaisesRegex(ValueError, r"intermediate size.*4 \* hidden_size"):
+            _convert_state_dict(original)
 
 
 class TinyModelCheckpointConversionTest(unittest.TestCase):
     def test_saves_and_reloads_exact_bfloat16_checkpoint(self):
         original = make_original_state_dict()
-        _, expected = _convert_state_dict(original, num_attention_heads=2)
+        _, expected = _convert_state_dict(original)
 
         with TemporaryDirectory() as temporary_directory:
             temporary_directory = Path(temporary_directory)
@@ -136,12 +160,18 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
             model = convert_tiny_model_checkpoint(
                 checkpoint_path,
                 output_dir,
-                num_attention_heads=2,
                 expected_num_hidden_layers=2,
             )
 
             self.assertTrue((output_dir / "config.json").is_file())
             self.assertTrue((output_dir / "model.safetensors").is_file())
+            self.assertEqual(model.config.num_attention_heads, 16)
+            self.assertEqual(model.config.dtype, torch.bfloat16)
+            self.assertFalse(model.config.attention_bias)
+            self.assertTrue(model.config.attention_output_bias)
+            self.assertTrue(model.config.mlp_bias)
+            self.assertTrue(model.config.lm_head_bias)
+            self.assertFalse(model.config.tie_word_embeddings)
             self.assertEqual(set(model.state_dict()), set(expected))
             for key, tensor in model.state_dict().items():
                 self.assertEqual(tensor.dtype, torch.bfloat16)
@@ -152,22 +182,23 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
     def test_released_checkpoints(self):
         revision = "502a1f2453f61260c937f7807a1270a167faba07"
         input_ids = torch.tensor([[9_996, 51, 56, 4, 36]])
+        # Computed directly from the pinned raw checkpoints with the source equations in FP32 SDPA.
         cases = [
             (
                 "tiny_model.pt",
                 4,
                 "dec406b1ad94cb345b2606d7f8cffa7c1114fcb60850e949eb17274cec30a8c3",
                 [
-                    13.619353294372559,
-                    27.03830909729004,
-                    14.778779983520508,
-                    15.210500717163086,
+                    13.61935043334961,
+                    27.038311004638672,
+                    14.778780937194824,
+                    15.210494995117188,
                     19.164371490478516,
-                    13.294825553894043,
+                    13.294827461242676,
                     15.938150405883789,
-                    9.050104141235352,
+                    9.0501070022583,
                     14.516134262084961,
-                    8.900968551635742,
+                    8.900970458984375,
                 ],
                 3.20711088180542,
             ),
@@ -176,36 +207,36 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                 2,
                 "04e8df0cd677a7060558e5c9eb3aaa30dbfe84e4ecc92bf17ef0e405dcf33baf",
                 [
-                    14.836339950561523,
-                    27.60630989074707,
-                    16.463863372802734,
-                    16.657115936279297,
-                    19.72796630859375,
+                    14.836343765258789,
+                    27.606307983398438,
+                    16.4638671875,
+                    16.65711784362793,
+                    19.727964401245117,
                     15.745035171508789,
-                    15.660703659057617,
+                    15.660707473754883,
                     8.073421478271484,
-                    15.538191795349121,
-                    12.202946662902832,
+                    15.538188934326172,
+                    12.202945709228516,
                 ],
-                3.2003674507141113,
+                3.2003679275512695,
             ),
             (
                 "tiny_model_2L_3E.pt",
                 2,
                 "26dfc06da85d0e5d4de51a2e90108f9d585a81677bf4bac0ac079e780fda31f4",
                 [
-                    25.153165817260742,
-                    39.7927131652832,
-                    28.825101852416992,
-                    27.843303680419922,
-                    31.723831176757812,
+                    25.153167724609375,
+                    39.79271697998047,
+                    28.825111389160156,
+                    27.843313217163086,
+                    31.72383689880371,
                     27.25177764892578,
                     27.752153396606445,
-                    19.260297775268555,
-                    27.339969635009766,
-                    23.366392135620117,
+                    19.26030158996582,
+                    27.339975357055664,
+                    23.36639404296875,
                 ],
-                15.778337478637695,
+                15.778340339660645,
             ),
         ]
 
@@ -231,8 +262,8 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                 model = TinyModelForCausalLM.from_pretrained(
                     output_dir,
                     dtype=torch.float32,
-                    attn_implementation="eager",
                 ).eval()
+                self.assertEqual(model.config._attn_implementation, "sdpa")
                 with torch.no_grad():
                     logits = model(input_ids).logits
                     generated_ids = model.generate(input_ids, max_new_tokens=3, do_sample=False)
@@ -243,7 +274,7 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                     rtol=1e-5,
                     atol=1e-5,
                 )
-                self.assertAlmostEqual(logits[0, -1].mean().item(), expected_mean, places=5)
+                torch.testing.assert_close(logits[0, -1].mean(), torch.tensor(expected_mean), rtol=1e-5, atol=1e-5)
                 self.assertEqual(generated_ids.tolist(), [[9_996, 51, 56, 4, 36, 1, 38, 6]])
 
     def test_cli_converts_local_checkpoint(self):
@@ -259,8 +290,6 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                     str(checkpoint_path),
                     "--output_dir",
                     str(output_dir),
-                    "--num_attention_heads",
-                    "2",
                     "--expected_num_hidden_layers",
                     "2",
                 ]
