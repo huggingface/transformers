@@ -40,7 +40,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname, use_kernels=False)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname)
+pipe = pipeline(task="fill-mask", model=mname, model_kwargs={"use_kernels": False})
 print("success")
         """
 
@@ -75,7 +75,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname, use_kernels=False)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname)
+pipe = pipeline(task="fill-mask", model=mname, model_kwargs={"use_kernels": False})
 print("success")
         """
 
@@ -143,7 +143,7 @@ from transformers import pipeline
         """
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
-pipe = pipeline(model=mname)
+pipe = pipeline(model=mname, model_kwargs={"use_kernels": False})
         """
 
         mock = """
