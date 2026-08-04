@@ -19,7 +19,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -98,7 +98,15 @@ class MiniMaxVL01TextConfig(MiniMaxConfig):
 
 
 class MiniMaxVL01TextCache(MiniMaxCache):
-    pass
+    def _get_attention_layer_idx(self, layer_idx: int) -> int:
+        if layer_idx != 0 or DynamicCache.get_seq_length(self, layer_idx) > 0:
+            return layer_idx
+
+        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, len(self.layers)):
+            if DynamicCache.get_seq_length(self, attention_layer_idx) > 0:
+                return attention_layer_idx
+        return layer_idx
 
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):

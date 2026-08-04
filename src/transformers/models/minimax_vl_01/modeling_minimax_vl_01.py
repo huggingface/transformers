@@ -76,9 +76,8 @@ class MiniMaxVL01TextCache(DynamicCache):
         if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
             return layer_idx
 
-        # The released MiniMaxVL01Text-VL-01 layout begins with recurrent layers. DynamicCache creates empty placeholder
-        # layers before the first full-attention layer, so layer 0 cannot provide the global sequence length.
-        for attention_layer_idx in range(1, super().__len__()):
+        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, len(self.layers)):
             if super().get_seq_length(attention_layer_idx) > 0:
                 return attention_layer_idx
         return layer_idx

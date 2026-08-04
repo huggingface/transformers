@@ -38,6 +38,7 @@ if is_torch_available():
     import torch
 
     from transformers.models.minimax.modeling_minimax import MiniMaxCache
+    from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import MiniMaxVL01TextCache
 
 
 class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
@@ -128,6 +129,14 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_text_cache_resolves_first_full_attention_layer(self):
+        cache = MiniMaxVL01TextCache()
+        key_states = torch.zeros(2, 2, 5, 8)
+        cache.update(key_states, key_states, layer_idx=7)
+
+        self.assertEqual(cache._get_attention_layer_idx(0), 7)
+        self.assertEqual(cache._get_attention_layer_idx(7), 7)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
