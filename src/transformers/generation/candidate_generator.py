@@ -1482,21 +1482,18 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
     def _update_past_and_masks(
         self,
         input_ids: torch.LongTensor,
-        remove_from_pkv: int = 0,
         num_added_tokens: int = 1,
-        n_last_matches: int = 0,
     ) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
-            # add `n_last_matches` on topp of what we have, this is our new length
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, new_cache_size + n_last_matches, self.assistant_model.config.is_encoder_decoder
-            )
+            # same as other drafters and extra `-1` for newly generated anchor token
+            self.assistant_kwargs["past_key_values"].crop(input_ids.shape[-1] - 2 - num_added_tokens)
             self.assistant_kwargs = _prepare_position_ids(
-                self.assistant_kwargs, new_cache_size + n_last_matches, self.assistant_model.config.is_encoder_decoder
+                self.assistant_kwargs, input_ids.shape[-1] - 1, self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, input_ids.shape[-1] - 1, self.assistant_model.config.is_encoder_decoder
             )
         return has_past_key_values
 
@@ -1525,8 +1522,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
-        # This is actually cache so we need the new matches only and cat it to cache
-        self._update_past_and_masks(input_ids, n_last_matches)
+        # This is actually cache so we need the new matches only after prefill and concatenate to cache
+        self._update_past_and_masks(input_ids, num_added_tokens=n_last_matches)
         tgt_length = (
             model_outputs.hidden_states[0].shape[1]
             if self.assistant_kwargs.get("past_key_values") is None
@@ -1548,6 +1545,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
+        # The slicing is there to strip off alreay cached values, keeping only the new unprocessed tokens
         self.assistant_kwargs["past_key_values"] = self.assistant_model.update_cache_with_target_states(
             target_hidden_states,
             position_ids=self.assistant_kwargs["position_ids"][:, -tgt_length:],
@@ -1558,7 +1556,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         with torch.no_grad():
             outputs = self.assistant_model(
                 inputs_embeds=mask_token_embedding,
-                # Must be block bidirectional mask prepared in model!
                 attention_mask=model_kwargs.get("attention_mask"),
                 use_cache=True,
                 past_key_values=self.assistant_kwargs["past_key_values"],

@@ -26,6 +26,7 @@ import torch
 
 from transformers import OnyxAssistantConfig, OnyxAssistantModel
 
+
 def build_config():
     return OnyxAssistantConfig(
         hidden_size=6656,

@@ -25,7 +25,6 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
-    PermuteForRope,
     PrefixChange,
     Transpose,
     VisionUnfuseAndPermuteForRope,
