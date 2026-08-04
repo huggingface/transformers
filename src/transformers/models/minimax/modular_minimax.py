@@ -192,9 +192,6 @@ class MiniMaxCache(DynamicCache):
                 return attention_layer_idx
         return layer_idx
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
-
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:

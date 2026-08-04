@@ -82,9 +82,6 @@ class MiniMaxVL01TextCache(DynamicCache):
                 return attention_layer_idx
         return layer_idx
 
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
-
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
             if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
@@ -101,6 +98,9 @@ class MiniMaxVL01TextCache(DynamicCache):
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxVL01TextCache doesnot support `crop` method")
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
 
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         return super().get_mask_sizes(query_length, self._get_attention_layer_idx(layer_idx))

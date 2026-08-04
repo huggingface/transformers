@@ -325,17 +325,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(recurrent_state, reference_cache)
         self.assertEqual(recurrent_state.dtype, torch.float32)
 
-    def test_hybrid_cache_sequence_length_uses_full_attention_layer(self):
-        cache = MiniMaxCache()
-        key_states = torch.randn(1, 2, 5, 4)
-        value_states = torch.randn(1, 2, 5, 4)
-
-        cache.update(key_states, value_states, layer_idx=7)
-
-        self.assertEqual(cache.get_seq_length(), 5)
-        self.assertEqual(cache.get_seq_length(layer_idx=7), 5)
-        self.assertEqual(cache.get_seq_length(layer_idx=3), 0)
-
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
