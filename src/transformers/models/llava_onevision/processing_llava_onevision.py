@@ -54,7 +54,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     ):
         r"""
         num_image_tokens (`int`, *optional*):
-            Number of image tokens for one imagethat will be returned by vision tower.
+            Number of image tokens for one image that will be returned by vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Should be same as in model's config
