@@ -841,7 +841,7 @@ class ModelFileMapper(ModuleMapper):
         Merging rule: if any function with the same name was redefined in the modular, use it and its dependencies
         instead of the original ones (this may mean to add new functions as well, if any redefined function uses a new one).
         """
-        # Add/overwrite all needed function nodes and dependencies, but save fn names from modular file before
+        # Add/overwrite all needed function nodes and dependencies
         self.functions.update(functions)
         self.object_dependency_mapping.update({obj: dep for obj, dep in object_mapping.items() if obj in functions})
         # Add them to global nodes

@@ -1075,7 +1075,7 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
 
         # expand temporal_patch_size as a broadcast (zero-copy)
         patches = np.broadcast_to(
-            patches[:, :, :, :, :, :, :, None],
+            patches[..., None],
             (*patches.shape, temporal_patch_size),
         )
 
