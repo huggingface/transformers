@@ -964,8 +964,8 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
         # directly register the cos and sin embeddings as we have a fixed feature shape
         inv_freq = self.create_inv_freq()
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
+        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
 
     @torch.no_grad()
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:

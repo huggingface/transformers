@@ -718,9 +718,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         self.input_scale = math.sqrt(self.embed_dim)
         self.dropout = nn.Dropout(p=module_config["positional_dropout_rate"])
         self.max_len = 5000
-        self.register_buffer(
-            "pos_enc", self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len)), persistent=False
-        )
+        self.pos_enc = nn.Buffer(self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
     def extend_pos_enc(self, x, pos_enc=None):
         """Reset the positional encodings."""
@@ -1395,8 +1393,8 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-        self.register_buffer("mean", torch.zeros(config.model_in_dim))
-        self.register_buffer("scale", torch.ones(config.model_in_dim))
+        self.mean = nn.Buffer(torch.zeros(config.model_in_dim))
+        self.scale = nn.Buffer(torch.ones(config.model_in_dim))
 
         # Initialize weights and apply final processing
         self.post_init()
