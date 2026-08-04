@@ -24,7 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
@@ -390,20 +390,20 @@ class LlavaOnevision1_5Model(LlavaModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
-            if n_image_tokens != image_features.shape[0]:
-                raise ValueError(
-                    f"Image features and image tokens do not match, tokens: {n_image_tokens}, "
-                    f"features: {image_features.shape[0]}"
-                )
+            torch_compilable_check(
+                n_image_tokens == image_features.shape[0],
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, "
+                f"features: {image_features.shape[0]}",
+            )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
-            if n_video_tokens != video_features.shape[0]:
-                raise ValueError(
-                    f"Video features and video tokens do not match, tokens: {n_video_tokens}, "
-                    f"features: {video_features.shape[0]}"
-                )
+            torch_compilable_check(
+                n_video_tokens == video_features.shape[0],
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, "
+                f"features: {video_features.shape[0]}",
+            )
         return special_image_mask, special_video_mask
 
     @can_return_tuple
