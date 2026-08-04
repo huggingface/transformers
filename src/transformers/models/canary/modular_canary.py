@@ -24,7 +24,6 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrDecoder,
-    CohereAsrDecoderLayer,
     CohereAsrForConditionalGeneration,
     CohereAsrModel,
     CohereAsrPreTrainedModel,
@@ -39,8 +38,7 @@ logger = logging.get_logger(__name__)
 class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
     """
     Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
-    NeMo's `FixedPositionalEncoding`, the table is built in the default dtype and indexed by `position_ids`. The
-    conversion script permutes the checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
+    NeMo's `FixedPositionalEncoding`, and it is indexed by `position_ids`.
     """
 
     def __init__(self, length: int, channels: int):
@@ -52,15 +50,10 @@ class CanaryPositionalEmbedding(SinusoidsPositionEmbedding):
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
         scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
         emb = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
-
         return emb.to(torch.get_default_dtype())
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return self.positional_embedding[position_ids]
-
-
-class CanaryDecoderLayer(CohereAsrDecoderLayer):
-    pass
 
 
 @auto_docstring
@@ -75,28 +68,16 @@ class CanaryPreTrainedModel(CohereAsrPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, CanaryPositionalEmbedding):
-            position_embeddings = module.compute_default_singular_positional_embedding()
-            init.copy_(module.positional_embedding, position_embeddings)
+            init.copy_(module.positional_embedding, module.compute_default_singular_positional_embedding())
 
 
 class CanaryDecoder(CohereAsrDecoder):
     config: CanaryDecoderConfig
 
     def __init__(self, config: CanaryDecoderConfig):
-        PreTrainedModel.__init__(self, config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([CanaryDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
-        self.norm = nn.LayerNorm(config.hidden_size)
-        self.gradient_checkpointing = False
+        super().__init__(config)
         self.pos_emb = CanaryPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
-        self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
         self.proj = nn.Identity()
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
 
 @auto_docstring(

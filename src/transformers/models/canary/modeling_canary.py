@@ -49,8 +49,7 @@ from .configuration_canary import CanaryConfig, CanaryDecoderConfig
 class CanaryPositionalEmbedding(nn.Module):
     """
     Identical to [`SinusoidsPositionEmbedding`] except that the timescales and the `1 / sqrt(channels)` scaling match
-    NeMo's `FixedPositionalEncoding`, the table is built in the default dtype and indexed by `position_ids`. The
-    conversion script permutes the checkpoint from NeMo's interleaved sin/cos layout to this concatenated layout.
+    NeMo's `FixedPositionalEncoding`, and it is indexed by `position_ids`.
     """
 
     def __init__(self, length: int, channels: int):
@@ -69,11 +68,31 @@ class CanaryPositionalEmbedding(nn.Module):
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
         scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
         emb = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1) / math.sqrt(self.channels)
-
         return emb.to(torch.get_default_dtype())
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return self.positional_embedding[position_ids]
+
+
+@auto_docstring
+class CanaryPreTrainedModel(PreTrainedModel):
+    config: CanaryConfig
+    base_model_prefix = "model"
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, CanaryPositionalEmbedding):
+            init.copy_(module.positional_embedding, module.compute_default_singular_positional_embedding())
 
 
 class CanaryDecoderMLP(nn.Module):
@@ -324,28 +343,6 @@ class CanaryDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
-
-
-@auto_docstring
-class CanaryPreTrainedModel(PreTrainedModel):
-    config: CanaryConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    input_modalities = "audio"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["ParakeetEncoderBlock", "CanaryDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, CanaryPositionalEmbedding):
-            position_embeddings = module.compute_default_singular_positional_embedding()
-            init.copy_(module.positional_embedding, position_embeddings)
 
 
 @auto_docstring
