@@ -107,6 +107,9 @@ class TinyModelMLP(nn.Module):
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
         self.activation_fn = ACT2FN[config.hidden_act]
 
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.fc2(self.activation_fn(self.fc1(hidden_states)))
+
 
 class TinyModelDecoderLayer(GradientCheckpointingLayer):
     pass

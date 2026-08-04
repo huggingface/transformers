@@ -105,3 +105,13 @@ class TinyModelMLPTest(unittest.TestCase):
         self.assertEqual(mlp.fc1.bias.shape, (64,))
         self.assertEqual(mlp.fc2.weight.shape, (16, 64))
         self.assertEqual(mlp.fc2.bias.shape, (16,))
+
+    def test_forward_is_relu_feed_forward(self):
+        torch.manual_seed(2)
+        mlp = TinyModelMLP(TinyModelConfig(hidden_size=16, intermediate_size=64, num_attention_heads=4))
+        hidden_states = torch.randn(2, 5, 16)
+
+        actual = mlp(hidden_states)
+        expected = mlp.fc2(torch.relu(mlp.fc1(hidden_states)))
+
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
