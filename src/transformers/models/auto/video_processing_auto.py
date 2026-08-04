@@ -57,6 +57,7 @@ else:
             ("cosmos3_omni", "Qwen3VLVideoProcessor"),
             ("exaone4_5", "Qwen2VLVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
+            ("llava_onevision1_5", "Qwen2VLVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),

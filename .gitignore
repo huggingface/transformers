@@ -183,3 +183,6 @@ test-results/
 # AI agent local setup artifacts
 /.agents/skills
 /.claude/skills
+
+# Local scratch/test artifacts for LLaVA-OneVision-1.5 port (not for PR)
+/work_ov_local/

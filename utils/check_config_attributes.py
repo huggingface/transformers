@@ -69,6 +69,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    "LlavaOnevision1_5VisionConfig": ["temporal_patch_size"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
