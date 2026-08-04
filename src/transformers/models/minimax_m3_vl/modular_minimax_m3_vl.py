@@ -258,11 +258,15 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
-        # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
-        effective_length = tokens_to_remove if tokens_to_remove > 0 else self.get_seq_length() - abs(tokens_to_remove)
-        if self.idx_keys is not None and self.idx_keys.shape[-2] > effective_length:
-            self.idx_keys = self.idx_keys[..., :effective_length, :]
         super().crop(tokens_to_remove)
+        if tokens_to_remove > 0:
+            current_length = self.idx_keys.shape[-2]
+            if tokens_to_remove >= current_length:
+                return
+            tokens_to_remove = current_length - tokens_to_remove
+        if tokens_to_remove == 0:
+            return
+        self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]
 
 
 class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
