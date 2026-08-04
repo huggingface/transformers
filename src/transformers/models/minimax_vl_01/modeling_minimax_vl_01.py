@@ -105,6 +105,9 @@ class MiniMaxVL01TextCache(DynamicCache):
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxVL01TextCache doesnot support `crop` method")
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        self.batch_select_indices(beam_idx)
+
 
 @use_kernel_forward_from_hub("RMSNorm")
 class MiniMaxVL01TextRMSNorm(nn.Module):

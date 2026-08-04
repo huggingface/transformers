@@ -128,6 +128,9 @@ class MiniMaxVL01TextCache(MiniMaxCache):
             elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
                 self.layers[layer_idx].batch_select_indices(indices)
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        self.batch_select_indices(beam_idx)
+
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
     pass
