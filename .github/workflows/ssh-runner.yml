@@ -71,6 +71,7 @@ jobs:
       image: ${{ github.event.inputs.docker_image }}
     steps:
       - name: Update clone
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         env:
           commit_sha: ${{ github.sha }}
@@ -78,6 +79,7 @@ jobs:
           git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
@@ -85,6 +87,7 @@ jobs:
           rm -rf reports
 
       - name: Show installed libraries and their versions
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: pip freeze
 
@@ -104,12 +107,14 @@ jobs:
           pip install psutil --break-system-packages
 
       - name: Download memory monitor script
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           apt-get update && apt-get install -y curl
           curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
 
       - name: Start memory monitor
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         continue-on-error: true  # Don't fail workflow if monitor has issues
         run: |
