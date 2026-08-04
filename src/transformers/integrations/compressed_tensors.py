@@ -16,7 +16,7 @@
 import torch
 from torch import nn
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..utils import logging
 from ..utils.import_utils import is_torch_greater_or_equal
 
@@ -129,7 +129,7 @@ class DecompressExperts(ConversionOps):
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
-            # `MergeModulelist` stacks the full list for MoE kernels compatipility, i.e. x2 memory
+            # `MergeModulelist` stacks the full list for MoE kernels compatibility, i.e. x2 memory
             output = None
             for i, (quant, scale) in enumerate(zip(quantized, scales)):
                 # Prefer the checkpoint's stored per-expert `weight_shape`
@@ -166,7 +166,7 @@ class DecompressExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> "ConversionOps":
-        return None  # FIXME
+        return _IdentityOp()
 
 
 _FP8_DTYPE = torch.float8_e4m3fn

@@ -515,7 +515,7 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         raw_activations = activations
-        inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
+        inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight differences
 
         hidden_states, _ = self.temporal_block(
             inputs_normalized,
