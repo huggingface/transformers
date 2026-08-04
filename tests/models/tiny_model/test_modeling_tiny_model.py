@@ -13,9 +13,12 @@
 # limitations under the License.
 import unittest
 
+import torch
 from huggingface_hub.errors import StrictDataclassClassValidationError
+from torch import nn
 
 from transformers.models.tiny_model import TinyModelConfig
+from transformers.models.tiny_model.modular_tiny_model import eager_attention_forward
 
 
 class TinyModelConfigTest(unittest.TestCase):
@@ -42,3 +45,20 @@ class TinyModelConfigTest(unittest.TestCase):
     def test_hidden_size_must_be_divisible_by_attention_heads(self):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "hidden size .* is not a multiple"):
             TinyModelConfig(hidden_size=15, num_attention_heads=4)
+
+
+class TinyModelAttentionFunctionTest(unittest.TestCase):
+    def test_matches_causal_scaled_dot_product_attention(self):
+        torch.manual_seed(0)
+        query = torch.randn(2, 4, 5, 8)
+        key = torch.randn(2, 4, 5, 8)
+        value = torch.randn(2, 4, 5, 8)
+        attention_mask = torch.full((1, 1, 5, 5), float("-inf")).triu(diagonal=1)
+
+        actual, weights = eager_attention_forward(
+            nn.Identity(), query, key, value, attention_mask, scaling=8**-0.5
+        )
+        expected = nn.functional.scaled_dot_product_attention(query, key, value, is_causal=True)
+
+        torch.testing.assert_close(actual, expected.transpose(1, 2), rtol=1e-5, atol=1e-6)
+        self.assertTrue(torch.equal(weights.triu(diagonal=1), torch.zeros_like(weights)))
