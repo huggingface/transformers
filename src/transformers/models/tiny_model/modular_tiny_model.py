@@ -193,7 +193,12 @@ class TinyModelPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class TinyModel(TinyModelPreTrainedModel):
-    pass
+    def __init__(self, config: TinyModelConfig):
+        super().__init__(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_positions = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.layers = nn.ModuleList([TinyModelDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
 
 
 @auto_docstring

@@ -17,7 +17,7 @@ import torch
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
-from transformers.models.tiny_model import TinyModelConfig, TinyModelForCausalLM
+from transformers.models.tiny_model import TinyModel, TinyModelConfig, TinyModelForCausalLM
 from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelAttention,
     TinyModelDecoderLayer,
@@ -159,6 +159,29 @@ class TinyModelPreTrainedModelTest(unittest.TestCase):
         model._init_weights(embedding)
 
         self.assertAlmostEqual(embedding.weight.std().item(), config.embedding_initializer_range, delta=5e-6)
+
+
+class TinyModelTest(unittest.TestCase):
+    def test_model_structure_matches_checkpoint_namespace(self):
+        config = TinyModelConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            max_position_embeddings=8,
+            bos_token_id=28,
+            eos_token_id=29,
+            pad_token_id=30,
+        )
+        model = TinyModel(config)
+
+        self.assertEqual(model.embed_tokens.weight.shape, (32, 16))
+        self.assertEqual(model.embed_positions.weight.shape, (8, 16))
+        self.assertIsNone(model.embed_tokens.padding_idx)
+        self.assertEqual(len(model.layers), 2)
+        self.assertIn("layers.0.self_attn.q_proj.weight", model.state_dict())
+        self.assertIn("layers.1.mlp.fc2.bias", model.state_dict())
 
 
 class TinyModelForCausalLMTest(unittest.TestCase):
