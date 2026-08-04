@@ -26,6 +26,7 @@ from transformers import (
     MiniMaxVL01Config,
     MiniMaxVL01ForConditionalGeneration,
     MiniMaxVL01Model,
+    MiniMaxVL01TextConfig,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, torch_device
@@ -38,7 +39,10 @@ if is_torch_available():
     import torch
 
     from transformers.models.minimax.modeling_minimax import MiniMaxCache
-    from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import MiniMaxVL01TextCache
+    from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import (
+        MiniMaxVL01TextCache,
+        MiniMaxVL01TextLightningAttention,
+    )
 
 
 class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
@@ -199,6 +203,38 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(cache.linear_cache[0], expected_recurrent)
         torch.testing.assert_close(cache.layers[1].keys, expected_full)
         torch.testing.assert_close(cache.layers[1].values, expected_full)
+
+    def test_text_lightning_attention_slope_handles_one_and_multiple_layers(self):
+        common_kwargs = {
+            "vocab_size": 97,
+            "hidden_size": 32,
+            "intermediate_size": 16,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "head_dim": 8,
+            "num_local_experts": 2,
+            "num_experts_per_tok": 2,
+            "block_size": 4,
+        }
+        one_layer_config = MiniMaxVL01TextConfig(
+            **common_kwargs, num_hidden_layers=1, layer_types=["linear_attention"]
+        )
+        one_layer_attention = MiniMaxVL01TextLightningAttention(one_layer_config, layer_idx=0)
+        one_layer_slope = one_layer_attention.get_slope_rate(device=torch_device)
+
+        base = 1 / (2 ** (8 / one_layer_config.num_attention_heads))
+        exponent = torch.arange(1, one_layer_config.num_attention_heads + 1, device=torch_device, dtype=torch.float32)
+        torch.testing.assert_close(one_layer_slope.flatten(), base**exponent * (1 + 1e-5))
+        self.assertEqual(one_layer_slope.dtype, torch.float32)
+        self.assertEqual(one_layer_slope.device.type, torch.device(torch_device).type)
+        self.assertTrue(torch.isfinite(one_layer_slope).all())
+
+        multi_layer_config = MiniMaxVL01TextConfig(
+            **common_kwargs, num_hidden_layers=4, layer_types=["linear_attention"] * 4
+        )
+        last_layer_attention = MiniMaxVL01TextLightningAttention(multi_layer_config, layer_idx=3)
+        last_layer_slope = last_layer_attention.get_slope_rate(device=torch_device)
+        torch.testing.assert_close(last_layer_slope.flatten(), base**exponent * 1e-5)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values

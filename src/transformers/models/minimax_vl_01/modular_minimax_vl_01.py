@@ -133,7 +133,14 @@ class MiniMaxVL01TextCache(MiniMaxCache):
 
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
-    pass
+    def get_slope_rate(self, device=None):
+        base = 1 / (2 ** (8 / self.num_attention_heads))
+        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
+        factor = 1 - self.layer_idx / max(self.num_hidden_layers - 1, 1) + 1e-5
+
+        rate = base**exponent
+        rate = rate * factor
+        return rate[:, None, None]
 
 
 class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
