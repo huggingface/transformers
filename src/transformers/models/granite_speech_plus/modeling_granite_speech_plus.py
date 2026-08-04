@@ -439,7 +439,7 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
         seq = torch.arange(config.context_size)
         relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
         attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
-        self.register_buffer("attention_dists", attention_dists, persistent=False)
+        self.attention_dists = nn.Buffer(attention_dists, persistent=False)
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechPlusConformerBlock(config) for _ in range(config.num_layers)])
 
