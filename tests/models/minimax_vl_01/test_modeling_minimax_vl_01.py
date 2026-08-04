@@ -26,6 +26,7 @@ from transformers import (
     MiniMaxVL01ForConditionalGeneration,
     MiniMaxVL01Model,
     MiniMaxVL01TextConfig,
+    MiniMaxVL01TextModel,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, torch_device
@@ -37,7 +38,6 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers.models.minimax.modeling_minimax import MiniMaxCache
     from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import (
         MiniMaxVL01TextCache,
         MiniMaxVL01TextLightningAttention,
@@ -134,6 +134,15 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_model_uses_local_text_backbone_and_cache(self):
+        config = self.model_tester.get_config()
+        model = MiniMaxVL01Model(config).to(torch_device).eval()
+
+        self.assertIsInstance(model.language_model, MiniMaxVL01TextModel)
+        with torch.no_grad():
+            outputs = model(input_ids=torch.tensor([[5, 6, 7]], device=torch_device), use_cache=True)
+        self.assertIsInstance(outputs.past_key_values, MiniMaxVL01TextCache)
 
     def test_text_cache_resolves_first_full_attention_layer(self):
         cache = MiniMaxVL01TextCache()
@@ -410,7 +419,7 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         text_config = config.get_text_config(decoder=True)
-        self.assertIsInstance(past_key_values, MiniMaxCache)
+        self.assertIsInstance(past_key_values, MiniMaxVL01TextCache)
         head_dim = text_config.head_dim or text_config.hidden_size // text_config.num_attention_heads
         full_attention_shape = (
             batch_size,
@@ -432,9 +441,9 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             else:
                 self.assertEqual(tuple(past_key_values.linear_cache[layer_idx].shape), recurrent_state_shape)
 
-    def _check_caches_are_equal(self, cache1: MiniMaxCache, cache2: MiniMaxCache):
-        self.assertIsInstance(cache1, MiniMaxCache)
-        self.assertIsInstance(cache2, MiniMaxCache)
+    def _check_caches_are_equal(self, cache1: MiniMaxVL01TextCache, cache2: MiniMaxVL01TextCache):
+        self.assertIsInstance(cache1, MiniMaxVL01TextCache)
+        self.assertIsInstance(cache2, MiniMaxVL01TextCache)
         self.assertEqual(len(cache1), len(cache2))
 
         for layer_idx in range(len(cache1)):
@@ -561,7 +570,7 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             decoded = model(input_ids=next_id, past_key_values=prefill.past_key_values, use_cache=True)
             full = model(input_ids=torch.cat((prompt_ids, next_id), dim=-1), use_cache=False)
 
-        self.assertIsInstance(prefill.past_key_values, MiniMaxCache)
+        self.assertIsInstance(prefill.past_key_values, MiniMaxVL01TextCache)
         torch.testing.assert_close(decoded.logits[:, -1], full.logits[:, -1], rtol=1e-4, atol=1e-4)
 
     def test_multimodal_greedy_generation_uses_cache(self):

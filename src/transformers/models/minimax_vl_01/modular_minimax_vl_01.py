@@ -819,6 +819,11 @@ class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
 class MiniMaxVL01Model(LlavaNextModel):
     config_class = MiniMaxVL01Config
 
+    def __init__(self, config: MiniMaxVL01Config):
+        super().__init__(config)
+        self.language_model = MiniMaxVL01TextModel(config.text_config)
+        self.post_init()
+
     @staticmethod
     def _flatten_pixel_values(pixel_values):
         if not isinstance(pixel_values, (list, tuple)):
