@@ -80,10 +80,12 @@ class HubertPositionalConvEmbedding(nn.Module):
         self.padding = HubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, attention_mask=None):
         hidden_states = hidden_states.transpose(1, 2)
         if self.batch_norm is not None:
             hidden_states = self.batch_norm(hidden_states)
+            if attention_mask is not None:
+                hidden_states = hidden_states * attention_mask.unsqueeze(1)
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -430,13 +432,14 @@ class HubertEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
+
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -575,13 +578,14 @@ class HubertEncoderStableLayerNorm(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
+
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
