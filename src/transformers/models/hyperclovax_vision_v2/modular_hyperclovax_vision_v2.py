@@ -13,6 +13,9 @@
 # limitations under the License.
 """PyTorch HyperCLOVAX Vision V2 model."""
 
+import json
+import re
+
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -29,6 +32,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
+from ..exaone4_5.processing_exaone4_5 import Exaone4_5_Processor
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model, VideoLlama3PreTrainedModel
 
 
@@ -307,9 +311,64 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(
         )
 
 
+@auto_docstring
+class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
+    video_duration_token = "<|video_duration|>"
+
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
+        self._pending_video_durations = []
+        self._pending_needs_placeholder = None
+
+    def apply_chat_template(self, conversation, **kwargs):
+        is_batched = isinstance(conversation[0], (list, tuple)) if conversation else False
+        conversations = conversation if is_batched else [conversation]
+        self._pending_needs_placeholder = [
+            "video_duration" not in block
+            for conv in conversations
+            for message in conv
+            for block in (message.get("content") or [])
+            if isinstance(block, dict) and block.get("type") == "video"
+        ]
+        result = super().apply_chat_template(conversation, **kwargs)
+        return result
+
+    def _process_videos(self, videos, **kwargs):
+        processed_videos, video_replacements = super()._process_videos(videos, **kwargs)
+        all_durations = [
+            round(float(m.duration if m.duration is not None else m.total_num_frames / (m.fps or 24)), 2)
+            for m in processed_videos.get("video_metadata", [])
+        ]
+        needs = self._pending_needs_placeholder
+        self._pending_video_durations = (
+            [d for d, n in zip(all_durations, needs) if n]
+            if needs is not None and len(needs) == len(all_durations)
+            else all_durations
+        )
+        self._pending_needs_placeholder = None
+        return processed_videos, video_replacements
+
+    def get_text_with_replacements(
+        self,
+        text,
+        images_replacements=None,
+        videos_replacements=None,
+        audio_replacements=None,
+    ):
+        durations = iter(self._pending_video_durations)
+        pattern = re.escape(self.video_duration_token)
+        text = [re.sub(pattern, lambda _: json.dumps(next(durations)), sample) for sample in text]
+        self._pending_video_durations = []
+        result = super().get_text_with_replacements(
+            text, images_replacements or [], videos_replacements or [], audio_replacements or []
+        )
+        return result
+
+
 __all__ = [
     "HyperCLOVAXVisionV2Config",
     "HyperCLOVAXVisionV2ForConditionalGeneration",
     "HyperCLOVAXVisionV2Model",
     "HyperCLOVAXVisionV2PreTrainedModel",
+    "HyperCLOVAXVisionV2Processor",
 ]
