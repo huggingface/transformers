@@ -93,7 +93,19 @@ def eager_attention_forward(
 
 
 class TinyModelAttention(nn.Module):
-    pass
+    def __init__(self, config: TinyModelConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_output_bias)
 
 
 class TinyModelMLP(nn.Module):
