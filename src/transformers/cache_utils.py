@@ -283,7 +283,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
-        Remove `tokens_to_remove` tokens from the current cache layer.
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `sliding_window - 1` if they reached the sliding window length. This means that `crop(0)` will not
+        necessarily always be a no-op, as it may still remove useless states (i.e. states that are not needed for the next `forward`).
         """
         # If we are beyond the sliding window, we need to be more careful
         if self.get_seq_length() >= self.sliding_window:
@@ -962,6 +964,11 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.record_past = True
 
     def crop(self, tokens_to_remove: int):
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the size of the cached states back to their
+        minimal working size, i.e. `conv_kernel_size`. This means that `crop(0)` will not necessarily always be a no-op, as it may
+        still remove useless states (i.e. states that are not needed for the next `forward`).
+        """
         if not self.record_past:
             raise RuntimeError(
                 "`crop` was called, but the current layer does not track past states. Call `activate_past_recording` before "
@@ -1593,7 +1600,12 @@ class Cache:
             self.layers[layer_idx].reorder_cache(beam_idx)
 
     def crop(self, tokens_to_remove: int) -> None:
-        """Crop the cache to the given length"""
+        """
+        Remove `tokens_to_remove` tokens from the current Cache. For layers that do not need to keep all the past states in memory,
+        such as sliding window layers or linear attention layers, this will also restrict the size of the cached states back to their
+        minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
+        (i.e. states that are not needed for the next `forward`) from the Cache.
+        """
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].crop(tokens_to_remove)
 
