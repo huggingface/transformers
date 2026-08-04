@@ -10,30 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test_1gpu:
-    name: Test hfc-amd-mi300-1gpu
-    runs-on:
-      group: hfc-amd-mi300-1gpu
-    container:
-      image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host
-    steps:
-      - name: Hello World
-        run: echo "hello world!"
-
-      - name: ROCM-SMI
-        run: rocm-smi
-
-  test_2gpu:
-    name: Test hfc-amd-mi300-2gpu
-    runs-on:
-      group: hfc-amd-mi300-2gpu
-    container:
-      image: huggingface/transformers-pytorch-amd-gpu
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host
-    steps:
-      - name: Hello World
-        run: echo "hello world!"
-
-      - name: ROCM-SMI
-        run: rocm-smi
+  test_runners:
+    name: Test MI300 Runner Groups
+    uses: huggingface/hf-workflows/.github/workflows/test_amd_mi300_runners.yaml@test/amd-mi300-runners
+    secrets: inherit
