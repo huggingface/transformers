@@ -533,14 +533,14 @@ def _prepare_from_posids(query, key, value, position_ids):
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 
-def _is_packed_sequence(position_ids, batch_size):
+def _is_packed_sequence(position_ids, batch_size, query_length=None):
     """
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
-    if position_ids is None:
+    if position_ids is None or query_length == 1:
         return False
 
     increasing_position_sequences = (
