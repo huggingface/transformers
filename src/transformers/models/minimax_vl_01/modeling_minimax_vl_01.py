@@ -1278,4 +1278,5 @@ __all__ = [
     "MiniMaxVL01Model",
     "MiniMaxVL01ForConditionalGeneration",
     "MiniMaxVL01TextModel",
+    "MiniMaxVL01TextPreTrainedModel",
 ]

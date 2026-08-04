@@ -57,7 +57,7 @@ from ..llava_next.modeling_llava_next import (
 )
 from ..llava_next.processing_llava_next import LlavaNextProcessor
 from ..minimax.configuration_minimax import MiniMaxConfig
-from ..minimax.modeling_minimax import MiniMaxCache, MiniMaxLightningAttention, MiniMaxModel
+from ..minimax.modeling_minimax import MiniMaxCache, MiniMaxLightningAttention, MiniMaxModel, MiniMaxPreTrainedModel
 
 
 MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
@@ -266,6 +266,10 @@ class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
 
 
 class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
+    pass
+
+
+class MiniMaxVL01TextPreTrainedModel(MiniMaxPreTrainedModel):
     pass
 
 
@@ -1095,4 +1099,5 @@ __all__ = [
     "MiniMaxVL01ForConditionalGeneration",
     "MiniMaxVL01TextConfig",
     "MiniMaxVL01TextModel",
+    "MiniMaxVL01TextPreTrainedModel",
 ]
