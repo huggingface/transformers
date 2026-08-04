@@ -18,23 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_molmo2 import (
-        Molmo2AdapterConfig,
-        Molmo2Config,
-        Molmo2TextConfig,
-        Molmo2VisionConfig,
-    )
-    from .image_processing_molmo2 import Molmo2ImageProcessor
-    from .modeling_molmo2 import (
-        Molmo2Adapter,
-        Molmo2ForConditionalGeneration,
-        Molmo2Model,
-        Molmo2PreTrainedModel,
-        Molmo2TextModel,
-        Molmo2VisionModel,
-    )
-    from .processing_molmo2 import Molmo2Processor
-    from .video_processing_molmo2 import Molmo2VideoProcessor
+    from .configuration_molmo2 import *
+    from .image_processing_molmo2 import *
+    from .modeling_molmo2 import *
+    from .processing_molmo2 import *
+    from .video_processing_molmo2 import *
 else:
     import sys
 
