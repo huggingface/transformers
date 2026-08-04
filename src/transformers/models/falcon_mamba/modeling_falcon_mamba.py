@@ -35,7 +35,12 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
-from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_tracing
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torch_greater_or_equal,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
+)
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -240,7 +245,12 @@ def mamba_selective_scan(
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
         ssm_state = all_states[:, -1]
 
-    elif use_associative_scan and associative_scan is not None and is_tracing(hidden_states):
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+    ):
 
         def combine_fn(left, right):
             a_left, b_left = left

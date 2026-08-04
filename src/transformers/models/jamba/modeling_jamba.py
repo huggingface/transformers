@@ -46,7 +46,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import is_mambapy_available, is_torch_greater_or_equal, is_tracing
+from ...utils.import_utils import (
+    is_mambapy_available,
+    is_torch_greater_or_equal,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_jamba import JambaConfig
 
@@ -381,7 +386,12 @@ def mamba_selective_scan(
         scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
         ssm_state = all_states[:, -1]
 
-    elif use_associative_scan and associative_scan is not None and is_tracing(hidden_states):
+    elif (
+        use_associative_scan
+        and associative_scan is not None
+        # There is no onnx translation for this op so we rely on the normal sequential path then
+        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
+    ):
 
         def combine_fn(left, right):
             a_left, b_left = left
