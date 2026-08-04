@@ -761,9 +761,9 @@ observer statistics. Omit it and the exporter falls back to a single pass over t
 inputs, with a warning (one sample can skew the observed ranges).
 
 For generative models, give the dataset to [`~HfExporter.export_for_generation`] instead of the
-exporter directly. It captures each component's real activations during a short `generate` run and
-calibrates `prefill` / `decode` / the encoders on their own inputs — you pass one generate-style
-dataset and it is fanned out per component automatically.
+exporter directly. You pass one generate-style dataset; it runs through a short `generate` to capture
+each component's real inputs, and `prefill` / `decode` / the encoders are each calibrated on their own
+captured activations.
 
 ### A different recipe per component
 

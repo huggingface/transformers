@@ -28,8 +28,8 @@ returned/lowered — no hardcoded schemes. The tests cover:
   skip with a reason.
 - **`test_vlm_per_component_quantization`** — a VLM quantized component-by-component, each with its OWN
   recipe (vision encoder static int8, decoder dynamic int8, `lm_head` fp32) via a per-component config dict.
-- **calibration** — the generate-level `calibration_dataset` fanned out per component, and the
-  single-sample fallback (with a warning) when it's omitted.
+- **calibration** — the generate-level `calibration_dataset` captured into a separate set per component,
+  and the single-sample fallback (with a warning) when it's omitted.
 
 Quantization runs on the decomposed generation components (whose attention mask is a precomputed input),
 avoiding the in-graph mask construction that trips PT2E on a full-model forward.
@@ -44,6 +44,7 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
+from tests.exporters.export_utils import run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters.utils import capture_calibration_inputs, decompose_for_generation
 from transformers.testing_utils import (
@@ -76,6 +77,21 @@ def _qnn_available() -> bool:
             return True
         except Exception:
             return False
+
+
+def _has_quantize_ops(exported) -> bool:
+    """The exported FX graph carries PT2E quantize/dequantize nodes."""
+    return any(n.op == "call_function" and "quantize" in str(n.target) for n in exported.graph.nodes)
+
+
+def _has_dynamic_quant_ops(exported) -> bool:
+    """Activations are quantized dynamically (runtime `choose_qparams`), not with static calibrated scales."""
+    return any(n.op == "call_function" and "choose_qparams" in str(n.target) for n in exported.graph.nodes)
+
+
+def _has_onnx_quantize_ops(program) -> bool:
+    """The exported ONNX graph carries QDQ (`QuantizeLinear`) nodes."""
+    return any(node.op_type == "QuantizeLinear" for node in program.model_proto.graph.node)
 
 
 @slow
@@ -178,44 +194,49 @@ class QuantizationExportTest(unittest.TestCase):
             model, inputs, generation_config=self._generation_config(), multi_token_decode=True
         )["decode"]
 
-    def _x86_quantizer(self, dynamic=False):
-        """torchao-native quantizer (no ExecuTorch dependency): static per-channel int8, or — with
-        `dynamic=True` — dynamic int8 (runtime-quantized activations, int8 weights), the lighter recipe
-        typical for decoders (a true weight-only PT2E quantizer isn't available in torchao/executorch)."""
-        from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
-            X86InductorQuantizer,
-            get_default_x86_inductor_quantization_config,
-        )
+    def _quantizer(self, name, dynamic=False):
+        """Build the PT2E quantizer named `name`:
 
-        return X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=dynamic))
+        - `x86`: torchao-native (no ExecuTorch dependency), static per-channel int8 — or, with
+          `dynamic=True`, dynamic int8 (runtime-quantized activations + int8 weights), the lighter recipe
+          typical for decoders (a true weight-only PT2E quantizer isn't available in torchao/executorch).
+        - `xnnpack`: per-tensor quantizer for the XNNPACK ExecuTorch backend.
+        - `qnn`: vendor Qualcomm HTP quantizer (only lowers via the QNN ExecuTorch backend).
 
-    def _xnnpack_quantizer(self):
-        """Per-tensor quantizer for the XNNPACK ExecuTorch backend."""
-        from executorch.backends.xnnpack.quantizer.xnnpack_quantizer import (
-            XNNPACKQuantizer,
-            get_symmetric_quantization_config,
-        )
+        `dynamic` applies to `x86` only; `xnnpack`/`qnn` are static per-tensor.
+        """
+        if name == "x86":
+            from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
+                X86InductorQuantizer,
+                get_default_x86_inductor_quantization_config,
+            )
 
-        return XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
+            return X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=dynamic))
+        if name == "xnnpack":
+            from executorch.backends.xnnpack.quantizer.xnnpack_quantizer import (
+                XNNPACKQuantizer,
+                get_symmetric_quantization_config,
+            )
 
-    def _qnn_quantizer(self):
-        """Vendor Qualcomm HTP quantizer (only lowers via the QNN ExecuTorch backend)."""
-        from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
+            return XNNPACKQuantizer().set_global(get_symmetric_quantization_config())
+        if name == "qnn":
+            from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
 
-        return QnnQuantizer()
+            return QnnQuantizer()
+        raise ValueError(f"unknown quantizer {name}")
 
-    def _quantizer(self, name):
-        return {"x86": self._x86_quantizer, "xnnpack": self._xnnpack_quantizer, "qnn": self._qnn_quantizer}[name]()
+    def _quantization_target(self, family):
+        """The `(model, inputs)` to quantize for `family`, picked so the traced forward builds no attention
+        mask in-graph — PT2E's `make_fx` retrace trips on in-graph mask construction:
 
-    def _family_unit(self, family):
-        """A single quantizable `(model, inputs)` unit per family — the module carrying that family's
-        distinct ops: dense/MoE `decode` component, SSM full forward."""
+        - dense / MoE: the multi-token `decode` component, whose attention mask is a precomputed input;
+        - SSM: the plain forward — a state-space model has no attention mask to build.
+        """
         if family == "dense":
             return self._decode_component(self._tiny_model())
         if family == "moe":
             return self._decode_component(self._moe_model())
         if family == "ssm":
-            # no static KV cache → quantize the full forward (no in-graph attention mask to trip PT2E)
             return self._ssm_model(), {"input_ids": torch.randint(0, 64, (1, 8))}
         raise ValueError(f"unknown family {family}")
 
@@ -230,18 +251,18 @@ class QuantizationExportTest(unittest.TestCase):
         decode_model, decode_inputs = self._decode_component()
         with patch.object(exporter_dynamo.logger, "warning_once") as warning_once:
             exported = DynamoExporter().export(
-                decode_model, copy.deepcopy(decode_inputs), DynamoConfig(dynamic=True, quantizer=self._x86_quantizer())
+                decode_model,
+                copy.deepcopy(decode_inputs),
+                DynamoConfig(dynamic=True, quantizer=self._quantizer("x86")),
             )
         warning_once.assert_called()
-        self.assertTrue(
-            any(node.op == "call_function" and "quantize" in str(node.target) for node in exported.graph.nodes)
-        )
+        self.assertTrue(_has_quantize_ops(exported))
 
     @pytest.mark.torch_export_test
-    def test_calibration_dataset_fans_out_per_component(self):
-        """A single generate-level `calibration_dataset` is captured into a per-component set (one entry
-        per generation component, each the same length as the input dataset) so every decomposed component
-        calibrates on realistic activations rather than the sample inputs."""
+    def test_calibration_dataset_captured_per_component(self):
+        """One generate-level `calibration_dataset` becomes a separate calibration set for each generation
+        component: running it through `generate` captures every component's real inputs, giving one set per
+        component (each the same length as the input dataset) so each calibrates on its own activations."""
         model = self._tiny_model()
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -262,13 +283,13 @@ class QuantizationExportTest(unittest.TestCase):
         that family's distinct ops (dense/MoE `decode` component, SSM full forward). Static export."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
-        model, inputs = self._family_unit(family)
+        model, inputs = self._quantization_target(family)
         exported = DynamoExporter().export(
             model,
             copy.deepcopy(inputs),
-            DynamoConfig(dynamic=False, quantizer=self._x86_quantizer(), calibration_dataset=[copy.deepcopy(inputs)]),
+            DynamoConfig(dynamic=False, quantizer=self._quantizer("x86"), calibration_dataset=[copy.deepcopy(inputs)]),
         )
-        self.assertTrue(any(n.op == "call_function" and "quantize" in str(n.target) for n in exported.graph.nodes))
+        self.assertTrue(_has_quantize_ops(exported))
 
     @pytest.mark.torch_export_test
     def test_vlm_per_component_quantization(self):
@@ -287,24 +308,18 @@ class QuantizationExportTest(unittest.TestCase):
             "decode": True,
         }
         config = {
-            name: DynamoConfig(dynamic=True, quantizer=self._x86_quantizer(dynamic=dyn))
+            name: DynamoConfig(dynamic=True, quantizer=self._quantizer("x86", dynamic=dyn))
             for name, dyn in recipes.items()
         }
         config["lm_head"] = DynamoConfig(dynamic=True)  # per-component choice: keep the output head in fp32
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        def is_quantized(exported):
-            return any(n.op == "call_function" and "quantize" in str(n.target) for n in exported.graph.nodes)
-
-        def is_dynamic(exported):
-            return any(n.op == "call_function" and "choose_qparams" in str(n.target) for n in exported.graph.nodes)
-
         for name in recipes:
-            self.assertTrue(is_quantized(components[name]), f"{name} should be quantized")
-        self.assertFalse(is_quantized(components["lm_head"]), "lm_head should stay fp32")
+            self.assertTrue(_has_quantize_ops(components[name]), f"{name} should be quantized")
+        self.assertFalse(_has_quantize_ops(components["lm_head"]), "lm_head should stay fp32")
         # the recipes really differ: the decoder side is dynamically quantized, the vision side is static
-        self.assertTrue(is_dynamic(components["decode"]), "decode should be dynamically quantized")
-        self.assertFalse(is_dynamic(components["image_encoder"]), "image_encoder should be static int8")
+        self.assertTrue(_has_dynamic_quant_ops(components["decode"]), "decode should be dynamically quantized")
+        self.assertFalse(_has_dynamic_quant_ops(components["image_encoder"]), "image_encoder should be static int8")
 
     # ──────────────────────────────── ONNX ──────────────────────────────────
 
@@ -312,33 +327,31 @@ class QuantizationExportTest(unittest.TestCase):
     @pytest.mark.onnx_export_test
     def test_quantized_onnx(self, family):
         """The same x86-quantizer recipe, lowered to ONNX: every family produces a QDQ graph
-        (QuantizeLinear nodes) that ONNX Runtime can load. Static export throughout."""
+        (QuantizeLinear nodes) that runs in ONNX Runtime. Static export throughout."""
         from transformers.utils import is_onnxruntime_available, is_onnxscript_available
 
         if not (is_onnxruntime_available() and is_onnxscript_available()):
             self.skipTest("requires onnxruntime + onnxscript")
 
-        from collections import Counter
-
-        import onnxruntime as ort
-
         from transformers.exporters import OnnxConfig, OnnxExporter
 
-        model, inputs = self._family_unit(family)
+        model, inputs = self._quantization_target(family)
         program = OnnxExporter().export(
             model,
             copy.deepcopy(inputs),
             OnnxConfig(
                 dynamic=False,
-                quantizer=self._x86_quantizer(),
+                quantizer=self._quantizer("x86"),
                 calibration_dataset=[copy.deepcopy(inputs)],
                 external_data=False,
             ),
         )
-        op_types = Counter(node.op_type for node in program.model_proto.graph.node)
-        self.assertGreater(op_types["QuantizeLinear"], 0)
-        # the QDQ graph must be a valid ONNX model ORT can load
-        ort.InferenceSession(program.model_proto.SerializeToString(), providers=["CPUExecutionProvider"])
+        self.assertTrue(_has_onnx_quantize_ops(program))
+        # the QDQ graph must run in ONNX Runtime, not just parse — quantization error rules out an
+        # eager-parity check, so assert it executes to finite outputs
+        outputs = run_onnx_program(program, copy.deepcopy(inputs))
+        self.assertTrue(outputs)
+        self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
     # ────────────────────────────── ExecuTorch ──────────────────────────────
 
@@ -367,7 +380,7 @@ class QuantizationExportTest(unittest.TestCase):
                 self.skipTest("QNN HTP `CanonicalizeConv` pass can't lower Mamba's bias-less conv1d")
 
         et_backend = "qnn" if quantizer == "qnn" else "xnnpack"
-        model, inputs = self._family_unit(family)
+        model, inputs = self._quantization_target(family)
         program = ExecutorchExporter().export(
             model,
             copy.deepcopy(inputs),
@@ -379,3 +392,8 @@ class QuantizationExportTest(unittest.TestCase):
             ),
         )
         self.assertIsNotNone(program)
+        # Export + lowering is the check here, not runtime execution. The quantized `.pte` runs fine
+        # standalone, but executing it in-process aborts (native SIGABRT) when the pytest-rerunfailures
+        # plugin's background socket-server thread is live — which it is in this suite's config — so
+        # running it here would take down the whole worker. `test_export` sidesteps this by never
+        # executing a quantized program.
