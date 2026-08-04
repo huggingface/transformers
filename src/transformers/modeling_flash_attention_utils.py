@@ -580,12 +580,15 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for query state.
         max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
+        is_packed_sequence (`bool`, *optional*):
+            Whether the position ids indicate packed sequences.
     """
 
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None
     max_length_k: int | None
+    is_packed_sequence: bool | None
 
 
 def _process_flash_attention_kwargs(
