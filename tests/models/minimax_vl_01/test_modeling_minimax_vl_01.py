@@ -125,6 +125,10 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxVL01VisionText2TextModelTester
     skip_test_image_features_output_shape = True
 
+    def test_reverse_loading_mapping(self):
+        # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
