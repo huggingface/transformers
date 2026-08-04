@@ -11,17 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import torch
+from huggingface_hub import hf_hub_download
 
+from transformers import TinyModelForCausalLM
 from transformers.models.tiny_model.convert_tiny_model_weights_to_hf import (
     _convert_state_dict,
     convert_tiny_model_checkpoint,
     main,
 )
+from transformers.testing_utils import slow
 
 
 def make_original_state_dict(num_hidden_layers=2):
@@ -143,6 +147,104 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                 self.assertEqual(tensor.dtype, torch.bfloat16)
                 torch.testing.assert_close(tensor, expected[key], rtol=0, atol=0)
             self.assertNotEqual(model.model.embed_tokens.weight.data_ptr(), model.lm_head.weight.data_ptr())
+
+    @slow
+    def test_released_checkpoints(self):
+        revision = "502a1f2453f61260c937f7807a1270a167faba07"
+        input_ids = torch.tensor([[9_996, 51, 56, 4, 36]])
+        cases = [
+            (
+                "tiny_model.pt",
+                4,
+                "dec406b1ad94cb345b2606d7f8cffa7c1114fcb60850e949eb17274cec30a8c3",
+                [
+                    13.619353294372559,
+                    27.03830909729004,
+                    14.778779983520508,
+                    15.210500717163086,
+                    19.164371490478516,
+                    13.294825553894043,
+                    15.938150405883789,
+                    9.050104141235352,
+                    14.516134262084961,
+                    8.900968551635742,
+                ],
+                3.20711088180542,
+            ),
+            (
+                "tiny_model_2L_1E.pt",
+                2,
+                "04e8df0cd677a7060558e5c9eb3aaa30dbfe84e4ecc92bf17ef0e405dcf33baf",
+                [
+                    14.836339950561523,
+                    27.60630989074707,
+                    16.463863372802734,
+                    16.657115936279297,
+                    19.72796630859375,
+                    15.745035171508789,
+                    15.660703659057617,
+                    8.073421478271484,
+                    15.538191795349121,
+                    12.202946662902832,
+                ],
+                3.2003674507141113,
+            ),
+            (
+                "tiny_model_2L_3E.pt",
+                2,
+                "26dfc06da85d0e5d4de51a2e90108f9d585a81677bf4bac0ac079e780fda31f4",
+                [
+                    25.153165817260742,
+                    39.7927131652832,
+                    28.825101852416992,
+                    27.843303680419922,
+                    31.723831176757812,
+                    27.25177764892578,
+                    27.752153396606445,
+                    19.260297775268555,
+                    27.339969635009766,
+                    23.366392135620117,
+                ],
+                15.778337478637695,
+            ),
+        ]
+
+        for filename, num_hidden_layers, expected_sha256, expected_logits, expected_mean in cases:
+            with self.subTest(filename=filename), TemporaryDirectory() as output_dir:
+                checkpoint_path = hf_hub_download(
+                    repo_id="noanabeshima/tiny_model",
+                    filename=filename,
+                    revision=revision,
+                )
+                checkpoint_hash = hashlib.sha256()
+                with open(checkpoint_path, "rb") as checkpoint_file:
+                    for chunk in iter(lambda: checkpoint_file.read(1024 * 1024), b""):
+                        checkpoint_hash.update(chunk)
+                actual_sha256 = checkpoint_hash.hexdigest()
+                self.assertEqual(actual_sha256, expected_sha256)
+
+                convert_tiny_model_checkpoint(
+                    checkpoint_path,
+                    output_dir,
+                    expected_num_hidden_layers=num_hidden_layers,
+                )
+                model = TinyModelForCausalLM.from_pretrained(
+                    output_dir,
+                    dtype=torch.float32,
+                    attn_implementation="eager",
+                ).eval()
+                with torch.no_grad():
+                    logits = model(input_ids).logits
+                    generated_ids = model.generate(input_ids, max_new_tokens=3, do_sample=False)
+
+                torch.testing.assert_close(
+                    logits[0, -1, :10],
+                    torch.tensor(expected_logits),
+                    rtol=1e-5,
+                    atol=1e-5,
+                )
+                self.assertAlmostEqual(logits[0, -1].mean().item(), expected_mean, places=5)
+                self.assertEqual(generated_ids.tolist(), [[9_996, 51, 56, 4, 36, 1, 38, 6]])
 
     def test_cli_converts_local_checkpoint(self):
         with TemporaryDirectory() as temporary_directory:
