@@ -41,6 +41,7 @@ from transformers.testing_utils import (
     require_kernels,
     require_rocm,
     require_torch_accelerator,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -54,8 +55,8 @@ if is_kernels_available():
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
 
-@require_kernels
 @slow
+@scoped_kernels
 class TestHubKernels(TestCasePlus):
     @classmethod
     def setUpClass(cls):
@@ -437,6 +438,7 @@ class TestKernelUtilities(TestCasePlus):
         for s in invalid:
             self.assertFalse(is_kernel(s))
 
+    @scoped_kernels
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
 
@@ -445,12 +447,19 @@ class TestKernelUtilities(TestCasePlus):
             self.assertFalse(allow_all_kernels)
             return sentinel
 
+        patched_hub_mapping = copy.deepcopy(_HUB_KERNEL_MAPPING)
+        patched_hub_mapping["causal-conv1d"] = {
+            "repo_id": "kernels-community/causal-conv1d",
+            "version": 1,
+        }
+
         patched_module_mapping = copy.copy(_KERNEL_MODULE_MAPPING)
         patched_module_mapping.pop("causal-conv1d", None)
 
         with patch.dict(
             lazy_load_kernel.__globals__,
             {
+                "_HUB_KERNEL_MAPPING": patched_hub_mapping,
                 "_KERNEL_MODULE_MAPPING": patched_module_mapping,
                 "get_kernel": fake_get_kernel,
                 "ALLOW_ALL_KERNELS": False,
@@ -471,6 +480,7 @@ class TestKernelUtilities(TestCasePlus):
         # Cleanup cache entry to avoid growth across tests
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
+    @scoped_kernels
     def test_lazy_load_kernel_version(self):
         name = "causal-conv1d"
         version_spec = ">=0.0.4,<0.1.0"
@@ -616,7 +626,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
         self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
-@require_kernels
+@scoped_kernels
 class TestUseKernelsLifecycle(TestCasePlus):
     @classmethod
     def setUpClass(cls):

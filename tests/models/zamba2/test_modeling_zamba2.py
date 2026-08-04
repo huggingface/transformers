@@ -24,9 +24,9 @@ from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_flash_attn,
-    require_kernels,
     require_torch,
     require_torch_accelerator,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -274,6 +274,10 @@ class Zamba2ModelTester:
         model.to(device)
         model.eval()
 
+        # Enable kernels path
+        if device != "cpu":
+            model.use_kernels = True
+
         input_ids = input_ids[:1].to(device)
         prefill_len = input_ids.shape[1] // 2 + 1
         prompt = input_ids[:, :prefill_len]
@@ -405,7 +409,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
-    @require_kernels
+    @scoped_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_zamba2_chunked_prefill(*config_and_inputs, device=torch_device)
