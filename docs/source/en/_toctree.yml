@@ -10,20 +10,20 @@
   sections:
   - isExpanded: false
     sections:
-    - local: weightconverter
-      title: Dynamic weight loading
     - local: models
       title: Loading models
+    - local: weightconverter
+      title: Dynamic weight loading
     - local: custom_models
       title: Customizing models
     - local: heterogeneous_configurations
       title: Heterogeneous configurations
+    - local: how_to_hack_models
+      title: Customizing model components
     - local: monkey_patching
       title: Monkey patching
     - local: fusion_mapping
       title: Fusion mapping
-    - local: how_to_hack_models
-      title: Customizing model components
     - local: model_sharing
       title: Sharing
     - local: serialization
@@ -132,10 +132,10 @@
       title: Tensor parallelism for inference
     - local: expert_parallelism
       title: Expert parallelism
+    - local: cache_explanation
+      title: How caching works
     - local: kv_cache
       title: Cache strategies
-    - local: cache_explanation
-      title: Caching
     - local: assisted_decoding
       title: Assisted decoding
     - local: llm_tutorial_optimization
