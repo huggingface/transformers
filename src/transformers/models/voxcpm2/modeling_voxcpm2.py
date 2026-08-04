@@ -178,8 +178,11 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
     def __init__(self, config: VoxCPM2Config):
         super().__init__()
-        self.in_dim = config.lm_config.hidden_size
-        self.out_dim = config.lm_config.hidden_size
+        lm_config = config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        self.in_dim = lm_config.hidden_size
+        self.out_dim = lm_config.hidden_size
         self.latent_dim = config.scalar_quantization_latent_dim
         self.scale = config.scalar_quantization_scale
 
