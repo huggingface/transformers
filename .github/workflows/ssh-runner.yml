@@ -15,7 +15,6 @@ on:
         default: 'none'
 
 env:
-  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   OMP_NUM_THREADS: 8
@@ -107,7 +106,7 @@ jobs:
         working-directory: /transformers
         run: |
           apt-get update && apt-get install -y curl
-          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
+          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/f826f4b078b1b107b0fc3d63f0e6f8e5a5c5e8d9/utils/memory_monitor.py
 
       - name: Start memory monitor
         working-directory: /transformers
@@ -154,6 +153,17 @@ jobs:
           # Source from both .bash_profile and .bashrc
           echo 'source /root/.env_setup' >> /root/.bash_profile
           echo 'source /root/.env_setup' >> /root/.bashrc
+
+      - name: Authorization check for SSH access
+        run: |
+          ALLOWED_USERS="user1,user2,admin-team"
+          CURRENT_USER="${{ github.actor }}"
+          if [[ ",$ALLOWED_USERS," != *",$CURRENT_USER,"* ]]; then
+            echo "ERROR: User $CURRENT_USER is not authorized for SSH access"
+            echo "Authorized users: $ALLOWED_USERS"
+            exit 1
+          fi
+          echo "✅ User $CURRENT_USER authorized for SSH access"
 
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
