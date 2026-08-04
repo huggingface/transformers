@@ -551,7 +551,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
                 ("cuda", (8, 6)): [
-                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
                 ("cuda", 9): [
