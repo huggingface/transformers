@@ -203,6 +203,12 @@ class TinyModel(TinyModelPreTrainedModel):
 
 @auto_docstring
 class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
+    def __init__(self, config: TinyModelConfig):
+        super().__init__(config)
+        self.model = TinyModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.lm_head_bias)
+        self.post_init()
+
     @classmethod
     def _supports_default_dynamic_cache(cls) -> bool:
         return False

@@ -209,5 +209,27 @@ class TinyModelTest(unittest.TestCase):
 
 
 class TinyModelForCausalLMTest(unittest.TestCase):
+    def get_config(self):
+        return TinyModelConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            max_position_embeddings=8,
+            bos_token_id=28,
+            eos_token_id=29,
+            pad_token_id=30,
+        )
+
+    def test_model_structure_has_untied_biased_lm_head(self):
+        model = TinyModelForCausalLM(self.get_config())
+
+        self.assertEqual(model.lm_head.weight.shape, (32, 16))
+        self.assertEqual(model.lm_head.bias.shape, (32,))
+        self.assertNotEqual(model.model.embed_tokens.weight.data_ptr(), model.lm_head.weight.data_ptr())
+        self.assertIn("model.embed_tokens.weight", model.state_dict())
+        self.assertIn("lm_head.bias", model.state_dict())
+
     def test_dynamic_cache_is_not_advertised(self):
         self.assertFalse(TinyModelForCausalLM._supports_default_dynamic_cache())
