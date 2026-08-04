@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import AutoConfig
@@ -144,6 +146,7 @@ def _migrate_legacy_text_config(text_config: dict) -> dict:
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
+@strict
 class MiniMaxVL01Config(PreTrainedConfig):
     r"""
     This configuration composes a CLIP vision encoder with a MiniMax language model using the released

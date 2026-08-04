@@ -17,6 +17,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from huggingface_hub.errors import StrictDataclassFieldValidationError
+
 from transformers import AutoConfig, CLIPVisionConfig, MiniMaxConfig, MiniMaxVL01Config
 
 
@@ -64,6 +66,16 @@ def get_vision_config_dict():
 
 
 class MiniMaxVL01ConfigTest(unittest.TestCase):
+    def test_rejects_invalid_field_types(self):
+        for invalid_field in (
+            {"image_token_index": "bad"},
+            {"ignore_index": "bad"},
+            {"vision_feature_layer": 3.5},
+        ):
+            with self.subTest(invalid_field=invalid_field):
+                with self.assertRaises(StrictDataclassFieldValidationError):
+                    MiniMaxVL01Config(**invalid_field)
+
     def test_legacy_text_config_is_migrated_losslessly(self):
         config = MiniMaxVL01Config(
             text_config=get_legacy_text_config(),

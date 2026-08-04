@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
@@ -172,6 +173,7 @@ def _migrate_legacy_text_config(text_config: dict) -> dict:
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
+@strict
 class MiniMaxVL01Config(LlavaNextConfig):
     r"""
     This configuration composes a CLIP vision encoder with a MiniMax language model using the released
