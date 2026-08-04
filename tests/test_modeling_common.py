@@ -5775,6 +5775,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            # Most kernels are inference mode so ensure to enable as much as we can
+            model.eval()
 
             # Using kernels should not raise a `ValueError`
             model.use_kernels = True
@@ -5787,12 +5789,16 @@ class ModelTesterMixin(ExportTesterMixin):
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-
-            # Using kernels should not raise a `ValueError`
+            # Most kernels are inference mode so ensure to enable as much as we can
+            model.eval()
             model.use_kernels = True
 
-            model.eval()
-            model(**inputs)
+            prepared_inputs = self._prepare_for_class(inputs, model_class)
+            prepared_inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+            }
+
+            model(**prepared_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):

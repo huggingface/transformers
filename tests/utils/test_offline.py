@@ -206,6 +206,8 @@ print("success")
         # Configure env
         new_env = self.get_env()
         new_env.update(env)
+        # Kernels always requires special treatment so we ignore it in general for each test here
+        new_env["USE_HUB_KERNELS"] = "0"
 
         # Run command
         result = subprocess.run(cmd, env=new_env, check=False, capture_output=True)
