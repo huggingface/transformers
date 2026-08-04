@@ -421,8 +421,6 @@ class OlmoHybridRotaryEmbedding(nn.Module):
     RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: OlmoHybridConfig, device=None):
         super().__init__()

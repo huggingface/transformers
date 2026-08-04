@@ -194,8 +194,6 @@ class Gemma4UnifiedRMSNorm(nn.Module):
 
 
 class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4UnifiedTextConfig, device=None):
         super().__init__()

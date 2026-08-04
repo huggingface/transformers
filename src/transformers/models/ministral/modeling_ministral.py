@@ -280,8 +280,6 @@ class MinistralPreTrainedModel(PreTrainedModel):
 
 
 class MinistralRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MinistralConfig, device=None):
         super().__init__()

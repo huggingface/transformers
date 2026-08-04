@@ -64,8 +64,6 @@ class RecurrentGemmaRMSNorm(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->RecurrentGemma
 class RecurrentGemmaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     # Ignore copy
     def __init__(self, config: RecurrentGemmaConfig, device=None):
         super().__init__()

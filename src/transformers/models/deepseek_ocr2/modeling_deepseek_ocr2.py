@@ -655,8 +655,6 @@ class DeepseekOcr2VisionRMSNorm(nn.Module):
 
 
 class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekOcr2VisionConfig, device=None):
         super().__init__()
@@ -994,8 +992,6 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
 
 
 class DeepseekOcr2TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekOcr2TextConfig, device=None):
         super().__init__()

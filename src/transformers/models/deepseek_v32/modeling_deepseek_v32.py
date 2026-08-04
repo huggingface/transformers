@@ -66,8 +66,6 @@ class DeepseekV32RMSNorm(nn.Module):
 
 
 class DeepseekV32RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekV32Config, device=None):
         super().__init__()

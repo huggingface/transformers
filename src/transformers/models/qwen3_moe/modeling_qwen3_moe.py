@@ -379,8 +379,6 @@ class Qwen3MoePreTrainedModel(PreTrainedModel):
 
 
 class Qwen3MoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3MoeConfig, device=None):
         super().__init__()

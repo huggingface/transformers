@@ -310,8 +310,6 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
 
 
 class HunYuanDenseV1RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HunYuanDenseV1Config, device=None):
         super().__init__()

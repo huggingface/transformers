@@ -47,8 +47,6 @@ from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionCon
 
 
 class VideoLlama3VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim

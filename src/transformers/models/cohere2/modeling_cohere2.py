@@ -40,8 +40,6 @@ from .configuration_cohere2 import Cohere2Config
 
 
 class Cohere2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Cohere2Config, device=None):
         super().__init__()

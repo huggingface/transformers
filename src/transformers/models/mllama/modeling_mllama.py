@@ -704,8 +704,6 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaConfig->MllamaTextConfig,Llama->Mllama
 class MllamaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MllamaTextConfig, device=None):
         super().__init__()

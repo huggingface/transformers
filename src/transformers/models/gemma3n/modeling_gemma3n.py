@@ -1527,8 +1527,6 @@ class Gemma3nAudioEncoder(Gemma3nPreTrainedModel):
 
 
 class Gemma3nRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma3nTextConfig, device=None):
         super().__init__()

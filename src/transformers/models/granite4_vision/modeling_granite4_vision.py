@@ -211,8 +211,6 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
 
 
 class Granite4VisionTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Granite4VisionTextConfig, device=None):
         super().__init__()
