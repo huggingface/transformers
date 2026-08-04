@@ -27,7 +27,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -55,7 +55,7 @@ class OnyxAssistantRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight.float() * hidden_states).to(input_dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -68,6 +68,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -141,7 +142,7 @@ class OnyxAssistantAttention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
-        self.is_causal = False
+        self.is_causal = True
         self.scaling = self.head_dim**-0.5
         self.sliding_window = config.sliding_window
         layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
@@ -193,7 +194,6 @@ class OnyxAssistantAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window if self.is_sliding else None,
-            is_causal=False,
             **kwargs,
         )
 
@@ -225,8 +225,8 @@ class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = OnyxAssistantAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = OnyxAssistantMLP(config)
-        self.attention_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feedforward_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -239,7 +239,7 @@ class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.attention_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -252,7 +252,7 @@ class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.feedforward_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states

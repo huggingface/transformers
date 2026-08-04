@@ -35,9 +35,7 @@ class OnyxAssistantRMSNorm(Exaone4RMSNorm):
 class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
     def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.attention_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feedforward_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        del self.post_attention_layernorm
+        self.input_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.post_feedforward_layernorm
 
     # override: apply pre-LN not post-LM
@@ -52,7 +50,7 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.attention_layernorm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -65,7 +63,7 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.feedforward_layernorm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
