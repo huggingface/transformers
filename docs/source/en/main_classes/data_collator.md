@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Data Collator
+# Data collator
 
 Data collators are objects that will form a batch by using a list of dataset elements as input. These elements are of
 the same type as the elements of `train_dataset` or `eval_dataset`.

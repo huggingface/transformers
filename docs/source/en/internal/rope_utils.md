@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Rotary Embedding
+# Rotary embeddings utilities
 
 This page explains how the Rotary Embedding is computed and applied in Transformers and what types of RoPE are supported.
 

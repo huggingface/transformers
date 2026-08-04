@@ -14,6 +14,8 @@
       title: Loading models
     - local: weightconverter
       title: Dynamic weight loading
+    - local: backbones
+      title: Backbones
     - local: custom_models
       title: Customizing models
     - local: heterogeneous_configurations
@@ -66,8 +68,6 @@
       title: Image processors
     - local: video_processors
       title: Video processors
-    - local: backbones
-      title: Backbones
     - local: feature_extractors
       title: Feature extractors
     - local: processors
@@ -413,13 +413,13 @@
       - local: tasks/monocular_depth_estimation
         title: Depth estimation
       - local: tasks/image_feature_extraction
-        title: Image Feature Extraction
+        title: Image feature extraction
       - local: tasks/mask_generation
-        title: Mask Generation
+        title: Mask generation
       - local: tasks/keypoint_detection
         title: Keypoint detection
       - local: tasks/knowledge_distillation_for_image_classification
-        title: Knowledge Distillation for Computer Vision
+        title: Knowledge distillation for computer vision
       - local: tasks/keypoint_matching
         title: Keypoint matching
       - local: tasks/training_vision_backbone
@@ -429,11 +429,9 @@
       - local: tasks/image_captioning
         title: Image captioning
       - local: tasks/document_question_answering
-        title: Document Question Answering
+        title: Document question answering
       - local: tasks/visual_question_answering
-        title: Visual Question Answering
-      - local: tasks/idefics
-        title: Image tasks with IDEFICS
+        title: Visual question answering
       - local: tasks/image_text_to_text
         title: Image-text-to-text
       - local: tasks/any_to_any
@@ -441,7 +439,7 @@
       - local: tasks/video_text_to_text
         title: Video-text-to-text
       - local: tasks/visual_document_retrieval
-        title: Visual Document Retrieval
+        title: Visual document retrieval
       title: Multimodal
     title: Task recipes
   - local: run_scripts
@@ -451,7 +449,7 @@
   - local: philosophy
     title: Philosophy
   - local: models_timeline
-    title: Models Timeline
+    title: Models timeline
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -463,7 +461,7 @@
   sections:
   - sections:
     - local: model_doc/auto
-      title: Auto Classes
+      title: Auto classes
     - local: main_classes/backbones
       title: Backbones
     - local: main_classes/callback
@@ -473,13 +471,13 @@
     - local: main_classes/continuous_batching
       title: Continuous batching
     - local: main_classes/data_collator
-      title: Data Collator
+      title: Data collator
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
       title: Models
     - local: main_classes/text_generation
-      title: Text Generation
+      title: Text generation
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output
@@ -503,14 +501,14 @@
     - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
-      title: Feature Extractor
+      title: Feature extractor
     - local: main_classes/image_processor
-      title: Image Processor
+      title: Image processor
     - local: main_classes/video_processor
-      title: Video Processor
+      title: Video processor
     - local: main_classes/kernels
       title: Kernels
-    title: Main Classes
+    title: Main classes
   - sections:
     - sections:
       - local: model_doc/axk1
@@ -1553,32 +1551,32 @@
     title: Models
   - sections:
     - local: internal/modeling_utils
-      title: Custom Layers and Utilities
+      title: Custom layers and utilities
     - local: internal/model_debugging_utils
-      title: Utilities for Model Debugging
+      title: Utilities for model debugging
     - local: internal/pipelines_utils
       title: Utilities for pipelines
     - local: internal/tokenization_utils
-      title: Utilities for Tokenizers
+      title: Utilities for tokenizers
     - local: internal/trainer_utils
       title: Utilities for Trainer
     - local: internal/generation_utils
-      title: Utilities for Generation
+      title: Utilities for generation
     - local: internal/image_processing_utils
-      title: Utilities for Image Processors
+      title: Utilities for image processors
     - local: internal/audio_utils
-      title: Utilities for Audio processing
+      title: Utilities for audio processing
     - local: internal/file_utils
-      title: General Utilities
+      title: General utilities
     - local: internal/import_utils
-      title: Importing Utilities
+      title: Importing utilities
     - local: internal/time_series_utils
-      title: Utilities for Time Series
+      title: Utilities for time series
     - local: internal/rope_utils
-      title: Rotary Embeddings Utilities
+      title: Rotary embeddings utilities
     title: Internal helpers
   - sections:
     - local: reference/environment_variables
-      title: Environment Variables
+      title: Environment variables
     title: Reference
   title: API
