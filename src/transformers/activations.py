@@ -250,8 +250,8 @@ class XIELUActivation(nn.Module):
         self.alpha_n = nn.Parameter(
             torch.log(torch.expm1(torch.tensor(alpha_n_init - beta, dtype=dtype))).unsqueeze(0)
         )
-        self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
-        self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
+        self.beta = nn.Buffer(torch.tensor(beta, dtype=dtype))
+        self.eps = nn.Buffer(torch.tensor(eps, dtype=dtype))
         self.with_vector_loads = with_vector_loads
         # Temporary until xIELU CUDA fully implemented
         self._beta_scalar = float(beta)

@@ -1136,7 +1136,7 @@ class MaskFormerLoss(nn.Module):
         self.eos_coef = eos_coef
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
     def _max_by_axis(self, the_list: list[list[int]]) -> list[int]:
         maxes = the_list[0]

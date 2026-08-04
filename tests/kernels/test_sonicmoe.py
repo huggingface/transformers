@@ -185,26 +185,16 @@ class SonicMoeLoaderTest(unittest.TestCase):
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
-    def test_wrapper_is_compile_safe(self):
-        # `_sonicmoe_wrapper`'s `@allow_in_graph` must keep the CuteDSL dispatch opaque — sonic-moe's
-        # kernel asserts `not is_compiling()`. Targets the wrapper directly (not the full forward, which
-        # requires a CUDA device); the wrapper has no device dependency, so like the loader tests above it
-        # needs no GPU. Args past `hidden_states` are dummies — the fake only reads it (for `zeros_like`).
-        def fake_moe(hidden_states, *args, **kwargs):
-            assert not torch.compiler.is_compiling()
-            return torch.zeros_like(hidden_states), None
+    def test_is_sonicmoe_loadable_is_compile_safe(self):
+        # `is_sonicmoe_loadable` must fold to a constant (via `@assume_constant_result`); tracing its env
+        # probe would break the graph.
+        torch.compiler.reset()
 
-        bundle = sm.SonicMoE(activation_type_enum=_FakeActivationType, moe_general_routing_inputs=fake_moe)
-        d = torch.zeros(1, device=torch_device)
-        with mock.patch.object(sm, "load_sonicmoe_kernel", return_value=bundle):
-            torch.compiler.reset()
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return x + 1 if sm.is_sonicmoe_loadable() else x - 1
 
-            @torch.compile(fullgraph=True)
-            def run(x):
-                return sm._sonicmoe_wrapper(x, d, d, d, d, None, d, None, "silu", 4, True, True)
-
-            out = run(torch.zeros(6, 8, dtype=torch.bfloat16, device=torch_device))
-        self.assertEqual(out.shape, (6, 8))
+        run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
 
 @require_torch

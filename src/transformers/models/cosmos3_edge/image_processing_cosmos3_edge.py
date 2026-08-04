@@ -17,70 +17,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
-# Processor implementations live in the modular source so the fast/PIL/video/generated modules stay synchronized.
+from ...utils import TensorType, auto_docstring
 
 
 class Cosmos3EdgeImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    patch_size (`int`, *optional*, defaults to `16`):
-        Spatial patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to `2`):
-        Number of adjacent patches merged along each spatial axis by the projector.
+    """
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
     """
 
     patch_size: int
+    temporal_patch_size: int
     merge_size: int
 
 
 def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+    num_frames: int,
+    height: int,
+    width: int,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
 ):
-    """Rescales the image so that the following conditions are met:
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
+    if height < factor or width < factor:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
 
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the image is maintained as closely as possible.
-
-    """
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
+
+    if t_bar * h_bar * w_bar > max_pixels:
+        beta = math.sqrt((num_frames * height * width) / max_pixels)
         h_bar = max(factor, math.floor(height / beta / factor) * factor)
         w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
+    elif t_bar * h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (num_frames * height * width))
         h_bar = math.ceil(height * beta / factor) * factor
         w_bar = math.ceil(width * beta / factor) * factor
+
     return h_bar, w_bar
 
 
 @auto_docstring
 class Cosmos3EdgeImageProcessor(TorchvisionBackend):
-    """Dynamically resize images and return packed, unpadded SigLIP2 patches."""
-
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 256 * 256, "longest_edge": 4096 * 4096}
@@ -88,29 +90,80 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
     patch_size = 16
+    temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Cosmos3EdgeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Cosmos3EdgeImageProcessorKwargs]):
-        super().__init__(**kwargs)
-        if self.size is not None and (self.size.shortest_edge is None or self.size.longest_edge is None):
-            raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
-
-    def _standardize_kwargs(self, **kwargs) -> dict:
-        kwargs = super()._standardize_kwargs(**kwargs)
-        size = kwargs.get("size", self.size)
-        if size.shortest_edge is None or size.longest_edge is None:
-            raise ValueError("`size` must contain `shortest_edge` and `longest_edge` keys.")
-        return kwargs
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Cosmos3EdgeImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
+
+    def resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        factor: int,
+        temporal_factor: int,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=temporal_factor,
+            factor=factor,
+            temporal_factor=temporal_factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        # Override: time-major, block-major patches with HWC values within each flattened patch
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        patches = patches.permute(0, 2, 5, 3, 6, 4, 7, 1)
+        flatten_patches = (
+            patches.unsqueeze(-1)
+            .expand(-1, -1, -1, -1, -1, -1, -1, -1, temporal_patch_size)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                patch_size * patch_size * channel * temporal_patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
@@ -124,83 +177,90 @@ class Cosmos3EdgeImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         patch_size: int,
+        temporal_patch_size: int,
         merge_size: int,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        pixel_values = []
-        image_grids = []
+        """
+        Preprocess an image or batch of images.
+        """
 
-        for image in images:
-            height, width = image.shape[-2:]
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
-                image = self.resize(
-                    image=image,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                stacked_images = self.resize(
+                    images=stacked_images,
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
                 )
-            else:
-                resized_height, resized_width = height, width
-                patch_group_size = patch_size * merge_size
-                if resized_height % patch_group_size or resized_width % patch_group_size:
-                    raise ValueError(
-                        "Images must have dimensions divisible by `patch_size * merge_size` when `do_resize=False`, "
-                        f"got height={resized_height}, width={resized_width}, patch_size={patch_size}, "
-                        f"merge_size={merge_size}."
-                    )
+            resized_images_grouped[shape] = stacked_images
 
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            channels = image.shape[0]
-            grid_height, grid_width = resized_height // patch_size, resized_width // patch_size
-            patches = image.reshape(
-                channels,
-                grid_height // merge_size,
-                merge_size,
-                patch_size,
-                grid_width // merge_size,
-                merge_size,
-                patch_size,
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_grids = {}
+
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            # The projector expects block-major patches with HWC values within each flattened patch:
-            # (group_h, group_w, merge_h, merge_w, patch_h, patch_w, channel).
-            patches = patches.permute(1, 4, 2, 5, 3, 6, 0).reshape(grid_height * grid_width, -1)
 
-            pixel_values.append(patches)
-            image_grids.append((1, grid_height, grid_width))
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
+            )
+
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids = reorder_images(processed_grids, grouped_images_index)
+
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={
-                "pixel_values": torch.cat(pixel_values, dim=0),
-                "image_grid_thw": torch.tensor(image_grids, dtype=torch.long),
-            },
-            tensor_type=return_tensors,
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
-        """Return the number of pre-projector vision patches for an image size."""
-        images_kwargs = images_kwargs or {}
-        size = images_kwargs.get("size", self.size)
-        if isinstance(size, SizeDict):
-            min_pixels, max_pixels = size.shortest_edge, size.longest_edge
-        else:
-            min_pixels, max_pixels = size["shortest_edge"], size["longest_edge"]
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
+
+        factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=patch_size * merge_size,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
+            num_frames=self.temporal_patch_size,
+            height=height,
+            width=width,
+            factor=factor,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
+            temporal_factor=self.temporal_patch_size,
         )
-        return (resized_height // patch_size) * (resized_width // patch_size)
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 __all__ = ["Cosmos3EdgeImageProcessor"]

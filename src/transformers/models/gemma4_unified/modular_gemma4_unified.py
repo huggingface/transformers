@@ -583,7 +583,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         self.layer_idx = layer_idx
         self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
     def forward(
         self,
@@ -1225,45 +1225,11 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
     def set_per_layer_input_embeddings(self, value):
         raise AttributeError("PLE is not used")
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
+        if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
 
