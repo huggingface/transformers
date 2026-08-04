@@ -22,6 +22,7 @@ from .test_modeling_common import (
     floats_tensor,
     ids_tensor,
     is_torch_available,
+    scoped_kernels_class,
     torch_device,
 )
 
@@ -148,6 +149,7 @@ class ALMModelTester(MultiModalModelTester):
         return self.audio_config_class(**kwargs)
 
 
+@scoped_kernels_class
 class ALMModelTest(MultiModalModelTest):
     """
     Base test class for Audio-Language Models.

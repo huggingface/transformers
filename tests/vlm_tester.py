@@ -20,6 +20,7 @@ from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
     floats_tensor,
     is_torch_available,
+    scoped_kernels_class,
     torch_device,
 )
 
@@ -119,6 +120,7 @@ class VLMModelTester(MultiModalModelTester):
         return self.vision_config_class(**kwargs)
 
 
+@scoped_kernels_class
 class VLMModelTest(MultiModalModelTest):
     """
     Base test class for Vision-Language Models.

@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     cleanup,
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     scoped_kernels,
     slow,
     torch_device,
@@ -69,6 +70,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GptOssModelTester
 
     @pytest.mark.flash_attn_test
+    @require_torch_accelerator
     @scoped_kernels
     def test_default_flash_implementation_auto_correction(self):
         """

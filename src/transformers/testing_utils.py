@@ -4527,7 +4527,6 @@ def scoped_kernels(test):
     _MISSING = object()
 
     @require_kernels
-    @require_torch_accelerator
     @functools.wraps(test)
     def wrapper(*args, **kwargs):
         from kernels import use_kernel_mapping
@@ -4557,4 +4556,28 @@ def scoped_kernels(test):
                     else:
                         module.__dict__["forward"] = forward
 
+    # Mark to avoid class level usage duplication
+    wrapper._is_scoped_kernels = True
+
     return wrapper
+
+
+def scoped_kernels_class(test_class):
+    """
+    Applies `scoped_kernels` on each test function individually, i.e. each kernelize gets a fresh state.
+    """
+    for name in dir(test_class):
+        if not name.startswith("test"):
+            continue
+
+        test = getattr(test_class, name)
+
+        if not callable(test):
+            continue
+
+        if getattr(test, "_is_scoped_kernels", False):
+            continue
+
+        setattr(test_class, name, scoped_kernels(test))
+
+    return test_class

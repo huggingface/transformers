@@ -5778,6 +5778,7 @@ class ModelTesterMixin(ExportTesterMixin):
                             is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
                             self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
+    @require_torch_accelerator
     @scoped_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
@@ -5789,6 +5790,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Using kernels should not raise a `ValueError`
             model.use_kernels = True
 
+    @require_torch_accelerator
     @scoped_kernels
     def test_kernels_can_run_without_crashing(self):
         """Check whether activating kernels and then running through some input leads to an (value) error"""

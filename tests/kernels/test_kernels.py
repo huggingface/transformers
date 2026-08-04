@@ -56,6 +56,7 @@ if is_kernels_available():
 
 
 @slow
+@require_torch_accelerator
 @scoped_kernels
 class TestHubKernels(TestCasePlus):
     @classmethod
@@ -438,6 +439,7 @@ class TestKernelUtilities(TestCasePlus):
         for s in invalid:
             self.assertFalse(is_kernel(s))
 
+    @require_torch_accelerator
     @scoped_kernels
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
@@ -480,6 +482,7 @@ class TestKernelUtilities(TestCasePlus):
         # Cleanup cache entry to avoid growth across tests
         _KERNEL_MODULE_MAPPING.pop(name, None)
 
+    @require_torch_accelerator
     @scoped_kernels
     def test_lazy_load_kernel_version(self):
         name = "causal-conv1d"
@@ -626,6 +629,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
         self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
+@require_torch_accelerator
 @scoped_kernels
 class TestUseKernelsLifecycle(TestCasePlus):
     @classmethod

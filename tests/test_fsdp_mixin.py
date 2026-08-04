@@ -153,12 +153,15 @@ def _deterministic_init_model_dir(rank, config, dtype):
         yield model_dir
 
 
-def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file):
+def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_size, port, results_file, use_hub_kernels):
     os.environ["WORLD_SIZE"] = str(world_size)
     os.environ["RANK"] = str(rank)
     os.environ["LOCAL_RANK"] = str(rank)
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(port)
+
+    # Kernelize is propogated via envs so we pass it to the child as well
+    os.environ["USE_HUB_KERNELS"] = use_hub_kernels
 
     _set_determinism(SEED)
     dist.init_process_group(backend=_get_distributed_backend(), rank=rank, world_size=world_size)
@@ -566,6 +569,7 @@ class FSDPTesterMixin(ABC):
         config_class, config_dict = self._get_tiny_config()
         func_args = (config_class, config_dict, *test_args)
 
+        use_hub_kernels = os.environ.get("USE_HUB_KERNELS", "NO")
         results_file = tempfile.mktemp(suffix=".json")
         # port binding
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -575,7 +579,7 @@ class FSDPTesterMixin(ABC):
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
-                args=(test_name, test_impl, func_args, test_kwargs, self.fsdp_nproc_per_node, port, results_file),
+                args=(test_name, test_impl, func_args, test_kwargs, self.fsdp_nproc_per_node, port, results_file, use_hub_kernels),
                 nprocs=self.fsdp_nproc_per_node,
             )
 
