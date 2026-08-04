@@ -20,6 +20,7 @@ import torch
 from transformers.models.tiny_model.convert_tiny_model_weights_to_hf import (
     _convert_state_dict,
     convert_tiny_model_checkpoint,
+    main,
 )
 
 
@@ -142,3 +143,26 @@ class TinyModelCheckpointConversionTest(unittest.TestCase):
                 self.assertEqual(tensor.dtype, torch.bfloat16)
                 torch.testing.assert_close(tensor, expected[key], rtol=0, atol=0)
             self.assertNotEqual(model.model.embed_tokens.weight.data_ptr(), model.lm_head.weight.data_ptr())
+
+    def test_cli_converts_local_checkpoint(self):
+        with TemporaryDirectory() as temporary_directory:
+            temporary_directory = Path(temporary_directory)
+            checkpoint_path = temporary_directory / "tiny_model_2L_3E.pt"
+            output_dir = temporary_directory / "converted"
+            torch.save(make_original_state_dict(), checkpoint_path)
+
+            main(
+                [
+                    "--checkpoint_path",
+                    str(checkpoint_path),
+                    "--output_dir",
+                    str(output_dir),
+                    "--num_attention_heads",
+                    "2",
+                    "--expected_num_hidden_layers",
+                    "2",
+                ]
+            )
+
+            self.assertTrue((output_dir / "config.json").is_file())
+            self.assertTrue((output_dir / "model.safetensors").is_file())

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Convert original TinyModel checkpoints to the Transformers format."""
 
+import argparse
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -248,3 +249,32 @@ def convert_tiny_model_checkpoint(
     if reloaded_model.model.embed_tokens.weight.data_ptr() == reloaded_model.lm_head.weight.data_ptr():
         raise ValueError("TinyModel token embeddings and language-modeling head must remain untied.")
     return reloaded_model
+
+
+def main(args: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--checkpoint_path", type=Path, required=True, help="Path to an original TinyModel .pt file.")
+    parser.add_argument("--output_dir", type=Path, required=True, help="Directory for the converted checkpoint.")
+    parser.add_argument(
+        "--num_attention_heads",
+        type=int,
+        default=16,
+        help="Number of attention heads; this value cannot be inferred from the checkpoint tensors.",
+    )
+    parser.add_argument(
+        "--expected_num_hidden_layers",
+        type=int,
+        help="Optional expected layer count used to detect a truncated checkpoint.",
+    )
+    parsed_args = parser.parse_args(args)
+
+    convert_tiny_model_checkpoint(
+        checkpoint_path=parsed_args.checkpoint_path,
+        output_dir=parsed_args.output_dir,
+        num_attention_heads=parsed_args.num_attention_heads,
+        expected_num_hidden_layers=parsed_args.expected_num_hidden_layers,
+    )
+
+
+if __name__ == "__main__":
+    main()
