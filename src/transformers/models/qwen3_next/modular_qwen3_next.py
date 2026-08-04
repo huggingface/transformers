@@ -295,23 +295,23 @@ def torch_chunk_gated_delta_rule(
     pairwise_log_decay = pairwise_log_decay.masked_fill(strictly_upper_mask, float("-inf"))
     pairwise_decay = pairwise_log_decay.exp()  # no overflow because positive pairwise_log_decay are masked to -inf
 
-    # Compute auxiliary tensors: UT transform (ut_attn) and QK dot product (qk_attn)
-    ut_attn = -(k_beta @ key.transpose(-1, -2)) * pairwise_decay
-    ut_attn = ut_attn.masked_fill(mask, 0)
-    qk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
+    # Compute auxiliary tensors: UT transform and intra-chunk attention (QK dot product)
+    ut_transform = -(k_beta @ key.transpose(-1, -2)) * pairwise_decay
+    ut_transform = ut_transform.masked_fill(mask, 0)
+    intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
 
-    # Apply the UT transform to the within-chunk k/v pairs. The transform computes (I + L)^-1 by forward substitution,
-    # where -L is the strictly lower triangular ut_attn built above.
+    # Apply the UT transform: the transform computes (I + L)^-1 by forward substitution, where -L is the strictly lower
+    # triangular ut_transform built above. This condenses multiple delta rule updates into a few matrix multiplication.
     for i in range(1, chunk_size):
-        row = ut_attn[..., i, :i].clone()
-        sub = ut_attn[..., :i, :i].clone()
-        ut_attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
-    ut_attn = ut_attn + torch.eye(chunk_size, dtype=ut_attn.dtype, device=ut_attn.device)
+        row = ut_transform[..., i, :i].clone()
+        sub = ut_transform[..., :i, :i].clone()
+        ut_transform[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+    ut_transform = ut_transform + torch.eye(chunk_size, dtype=ut_transform.dtype, device=ut_transform.device)
     # The UT-transformed k/v pairs are used to create the new_values (called "u" in the DeltaNet paper) and the decayed
     # keys reading the old state (k_cumdecay). In the update, the part of new_values that the old state already predicts
     # is subtracted out, so that only the correction is written to the recurrent state: this is the delta rule.
-    new_values = ut_attn @ v_beta
-    k_cumdecay = ut_attn @ (k_beta * cum_decay.unsqueeze(-1))
+    new_values = ut_transform @ v_beta
+    k_cumdecay = ut_transform @ (k_beta * cum_decay.unsqueeze(-1))
 
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
@@ -322,17 +322,17 @@ def torch_chunk_gated_delta_rule(
         last_recurrent_state = initial_state.to(new_values)
     core_attn_out = torch.zeros_like(new_values)
 
-    # Second phase: the sequential scan over chunks. Combine the read of the previous recurrent state (attn_inter)
-    # with the within-chunk attention (qk_attn), then decay + update the recurrent state
+    # Second phase: the sequential scan over chunks. Combine the read of the previous recurrent state (inter_chunk_attn)
+    # with the within-chunk attention (intra_chunk_attn), then decay + update the recurrent state
     for i in range(num_chunks):
         q_i, k_i, cum_log_decay_i = query[:, :, i], key[:, :, i], cum_log_decay[:, :, i]
         v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
         inter_chunk_attn = (q_i * cum_decay[:, :, i].unsqueeze(-1)) @ last_recurrent_state
-        core_attn_out[:, :, i] = inter_chunk_attn + qk_attn[:, :, i] @ v_new
-        # chunk_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
-        chunk_log_decay = cum_log_decay_i[:, :, -1]
-        state_decay = chunk_log_decay.exp()[..., None, None]
-        key_decay = (chunk_log_decay.unsqueeze(-1) - cum_log_decay_i).exp().unsqueeze(-1)
+        core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
+        # sum_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
+        sum_log_decay = cum_log_decay_i[:, :, -1]
+        state_decay = sum_log_decay.exp()[..., None, None]
+        key_decay = (sum_log_decay.unsqueeze(-1) - cum_log_decay_i).exp().unsqueeze(-1)
         last_recurrent_state = last_recurrent_state * state_decay + (k_i * key_decay).transpose(-1, -2) @ v_new
 
     # Discard the final state if not requested
