@@ -224,7 +224,7 @@ def torch_chunk_gated_delta_rule(
     use_qk_l2norm_in_kernel: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Computes linear attention using the gated delta rule, by chunking along the sequence dimension.
+    """Computes the gated delta rule, by chunking along the sequence dimension.
     Args:
         query: Query tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
         key: Key tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
