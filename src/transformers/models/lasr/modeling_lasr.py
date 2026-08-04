@@ -499,7 +499,6 @@ class LasrEncoder(LasrPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
