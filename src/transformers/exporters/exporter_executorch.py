@@ -1180,6 +1180,33 @@ def _patch_squeeze_node_visitors(original):
     return new
 
 
+@register_patch("executorch.qnn", "executorch.backends.qualcomm._passes.replace_inf_values.ReplaceInfValues.call")
+def _patch_replace_inf_values(original):
+    """QNN's ``ReplaceInfValues`` pass ``setattr``s every float buffer back onto the graph module by name,
+    which ``register_buffer`` rejects for nested (dotted) names such as ``model.rotary_emb.inv_freq``. The
+    pass already clamps ``inf`` in place, so clamp the dotted float buffers ourselves, hide them from the
+    pass's ``setattr``, and restore them afterwards.
+    """
+
+    def call(self, graph_module):
+        hidden = []
+        for name, buffer in list(graph_module.named_buffers()):
+            if "." in name and buffer.is_floating_point():
+                buffer[buffer == float("inf")] = 255
+                buffer[buffer == float("-inf")] = -255
+                parent_path, _, attr = name.rpartition(".")
+                parent = graph_module.get_submodule(parent_path)
+                hidden.append((parent, attr, buffer))
+                delattr(parent, attr)
+        try:
+            return original(self, graph_module)
+        finally:
+            for parent, attr, buffer in hidden:
+                parent.register_buffer(attr, buffer, persistent=False)
+
+    return call
+
+
 # ── Stage 4: FX program fixes ─────────────────────────────────────────────────
 # `@register_fx_program_fix("executorch")` on `(exported_program) -> None` callables
 # applied in place between ``torch.export.export`` and ``to_edge_transform_and_lower``.
