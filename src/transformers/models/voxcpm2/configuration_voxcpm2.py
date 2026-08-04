@@ -476,9 +476,12 @@ class VoxCPM2Config(PreTrainedConfig):
         super().validate_architecture()
         if self.patch_size <= 0 or self.residual_lm_num_layers <= 0 or self.max_cache_length <= 0:
             raise ValueError("Patch size, residual LM layers, and cache length must be strictly positive.")
-        if self.feat_dim != self.audio_vae_config.latent_dim:
+        audio_vae_config = self.audio_vae_config
+        if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+            raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+        if self.feat_dim != audio_vae_config.latent_dim:
             raise ValueError(
-                f"`feat_dim` ({self.feat_dim}) must match AudioVAE `latent_dim` ({self.audio_vae_config.latent_dim})."
+                f"`feat_dim` ({self.feat_dim}) must match AudioVAE `latent_dim` ({audio_vae_config.latent_dim})."
             )
 
     def get_text_config(self, *args, **kwargs):
