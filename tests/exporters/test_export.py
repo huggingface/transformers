@@ -418,8 +418,6 @@ def _clean_inputs_for_export(inputs_dict, config):
     return inputs_dict
 
 
-
-
 def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     """Return whether onnxscript optimisation should run for this model under this shape mode.
 
