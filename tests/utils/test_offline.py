@@ -38,7 +38,7 @@ from transformers import BertConfig, BertModel, BertTokenizer, pipeline
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname)
+BertModel.from_pretrained(mname, use_kernels=False)
 BertTokenizer.from_pretrained(mname)
 pipe = pipeline(task="fill-mask", model=mname)
 print("success")
@@ -53,7 +53,7 @@ socket.socket = offline_socket
         # Force fetching the files so that we can use the cache
         mname = "hf-internal-testing/tiny-random-bert"
         BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
+        BertModel.from_pretrained(mname, use_kernels=False)
         BertTokenizer.from_pretrained(mname)
         pipeline(task="fill-mask", model=mname)
 
@@ -73,7 +73,7 @@ from transformers import BertConfig, BertModel, BertTokenizer, pipeline
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname)
+BertModel.from_pretrained(mname, use_kernels=False)
 BertTokenizer.from_pretrained(mname)
 pipe = pipeline(task="fill-mask", model=mname)
 print("success")
@@ -88,7 +88,7 @@ socket.socket = offline_socket
         # Force fetching the files so that we can use the cache
         mname = "hf-internal-testing/tiny-random-bert"
         BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
+        BertModel.from_pretrained(mname, use_kernels=False)
         BertTokenizer.from_pretrained(mname)
         pipeline(task="fill-mask", model=mname)
 
@@ -113,7 +113,7 @@ from transformers import BertConfig, BertModel, BertTokenizer
         run = """
 mname = "hf-internal-testing/tiny-random-bert-sharded"
 BertConfig.from_pretrained(mname)
-BertModel.from_pretrained(mname)
+BertModel.from_pretrained(mname, use_kernels=False)
 print("success")
         """
 
@@ -165,7 +165,7 @@ from transformers import AutoModel
         """
         run = """
 mname = "hf-internal-testing/test_dynamic_model"
-AutoModel.from_pretrained(mname, trust_remote_code=True)
+AutoModel.from_pretrained(mname, trust_remote_code=True, use_kernels=False)
 print("success")
         """
 
