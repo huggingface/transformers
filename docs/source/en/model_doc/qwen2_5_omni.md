@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -33,8 +33,7 @@ The abstract from the technical report is the following:
 ## Notes
 
 - Use [`Qwen2_5OmniForConditionalGeneration`] to generate audio and text output. To generate only one output type, use [`Qwen2_5OmniThinkerForConditionalGeneration`] for text-only and [`Qwen2_5OmniTalkersForConditionalGeneration`] for audio-only outputs.
-- Audio generation with [`Qwen2_5OmniForConditionalGeneration`] supports only single batch size at the moment.
-- In case out out-of-memory errors hwen working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very arge value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
+- In case out-of-memory errors when working with video input, decrease `processor.max_pixels`. By default the maximum is set to a very large value and high resolution visuals will not be resized, unless resolution exceeds `processor.max_pixels`.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
 ## Usage example
@@ -68,7 +67,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can't you hear and see in this video?"},
         ],
     },
 ]
@@ -124,7 +123,7 @@ conversations = [
         "role": "user",
         "content": [
             {"type": "video", "video": "/path/to/video.mp4"},
-            {"type": "text", "text": "What cant you hear and see in this video?"},
+            {"type": "text", "text": "What can't you hear and see in this video?"},
         ],
     },
 ]
@@ -147,11 +146,6 @@ inputs = processor.apply_chat_template(
 text_ids = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
-sf.write(
-    "output.wav",
-    audio.reshape(-1).detach().cpu().numpy(),
-    samplerate=24000,
-)
 print(text)
 ```
 
@@ -230,7 +224,7 @@ conversation4 = [
             {"type": "image", "path": "/path/to/image.jpg"},
             {"type": "video", "path": "/path/to/video.mp4"},
             {"type": "audio", "path": "/path/to/audio.wav"},
-            {"type": "text", "text": "What are the elements can you see and hear in these medias?"},
+            {"type": "text", "text": "What are the elements can you see and hear in these media?"},
         ],
     }
 ]
@@ -255,6 +249,71 @@ text_ids = model.generate(**inputs, use_audio_in_video=True)
 text = processor.batch_decode(text_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 
 print(text)
+```
+
+### Batch audio generation
+
+[`Qwen2_5OmniForConditionalGeneration`] supports batched audio output generation. For example, below for text-to-speech batch generation. With a batch of more than one sample, the generated audio is returned as a list with one waveform per sample, each already trimmed to its own length, so shorter samples are not padded with spurious audio. A single-sample call still returns one tensor.
+
+```python
+import soundfile as sf
+from transformers import AutoModelForTextToWaveform, AutoProcessor
+import torch
+
+model_id = "Qwen/Qwen2.5-Omni-7B"
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+sampling_rate = 24000  # output sampling rate
+max_new_tokens = 200  # maximum number of tokens to generate
+
+system_text = (
+    "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of "
+    "perceiving auditory and visual inputs, as well as generating text and speech."
+)
+texts = [
+    "Hello, I'm Qwen. How can I help you today?",
+    "The weather is nice today. Let's go for a walk.",
+]
+inputs = processor.apply_chat_template(
+    [
+        [
+            {"role": "system", "content": [{"type": "text", "text": system_text}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Please read the following text aloud exactly as written, with no "
+                            f"additional commentary:\n\n{text}"
+                        ),
+                    }
+                ],
+            },
+        ]
+        for text in texts
+    ],
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+    processor_kwargs={"padding": True},
+).to(model.device, dtype=model.dtype)
+
+gen_kwargs = {
+    "talker_do_sample": True,
+    "speaker": "Ethan",  # Ethan, Chelsie
+    "talker_max_new_tokens": max_new_tokens,
+}
+_, pred_waveform = model.generate(**inputs, **gen_kwargs)
+
+for sample_id, audio in enumerate(pred_waveform):
+    sf.write(
+        f"qwen2_5_omni_output_{sample_id}.wav",
+        audio.detach().to(torch.float32).cpu().numpy(),
+        sampling_rate,
+    )
+    print(f"Saved audio to qwen2_5_omni_output_{sample_id}.wav")
 ```
 
 ### Usage Tips
@@ -306,14 +365,14 @@ text_ids = model.generate(**inputs, return_audio=False)
 
 #### Change voice type of output audio
 
-Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `spk` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `spk` is not specified, the default voice type is `Chelsie`.
+Qwen2.5-Omni supports the ability to change the voice of the output audio. Users can use the `speaker` parameter of `generate` function to specify the voice type. The `"Qwen/Qwen2.5-Omni-7B"` checkpoint support two voice types: `Chelsie` and `Ethan`, while `Chelsie` is a female voice and `Ethan` is a male voice. By default, if `speaker` is not specified, the default voice type is `Chelsie`.
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Chelsie")
+text_ids, audio = model.generate(**inputs, speaker="Chelsie")
 ```
 
 ```python
-text_ids, audio = model.generate(**inputs, spk="Ethan")
+text_ids, audio = model.generate(**inputs, speaker="Ethan")
 ```
 
 #### Flash-Attention 2 to speed up generation

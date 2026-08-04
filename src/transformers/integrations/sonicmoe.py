@@ -38,17 +38,22 @@ logger = logging.get_logger(__name__)
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
-# Max sonic-moe build-dependency versions: newer CuteDSL / TVM-FFI releases haven't been validated
-# against the kernel and may break its dispatch, so we refuse to load past them.
-SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.5.2", "apache-tvm-ffi": "0.1.9"}
+# Min sonic-moe build-dependency versions: older CuteDSL / TVM-FFI releases lack APIs the kernel
+# needs and fail at import or JIT time, so we refuse to load below them.
+SONICMOE_DEPENDENCIES = {"nvidia-cutlass-dsl": "4.6.0", "apache-tvm-ffi": "0.1.10"}
 
 
+@torch._dynamo.assume_constant_result
 def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
     """Whether the sonic-moe kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on
     Hopper (SM90) or newer, and `nvidia-cutlass-dsl` / `apache-tvm-ffi` no newer than the versions the
     kernel was validated against (`SONICMOE_DEPENDENCIES`) — newer releases may break its CuteDSL / TVM
     FFI dispatch. A one-glance gate for callers, including external stacks. With `raise_error=True` (used
     by the loader) it re-raises the specific `ImportError` instead of returning `False`.
+
+    `@assume_constant_result` makes dynamo evaluate this once at trace time and inline the bool (its probe
+    is untraceable — an `lru_cache`'d import check, the `get_device_capability` pybind, and
+    `importlib.metadata` version lookups), so it stays compile-safe if called from a compiled region.
     """
     if not is_kernels_available():
         return maybe_import_error(
@@ -67,7 +72,7 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             f"capability {major}.x. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
-    for distribution, max_version in SONICMOE_DEPENDENCIES.items():
+    for distribution, min_version in SONICMOE_DEPENDENCIES.items():
         # These are distribution (`pip install`) names, not import names, so resolve the version directly
         # via `importlib.metadata`. `_is_package_available` looks packages up through `find_spec`, which
         # can't resolve a distribution whose import name differs (e.g. `nvidia-cutlass-dsl` imports as
@@ -78,10 +83,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             return maybe_import_error(
                 f"sonic-moe requires `{distribution}`, but it is not installed.", raise_error=raise_error
             )
-        if version.parse(installed) > version.parse(max_version):
+        if version.parse(installed) < version.parse(min_version):
             return maybe_import_error(
-                f"sonic-moe requires `{distribution}` <= {max_version} (newer versions are unvalidated), "
-                f"but {installed} is installed.",
+                f"sonic-moe requires `{distribution}` >= {min_version}, but {installed} is installed.",
                 raise_error=raise_error,
             )
     return True
@@ -156,51 +160,6 @@ def load_sonicmoe_kernel() -> SonicMoE:
     return _SONICMOE
 
 
-@torch._dynamo.allow_in_graph
-def _sonicmoe_wrapper(
-    hidden_states: torch.Tensor,
-    router_scores: torch.Tensor,
-    expert_ids: torch.Tensor,
-    token_idx: torch.Tensor,
-    w1: torch.Tensor,
-    b1: torch.Tensor | None,
-    w2: torch.Tensor,
-    b2: torch.Tensor | None,
-    act_name: str,
-    num_experts: int,
-    concat_layout: bool,
-    is_inference_mode_enabled: bool,
-) -> torch.Tensor:
-    """Module-level shim around `moe_general_routing_inputs` so `allow_in_graph` can wrap it.
-
-    sonicmoe asserts `not torch.compiler.is_compiling()` internally because it dispatches
-    CuteDSL kernels, which Dynamo can't trace. `allow_in_graph` keeps the call in the FX
-    graph as a single opaque node (no tracing into the body, no graph break) while still
-    running the real Python at runtime — autograd through `_UpProjection` / `_DownProjection`
-    flows normally. The decorator must be applied at module load time, not inside the compiled
-    function — hence this shim plus the `allow_in_graph` decorator above.
-    """
-    sonicmoe = load_sonicmoe_kernel()
-    activation_type_enum = sonicmoe.activation_type_enum
-    activation_type = getattr(activation_type_enum, ACT_MAP[act_name].upper())
-    output, _ = sonicmoe.moe_general_routing_inputs(
-        hidden_states,
-        router_scores,
-        token_idx,
-        expert_ids,
-        w1,
-        b1,
-        w2,
-        b2,
-        E=num_experts,
-        activation_type=activation_type,
-        is_inference_mode_enabled=is_inference_mode_enabled,
-        concat_layout=concat_layout,
-        stream_id=None,
-    )
-    return output
-
-
 def sonicmoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -242,17 +201,20 @@ def sonicmoe_experts_forward(
     w1 = w1.permute(*perm)  # (2*I, H, E)
     w2 = w2.permute(*perm)  # (I, H, E)
 
-    return _sonicmoe_wrapper(
-        hidden_states=hidden_states,
-        router_scores=router_scores,
-        expert_ids=expert_ids,
-        token_idx=token_idx,
-        w1=w1,
-        b1=b1,
-        w2=w2,
-        b2=b2,
-        act_name=act_name,
-        num_experts=self.num_experts,
-        concat_layout=self.is_concatenated,
+    sonicmoe = load_sonicmoe_kernel()
+    output, _ = sonicmoe.moe_general_routing_inputs(
+        hidden_states,
+        router_scores,
+        token_idx,
+        expert_ids,
+        w1,
+        b1,
+        w2,
+        b2,
+        E=self.num_experts,
+        activation_type=getattr(sonicmoe.activation_type_enum, ACT_MAP[act_name].upper()),
         is_inference_mode_enabled=not torch.is_grad_enabled(),
+        concat_layout=self.is_concatenated,
+        stream_id=None,
     )
+    return output
