@@ -24,9 +24,9 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
-from ..utils.generic import is_flash_attention_requested
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -624,11 +624,7 @@ def load_and_register_attn_kernel(
 
     # create revision xor version
     rev = rev.strip() if rev else None
-    version = None
-    if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
-        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+    version = FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1) if rev is None else None
 
     # Load the kernel from hub
     try:
