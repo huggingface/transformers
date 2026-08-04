@@ -168,12 +168,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -182,12 +182,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -224,12 +224,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -238,12 +238,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -252,12 +252,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -266,12 +266,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -280,12 +280,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -577,9 +577,6 @@ else:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d", "version": 1},
-    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
-    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
@@ -765,6 +762,16 @@ def get_kernel(
 
 
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
+    """
+    The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
+    FLA for Gated Delta Rule, mamba-ssm for mamba2, etc.
+
+    This combines all options with kernels, enabling kernels on top of the original package if requested as well.
+    The order of priority is
+        1. Hf kernels (if requested)
+        2. Original package
+        3. Torch only path
+    """
     kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
 
     # Allow internal path prefix if given to resolve non __init__ imports
@@ -774,6 +781,8 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
+            # TODO: remove raise to force torch path
+            raise
             module = importlib.import_module(package)
             implementation = resolve_internal_import(module, full_path)
         except Exception:
