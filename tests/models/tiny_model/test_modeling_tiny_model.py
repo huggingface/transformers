@@ -17,7 +17,7 @@ import torch
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
-from transformers.models.tiny_model import TinyModel, TinyModelConfig, TinyModelForCausalLM
+from transformers import TinyModel, TinyModelConfig, TinyModelForCausalLM, is_torch_available
 from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelAttention,
     TinyModelDecoderLayer,
@@ -25,6 +25,9 @@ from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelPreTrainedModel,
     eager_attention_forward,
 )
+from transformers.testing_utils import require_torch
+
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class TinyModelConfigTest(unittest.TestCase):
@@ -61,9 +64,7 @@ class TinyModelAttentionFunctionTest(unittest.TestCase):
         value = torch.randn(2, 4, 5, 8)
         attention_mask = torch.full((1, 1, 5, 5), float("-inf")).triu(diagonal=1)
 
-        actual, weights = eager_attention_forward(
-            nn.Identity(), query, key, value, attention_mask, scaling=8**-0.5
-        )
+        actual, weights = eager_attention_forward(nn.Identity(), query, key, value, attention_mask, scaling=8**-0.5)
         expected = nn.functional.scaled_dot_product_attention(query, key, value, is_causal=True)
 
         torch.testing.assert_close(actual, expected.transpose(1, 2), rtol=1e-5, atol=1e-6)
@@ -243,6 +244,17 @@ class TinyModelForCausalLMTest(unittest.TestCase):
         self.assertEqual(output_ids.shape, (1, 5))
         self.assertFalse(model.generation_config.use_cache)
 
+    def test_generation_from_input_embeddings_is_rejected(self):
+        model = TinyModelForCausalLM(self.get_config())
+        input_ids = torch.tensor([[1, 2, 3]])
+
+        with self.assertRaisesRegex(ValueError, "cannot generate from `inputs_embeds`"):
+            model.prepare_inputs_for_generation(
+                input_ids,
+                inputs_embeds=model.model.embed_tokens(input_ids),
+                use_cache=False,
+            )
+
     def test_forward_returns_raw_logits_and_loss(self):
         torch.manual_seed(6)
         model = TinyModelForCausalLM(self.get_config()).eval()
@@ -271,3 +283,73 @@ class TinyModelForCausalLMTest(unittest.TestCase):
             model(input_ids=input_ids, use_cache=True)
         with self.assertRaisesRegex(ValueError, "does not support `past_key_values`"):
             model(input_ids=input_ids, past_key_values=object())
+
+    def test_matches_original_model_equations(self):
+        torch.manual_seed(7)
+        model = TinyModelForCausalLM(self.get_config()).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+
+        with torch.no_grad():
+            native_logits = model(input_ids).logits
+
+            position_ids = torch.arange(input_ids.shape[1]).unsqueeze(0)
+            hidden_states = model.model.embed_tokens(input_ids) + model.model.embed_positions(position_ids)
+            for layer in model.model.layers:
+                batch_size, sequence_length, _ = hidden_states.shape
+                query = layer.self_attn.q_proj(hidden_states).view(batch_size, sequence_length, 4, 4).transpose(1, 2)
+                key = layer.self_attn.k_proj(hidden_states).view(batch_size, sequence_length, 4, 4).transpose(1, 2)
+                value = layer.self_attn.v_proj(hidden_states).view(batch_size, sequence_length, 4, 4).transpose(1, 2)
+                attention_output = nn.functional.scaled_dot_product_attention(query, key, value, is_causal=True)
+                attention_output = layer.self_attn.o_proj(
+                    attention_output.transpose(1, 2).reshape(batch_size, sequence_length, 16)
+                )
+                hidden_states = hidden_states + attention_output
+                hidden_states = hidden_states + layer.mlp.fc2(torch.relu(layer.mlp.fc1(hidden_states)))
+            original_logits = model.lm_head(hidden_states)
+            original_log_probabilities = torch.log_softmax(original_logits, dim=-1)
+
+        torch.testing.assert_close(native_logits, original_logits, rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(
+            torch.log_softmax(native_logits, dim=-1), original_log_probabilities, rtol=1e-5, atol=1e-6
+        )
+
+
+class TinyModelModelTester(CausalLMModelTester):
+    config_class = TinyModelConfig
+    if is_torch_available():
+        base_model_class = TinyModel
+        causal_lm_class = TinyModelForCausalLM
+
+    def __init__(self, parent):
+        super().__init__(
+            parent=parent,
+            hidden_act="relu",
+            intermediate_size=64,
+            max_position_embeddings=64,
+        )
+
+
+@require_torch
+class TinyModelModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = TinyModelModelTester
+    training_overfit_learning_rate = 2e-3
+
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    @unittest.skip("TinyModel does not support caching, but this common test explicitly enables it")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("TinyModel does not support caching, but this common test explicitly enables it")
+    def test_generate_with_and_without_position_ids(self):
+        pass

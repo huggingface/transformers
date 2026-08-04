@@ -215,6 +215,11 @@ class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
     def _supports_default_dynamic_cache(cls) -> bool:
         return False
 
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs):
+        if kwargs.get("inputs_embeds") is not None:
+            raise ValueError("TinyModel cannot generate from `inputs_embeds` without key/value caching.")
+        return super().prepare_inputs_for_generation(input_ids, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(

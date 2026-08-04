@@ -43,14 +43,11 @@ def _convert_state_dict(
     invalid_dtype_keys = [key for key, value in state_dict.items() if value.dtype != torch.bfloat16]
     if invalid_dtype_keys:
         raise ValueError(
-            "TinyModel checkpoints must contain only bfloat16 tensors, invalid keys: "
-            f"{sorted(invalid_dtype_keys)}"
+            f"TinyModel checkpoints must contain only bfloat16 tensors, invalid keys: {sorted(invalid_dtype_keys)}"
         )
 
     layer_indices = {
-        int(match.group(1))
-        for key in state_dict
-        if (match := re.fullmatch(r"torso\.(\d+)\..+", key)) is not None
+        int(match.group(1)) for key in state_dict if (match := re.fullmatch(r"torso\.(\d+)\..+", key)) is not None
     }
     if not layer_indices:
         raise ValueError("TinyModel checkpoint does not contain any decoder layers.")
@@ -58,9 +55,7 @@ def _convert_state_dict(
     num_hidden_layers = max(layer_indices) + 1
     expected_layer_indices = set(range(num_hidden_layers))
     if layer_indices != expected_layer_indices:
-        raise ValueError(
-            f"TinyModel decoder layers must be contiguous from zero, got {sorted(layer_indices)}."
-        )
+        raise ValueError(f"TinyModel decoder layers must be contiguous from zero, got {sorted(layer_indices)}.")
     if expected_num_hidden_layers is not None and num_hidden_layers != expected_num_hidden_layers:
         raise ValueError(
             f"Expected {expected_num_hidden_layers} decoder layers, but the checkpoint contains {num_hidden_layers}."
@@ -99,8 +94,7 @@ def _convert_state_dict(
     position_shape = tuple(state_dict["pos_embed"].shape)
     if len(position_shape) != 3 or position_shape[0] != 1 or position_shape[2] != hidden_size:
         raise ValueError(
-            f"Expected `pos_embed` to have shape (1, max_position_embeddings, {hidden_size}), "
-            f"got {position_shape}."
+            f"Expected `pos_embed` to have shape (1, max_position_embeddings, {hidden_size}), got {position_shape}."
         )
     max_position_embeddings = position_shape[1]
 
@@ -113,8 +107,7 @@ def _convert_state_dict(
     intermediate_size = read_in_shape[0]
     if intermediate_size != 4 * hidden_size:
         raise ValueError(
-            f"Expected the intermediate size to equal 4 * hidden_size ({4 * hidden_size}), "
-            f"got {intermediate_size}."
+            f"Expected the intermediate size to equal 4 * hidden_size ({4 * hidden_size}), got {intermediate_size}."
         )
     if num_attention_heads <= 0 or hidden_size % num_attention_heads != 0:
         raise ValueError(

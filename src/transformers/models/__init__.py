@@ -452,6 +452,7 @@ if TYPE_CHECKING:
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *
+    from .tiny_model import *
     from .trocr import *
     from .tvp import *
     from .udop import *
