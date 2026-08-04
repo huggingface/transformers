@@ -179,13 +179,27 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
                 json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
-            config_dict = get_image_processor_config(tmpdirname)
-            self.assertEqual(config_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
+            image_processor_dict = get_image_processor_config(tmpdirname)
+            self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
+
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+                json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
+            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
+                json.dump({"video_processor_type": "SomeVideoProcessor"}, f)
+            feature_extractor_dict = get_feature_extractor_config(tmpdirname)
+            self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
+            video_processor_dict = get_video_processor_config(tmpdirname)
+            self.assertEqual(video_processor_dict, {"video_processor_type": "SomeVideoProcessor"})
 
         # case 2: `processor_config.json` exists but does not contain a nested key
         with tempfile.TemporaryDirectory() as tmpdirname:
             with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
                 json.dump({"processor_class": "SomeProcessor"}, f)
+            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
+                json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
+            image_processor_dict = get_image_processor_config(tmpdirname)
+            self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
+
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
             with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
