@@ -443,7 +443,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python

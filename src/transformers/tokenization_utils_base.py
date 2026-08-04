@@ -1210,7 +1210,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self, new_tokens: str | AddedToken | Sequence[str | AddedToken], special_tokens: bool = False
     ) -> int:
         """
-        #TODO remove this from here! PreTrainedTOkeniuzerBase should be agnostic of AddedToken.
+        #TODO remove this from here! PreTrainedTokenizerBase should be agnostic of AddedToken.
 
         Add a list of new tokens. If the new tokens are not in the vocabulary, they are added to the end. Added tokens and
         tokens from the vocabulary of the tokenization algorithm are therefore not treated in the same way.
