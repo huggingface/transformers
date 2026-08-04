@@ -2232,8 +2232,8 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
         self.total_upsample = np.prod(config.upsample_rates + config.upsampling_ratios)
         self.pre_transformer = Qwen3OmniMoeCode2WavTransformerModel._from_config(config)
         self.code_embedding = nn.Embedding(config.codebook_size * config.num_quantizers, config.hidden_size)
-        self.register_buffer(
-            "code_offset", torch.arange(config.num_quantizers).view(1, -1, 1) * config.codebook_size, persistent=False
+        self.code_offset = nn.Buffer(
+            torch.arange(config.num_quantizers).view(1, -1, 1) * config.codebook_size, persistent=False
         )
 
         upsample = []

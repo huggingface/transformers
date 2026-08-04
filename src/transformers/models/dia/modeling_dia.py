@@ -89,7 +89,7 @@ class DiaMultiChannelEmbedding(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_channels = config.num_channels
         offsets = torch.arange(config.num_channels, dtype=torch.long) * config.vocab_size  # (C,)
-        self.register_buffer("offsets", offsets, persistent=False)
+        self.offsets = nn.Buffer(offsets, persistent=False)
 
     def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
         tokens = (audio_codes + self.offsets.to(audio_codes.device)).view(
@@ -155,8 +155,8 @@ class DiaRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

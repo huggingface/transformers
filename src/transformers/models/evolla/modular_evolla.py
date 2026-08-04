@@ -103,7 +103,7 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
         super().__init__(config)
         # remove the position_ids in EsmEmbeddings
-        self.position_ids = None
+        del self.position_ids
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):

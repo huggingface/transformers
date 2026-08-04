@@ -870,7 +870,7 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         pos_idx_to_embed[:, 0::2] = sine
         pos_idx_to_embed[:, 1::2] = cosine
         # Save the positional embeddings in a constant buffer.
-        self.register_buffer("pos_idx_to_embed", pos_idx_to_embed)
+        self.pos_idx_to_embed = nn.Buffer(pos_idx_to_embed)
 
     @staticmethod
     def get_sinusoid_embeddings(max_positions: int, embed_dim: int):
