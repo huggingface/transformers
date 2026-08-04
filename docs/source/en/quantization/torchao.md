@@ -151,6 +151,36 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
+
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    dtype=torch.float16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device)
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
 </hfoptions>
 
 ### A100 GPU
@@ -213,6 +243,36 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+
+<hfoption id="int4-weight-only-24sparse">
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from torchao.quantization import Int4WeightOnlyConfig
+from torchao.dtypes import MarlinSparseLayout
+
+quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
+quantization_config = TorchAoConfig(quant_type=quant_config)
+
+# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
+    dtype=torch.float16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
 input_text = "What are we having for dinner?"
 input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
 
