@@ -23,10 +23,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -183,6 +187,10 @@ class TinyModelPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["TinyModelDecoderLayer"]
     _supports_attention_backend = True
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": TinyModelDecoderLayer,
+        "attentions": TinyModelAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
@@ -199,6 +207,40 @@ class TinyModel(TinyModelPreTrainedModel):
         self.embed_positions = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.layers = nn.ModuleList([TinyModelDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if position_ids is None:
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds + self.embed_positions(position_ids)
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(hidden_states, attention_mask=causal_mask, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring

@@ -162,8 +162,8 @@ class TinyModelPreTrainedModelTest(unittest.TestCase):
 
 
 class TinyModelTest(unittest.TestCase):
-    def test_model_structure_matches_checkpoint_namespace(self):
-        config = TinyModelConfig(
+    def get_config(self):
+        return TinyModelConfig(
             vocab_size=32,
             hidden_size=16,
             intermediate_size=64,
@@ -174,6 +174,9 @@ class TinyModelTest(unittest.TestCase):
             eos_token_id=29,
             pad_token_id=30,
         )
+
+    def test_model_structure_matches_checkpoint_namespace(self):
+        config = self.get_config()
         model = TinyModel(config)
 
         self.assertEqual(model.embed_tokens.weight.shape, (32, 16))
@@ -182,6 +185,27 @@ class TinyModelTest(unittest.TestCase):
         self.assertEqual(len(model.layers), 2)
         self.assertIn("layers.0.self_attn.q_proj.weight", model.state_dict())
         self.assertIn("layers.1.mlp.fc2.bias", model.state_dict())
+
+    def test_forward_supports_input_ids_and_input_embeddings(self):
+        torch.manual_seed(5)
+        model = TinyModel(self.get_config()).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+
+        with torch.no_grad():
+            from_ids = model(input_ids=input_ids).last_hidden_state
+            from_embeds = model(inputs_embeds=model.embed_tokens(input_ids)).last_hidden_state
+
+        self.assertEqual(from_ids.shape, (2, 4, 16))
+        torch.testing.assert_close(from_ids, from_embeds, rtol=0, atol=0)
+
+    def test_forward_requires_exactly_one_input(self):
+        model = TinyModel(self.get_config())
+        input_ids = torch.tensor([[1, 2, 3]])
+
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            model()
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            model(input_ids=input_ids, inputs_embeds=model.embed_tokens(input_ids))
 
 
 class TinyModelForCausalLMTest(unittest.TestCase):
