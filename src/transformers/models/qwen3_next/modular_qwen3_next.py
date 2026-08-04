@@ -28,7 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_exporting, logging
 from ...utils.generic import maybe_replace_from_package, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -307,7 +307,7 @@ def torch_chunk_gated_delta_rule(
 
     # On CUDA, use a fast solver (which is in torch since 1.11 and backwards compatible); elsewhere, build the inverse
     # by forward substitution.
-    if ut_system.is_cuda:
+    if ut_system.is_cuda and not is_torchdynamo_exporting():
         new_values = torch.linalg.solve_triangular(ut_system, v_beta, upper=False, unitriangular=True)
         k_cumdecay = torch.linalg.solve_triangular(ut_system, decayed_k_beta, upper=False, unitriangular=True)
     else:
