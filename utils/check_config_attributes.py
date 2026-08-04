@@ -60,6 +60,10 @@ SPECIAL_CASES_TO_ALLOW = {
         "dim_model_base",  # Used by the logits_scaling property
         "mup_denominator",  # Checkpoint compatibility for speculative decoding heads
     ],
+    "VoxCPM2TextConfig": [
+        "dim_model_base",  # Used by the logits_scaling property
+        "mup_denominator",  # Checkpoint compatibility for speculative decoding heads
+    ],
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
