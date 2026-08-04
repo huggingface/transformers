@@ -251,6 +251,7 @@ class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
         self.model = TinyModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.lm_head_bias)
         self.post_init()
+        self.generation_config.use_cache = False
 
     @classmethod
     def _supports_default_dynamic_cache(cls) -> bool:

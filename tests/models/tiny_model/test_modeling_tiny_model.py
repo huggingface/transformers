@@ -234,6 +234,15 @@ class TinyModelForCausalLMTest(unittest.TestCase):
     def test_dynamic_cache_is_not_advertised(self):
         self.assertFalse(TinyModelForCausalLM._supports_default_dynamic_cache())
 
+    def test_greedy_generation_without_cache(self):
+        model = TinyModelForCausalLM(self.get_config()).eval()
+        input_ids = torch.tensor([[1, 2, 3]])
+
+        output_ids = model.generate(input_ids, max_new_tokens=2, do_sample=False)
+
+        self.assertEqual(output_ids.shape, (1, 5))
+        self.assertFalse(model.generation_config.use_cache)
+
     def test_forward_returns_raw_logits_and_loss(self):
         torch.manual_seed(6)
         model = TinyModelForCausalLM(self.get_config()).eval()
