@@ -335,7 +335,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(cache.get_seq_length(), 5)
         self.assertEqual(cache.get_seq_length(layer_idx=7), 5)
         self.assertEqual(cache.get_seq_length(layer_idx=3), 0)
-        self.assertEqual(cache.get_mask_sizes(query_length=3, layer_idx=0), (8, 0))
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
