@@ -2284,8 +2284,11 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
             audio_mask,
             decoder_context_patches=decoder_context_patches,
         )
-        decoder_context = decoder_context.to(generation_output.audio_features.dtype)
-        decoder_features = torch.cat((decoder_context, generation_output.audio_features), dim=1)
+        generated_audio_features = generation_output.audio_features
+        if generated_audio_features is None:
+            raise RuntimeError("VoxCPM2 generation did not return audio features")
+        decoder_context = decoder_context.to(generated_audio_features.dtype)
+        decoder_features = torch.cat((decoder_context, generated_audio_features), dim=1)
         decoder_features = decoder_features.reshape(decoder_features.shape[0], -1, decoder_features.shape[-1])
         decoder_features = decoder_features.transpose(1, 2).contiguous()
         audio_vae_dtype = next(self.audio_vae.parameters()).dtype
