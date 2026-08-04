@@ -2254,7 +2254,10 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         audio_features = audio_features.to(dtype=target_dtype)
         encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
 
-        embedding_scale = self.config.lm_config.scale_emb if self.config.lm_config.use_mup else 1.0
+        lm_config = self.config.lm_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
         text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
         text_mask = text_mask.to(dtype=text_embeddings.dtype)
         audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
@@ -2300,6 +2303,8 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         stop_logits = self.stop_head(self.stop_actn(self.stop_proj(lm_hidden_states)))
         stop_loss = None
         if labels is not None:
+            if loss_mask is None:
+                raise ValueError("`loss_mask` must be provided when `labels` are provided")
             typed_loss_mask = loss_mask.to(stop_logits.dtype)
             stop_losses = self.stop_loss(stop_logits.transpose(1, 2), labels)
             stop_loss = (stop_losses * typed_loss_mask).sum() / torch.clamp(typed_loss_mask.sum(), min=1.0)
