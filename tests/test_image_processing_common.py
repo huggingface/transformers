@@ -201,14 +201,8 @@ class ImageProcessingTester:
 
 class ImageProcessingTestMixin:
     test_cast_dtype = None
-    image_processor_tester = None
 
     def setUp(self):
-        if self.image_processor_tester is None:
-            raise ValueError(
-                f"You have inherited from {type(self).__name__} but did not set the image_processor_tester attribute."
-            )
-
         # Infer model_name from test folder (parent of this test file)
 
         test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
