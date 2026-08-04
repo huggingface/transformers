@@ -74,9 +74,9 @@ class DbrxFFNConfig(PreTrainedConfig):
     ffn_hidden_size: int = 3584
     moe_num_experts: int = 4
     moe_top_k: int = 1
-    moe_jitter_eps: float | None = None
-    moe_loss_weight: float = 0.01
-    moe_normalize_expert_weights: float | None = 1.0
+    moe_jitter_eps: float | int | None = None
+    moe_loss_weight: float | int = 0.01
+    moe_normalize_expert_weights: float | int | None = 1.0
 
     def __post_init__(self, **kwargs):
         if self.ffn_act_fn is None:
@@ -162,6 +162,10 @@ class DbrxConfig(PreTrainedConfig):
             self.ffn_config = DbrxFFNConfig()
         elif isinstance(self.ffn_config, dict):
             self.ffn_config = DbrxFFNConfig(**self.ffn_config)
+
+        # The experts read/write hidden states, so `ffn_config.hidden_size` must mirror the model's
+        # `hidden_size`. Checkpoints do not store it, hence we always propagate it from `d_model`.
+        self.ffn_config.hidden_size = self.d_model
 
         self.num_key_value_heads = self.attn_config.kv_n_heads
         super().__post_init__(**kwargs)
