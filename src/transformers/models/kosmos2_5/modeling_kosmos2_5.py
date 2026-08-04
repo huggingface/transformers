@@ -1136,9 +1136,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-    KOSMOS-2.5 Model for generating text and image features. The model consists of a vision encoder and a language model.
-    """,
+    "",
     KOSMOS2_5_START_DOCSTRING,
 )
 class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
