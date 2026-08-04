@@ -214,7 +214,7 @@ def _run_training_steps(model, optimizer, batches, *, track_grad_norms=True):
         loss.backward()
         if track_grad_norms:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float("inf"))
-            grad_norms.append(grad_norm)
+            grad_norms.append(grad_norm.item())
         optimizer.step()
         losses.append(loss.detach().item())
     return losses, grad_norms
@@ -514,6 +514,10 @@ class FSDPTesterMixin(ABC):
         if available_workers < self.fsdp_nproc_per_node:
             self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
 
+    def _skip_if_mps(self):
+        if torch._C._get_accelerator().type == "mps":
+            self.skipTest("FSDP distributed tests are not supported when the default accelerator is MPS")
+
     def _has_fsdp_plan(self) -> bool:
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
@@ -555,6 +559,7 @@ class FSDPTesterMixin(ABC):
         return type(config), config.to_diff_dict()
 
     def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
+        self._skip_if_mps()
         self._skip_if_insufficient_devices()
         self._skip_if_fsdp_distributed_not_enabled()
 

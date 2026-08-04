@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -32,6 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TensorType
 from ..auto import AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
@@ -382,6 +382,7 @@ class PPDocLayoutV2GlobalPointer(PPDocLayoutV3GlobalPointer):
 class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):
         super().__init__()
         self.config = config
@@ -391,23 +392,18 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
             in_channels=self.embed_dim * 4, out_channels=config.num_attention_heads, kernel_size=1
         )
         inv_freq, self.attention_scaling = self.compute_default_rope_parameters(config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: PPDocLayoutV2Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: PPDocLayoutV2Config, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -417,12 +413,9 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         half_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / half_dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / half_dim))
+        return inv_freq.to(device), attention_factor
 
     def box_relative_encoding(
         self, source_boxes: torch.Tensor, target_boxes: torch.Tensor = None, epsilon: float = 1e-5
@@ -642,7 +635,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
         if isinstance(module, PPDocLayoutV2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.config, module.inv_freq.device)
+            inv_freq, _ = module.compute_default_rope_parameters(module.config)
             module.register_buffer("inv_freq", inv_freq, persistent=False)
 
 

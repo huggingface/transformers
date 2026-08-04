@@ -35,7 +35,6 @@ from ...integrations import (
     lazy_load_kernel,
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
@@ -757,7 +756,7 @@ class NemotronHTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -794,7 +793,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -1215,29 +1214,9 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
         kwargs["logits_to_keep"] = self.config.num_logits_to_keep
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         return model_inputs
 
     @staticmethod

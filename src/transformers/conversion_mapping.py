@@ -250,9 +250,12 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
             # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
-            # (`fc1` / `fc2`). Bridge the names on load (and back on save).
-            WeightRenaming(source_patterns=r"\.W_down\.", target_patterns=".mlp.fc1."),
-            WeightRenaming(source_patterns=r"\.W_up\.", target_patterns=".mlp.fc2."),
+            # (`fc1` / `fc2`). Bridge the names on load (and back on save). Patterns are unanchored (no
+            # surrounding dots) so the same rename also normalizes the bare module names in an fp8 checkpoint's
+            # `modules_to_not_convert` (`W_down`/`W_up` -> `mlp.fc1`/`mlp.fc2`); a dot-anchored pattern would
+            # leave those bare names untouched and the gate MLP would be quantized by mistake.
+            WeightRenaming(source_patterns=r"W_down", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns=r"W_up", target_patterns="mlp.fc2"),
             # The released checkpoints fuse the query up-projection and the attention output gate into a
             # single `q_b_proj` (vLLM layout); the model keeps it fused under the clearer name `q_gate_proj`
             # and splits the activation in the forward. A plain rename (kept fp8-safe: no weight split, and
@@ -652,15 +655,15 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns=r"\.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -757,28 +760,20 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.w1.weight",
-                    "mlp.experts.*.w3.weight",
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
                 ],
-                target_patterns="mlp.experts.gate_up_proj",
+                target_patterns=r"\.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.w2.weight",
-                target_patterns="mlp.experts.down_proj",
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
             WeightConverter(
-                source_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
-                target_patterns="mlp.gate_up_proj.weight",
-                operations=[Concatenate(dim=0)],
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.shared_experts.gate_proj.weight",
-                    "mlp.shared_experts.up_proj.weight",
-                ],
-                target_patterns="mlp.shared_experts.gate_up_proj.weight",
+                source_patterns=[r"\.gate_proj.weight", r"\.up_proj.weight"],
+                target_patterns=r"\.gate_up_proj.weight",
                 operations=[Concatenate(dim=0)],
             ),
         ],

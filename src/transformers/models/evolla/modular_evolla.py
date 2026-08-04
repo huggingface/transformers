@@ -103,20 +103,15 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
         super().__init__(config)
         # remove the position_ids in EsmEmbeddings
-        self.position_ids = None
+        del self.position_ids
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
     def __init__(self, config: SaProtConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: SaProtConfig | None = None,
-        device: "torch.device | None" = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len)
+    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config)
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention):
