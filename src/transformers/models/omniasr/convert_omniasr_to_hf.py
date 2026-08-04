@@ -98,8 +98,9 @@ logger = logging.get_logger(__name__)
 
 # TODO change to state dict mapping like in newer models
 def get_encoder_convert_list(target_attr="encoder"):
-    # `target_attr` is the HF attribute path holding the audio encoder:
-    # "encoder" for OmniASRForCTC/OmniASRSpeechEncoder, "model.encoder" for OmniASRForConditionalGeneration.
+    # `target_attr` is the HF attribute path holding the audio encoder: "encoder" for
+    # OmniASRForCTC/OmniASRSpeechEncoder, "model.audio_tower" for OmniASRForConditionalGeneration, which follows
+    # Voxtral's naming.
     return [
         # OmniASRFeatureEncoder
         ("encoder_frontend.feature_extractor.layers", f"{target_attr}.feature_extractor.conv_layers"),
@@ -518,7 +519,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         encoder_convert_list = get_encoder_convert_list(target_attr="encoder")
     elif "LLM" in model_card:
         decoder_convert_list = llm_convert_list
-        encoder_convert_list = get_encoder_convert_list(target_attr="model.encoder")
+        encoder_convert_list = get_encoder_convert_list(target_attr="model.audio_tower")
     else:
         encoder_convert_list = get_encoder_convert_list(target_attr="encoder")
     hf_model = _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list)

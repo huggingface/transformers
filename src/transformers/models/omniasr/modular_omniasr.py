@@ -42,7 +42,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..parakeet.modeling_parakeet import ParakeetCTCGenerateOutput, ParakeetForCTC
-from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration
+from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2Encoder,
@@ -473,12 +473,9 @@ class OmniASRModelOutputWithPast(BaseModelOutputWithPast):
     without a language modeling head.
     """
 )
-class OmniASRModel(OmniASRPreTrainedModel):
+class OmniASRModel(VoxtralModel):
     def __init__(self, config):
         super().__init__(config)
-
-        self.encoder = AutoModel.from_config(config.audio_config)
-        self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = nn.Linear(
             config.audio_config.hidden_size * config.encoder_stacking,
             config.text_config.hidden_size,
@@ -493,10 +490,14 @@ class OmniASRModel(OmniASRPreTrainedModel):
                 self.language_token_id = reserved_language_token_id
         self.lang_embeddings = nn.Embedding(config.num_language_embeddings, config.text_config.hidden_size)
 
-        self.post_init()
+
+    def get_placeholder_mask(
+            self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+        ):
+        raise NotImplementedError("TODO replace build_audio_context with this function, which will be used in the decoder to mask out the audio context")
 
     def get_audio_features(self, input_values: torch.FloatTensor, attention_mask: torch.Tensor | None = None):
-        audio_outputs = self.encoder(input_values, attention_mask=attention_mask)
+        audio_outputs = self.audio_tower(input_values, attention_mask=attention_mask)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
@@ -546,7 +547,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         else:
             # Shift each sample right by the amount of audio padding it carries, so its valid frames end at
             # `audio_length` and the markers below follow immediately after them.
-            audio_lengths = self.encoder._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(target_device)
+            audio_lengths = self.audio_tower._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(target_device)
             indices = torch.arange(audio_length, device=target_device) - (audio_length - audio_lengths)[:, None]
             audio_attention_mask = indices >= 0
             gather_indices = indices.clamp(min=0).unsqueeze(-1).expand(-1, -1, hidden_size)
@@ -566,19 +567,18 @@ class OmniASRModel(OmniASRPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         input_values: torch.Tensor | None = None,
-        # TODO better handling of language ids?
         language_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OmniASRModelOutputWithPast:
         r"""
         language_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Language IDs for the input audio. If not provided, the model defaults to a language-agnostic mode.
+            Index into the language embedding table for each audio input, as produced by
+            [`OmniASRProcessor.__call__`] from its `language` argument. Defaults to the language-agnostic entry (0).
         """
 
         if input_values is None and input_ids is None and inputs_embeds is None:
@@ -595,22 +595,6 @@ class OmniASRModel(OmniASRPreTrainedModel):
         elif inputs_embeds is None:
             # Subsequent decoding steps: the newly generated tokens are passed as `input_ids`.
             inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if labels is not None:
-            # Training: append target_text + eos embeddings for teacher forcing
-            batch_size = inputs_embeds.size(0)
-            device = inputs_embeds.device
-            dtype = inputs_embeds.dtype
-            text_embed_fn = self.get_input_embeddings()
-            eos_batch = torch.full((batch_size, 1), self.config.eos_token_id, dtype=torch.long, device=device)
-            target_embeds = text_embed_fn(labels).to(dtype)
-            eos_embeds = text_embed_fn(eos_batch).to(dtype)
-            inputs_embeds = torch.cat([inputs_embeds, target_embeds, eos_embeds], dim=1)
-            if attention_mask is not None:
-                target_attention_mask = torch.ones(
-                    batch_size, labels.shape[1] + 1, dtype=attention_mask.dtype, device=attention_mask.device
-                )
-                attention_mask = torch.cat([attention_mask, target_attention_mask], dim=1)
 
         # Build attention mask if not provided
         if attention_mask is None and past_key_values is None:
@@ -652,7 +636,6 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
         self,
         input_ids: torch.LongTensor | None = None,
         input_values: torch.Tensor | None = None,
-        # TODO better handling of language ids?
         language_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -665,7 +648,12 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         language_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Language IDs for the input audio. If not provided, the model defaults to a language-agnostic mode.
+            Index into the language embedding table for each audio input, as produced by
+            [`OmniASRProcessor.__call__`] from its `language` argument. Defaults to the language-agnostic entry (0).
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the causal language modeling loss. They are shifted internally, so they must be
+            aligned with the decoder sequence -- i.e. as long as `input_ids` / `inputs_embeds`, with `-100` on the
+            positions that should not contribute to the loss (the audio context, and padding).
         """
         outputs: OmniASRModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -685,27 +673,9 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            # TODO check
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-
-            # # Context length = audio_seq_len + 3 (lid_marker + lang_id + bos)
-            # context_seq_len = hidden_states.size(1) - labels.size(1) - 1  # subtract target + eos
-            # target_len = labels.size(1) + 1  # +1 for EOS
-            # target_logits = logits[:, context_seq_len - 1 : context_seq_len - 1 + target_len, :]
-
-            # batch_size = labels.size(0)
-            # device = labels.device
-            # eos_batch = torch.full((batch_size, 1), self.config.eos_token_id, dtype=torch.long, device=device)
-            # targets = torch.cat([labels, eos_batch], dim=1)
-
-            # loss = nn.functional.cross_entropy(
-            #     input=target_logits.reshape(-1, target_logits.size(-1)),
-            #     target=targets.reshape(-1),
-            #     ignore_index=self.config.pad_token_id,
-            #     reduction="mean",
-            # )
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -715,11 +685,16 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        raise AttributeError(
-            "Drops Voxtral's override, which forwards `input_features` on the first decoding step. OmniASR has no "
-            "such input, so the standard `GenerationMixin.prepare_inputs_for_generation` is used instead."
-        )
+    # Bypasses Voxtral's override, which forwards `input_features` on the first decoding step: OmniASR has no such
+    # input. The signature has to name `inputs_embeds` explicitly, since `generate` inspects it to decide whether
+    # the model can be driven from embeddings.
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor | None = None,
+        **kwargs,
+    ):
+        return GenerationMixin.prepare_inputs_for_generation(self, input_ids, inputs_embeds=inputs_embeds, **kwargs)
 
     # TODO avoid this override, and use `prepare_inputs_for_generation` instead?
     # The audio is the entire decoder context, so it is turned into `inputs_embeds` here and the rest of the
