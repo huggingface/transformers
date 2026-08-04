@@ -244,6 +244,7 @@ class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep

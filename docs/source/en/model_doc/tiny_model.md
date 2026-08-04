@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # TinyModel
 
-[TinyModel](https://github.com/noanabeshima/tinymodel) is a compact decoder-only language model trained on TinyStories.
+[TinyModel](https://github.com/noanabeshima/tinymodel/tree/ae0c9031c467d05e12914bd7be19aaa6262dc7bf) is a compact decoder-only language model trained on TinyStories.
 It uses learned absolute positions, bias-free query/key/value projections, a biased attention output projection, ReLU
 feed-forward layers, and two residual connections per decoder block. It does not use normalization, dropout, tied
 embeddings, or key/value caching.

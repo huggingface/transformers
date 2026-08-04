@@ -269,6 +269,19 @@ class TinyModelForCausalLMTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, (2, 4, 32))
         self.assertTrue(torch.isfinite(outputs.loss))
 
+    def test_config_return_dict_false(self):
+        config = self.get_config()
+        config.return_dict = False
+        model = TinyModelForCausalLM(config).eval()
+        input_ids = torch.tensor([[1, 2, 3]])
+
+        tuple_outputs = model(input_ids)
+        structured_outputs = model(input_ids, return_dict=True)
+
+        self.assertIsInstance(tuple_outputs, tuple)
+        self.assertEqual(tuple_outputs[0].shape, (1, 3, 32))
+        self.assertEqual(structured_outputs.logits.shape, (1, 3, 32))
+
     def test_logits_to_keep(self):
         model = TinyModelForCausalLM(self.get_config()).eval()
         outputs = model(input_ids=torch.tensor([[1, 2, 3, 4]]), logits_to_keep=1)
