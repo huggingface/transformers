@@ -145,14 +145,19 @@ class ExecutorchExporter(DynamoExporter):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
-            )
+            edge_program_manager: EdgeProgramManager = _lower_to_edge(exported_program, partitioner, config.backend)
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
 
         return executorch_programs_manager
+
+    def _quantize(self, exported_program, config, sample_inputs, dynamic_shapes):
+        # QnnQuantizer's annotation passes assume every node carries a schema and crash on the
+        # `wrap_with_set_grad_enabled` HOP `torch.export` emits; lower to inference IR to inline it away.
+        if config.backend == "qnn":
+            exported_program = exported_program.run_decompositions({})
+        return super()._quantize(exported_program, config, sample_inputs, dynamic_shapes)
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:
@@ -180,6 +185,29 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
             torch.ops.aten.searchsorted.Tensor,
             torch.ops.aten.unique_consecutive.default,
         ],
+    )
+
+
+def _lower_to_edge(exported_program, partitioner, backend):
+    """Lower an (optionally quantized) program to the edge dialect and delegate it to ``partitioner``.
+
+    QNN can't reuse the generic path: its HTP compiler needs its own edge-transform passes — notably
+    `FoldQDQ`, which folds the PT2E `quantize`/`dequantize` ops into HTP-native quant encodings. Without
+    them the raw dequantize ops reach the backend and graph finalization fails (`op validation ... 3110`).
+    Mirror `to_edge_transform_and_lower_to_qnn` for QNN; every other backend uses the plain path.
+    """
+    if backend == "qnn":
+        from executorch.backends.qualcomm._passes.qnn_pass_manager import QnnPassManager
+        from executorch.backends.qualcomm.utils.utils import qnn_edge_config
+
+        aten_program = QnnPassManager().transform_for_export_pipeline(exported_program)
+        transform_passes = QnnPassManager().get_to_edge_transform_passes(exported_program)
+        return to_edge_transform_and_lower(
+            aten_program, transform_passes=transform_passes, partitioner=partitioner, compile_config=qnn_edge_config()
+        )
+
+    return to_edge_transform_and_lower(
+        exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
     )
 
 
@@ -243,9 +271,10 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], c
 def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """On-device inference via the Qualcomm QNN (HTP/NPU) backend.
 
-    **Unverified in this repo's CI** — the Qualcomm AI Engine Direct SDK isn't installed here (the
-    `executorch.backends.qualcomm` package won't even import without it), so this path can't be
-    exercised in-tree; it follows the QNN export recipe and should be validated on Qualcomm hardware.
+    Skipped in this repo's CI — the Qualcomm AI Engine Direct SDK isn't installed there (the
+    `executorch.backends.qualcomm` package won't even import without it). The SDK does install on a
+    plain x86 host, though, and the export path is verified against it (the `.pte` is built via the
+    SDK's HTP emulator, no Qualcomm device needed); see `test_qnn_export`.
 
     The model is traced on CPU (like XNNPACK), then delegated to the HTP via `QnnPartitioner`. Pass a
     `QnnQuantizer` through `config.quantizer` for HTP int8/16 (the generic PT2E step quantizes the graph
@@ -262,6 +291,15 @@ def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], confi
 
     model.requires_grad_(False)
     model = model.to(device="cpu")
+
+    # The HTP has no rank-0 tensors, so QNN promotes scalars to rank-1 — but leaves mutable-buffer
+    # placeholders rank-0, so `StaticLayer.cumulative_length` (a scalar counter) fails its input-mutation
+    # writeback at `to_executorch`. Make it 1D up front (broadcast-equivalent) so the writeback matches.
+    for layer in getattr(sample_inputs.get("past_key_values"), "layers", ()):
+        cumulative_length = getattr(layer, "cumulative_length", None)
+        if isinstance(cumulative_length, torch.Tensor) and cumulative_length.ndim == 0:
+            layer.cumulative_length = cumulative_length.reshape(1)
+
     backend_options = generate_htp_compiler_spec(use_fp16=config.quantizer is None)
     compiler_specs = generate_qnn_executorch_compiler_spec(
         soc_model=getattr(QcomChipset, config.soc_model), backend_options=backend_options

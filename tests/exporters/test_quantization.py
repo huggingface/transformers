@@ -29,6 +29,7 @@ avoiding the in-graph mask construction that trips PT2E on a full-model forward.
 """
 
 import copy
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -42,6 +43,7 @@ from transformers.testing_utils import (
     require_onnxscript,
     require_torch,
     require_torchao,
+    run_command,
     slow,
 )
 from transformers.utils import is_torch_available
@@ -55,11 +57,11 @@ MAX_CACHE_LEN = 16
 
 
 def _qnn_available() -> bool:
-    """The QNN backend needs the Qualcomm AI Engine Direct SDK; `executorch.backends.qualcomm` raises on
-    import without it (missing `bsdtar`/SDK), so probe with a broad except."""
+    """The QNN backend needs the Qualcomm AI Engine Direct SDK. Probe in a subprocess: importing
+    `executorch.backends.qualcomm` runs an auto-installer that mutates `LD_LIBRARY_PATH`, which would
+    corrupt the pytest process for the other tests."""
     try:
-        import executorch.backends.qualcomm  # noqa: F401
-
+        run_command([sys.executable, "-c", "import executorch.backends.qualcomm"])
         return True
     except Exception:
         return False
@@ -273,9 +275,8 @@ class QuantizationExportTest(unittest.TestCase):
     @require_executorch
     @pytest.mark.executorch_export_test
     def test_qnn_export(self):
-        """QNN (HTP) export of the decode component, PT2E-quantized with a `QnnQuantizer` via the generic
-        `config.quantizer` recipe (HTP int8). Skipped unless the Qualcomm QNN SDK is installed; runs on
-        Qualcomm hardware."""
+        """QNN (HTP) int8 export of the decode component with a `QnnQuantizer`, via the generic
+        `config.quantizer` recipe. Skipped unless the Qualcomm QNN SDK is installed."""
         from executorch.backends.qualcomm.quantizer.quantizer import QnnQuantizer
 
         from transformers.exporters import ExecutorchConfig, ExecutorchExporter
