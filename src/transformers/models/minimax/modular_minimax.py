@@ -32,10 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeRotaryEmbedding,
-    apply_rotary_pos_emb,  # noqa: F401
-)
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..mamba2.modeling_mamba2 import apply_mask_to_padding_states
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -344,7 +341,7 @@ class MiniMaxLightningAttention(nn.Module):
         return attn_output, attn_weights_inter
 
 
-class MiniMaxRotaryEmbedding(Glm4MoeRotaryEmbedding):
+class MiniMaxRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 

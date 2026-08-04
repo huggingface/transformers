@@ -33,11 +33,7 @@ if is_torch_available():
         MiniMaxForCausalLM,
         MiniMaxModel,
     )
-    from transformers.models.minimax.modeling_minimax import (
-        MiniMaxCache,
-        MiniMaxRotaryEmbedding,
-        apply_rotary_pos_emb,
-    )
+    from transformers.models.minimax.modeling_minimax import MiniMaxCache
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -204,33 +200,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(attention.shape[-3:], (config.num_attention_heads, seq_len, seq_len))
             else:
                 self.assertEqual(attention.shape[-3:], (config.num_attention_heads, head_dim, head_dim))
-
-    def test_partial_rotary_embedding(self):
-        config = self.model_tester.get_config()
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        hidden_states = torch.zeros(1, 3, config.hidden_size)
-        position_ids = torch.arange(3).unsqueeze(0)
-
-        full_rotary = MiniMaxRotaryEmbedding(config)
-        full_cos, full_sin = full_rotary(hidden_states, position_ids)
-        self.assertEqual(full_cos.shape[-1], head_dim)
-        self.assertEqual(full_sin.shape[-1], head_dim)
-
-        config.rope_parameters = {
-            "rope_type": "default",
-            "rope_theta": config.rope_parameters["rope_theta"],
-            "partial_rotary_factor": 0.5,
-        }
-        partial_rotary = MiniMaxRotaryEmbedding(config)
-        partial_cos, partial_sin = partial_rotary(hidden_states, position_ids)
-        self.assertEqual(partial_cos.shape[-1], head_dim // 2)
-        self.assertEqual(partial_sin.shape[-1], head_dim // 2)
-
-        query = torch.randn(1, config.num_attention_heads, 3, head_dim)
-        key = torch.randn(1, config.num_key_value_heads, 3, head_dim)
-        rotated_query, rotated_key = apply_rotary_pos_emb(query, key, partial_cos, partial_sin)
-        torch.testing.assert_close(rotated_query[..., head_dim // 2 :], query[..., head_dim // 2 :])
-        torch.testing.assert_close(rotated_key[..., head_dim // 2 :], key[..., head_dim // 2 :])
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
