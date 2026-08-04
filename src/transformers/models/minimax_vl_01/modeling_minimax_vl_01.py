@@ -19,24 +19,737 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MoeModelOutputWithPast,
+)
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
-from .configuration_minimax_vl_01 import MiniMaxVL01Config
+from .configuration_minimax_vl_01 import MiniMaxVL01Config, MiniMaxVL01TextConfig
+
+
+class MiniMaxVL01TextCache(DynamicCache):
+    def __init__(self):
+        super().__init__()
+        self.linear_cache: list[torch.Tensor] = []
+
+    def set_linear_cache(self, layer_idx, linear_cache):
+        # There may be skipped layers, fill them with empty lists
+        for _ in range(len(self.linear_cache), layer_idx + 1):
+            self.linear_cache.append([])
+        self.linear_cache[layer_idx] = linear_cache
+
+    def get_linear_cache(self, layer_idx: int):
+        if layer_idx < len(self):
+            return self.linear_cache[layer_idx]
+        return None
+
+    def __len__(self):
+        return max(super().__len__(), len(self.linear_cache))
+
+    def _get_attention_layer_idx(self, layer_idx: int) -> int:
+        if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
+            return layer_idx
+
+        # The released MiniMaxVL01Text-VL-01 layout begins with recurrent layers. DynamicCache creates empty placeholder
+        # layers before the first full-attention layer, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, super().__len__()):
+            if super().get_seq_length(attention_layer_idx) > 0:
+                return attention_layer_idx
+        return layer_idx
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        return super().get_mask_sizes(query_length, self._get_attention_layer_idx(layer_idx))
+
+    def batch_repeat_interleave(self, repeats: int):
+        for layer_idx in range(len(self)):
+            if self.linear_cache[layer_idx] != []:
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            else:
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        for layer_idx in range(len(self)):
+            if self.linear_cache[layer_idx] != []:
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
+            else:
+                self.layers[layer_idx].batch_select_indices(indices)
+
+    def crop(self, max_length: int):
+        raise RuntimeError("MiniMaxVL01TextCache doesnot support `crop` method")
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class MiniMaxVL01TextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        MiniMaxVL01TextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class MiniMaxVL01TextLightningAttention(nn.Module):
+    def __init__(self, config: MiniMaxVL01TextConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.num_hidden_layers = config.num_hidden_layers
+        self.block_size = config.block_size
+
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.norm = MiniMaxVL01TextRMSNorm(self.head_dim * self.num_attention_heads)
+        self.qkv_proj = nn.Linear(config.hidden_size, self.num_attention_heads * self.head_dim * 3, bias=False)
+        self.out_proj = nn.Linear(self.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.output_gate = nn.Linear(config.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
+
+        slope_rate = self.get_slope_rate()
+        query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
+
+        self.slope_rate = nn.Buffer(slope_rate)
+        self.query_decay = nn.Buffer(query_decay)
+        self.key_decay = nn.Buffer(key_decay)
+        self.diagonal_decay = nn.Buffer(diagonal_decay)
+
+        self.layer_type = config.layer_types[layer_idx]
+
+    def get_slope_rate(self, device=None):
+        base = 1 / (2 ** (8 / self.num_attention_heads))
+        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
+        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
+
+        rate = base**exponent
+        rate = rate * factor
+        rate = rate[:, None, None]
+
+        return rate
+
+    def decay_factors(self, slope_rate):
+        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
+
+        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
+        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
+
+        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
+        diagonal_decay = diagonal_decay[None, None, :, :]
+        diagonal_decay = slope_rate * diagonal_decay
+        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
+        diagonal_decay = torch.exp(diagonal_decay)
+
+        return query_decay, key_decay, diagonal_decay
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        num_blocks = (seq_len + self.block_size - 1) // self.block_size
+
+        qkv_states = self.act_fn(self.qkv_proj(hidden_states))
+        qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
+
+        query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        # The reference implementation keeps slopes, decay tensors, and the recurrent accumulator in float32 even
+        # when model weights and activations use a lower precision. Recompute the derived decays because module dtype
+        # casts also cast registered buffers.
+        slope_rate = self.get_slope_rate(device=value_states.device)
+        query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
+
+        if attention_mask is not None:
+            padding_mask = ~attention_mask[:, None, :, None].to(torch.bool)
+            value_states = value_states.masked_fill(padding_mask, 0)
+
+        # calculated (K.T @ V) and saved as cache
+        attn_weights_inter = None
+        if past_key_values is not None:
+            attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
+
+        if attn_weights_inter is None:
+            attn_weights_inter = torch.zeros(
+                batch_size,
+                self.num_attention_heads,
+                self.head_dim,
+                self.head_dim,
+                dtype=torch.float32,
+                device=value_states.device,
+            )
+
+            attn_output = torch.empty(
+                batch_size,
+                self.num_attention_heads,
+                seq_len,
+                self.head_dim,
+                dtype=query_states.dtype,
+                device=query_states.device,
+            )
+            for i in range(num_blocks):
+                start_idx = i * self.block_size
+                end_idx = min(start_idx + self.block_size, seq_len)
+                current_block_size = end_idx - start_idx
+
+                current_query_states = query_states[:, :, start_idx:end_idx]
+                current_key_states = key_states[:, :, start_idx:end_idx]
+                current_value_states = value_states[:, :, start_idx:end_idx]
+
+                current_query_decay = query_decay[:, :current_block_size]
+                current_key_decay = key_decay[:, -current_block_size:]
+                current_diagonal_decay = diagonal_decay[:, :, :current_block_size, :current_block_size]
+                block_decay = torch.exp(-slope_rate * current_block_size)
+
+                # intra: ( Q @ K.T ) @ V -> QK * V
+                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2)).float()
+                attn_output_intra = torch.matmul(
+                    attn_weights_intra * current_diagonal_decay, current_value_states.float()
+                )
+
+                # inter: Q @ ( K.T @ V ) -> Q * KV
+                attn_output_inter = torch.matmul(
+                    current_query_states * current_query_decay, attn_weights_inter.float()
+                )
+
+                # final attention output
+                current_attn_output = attn_output_inter + attn_output_intra
+                attn_output[:, :, start_idx:end_idx] = current_attn_output
+
+                # calculate attn_weights_inter for next block or cache
+                next_attn_weights_inter = torch.matmul(
+                    (current_key_states * current_key_decay).transpose(-1, -2).to(current_value_states.dtype),
+                    current_value_states,
+                )
+                attn_weights_inter = attn_weights_inter.float() * block_decay + next_attn_weights_inter
+
+        else:
+            attn_weights_inter = attn_weights_inter.float()
+            ratio = torch.exp(-slope_rate)
+            attn_output = []
+            for i in range(seq_len):
+                current_query_states = query_states[:, :, i : i + 1]
+                current_key_states = key_states[:, :, i : i + 1]
+                current_value_states = value_states[:, :, i : i + 1]
+
+                current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2), current_value_states)
+                attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
+                current_attn_output = torch.matmul(current_query_states, attn_weights_inter.to(query_states.dtype))
+
+                attn_output.append(current_attn_output)
+
+            # concatenate attention outputs over all recurrent steps
+            attn_output = torch.cat(attn_output, dim=-2)
+
+        # final output projection
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size, seq_len, self.num_attention_heads * self.head_dim)
+        attn_output = self.norm(attn_output)
+        attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
+        attn_output = self.out_proj(attn_output)
+
+        # update cache
+        if past_key_values is not None:
+            past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
+
+        return attn_output, attn_weights_inter
+
+
+class MiniMaxVL01TextRotaryEmbedding(nn.Module):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: MiniMaxVL01TextConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(
+        config: MiniMaxVL01TextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class MiniMaxVL01TextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: MiniMaxVL01TextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class MiniMaxVL01TextTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_probs = torch.nn.functional.softmax(router_logits.float(), dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
+
+
+@use_experts_implementation
+class MiniMaxVL01TextExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
+    def __init__(self, config: MiniMaxVL01TextConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class MiniMaxVL01TextSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.jitter_noise = config.router_jitter_noise
+        self.gate = MiniMaxVL01TextTopKRouter(config)
+        self.experts = MiniMaxVL01TextExperts(config)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
+
+
+class MiniMaxVL01TextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniMaxVL01TextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = MiniMaxVL01TextAttention(config, layer_idx)
+        self.input_layernorm = MiniMaxVL01TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniMaxVL01TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.layer_idx = layer_idx
+        self.block_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.mlp_alpha_factor = config.mlp_alpha_factor
+        self.mlp_beta_factor = config.mlp_beta_factor
+        self.mlp = MiniMaxVL01TextSparseMoeBlock(config)
+        if self.block_type == "linear_attention":
+            self.self_attn = MiniMaxVL01TextLightningAttention(config, layer_idx)
+            self.attn_alpha_factor = config.linear_attn_alpha_factor
+            self.attn_beta_factor = config.linear_attn_beta_factor
+        else:
+            self.self_attn = MiniMaxVL01TextAttention(config, layer_idx)
+            self.attn_alpha_factor = config.full_attn_alpha_factor
+            self.attn_beta_factor = config.full_attn_beta_factor
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        hidden_states = self.input_layernorm(hidden_states)
+        residual = hidden_states
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        residual = hidden_states
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
+
+        return hidden_states
+
+
+@auto_docstring
+class MiniMaxVL01TextPreTrainedModel(PreTrainedModel):
+    config: MiniMaxVL01TextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MiniMaxVL01TextDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class MiniMaxVL01TextCache
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MiniMaxVL01TextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": MiniMaxVL01TextDecoderLayer,
+        "attentions": [MiniMaxVL01TextAttention, MiniMaxVL01TextLightningAttention],
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, MiniMaxVL01TextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, MiniMaxVL01TextTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+        if isinstance(module, MiniMaxVL01TextLightningAttention):
+            slope_rate = module.get_slope_rate()
+            query_decay, key_decay, diagonal_decay = module.decay_factors(slope_rate)
+            init.copy_(module.slope_rate, slope_rate)
+            init.copy_(module.query_decay, query_decay)
+            init.copy_(module.key_decay, key_decay)
+            init.copy_(module.diagonal_decay, diagonal_decay)
+
+
+@auto_docstring
+class MiniMaxVL01TextModel(MiniMaxVL01TextPreTrainedModel):
+    def __init__(self, config: MiniMaxVL01TextConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [MiniMaxVL01TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = MiniMaxVL01TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MiniMaxVL01TextRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: MiniMaxVL01TextCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = MiniMaxVL01TextCache()
+        elif use_cache and not isinstance(past_key_values, MiniMaxVL01TextCache):
+            raise ValueError(
+                f"MiniMax uses cache of its own and is not compatible with `past_key_values` of type {type(past_key_values)}."
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_function = (
+                create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+            )
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": mask_function(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 model outputs.")
@@ -105,7 +818,7 @@ class MiniMaxVL01PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _no_split_modules = ["MiniMaxDecoderLayer", "CLIPEncoderLayer"]
+    _no_split_modules = ["MiniMaxVL01TextDecoderLayer", "CLIPEncoderLayer"]
     # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
     # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
     _keys_to_ignore_on_load_missing = [
@@ -574,4 +1287,9 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         )
 
 
-__all__ = ["MiniMaxVL01PreTrainedModel", "MiniMaxVL01Model", "MiniMaxVL01ForConditionalGeneration"]
+__all__ = [
+    "MiniMaxVL01PreTrainedModel",
+    "MiniMaxVL01Model",
+    "MiniMaxVL01ForConditionalGeneration",
+    "MiniMaxVL01TextModel",
+]

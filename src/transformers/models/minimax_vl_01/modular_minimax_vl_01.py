@@ -36,6 +36,10 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoConfig
+from ..glm4_moe.modeling_glm4_moe import (
+    Glm4MoeRotaryEmbedding,
+    apply_rotary_pos_emb,  # noqa: F401
+)
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
@@ -50,6 +54,8 @@ from ..llava_next.modeling_llava_next import (
     image_size_to_num_patches,
 )
 from ..llava_next.processing_llava_next import LlavaNextProcessor
+from ..minimax.configuration_minimax import MiniMaxConfig
+from ..minimax.modeling_minimax import MiniMaxCache, MiniMaxLightningAttention, MiniMaxModel
 
 
 MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
@@ -82,6 +88,29 @@ MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
     [2016, 672],
     [2016, 1008],
 ]
+
+
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
+@strict
+class MiniMaxVL01TextConfig(MiniMaxConfig):
+    model_type = "minimax_vl_01_text"
+    base_config_key = "text_config"
+
+
+class MiniMaxVL01TextCache(MiniMaxCache):
+    pass
+
+
+class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
+    pass
+
+
+class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
+    pass
+
+
+class MiniMaxVL01TextModel(MiniMaxModel):
+    pass
 
 
 def _migrate_legacy_text_config(text_config: dict) -> dict:
@@ -610,7 +639,7 @@ class MiniMaxVL01MultiModalProjector(LlavaNextMultiModalProjector):
 
 
 class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
-    _no_split_modules = ["MiniMaxDecoderLayer", "CLIPEncoderLayer"]
+    _no_split_modules = ["MiniMaxVL01TextDecoderLayer", "CLIPEncoderLayer"]
     _can_compile_fullgraph = False
     # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
     # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
@@ -895,4 +924,6 @@ __all__ = [
     "MiniMaxVL01PreTrainedModel",
     "MiniMaxVL01Model",
     "MiniMaxVL01ForConditionalGeneration",
+    "MiniMaxVL01TextConfig",
+    "MiniMaxVL01TextModel",
 ]

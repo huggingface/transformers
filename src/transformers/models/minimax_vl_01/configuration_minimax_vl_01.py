@@ -21,8 +21,114 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import AutoConfig
+
+
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
+@strict
+class MiniMaxVL01TextConfig(PreTrainedConfig):
+    r"""
+    block_size (`int`, *optional*, defaults to 256):
+        The length of each attention block, determining how queries, keys, and values
+        are grouped and processed for intra- and inter-block attention.
+    full_attn_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after normal attention.
+    full_attn_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after normal attention.
+    linear_attn_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after lightning attention.
+    linear_attn_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after lightning attention.
+    mlp_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after MLP.
+    mlp_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after MLP.
+
+    ```python
+    >>> from transformers import MiniMaxVL01TextModel, MiniMaxVL01TextConfig
+
+    >>> # Initializing a MiniMaxVL01Text style configuration
+    >>> configuration = MiniMaxVL01TextConfig()
+
+    >>> # Initializing a model from the MiniMaxVL01Text style configuration
+    >>> model = MiniMaxVL01TextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "minimax_vl_01_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+
+    attribute_map = {"num_experts": "num_local_experts"}
+
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    intermediate_size: int = 14336
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    head_dim: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096 * 32
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 2
+    num_local_experts: int = 8
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    router_jitter_noise: float = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    layer_types: list[str] | None = None
+    block_size: int = 256
+    full_attn_alpha_factor: int | float = 1
+    full_attn_beta_factor: int | float = 1
+    linear_attn_alpha_factor: int | float = 1
+    linear_attn_beta_factor: int | float = 1
+    mlp_alpha_factor: int | float = 1
+    mlp_beta_factor: int | float = 1
+    base_config_key = "text_config"
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
 
 
 MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
@@ -249,4 +355,4 @@ class MiniMaxVL01Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["MiniMaxVL01Config"]
+__all__ = ["MiniMaxVL01Config", "MiniMaxVL01TextConfig"]

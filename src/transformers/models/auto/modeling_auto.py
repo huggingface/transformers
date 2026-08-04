@@ -322,6 +322,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("minimax_m3_vl", "MiniMaxM3VLModel"),
         ("minimax_m3_vl_text", "MiniMaxM3VLTextModel"),
         ("minimax_vl_01", "MiniMaxVL01Model"),
+        ("minimax_vl_01_text", "MiniMaxVL01TextModel"),
         ("ministral", "MinistralModel"),
         ("ministral3", "Ministral3Model"),
         ("mistral", "MistralModel"),
