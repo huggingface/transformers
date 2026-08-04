@@ -20,6 +20,7 @@ from torch import nn
 from transformers.models.tiny_model import TinyModelConfig
 from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelAttention,
+    TinyModelDecoderLayer,
     TinyModelMLP,
     eager_attention_forward,
 )
@@ -115,3 +116,12 @@ class TinyModelMLPTest(unittest.TestCase):
         expected = mlp.fc2(torch.relu(mlp.fc1(hidden_states)))
 
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+class TinyModelDecoderLayerTest(unittest.TestCase):
+    def test_contains_attention_and_mlp_without_norms(self):
+        layer = TinyModelDecoderLayer(TinyModelConfig(hidden_size=16, intermediate_size=64, num_attention_heads=4))
+
+        self.assertIsInstance(layer.self_attn, TinyModelAttention)
+        self.assertIsInstance(layer.mlp, TinyModelMLP)
+        self.assertFalse(any(isinstance(module, nn.LayerNorm) for module in layer.modules()))

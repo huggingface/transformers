@@ -112,7 +112,10 @@ class TinyModelMLP(nn.Module):
 
 
 class TinyModelDecoderLayer(GradientCheckpointingLayer):
-    pass
+    def __init__(self, config: TinyModelConfig):
+        super().__init__()
+        self.self_attn = TinyModelAttention(config)
+        self.mlp = TinyModelMLP(config)
 
 
 @auto_docstring
