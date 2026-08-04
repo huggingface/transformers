@@ -43,7 +43,7 @@ AUTODOC_FILES = [
     "processing_*.py",
     "image_processing_pil_*.py",
     "image_processing_*.py",
-    "feature_extractor_*.py",
+    "feature_extraction_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
@@ -4480,10 +4480,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
 
         Using with ModelOutput classes:
         ```python
-        @dataclass
         @auto_docstring(
             custom_intro="Custom model outputs with additional fields."
         )
+        @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
             loss (`torch.FloatTensor`, *optional*):
