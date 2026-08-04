@@ -18,7 +18,11 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
 from transformers.models.tiny_model import TinyModelConfig
-from transformers.models.tiny_model.modeling_tiny_model import TinyModelAttention, eager_attention_forward
+from transformers.models.tiny_model.modeling_tiny_model import (
+    TinyModelAttention,
+    TinyModelMLP,
+    eager_attention_forward,
+)
 
 
 class TinyModelConfigTest(unittest.TestCase):
@@ -91,3 +95,13 @@ class TinyModelAttentionTest(unittest.TestCase):
 
         torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
         self.assertEqual(weights.shape, (2, 4, 5, 5))
+
+
+class TinyModelMLPTest(unittest.TestCase):
+    def test_projection_shapes_and_biases(self):
+        mlp = TinyModelMLP(TinyModelConfig(hidden_size=16, intermediate_size=64, num_attention_heads=4))
+
+        self.assertEqual(mlp.fc1.weight.shape, (64, 16))
+        self.assertEqual(mlp.fc1.bias.shape, (64,))
+        self.assertEqual(mlp.fc2.weight.shape, (16, 64))
+        self.assertEqual(mlp.fc2.bias.shape, (16,))

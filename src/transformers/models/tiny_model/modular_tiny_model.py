@@ -19,6 +19,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -143,7 +144,11 @@ class TinyModelAttention(nn.Module):
 
 
 class TinyModelMLP(nn.Module):
-    pass
+    def __init__(self, config: TinyModelConfig):
+        super().__init__()
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.activation_fn = ACT2FN[config.hidden_act]
 
 
 class TinyModelDecoderLayer(GradientCheckpointingLayer):

@@ -23,6 +23,7 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
+from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -100,7 +101,11 @@ class TinyModelAttention(nn.Module):
 
 
 class TinyModelMLP(nn.Module):
-    pass
+    def __init__(self, config: TinyModelConfig):
+        super().__init__()
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.activation_fn = ACT2FN[config.hidden_act]
 
 
 class TinyModelDecoderLayer(GradientCheckpointingLayer):
