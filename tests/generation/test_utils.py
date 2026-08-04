@@ -2791,17 +2791,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
         uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
 
+        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
+        if uses_dsa:
+            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
+            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
+            return key_shape, value_shape
+
         # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
         if uses_mla:
             kv_nope_shape = (batch_size, 1, seq_length, kv_lora_rank)
             k_rot_shape = (batch_size, 1, seq_length, qk_rope_head_dim)
             return kv_nope_shape, k_rot_shape
-
-        # DSA models expand the latents before caching, so their keys and values have distinct head dims
-        if uses_dsa:
-            key_shape = (batch_size, num_kv_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
-            value_shape = (batch_size, num_kv_heads, seq_length, config.v_head_dim)
-            return key_shape, value_shape
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
         if seq_length is None:
