@@ -218,7 +218,8 @@ class PeftAdapterMixin:
 
         from peft.utils.transformers_weight_conversion import build_peft_weight_mapping
 
-        weight_conversions = get_model_conversion_mapping(self)
+        # Reuse `from_pretrained`'s `weight_mapping` as recomputing here would drop any user-supplied `key_mapping`.
+        weight_conversions = load_config.weight_mapping or get_model_conversion_mapping(self)
 
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable

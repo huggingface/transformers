@@ -18,15 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -35,16 +35,10 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, maybe_replace_from_package, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_lfm2 import Lfm2Config
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_fn, causal_conv1d_update = None, None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -71,6 +65,7 @@ class Lfm2RMSNorm(nn.Module):
 class Lfm2RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Lfm2Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -84,24 +79,17 @@ class Lfm2RotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Lfm2Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: Lfm2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -110,12 +98,9 @@ class Lfm2RotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -160,7 +145,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -294,8 +279,47 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-kernel_modules = (causal_conv1d_fn, causal_conv1d_update)
-is_fast_path_available = all(kernel_modules)
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
 class Lfm2ShortConv(nn.Module):
@@ -307,104 +331,21 @@ class Lfm2ShortConv(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.L_cache = config.conv_L_cache
+        self.conv_kernel_size = config.conv_L_cache
         self.bias = config.conv_bias
 
         self.conv = nn.Conv1d(
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
-            kernel_size=self.L_cache,
+            kernel_size=self.conv_kernel_size,
             groups=config.hidden_size,
             bias=self.bias,
-            padding=self.L_cache - 1,
+            padding=self.conv_kernel_size - 1,
         )
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
         self.layer_type = config.layer_types[layer_idx]
-
-    def cuda_kernels_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
-
-        Bx = B * x
-
-        conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_out = causal_conv1d_update(
-                Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states[0],
-                conv_weights,
-                self.conv.bias,
-                None,
-            )
-            conv_out = conv_out.unsqueeze(-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-
-            # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
-            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
-
-        y = C * conv_out
-        y = self.out_proj(y.transpose(-1, -2).contiguous())
-        return y
-
-    def slow_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        seqlen = x.shape[1]
-
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
-
-        Bx = B * x
-
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)[..., -self.L_cache :]
-            conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
-            if self.bias:
-                conv_out += self.conv.bias
-
-            conv_out = conv_out.unsqueeze(-1)
-        elif seq_idx is not None and x.shape[0] == 1:
-            # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-            si = seq_idx[0]
-            change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
-            bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
-            parts = []
-            for i in range(len(bounds) - 1):
-                s, e = bounds[i], bounds[i + 1]
-                if e > s:
-                    parts.append(self.conv(Bx[:, :, s:e])[..., : e - s])
-            conv_out = torch.cat(parts, dim=-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)[..., -self.L_cache :]
-
-            conv_out = self.conv(Bx)[..., :seqlen]
-
-        y = C * conv_out
-        y = y.transpose(-1, -2).contiguous()
-        y = self.out_proj(y)
-        return y
 
     @force_accelerate_hooks("conv")
     def forward(
@@ -414,9 +355,39 @@ class Lfm2ShortConv(nn.Module):
         attention_mask: torch.Tensor | None = None,
         seq_idx: torch.IntTensor | None = None,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
-        return self.slow_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
+        seq_len = hidden_states.shape[1]
+
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
+        hidden_states = B * x
+
+        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
+
+        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
+            conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
+            )
+        else:
+            if past_key_values is not None:
+                hidden_states = past_key_values.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(
+                hidden_states, self.conv.weight.squeeze(1), self.conv.bias, seq_idx=seq_idx
+            )
+
+            # Drop the additional previous states
+            if past_key_values is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
@@ -481,7 +452,6 @@ class Lfm2PreTrainedModel(PreTrainedModel):
         "hidden_states": Lfm2DecoderLayer,
         "attentions": Lfm2Attention,
     }
-    _is_stateful = True
 
 
 @auto_docstring
@@ -569,6 +539,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)

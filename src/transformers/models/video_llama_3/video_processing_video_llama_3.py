@@ -58,7 +58,7 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
         max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
             The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
+            The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
             The temporal patch size of the vision encoder.
         merge_size (`int`, *optional*, defaults to 2):
@@ -133,7 +133,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:
@@ -250,9 +250,10 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             patches = stacked_videos
 
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size

@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -54,7 +54,7 @@ model.set_attn_implementation("sdpa")
 
 Download and load compiled compute kernels directly from the [Hub](https://huggingface.co/models?other=kernels) at runtime with the [Kernels](https://huggingface.co/docs/kernels/index) library. This avoids packaging issues from mismatched PyTorch or CUDA versions.
 
-Kernels automatically register to [`AttentionInterface`] upon detection. You don't need to install the FlashAttention package explicitly.
+Kernels automatically register to [`AttentionInterface`] upon detection. You don't need to install the FlashAttention package explicitly. Requesting FlashAttention by name also falls back to the Hub kernel, see [FlashAttention fallback](./kernel_doc/loading_kernels#flashattention-fallback).
 
 ```py
 import torch

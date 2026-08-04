@@ -368,7 +368,7 @@ class LightGlueMatchAssignmentLayer(nn.Module):
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
         # Final projection and similarity computation
         m_descriptors = self.final_projection(descriptors)
-        m_descriptors = m_descriptors / torch.tensor(self.descriptor_dim, device=m_descriptors.device) ** 0.25
+        m_descriptors = m_descriptors / torch.full((), self.descriptor_dim, device=m_descriptors.device) ** 0.25
         m_descriptors = m_descriptors.reshape(batch_size // 2, 2, num_keypoints, descriptor_dim)
         m_descriptors0 = m_descriptors[:, 0]
         m_descriptors1 = m_descriptors[:, 1]
@@ -744,8 +744,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     config=self.config,
                     inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
                     attention_mask=mask,
-                    # Model is too sensitive to the FA backend --> force mask to avoid the backend
-                    and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+                    # Model is too sensitive to the FA backend, so always materialize the mask to avoid it.
+                    allow_is_bidirectional_skip=False,
                 )
             else:
                 extended_attention_mask = torch.ones((batch_size, descriptors.size()[-2]), device=keypoints.device)

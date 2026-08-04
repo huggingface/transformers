@@ -34,6 +34,7 @@ from ..cache_utils import (
     StaticCache,
 )
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -144,6 +145,23 @@ GENERATION_MODES_MAPPING = {
     GenerationMode.GROUP_BEAM_SEARCH: "transformers-community/group-beam-search",
     GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
 }
+
+MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "pixel_values",
+    "pixel_mask",
+    "input_features",
+    "input_features_mask",
+    "pixel_values_videos",
+    "num_local_patches",
+    "high_res_pixel_values",
+    "image_patches_indices",
+    "image_patches",
+    "image_sizes",
+    "image_sizes_videos",
+    "pixel_attention_mask",
+    "pixel_values_images",
+    "num_local_patches",
+)
 
 
 @dataclass
@@ -589,7 +607,16 @@ class GenerationMixin(ContinuousMixin):
         # 5. Forward ALL kwargs that are uninitialized, e.g. `use_cache` (except a few exceptions)
         kwargs_to_avoid_forwarding = ("labels", "next_sequence_length")
         for key, value in kwargs.items():
-            if key not in model_inputs and key not in kwargs_to_avoid_forwarding:
+            # Those keys are never forwarded
+            if key in kwargs_to_avoid_forwarding:
+                continue
+            # Those keys are forwarded only during prefill (or the first forward of a new batch of inputs, such as with cache
+            # continuation), or without a cache
+            elif key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL and (
+                not is_first_iteration and kwargs.get("use_cache", True)
+            ):
+                continue
+            elif key not in model_inputs:
                 model_inputs[key] = value
 
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
@@ -1955,20 +1982,7 @@ class GenerationMixin(ContinuousMixin):
             return
 
         # Otherwise we NEED to prepare a cache, based on `generation_config.cache_implementation`
-
-        # Assisted decoding and contrastive search require cache rollback, which is incompatible with sliding layers.
-        # To handle this, we skip passing the model config to DynamicCache (forcing a full-layer cache).
-        # The "dynamic_full" option is a shortcut for generate() users to avoid sliding layers on their own.
-        if generation_mode in (GenerationMode.ASSISTED_GENERATION, GenerationMode.CONTRASTIVE_SEARCH):
-            if generation_config.cache_implementation is not None:
-                logger.warning_once(
-                    "An assistant model is provided, using a dynamic cache instead of a cache of type="
-                    f"'{generation_config.cache_implementation}'."
-                )
-            generation_config.cache_implementation = "dynamic_full"
-
-        dynamic_cache_kwargs = {}
-        dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
+        dynamic_cache_kwargs = {"config": self.config.get_text_config(decoder=True)}
 
         if generation_config.cache_implementation == "offloaded":
             dynamic_cache_kwargs["offloading"] = True
@@ -2005,30 +2019,9 @@ class GenerationMixin(ContinuousMixin):
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
-        # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
-        # TODO: prepare linear cache from a single API, instead of creating in modeling code
+        # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
         else:
-            cache = DynamicCache(**dynamic_cache_kwargs)
-            # Replace sliding by full
-            if generation_config.cache_implementation == "dynamic_full":
-                from ..cache_utils import (
-                    DynamicLayer,
-                    DynamicSlidingWindowLayer,
-                    LinearAttentionAndFullAttentionLayer,
-                    LinearAttentionAndSlidingWindowAttentionLayer,
-                )
-
-                cache.layers = [
-                    DynamicLayer() if type(layer) is DynamicSlidingWindowLayer else layer for layer in cache.layers
-                ]
-                cache.layers = [
-                    LinearAttentionAndFullAttentionLayer(number_of_states=layer.number_of_states)
-                    if type(layer) is LinearAttentionAndSlidingWindowAttentionLayer
-                    else layer
-                    for layer in cache.layers
-                ]
-
-            model_kwargs[cache_name] = cache
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         if (
             self.config.is_encoder_decoder
@@ -2039,6 +2032,10 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
+
+        # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
+        if generation_config.is_assistant:
+            model_kwargs[cache_name].activate_past_recording()
 
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
@@ -2254,7 +2251,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_model": assistant_model,
             "streamer": streamer,
         }
-        world_size = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1  # type: ignore
+        world_size = _get_torch_distributed_world_size()
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and world_size > 1
             if synced_gpus is None

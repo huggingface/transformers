@@ -50,7 +50,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
     @torch.no_grad()
@@ -166,10 +166,10 @@ class HiggsAudioV2TokenizerEuclideanCodebook(nn.Module):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     def quantize(self, hidden_states):
         embed = self.embed.t()
@@ -443,7 +443,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to their quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         for i, indices in enumerate(codes):
             quantizer = self.quantizers[i]
             quantized = quantizer.decode(indices)
