@@ -17,7 +17,7 @@ import torch
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
-from transformers.models.tiny_model import TinyModelConfig
+from transformers.models.tiny_model import TinyModelConfig, TinyModelForCausalLM
 from transformers.models.tiny_model.modeling_tiny_model import (
     TinyModelAttention,
     TinyModelDecoderLayer,
@@ -159,3 +159,8 @@ class TinyModelPreTrainedModelTest(unittest.TestCase):
         model._init_weights(embedding)
 
         self.assertAlmostEqual(embedding.weight.std().item(), config.embedding_initializer_range, delta=5e-6)
+
+
+class TinyModelForCausalLMTest(unittest.TestCase):
+    def test_dynamic_cache_is_not_advertised(self):
+        self.assertFalse(TinyModelForCausalLM._supports_default_dynamic_cache())

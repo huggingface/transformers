@@ -198,7 +198,9 @@ class TinyModel(TinyModelPreTrainedModel):
 
 @auto_docstring
 class TinyModelForCausalLM(TinyModelPreTrainedModel, GenerationMixin):
-    pass
+    @classmethod
+    def _supports_default_dynamic_cache(cls) -> bool:
+        return False
 
 
 __all__ = [
