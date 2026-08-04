@@ -29,9 +29,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# ── Image Processor ───────────────────────────────────────────────────────────
-
-
 class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 504):
@@ -57,10 +54,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
     resample = PILImageResampling.BILINEAR
     size = {"height": 728, "width": 728}
-    default_to_square = True
     patch_size: int = 504
     do_rescale = True
-    rescale_factor: float = 1 / 255
     do_normalize = True
     image_mean: list[float] = OPENAI_CLIP_MEAN
     image_std: list[float] = OPENAI_CLIP_STD
@@ -131,15 +126,15 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         if window_size == 0:
             return (width, height), (width, height), 0, 0, 0, needs_square_pad
 
-        # Step 3 — snap to window-size multiples
-        def _snap(dim: int) -> int:
-            return (
+        # Step 3 — snap each dimension to the nearest window-size multiple
+        crop_width, crop_height = (
+            (
                 window_size * (dim // window_size + (dim % window_size > 0.2 * window_size))
                 if dim >= window_size
                 else dim
             )
-
-        crop_width, crop_height = _snap(width), _snap(height)
+            for dim in (width, height)
+        )
         num_patches_x = max(1, crop_width // window_size)
         num_patches_y = max(1, crop_height // window_size)
         return (width, height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y, needs_square_pad
@@ -150,7 +145,7 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         size = images_kwargs.get("size", self.size)
         image_size = size["height"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
-        *_, num_patches_x, num_patches_y, _ = self._plan_patches(width, height, image_size, patch_size)
+        num_patches_x, num_patches_y = self._plan_patches(width, height, image_size, patch_size)[3:5]
         return num_patches_x * num_patches_y
 
     def _get_image_patches(
@@ -167,9 +162,14 @@ class Step3p7ImageProcessor(TorchvisionBackend):
         `window_size`, not yet resized to `patch_size`), and the patch grid dimensions.
         """
         _, height, width = img.shape
-        plan = self._plan_patches(width, height, image_size, patch_size)
-        (global_width, global_height), (crop_width, crop_height), window_size, num_patches_x, num_patches_y = plan[:5]
-        needs_square_pad = plan[5]
+        (
+            (global_width, global_height),
+            (crop_width, crop_height),
+            window_size,
+            num_patches_x,
+            num_patches_y,
+            needs_square_pad,
+        ) = self._plan_patches(width, height, image_size, patch_size)
 
         # Pad extreme-aspect-ratio images to square (original at top-left, zeros elsewhere)
         if needs_square_pad:

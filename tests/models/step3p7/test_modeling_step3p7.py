@@ -211,7 +211,10 @@ class Step3p7ConversionMappingIntegrationTest(unittest.TestCase):
         # (attention_other_setting) — this is the field `Step3p7Attention` reads to rebuild
         # q_proj/o_proj per layer type; regression-tested numerically below via real shapes.
         self.assertIsNotNone(text_config.num_sliding_attention_heads)
-        self.assertNotEqual(text_config.num_sliding_attention_heads, text_config.num_attention_heads)
+        self.assertNotEqual(
+            text_config.num_sliding_attention_heads,
+            text_config._getattr_without_heterogeneous_validation("num_attention_heads"),
+        )
 
     def test_real_checkpoint_weight_mapping_is_complete(self):
         """Every real-checkpoint weight key must rename to a key in our model (shape-checked for
