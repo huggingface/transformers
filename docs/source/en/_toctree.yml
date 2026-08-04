@@ -116,20 +116,20 @@
       title: Paged attention
     - sections:
       - local: kernel_doc/overview
-        title: Kernels
+        title: Overview
       - local: kernel_doc/loading_kernels
         title: Loading kernels
       - local: kernel_doc/writing_kernels
         title: Writing kernels
-      title: Kernels
+      title: Kernels for inference
     - local: perf_torch_compile
-      title: torch.compile
+      title: torch.compile for inference
     - local: exporters
       title: Exporters
     - local: exporters_extend
       title: Extending the exporters
     - local: perf_infer_gpu_multi
-      title: Tensor parallelism
+      title: Tensor parallelism for inference
     - local: expert_parallelism
       title: Expert parallelism
     - local: kv_cache
@@ -214,9 +214,9 @@
       - local: mixed_precision_training
         title: Mixed precision training
       - local: torch_compile
-        title: torch.compile
+        title: torch.compile for training
       - local: kernels
-        title: Kernels
+        title: Kernels for training
       - local: padding_free
         title: Padding-free training
       title: Speed optimization
@@ -236,7 +236,7 @@
     - local: deepspeed_alst
       title: Ulysses sequence parallelism
     - local: tensor_parallelism
-      title: Tensor parallelism
+      title: Tensor parallelism for training
     - local: debugging
       title: Debugging
     - local: perf_train_gpu_many
@@ -252,8 +252,6 @@
       title: Intel Gaudi
     - local: perf_hardware
       title: Building a GPU workstation
-    - local: model_memory_anatomy
-      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false
