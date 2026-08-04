@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
+    scoped_kernels_class,
     slow,
     torch_device,
 )
@@ -214,6 +215,7 @@ class DeepseekV3ModelTester:
 
 
 @require_torch
+@scoped_kernels_class
 class DeepseekV3ModelTest(
     ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase, TensorParallelTesterMixin
 ):
