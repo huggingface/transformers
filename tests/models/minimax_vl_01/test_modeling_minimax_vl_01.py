@@ -42,6 +42,8 @@ if is_torch_available():
     from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import (
         MiniMaxVL01TextCache,
         MiniMaxVL01TextLightningAttention,
+        MiniMaxVL01TextRotaryEmbedding,
+        apply_rotary_pos_emb,
     )
 
 
@@ -348,6 +350,33 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(output, reference_output)
         torch.testing.assert_close(recurrent_state, reference_cache)
         self.assertEqual(recurrent_state.dtype, torch.float32)
+
+    def test_text_partial_rotary_embedding_preserves_unrotated_suffix(self):
+        config = MiniMaxVL01TextConfig(
+            vocab_size=97,
+            hidden_size=32,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            num_local_experts=2,
+            num_experts_per_tok=2,
+            layer_types=["linear_attention", "full_attention"],
+            rope_parameters={"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
+        )
+        hidden_states = torch.zeros(1, 3, config.hidden_size)
+        position_ids = torch.arange(3).unsqueeze(0)
+        cos, sin = MiniMaxVL01TextRotaryEmbedding(config)(hidden_states, position_ids)
+
+        self.assertEqual(cos.shape[-1], config.head_dim // 2)
+        self.assertEqual(sin.shape[-1], config.head_dim // 2)
+
+        query = torch.randn(1, config.num_attention_heads, 3, config.head_dim)
+        key = torch.randn(1, config.num_key_value_heads, 3, config.head_dim)
+        rotated_query, rotated_key = apply_rotary_pos_emb(query, key, cos, sin)
+        torch.testing.assert_close(rotated_query[..., config.head_dim // 2 :], query[..., config.head_dim // 2 :])
+        torch.testing.assert_close(rotated_key[..., config.head_dim // 2 :], key[..., config.head_dim // 2 :])
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
