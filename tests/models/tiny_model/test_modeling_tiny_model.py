@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers.models.tiny_model import TinyModelConfig
 
 
@@ -36,3 +38,7 @@ class TinyModelConfigTest(unittest.TestCase):
         self.assertEqual(config.bos_token_id, 9_996)
         self.assertEqual(config.eos_token_id, 9_997)
         self.assertEqual(config.pad_token_id, 9_998)
+
+    def test_hidden_size_must_be_divisible_by_attention_heads(self):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "hidden size .* is not a multiple"):
+            TinyModelConfig(hidden_size=15, num_attention_heads=4)

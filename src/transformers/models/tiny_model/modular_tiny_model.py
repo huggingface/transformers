@@ -61,6 +61,14 @@ class TinyModelConfig(PreTrainedConfig):
     pad_token_id: int | None = 9_998
     tie_word_embeddings: bool = False
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
+
 
 class TinyModelAttention(nn.Module):
     pass
