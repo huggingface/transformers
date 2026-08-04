@@ -77,6 +77,7 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys[indices, ...]
 
+    @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         # Important to get the seq_len before the call to `super`, as it will be changed inside otherwise
         effective_length = tokens_to_remove if tokens_to_remove > 0 else self.get_seq_length() - abs(tokens_to_remove)
