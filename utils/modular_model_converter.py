@@ -647,7 +647,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 self.imports.append(node)
 
     def leave_SimpleStatementLine(self, node):
-        # No need to check for the parent here -> everytime we exit one, it should be None anyway independently of where the
+        # No need to check for the parent here -> every time we exit one, it should be None anyway independently of where the
         # SimpleStatement is located
         self.current_assignment = None
 
