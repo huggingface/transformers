@@ -15,10 +15,12 @@
 
 import re
 from collections.abc import Mapping
+from pathlib import Path
 
 import torch
 
 from .configuration_tiny_model import TinyModelConfig
+from .modeling_tiny_model import TinyModelForCausalLM
 
 
 def _convert_state_dict(
@@ -193,3 +195,56 @@ def _convert_state_dict(
             f"Converted {len(converted_state_dict)} tensors from a checkpoint containing {len(state_dict)} tensors."
         )
     return config, converted_state_dict
+
+
+def convert_tiny_model_checkpoint(
+    checkpoint_path: str | Path,
+    output_dir: str | Path,
+    num_attention_heads: int = 16,
+    expected_num_hidden_layers: int | None = None,
+) -> TinyModelForCausalLM:
+    state_dict = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+        weights_only=True,
+        mmap=True,
+    )
+    config, converted_state_dict = _convert_state_dict(
+        state_dict,
+        num_attention_heads=num_attention_heads,
+        expected_num_hidden_layers=expected_num_hidden_layers,
+    )
+
+    with torch.device("meta"):
+        model = TinyModelForCausalLM(config)
+
+    expected_target_keys = set(model.state_dict())
+    actual_target_keys = set(converted_state_dict)
+    missing_target_keys = sorted(expected_target_keys - actual_target_keys)
+    unexpected_target_keys = sorted(actual_target_keys - expected_target_keys)
+    if missing_target_keys or unexpected_target_keys:
+        raise ValueError(
+            "Converted TinyModel keys do not match the native model. "
+            f"Missing keys: {missing_target_keys}. Unexpected keys: {unexpected_target_keys}."
+        )
+
+    model.load_state_dict(converted_state_dict, strict=True, assign=True)
+    model.eval()
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(output_dir, safe_serialization=True)
+
+    reloaded_model = TinyModelForCausalLM.from_pretrained(output_dir, dtype=torch.bfloat16)
+    reloaded_state_dict = reloaded_model.state_dict()
+    if set(reloaded_state_dict) != actual_target_keys:
+        raise ValueError("The saved TinyModel checkpoint changed its state-dict keys during reload.")
+    for key, expected_tensor in converted_state_dict.items():
+        actual_tensor = reloaded_state_dict[key]
+        if actual_tensor.dtype != torch.bfloat16:
+            raise ValueError(f"Expected `{key}` to remain bfloat16 after reload, got {actual_tensor.dtype}.")
+        if not torch.equal(actual_tensor.cpu(), expected_tensor.cpu()):
+            raise ValueError(f"Tensor `{key}` changed during the save and reload round trip.")
+
+    if reloaded_model.model.embed_tokens.weight.data_ptr() == reloaded_model.lm_head.weight.data_ptr():
+        raise ValueError("TinyModel token embeddings and language-modeling head must remain untied.")
+    return reloaded_model

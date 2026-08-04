@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import torch
 
-from transformers.models.tiny_model.convert_tiny_model_weights_to_hf import _convert_state_dict
+from transformers.models.tiny_model.convert_tiny_model_weights_to_hf import (
+    _convert_state_dict,
+    convert_tiny_model_checkpoint,
+)
 
 
 def make_original_state_dict(num_hidden_layers=2):
@@ -110,3 +115,30 @@ class TinyModelStateDictConversionTest(unittest.TestCase):
         original["torso.0.attn.Q.weight"] = torch.zeros((8, 7), dtype=torch.bfloat16)
         with self.assertRaisesRegex(ValueError, r"torso\.0\.attn\.Q\.weight.*\(8, 8\).*\(8, 7\)"):
             _convert_state_dict(original, num_attention_heads=2)
+
+
+class TinyModelCheckpointConversionTest(unittest.TestCase):
+    def test_saves_and_reloads_exact_bfloat16_checkpoint(self):
+        original = make_original_state_dict()
+        _, expected = _convert_state_dict(original, num_attention_heads=2)
+
+        with TemporaryDirectory() as temporary_directory:
+            temporary_directory = Path(temporary_directory)
+            checkpoint_path = temporary_directory / "tiny_model.pt"
+            output_dir = temporary_directory / "converted"
+            torch.save(original, checkpoint_path)
+
+            model = convert_tiny_model_checkpoint(
+                checkpoint_path,
+                output_dir,
+                num_attention_heads=2,
+                expected_num_hidden_layers=2,
+            )
+
+            self.assertTrue((output_dir / "config.json").is_file())
+            self.assertTrue((output_dir / "model.safetensors").is_file())
+            self.assertEqual(set(model.state_dict()), set(expected))
+            for key, tensor in model.state_dict().items():
+                self.assertEqual(tensor.dtype, torch.bfloat16)
+                torch.testing.assert_close(tensor, expected[key], rtol=0, atol=0)
+            self.assertNotEqual(model.model.embed_tokens.weight.data_ptr(), model.lm_head.weight.data_ptr())
