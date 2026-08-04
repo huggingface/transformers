@@ -90,9 +90,9 @@ class MiniMaxVL01TextCache(DynamicCache):
 
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
-            if self.linear_cache[layer_idx] != []:
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
-            else:
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
                 self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):

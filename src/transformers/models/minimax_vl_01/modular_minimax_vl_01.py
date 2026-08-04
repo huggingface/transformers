@@ -114,6 +114,13 @@ class MiniMaxVL01TextCache(MiniMaxCache):
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         return DynamicCache.get_mask_sizes(self, query_length, self._get_attention_layer_idx(layer_idx))
 
+    def batch_repeat_interleave(self, repeats: int):
+        for layer_idx in range(len(self)):
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
+
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
     pass

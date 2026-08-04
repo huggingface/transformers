@@ -155,6 +155,21 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(cache.get_mask_sizes(query_length=3, layer_idx=0), (8, 0))
         self.assertEqual(cache.get_mask_sizes(query_length=3, layer_idx=7), (8, 0))
 
+    def test_text_cache_batch_repeat_interleave_handles_final_full_attention_layer(self):
+        cache = MiniMaxVL01TextCache()
+        recurrent_state = torch.tensor([1.0, 2.0]).reshape(2, 1, 1, 1)
+        full_attention_state = torch.tensor([10.0, 20.0]).reshape(2, 1, 1, 1)
+        cache.set_linear_cache(layer_idx=0, linear_cache=recurrent_state)
+        cache.update(full_attention_state, full_attention_state, layer_idx=1)
+
+        cache.batch_repeat_interleave(2)
+
+        expected_recurrent = torch.tensor([1.0, 1.0, 2.0, 2.0]).reshape(4, 1, 1, 1)
+        expected_full = torch.tensor([10.0, 10.0, 20.0, 20.0]).reshape(4, 1, 1, 1)
+        torch.testing.assert_close(cache.linear_cache[0], expected_recurrent)
+        torch.testing.assert_close(cache.layers[1].keys, expected_full)
+        torch.testing.assert_close(cache.layers[1].values, expected_full)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
