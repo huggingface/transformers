@@ -176,9 +176,6 @@ def _migrate_legacy_text_config(text_config: dict) -> dict:
 @strict
 class MiniMaxVL01Config(LlavaNextConfig):
     r"""
-    This configuration composes a CLIP vision encoder with a MiniMax language model using the released
-    MiniMax-VL-01 two-layer multimodal projector and any-resolution image packing.
-
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         Candidate `(height, width)` resolutions used by the any-resolution image processor. By default this uses the
         28 resolutions released with MiniMax-VL-01.
