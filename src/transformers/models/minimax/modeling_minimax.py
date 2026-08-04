@@ -89,6 +89,18 @@ class MiniMaxCache(DynamicCache):
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
 
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        seq_length = super().get_seq_length(layer_idx)
+        if seq_length > 0 or layer_idx != 0:
+            return seq_length
+
+        # The released MiniMax-VL-01 layout begins with recurrent layers. DynamicCache creates empty placeholder
+        # layers before the first full-attention layer, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, super().__len__()):
+            if (seq_length := super().get_seq_length(attention_layer_idx)) > 0:
+                return seq_length
+        return 0
+
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
@@ -105,18 +117,6 @@ class MiniMaxCache(DynamicCache):
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxCache doesnot support `crop` method")
-
-
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
 
 
 class MiniMaxLightningAttention(nn.Module):
@@ -144,10 +144,10 @@ class MiniMaxLightningAttention(nn.Module):
 
         self.layer_type = config.layer_types[layer_idx]
 
-    def get_slope_rate(self):
+    def get_slope_rate(self, device=None):
         base = 1 / (2 ** (8 / self.num_attention_heads))
-        exponent = torch.arange(self.num_attention_heads) + 1
-        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
+        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
+        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
 
         rate = base**exponent
         rate = rate * factor
@@ -156,7 +156,7 @@ class MiniMaxLightningAttention(nn.Module):
         return rate
 
     def decay_factors(self, slope_rate):
-        block_size_range = torch.arange(self.block_size) + 1
+        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
         key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
@@ -181,7 +181,6 @@ class MiniMaxLightningAttention(nn.Module):
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
-        qkv_states = apply_mask_to_padding_states(qkv_states, attention_mask)
         qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
         query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
@@ -190,17 +189,39 @@ class MiniMaxLightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        # The reference implementation keeps slopes, decay tensors, and the recurrent accumulator in float32 even
+        # when model weights and activations use a lower precision. Recompute the derived decays because module dtype
+        # casts also cast registered buffers.
+        slope_rate = self.get_slope_rate(device=value_states.device)
+        query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
+
+        if attention_mask is not None:
+            padding_mask = ~attention_mask[:, None, :, None].to(torch.bool)
+            value_states = value_states.masked_fill(padding_mask, 0)
+
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
         if past_key_values is not None:
             attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
 
         if attn_weights_inter is None:
-            attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
-                value_states
+            attn_weights_inter = torch.zeros(
+                batch_size,
+                self.num_attention_heads,
+                self.head_dim,
+                self.head_dim,
+                dtype=torch.float32,
+                device=value_states.device,
             )
 
-            attn_output = []
+            attn_output = torch.empty(
+                batch_size,
+                self.num_attention_heads,
+                seq_len,
+                self.head_dim,
+                dtype=query_states.dtype,
+                device=query_states.device,
+            )
             for i in range(num_blocks):
                 start_idx = i * self.block_size
                 end_idx = min(start_idx + self.block_size, seq_len)
@@ -210,30 +231,36 @@ class MiniMaxLightningAttention(nn.Module):
                 current_key_states = key_states[:, :, start_idx:end_idx]
                 current_value_states = value_states[:, :, start_idx:end_idx]
 
-                current_query_decay = self.query_decay[:, :current_block_size]
-                current_key_decay = self.key_decay[:, -current_block_size:]
-                current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
-                block_decay = torch.exp(-self.slope_rate * current_block_size)
+                current_query_decay = query_decay[:, :current_block_size]
+                current_key_decay = key_decay[:, -current_block_size:]
+                current_diagonal_decay = diagonal_decay[:, :, :current_block_size, :current_block_size]
+                block_decay = torch.exp(-slope_rate * current_block_size)
 
                 # intra: ( Q @ K.T ) @ V -> QK * V
-                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2))
-                attn_output_intra = torch.matmul(attn_weights_intra * current_diagonal_decay, current_value_states)
+                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2)).float()
+                attn_output_intra = torch.matmul(
+                    attn_weights_intra * current_diagonal_decay, current_value_states.float()
+                )
 
                 # inter: Q @ ( K.T @ V ) -> Q * KV
-                attn_output_inter = torch.matmul(current_query_states * current_query_decay, attn_weights_inter)
+                attn_output_inter = torch.matmul(
+                    current_query_states * current_query_decay, attn_weights_inter.float()
+                )
 
                 # final attention output
                 current_attn_output = attn_output_inter + attn_output_intra
-                attn_output.append(current_attn_output)
+                attn_output[:, :, start_idx:end_idx] = current_attn_output
 
                 # calculate attn_weights_inter for next block or cache
                 next_attn_weights_inter = torch.matmul(
-                    (current_key_states * current_key_decay).transpose(-1, -2), current_value_states
+                    (current_key_states * current_key_decay).transpose(-1, -2).to(current_value_states.dtype),
+                    current_value_states,
                 )
-                attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
+                attn_weights_inter = attn_weights_inter.float() * block_decay + next_attn_weights_inter
 
         else:
-            ratio = torch.exp(-self.slope_rate)
+            attn_weights_inter = attn_weights_inter.float()
+            ratio = torch.exp(-slope_rate)
             attn_output = []
             for i in range(seq_len):
                 current_query_states = query_states[:, :, i : i + 1]
@@ -242,12 +269,12 @@ class MiniMaxLightningAttention(nn.Module):
 
                 current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2), current_value_states)
                 attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
-                current_attn_output = torch.matmul(current_query_states, attn_weights_inter)
+                current_attn_output = torch.matmul(current_query_states, attn_weights_inter.to(query_states.dtype))
 
                 attn_output.append(current_attn_output)
 
-        # concatenate attention outputs over all blocks
-        attn_output = torch.cat(attn_output, dim=-2)
+            # concatenate attention outputs over all recurrent steps
+            attn_output = torch.cat(attn_output, dim=-2)
 
         # final output projection
         attn_output = attn_output.transpose(1, 2)
@@ -294,7 +321,9 @@ class MiniMaxRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
@@ -304,12 +333,15 @@ class MiniMaxRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -324,7 +356,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -345,8 +376,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
 
 
