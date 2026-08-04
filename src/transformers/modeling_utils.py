@@ -4124,6 +4124,8 @@ class PreTrainedModel(
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", True)
         kernel_config = kwargs.pop("kernel_config", None)
+        # TODO: introduce kernel mode for torch compile compatibility
+        # kernel_mode = kwargs.pop("kernel_mode", self.training)
         key_mapping = kwargs.pop("key_mapping", None)
 
         # Not used anymore -- remove them from the kwargs
