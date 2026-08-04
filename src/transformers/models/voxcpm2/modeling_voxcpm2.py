@@ -162,8 +162,13 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
             else:
                 init.normal_(module.cond_embed.weight, mean=0.0, std=1.0)
         elif isinstance(module, VoxCPM2AudioDecoder) and module.sr_bin_boundaries is not None:
+            audio_vae_config = self.config.audio_vae_config
+            if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+                raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+            if audio_vae_config.sr_bin_boundaries is None:
+                raise ValueError("AudioVAE sample-rate boundaries are missing from the configuration")
             boundaries = torch.tensor(
-                self.config.audio_vae_config.sr_bin_boundaries,
+                audio_vae_config.sr_bin_boundaries,
                 device=module.sr_bin_boundaries.device,
                 dtype=module.sr_bin_boundaries.dtype,
             )
