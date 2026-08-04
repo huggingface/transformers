@@ -75,12 +75,15 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
+    "inkling": "InklingConfig",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
+    "radio": "RADIOConfig",
+    "cosmos3-edge": "Cosmos3EdgeConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -2469,7 +2472,7 @@ class ClassDocstring:
     """
 
     TextModel = r"""
-    The bare {model_name} Text Model outputting raw hidden-states without any specific head on to.
+    The bare {model_name} Text Model outputting raw hidden-states without any specific head on top.
     """
 
     ForSequenceClassification = r"""
@@ -3412,7 +3415,7 @@ def _is_image_processor_class(func, parent_class):
     filename = os.path.basename(source_file)
 
     # Multimodal processors are implemented in processing_*.py modules
-    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    # (single-modality processors use image_processing_*, video_processing_*, etc.).
     return filename.startswith("image_processing_") and filename.endswith(".py")
 
 
@@ -3455,7 +3458,7 @@ def _is_processor_class(func, parent_class):
     filename = os.path.basename(source_file)
 
     # Multimodal processors are implemented in processing_*.py modules
-    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    # (single-modality processors use image_processing_*, video_processing_*, etc.).
     return filename.startswith("processing_") and filename.endswith(".py")
 
 

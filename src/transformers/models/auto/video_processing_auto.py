@@ -213,7 +213,7 @@ def get_video_processor_config(
     # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
-    video_processor_dict = {}
+    video_processor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "video_processor" in processor_dict:
@@ -222,7 +222,7 @@ def get_video_processor_config(
     if resolved_video_processor_file is not None and video_processor_dict is None:
         video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
-    return video_processor_dict
+    return video_processor_dict or {}
 
 
 @requires(backends=("vision", "torchvision"))
@@ -336,15 +336,21 @@ class AutoVideoProcessor:
                 video_processor_auto_map = image_processor_auto_map.replace("ImageProcessor", "VideoProcessor")
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
-        if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            # It could be in `config.video_processor_type``
-            video_processor_class = getattr(config, "video_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
-                video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+        if video_processor_class is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+
+                # It could be in `config.video_processor_type``
+                video_processor_class = getattr(config, "video_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
+                    video_processor_auto_map = config.auto_map["AutoVideoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if video_processor_class is not None:
             video_processor_class = video_processor_class_from_name(video_processor_class)

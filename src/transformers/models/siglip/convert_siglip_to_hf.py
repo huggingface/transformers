@@ -72,17 +72,17 @@ MODEL_CONFIGS = {
 
 model_name_to_checkpoint = {
     # base checkpoints
-    "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
-    "siglip-base-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_256_60500360.npz",
-    "siglip-base-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_384_68578854.npz",
-    "siglip-base-patch16-512": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_512_68580893.npz",
+    "siglip-base-patch16-224": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_224_63724782.npz",
+    "siglip-base-patch16-256": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_256_60500360.npz",
+    "siglip-base-patch16-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_384_68578854.npz",
+    "siglip-base-patch16-512": "https://storage.googleapis.com/big_vision/siglip/webli_en_b16_512_68580893.npz",
     # large checkpoints
-    "siglip-large-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_256_60552751.npz",
-    "siglip-large-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_384_63634585.npz",
+    "siglip-large-patch16-256": "https://storage.googleapis.com/big_vision/siglip/webli_en_l16_256_60552751.npz",
+    "siglip-large-patch16-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_l16_384_63634585.npz",
     # multilingual checkpoint
-    "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
+    "siglip-base-patch16-256-i18n": "https://storage.googleapis.com/big_vision/siglip/webli_i18n_b16_256_66117334.npz",
     # so400m checkpoints
-    "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    "siglip-so400m-patch14-384": "https://storage.googleapis.com/big_vision/siglip/webli_en_so400m_384_58765454.npz",
     # ----------------- v2 -----------------
     # base checkpoints
     "siglip2-base-patch32-256": "gv-hf/siglip2/siglip2_b32_256.npz",
@@ -134,11 +134,12 @@ def get_vocab_size_from_model_name(model_name: str) -> int:
 
 
 def get_vocab_file_from_model_name(model_name: str) -> str:
-    # get vocab file
     if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+        repo_id = "google/siglip-base-patch16-256-multilingual"
     else:
-        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+        repo_id = "google/siglip-base-patch16-224"
+
+    vocab_file = hf_hub_download(repo_id=repo_id, filename="spiece.model")
     return vocab_file
 
 
@@ -389,8 +390,17 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     # Get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
     if not os.path.exists(checkpoint):
-        org, repo_id, *filepath = checkpoint.split("/")
-        checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
+        if checkpoint.startswith("http"):
+            import tempfile
+
+            with httpx.stream("GET", checkpoint) as response:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".npz") as tmp_file:
+                    for chunk in response.iter_bytes():
+                        tmp_file.write(chunk)
+                    checkpoint = tmp_file.name
+        else:
+            org, repo_id, *filepath = checkpoint.split("/")
+            checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
 
     # Load original state dict
     data = load(checkpoint)

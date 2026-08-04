@@ -14,18 +14,69 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
+from inspect import isfunction, ismethod
 from typing import Any
 
+from ..chat_template_utils import get_json_schema
 from .content_parsers import STREAMABLE_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
-def parse_response(text: str, response_template: dict | ResponseTemplate, *, prefix: str | None = None) -> dict:
+def _schema_types(schema: Any) -> tuple[str, ...]:
+    if not isinstance(schema, dict):
+        return ()
+    declared = schema.get("type")
+    types = [declared] if isinstance(declared, str) else []
+    if isinstance(declared, list):
+        types.extend(t for t in declared if isinstance(t, str))
+    for choice in schema.get("anyOf") or []:
+        types.extend(_schema_types(choice))
+    if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
+        types.append("null")
+    return tuple(types)
+
+
+def _coerce(raw: str, types: tuple[str, ...]) -> Any:
+    for type_name in types:
+        try:
+            if type_name == "integer":
+                return int(raw)
+            if type_name == "number":
+                number = float(raw)
+                if number != number or number in (float("inf"), float("-inf")):
+                    continue  # NaN / inf are not valid JSON numbers
+                # Preserve ints when the source text had no fractional part.
+                return int(number) if number.is_integer() and "." not in raw else number
+            if type_name == "boolean" and raw.strip().lower() in ("true", "1", "false", "0"):
+                return raw.strip().lower() in ("true", "1")
+            if type_name == "null" and raw.strip() in ("null", "None"):
+                return None
+            if type_name in ("object", "array"):
+                decoded = json.loads(raw)
+                if isinstance(decoded, dict if type_name == "object" else list):
+                    return decoded
+        except ValueError:
+            continue
+    return raw  # `string` params, unknown types and failed casts all keep the original text
+
+
+def parse_response(
+    text: str,
+    response_template: dict | ResponseTemplate,
+    *,
+    prefix: str | None = None,
+    tools: list[dict | Callable] | None = None,
+) -> dict:
     """The main function for response parsing when you don't want streaming. Takes generated output
     and the prompt prefix and parses them without streaming any events, then returns the parsed message.
+
+    Pass `tools` (in the same format as `apply_chat_template` accepts) to cast tool-call arguments
+    using the calling tool's JSON schema.
     """
     response_template = load_response_template(response_template)
-    stream = ResponseParser(response_template, prefix=prefix)
+    stream = ResponseParser(response_template, prefix=prefix, tools=tools)
     stream.feed(text)
     message, _ = stream.finalize()
     return message
@@ -48,6 +99,9 @@ class ResponseParser:
         for event in final_events:
             handle(event)
 
+    Pass `tools=` (in the same format as `apply_chat_template` accepts) to cast tool-call arguments
+    using the calling tool's JSON schema as each region closes.
+
     Events can be either "region_open", "region_chunk", or "region_close".
 
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
@@ -57,8 +111,31 @@ class ResponseParser:
     prefill regions before the model writes anything; closed prefill regions also land in the output dict.
     """
 
-    def __init__(self, response_template: dict | ResponseTemplate, prefix: str | None = None):
+    def __init__(
+        self,
+        response_template: dict | ResponseTemplate,
+        prefix: str | None = None,
+        *,
+        tools: list[dict | Callable] | None = None,
+    ):
         self._spec = load_response_template(response_template)
+        if prefix is None:
+            raise ValueError(
+                "`ResponseParser`/`parse_response` requires `prefix` (the chat prompt sent to the model before "
+                "generation), because chat templates often pre-write part of the assistant message (e.g. an "
+                "opening `<think>` tag) that the parser must see to parse the output correctly. If the generation "
+                'already contains the complete message, pass `prefix=""` to opt out explicitly.'
+            )
+        # Maps tool name -> schema `properties`, used to cast parsed tool-call arguments
+        self._tool_params: dict[str, dict] = {}
+        for tool in tools or []:
+            if isfunction(tool) or ismethod(tool):
+                tool = get_json_schema(tool)
+            fn = tool.get("function", tool) if isinstance(tool, dict) else None
+            if isinstance(fn, dict) and isinstance(fn.get("name"), str):
+                parameters = fn.get("parameters")
+                properties = parameters.get("properties") if isinstance(parameters, dict) else None
+                self._tool_params[fn["name"]] = properties if isinstance(properties, dict) else {}
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = dict(self._spec.defaults)
@@ -280,12 +357,33 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
+        if self._tool_params:
+            value = self._coerce_tool_calls(value)
         if field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
             self._output[self._current] = value
         events.append({"type": "region_close", "field": self._current, "value": value})
         self._reset_to_implicit()
+
+    def _coerce_tool_calls(self, value: Any) -> Any:
+        if isinstance(value, list):
+            return [self._coerce_tool_calls(item) for item in value]
+        fn = value.get("function") if isinstance(value, dict) else None
+        if not isinstance(fn, dict):
+            return value
+        name, arguments = fn.get("name"), fn.get("arguments")
+        if not isinstance(name, str) or not isinstance(arguments, dict):
+            return value
+        if properties := self._tool_params.get(name):
+            for key, argument in arguments.items():
+                if key not in properties or not (types := _schema_types(properties[key])):
+                    continue
+                if isinstance(argument, str):
+                    arguments[key] = _coerce(argument, types)
+                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                    arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
+        return value
 
     def _reset_to_implicit(self) -> None:
         self._current = self._implicit_name

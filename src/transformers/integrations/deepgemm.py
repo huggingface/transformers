@@ -16,9 +16,9 @@
 
 Provides:
 - `deepgemm_bf16_experts_forward`: BF16 M-grouped experts forward.
-- `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (BF16 in, BF16 out).
+- `deepgemm_fp8_fp4_linear`: end-to-end FP8/FP4 linear (output dtype follows the input).
 - `deepgemm_fp8_fp4_experts_forward`: FP8 (or FP4 on SM100+) M-grouped experts forward.
-- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8×FP4 Mega MoE forward (SM100+).
+- `deepgemm_fp8_fp4_megamoe_experts_forward`: FP8xFP4 Mega MoE forward (SM100+).
 
 Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/deep-gemm
 ≥ 2.5 (Mega MoE symbols required). Mega MoE additionally needs SM100+ at call time.
@@ -27,21 +27,23 @@ Requirements: CUDA, Hopper (SM90+), CUDA runtime ≥ 12.3, kernels-community/dee
 from __future__ import annotations
 
 import functools
+import json
+import os
+import re
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 
 from ..utils import logging
+from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
-    KERNELS_MAX_VERSION,
-    KERNELS_MIN_VERSION,
-    get_cuda_runtime_version,
     is_kernels_available,
-    is_torchdynamo_compiling,
+    maybe_import_error,
     resolve_internal_import,
 )
-from .hub_kernels import lazy_load_kernel
+from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .tensor_parallel import to_local
 
 
@@ -74,39 +76,175 @@ class DeepGEMM:
 
 
 @functools.cache
-def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    """Load DeepGEMM once; raise `ImportError` if env or any required symbol is missing.
+def _get_cuda_home() -> str | None:
+    """Resolve the CUDA toolkit root the way DeepGEMM's JIT does:
+    ``CUDA_HOME`` → ``CUDA_PATH`` → dir of ``which nvcc`` → ``/usr/local/cuda`` (``None`` if none found).
 
-    `requires_sm100` raises a Blackwell-specific error for callers (FP4 / Mega MoE)
-    that won't work on Hopper, instead of the generic SM90+ message.
+    Mirrors DeepGEMM's own ``_find_cuda_home`` so we agree on the path it will actually use, rather than
+    reusing ``torch.utils.cpp_extension.CUDA_HOME`` whose resolution inits a CUDA context (fork-unsafe).
     """
-    if not is_torchdynamo_compiling():
-        if not is_kernels_available():
-            raise ImportError(
-                "DeepGEMM kernel requires the `kernels` package. "
-                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
-            )
-        if not torch.cuda.is_available():
-            raise ImportError("DeepGEMM kernel requires CUDA, but CUDA is not available.")
+    cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
+    if cuda_home:
+        return cuda_home
+    nvcc = shutil.which("nvcc")
+    if nvcc:
+        return os.path.dirname(os.path.dirname(nvcc))
+    if os.path.isdir("/usr/local/cuda"):
+        return "/usr/local/cuda"
+    return None
 
-        major, minor = torch.cuda.get_device_capability()
-        # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
-        # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
-        allowed = (10,) if requires_sm100 else (9, 10)
-        if major not in allowed:
-            arch = "Blackwell (SM100)" if requires_sm100 else "Hopper (SM90) or Blackwell (SM100)"
-            raise ImportError(f"DeepGEMM requires {arch}; current device is SM{major}{minor}.")
 
-        # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
-        cuda_major, cuda_minor = get_cuda_runtime_version()
-        min_cuda = (12, 9) if major == 10 else (12, 3)
-        if (cuda_major, cuda_minor) < min_cuda:
-            raise ImportError(
-                f"DeepGEMM on SM{major}{minor} requires CUDA runtime ≥ {min_cuda[0]}.{min_cuda[1]}, "
-                f"found {cuda_major}.{cuda_minor}."
-            )
+@functools.cache
+def _get_nvcc_version() -> tuple[int, int] | None:
+    """Version of the CUDA toolkit nvcc will use, as ``(major, minor)``, read off disk without a
+    subprocess from (in order) ``{CUDA_HOME}/version.json``, ``version.txt``, or the ``CUDA_VERSION``
+    define in ``include/cuda.h``. ``None`` if unreadable. This is the compiler that builds the kernels,
+    unlike ``torch.version.cuda`` (torch's bundled runtime, which never drives a JIT compile).
+    """
+    cuda_home = _get_cuda_home()
+    if cuda_home is None:
+        return None
 
+    version_json = os.path.join(cuda_home, "version.json")
+    if os.path.isfile(version_json):
+        try:
+            with open(version_json) as f:
+                components = json.load(f)
+            version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
+            major, minor = version.split(".")[:2]
+            return int(major), int(minor)
+        except (OSError, ValueError, AttributeError):
+            pass
+
+    version_txt = os.path.join(cuda_home, "version.txt")
+    if os.path.isfile(version_txt):
+        try:
+            with open(version_txt) as f:
+                match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
+            pass
+
+    # `cuda.h` ships with every toolkit (incl. distro packages that have no version file).
+    cuda_h = os.path.join(cuda_home, "include", "cuda.h")
+    if os.path.isfile(cuda_h):
+        try:
+            with open(cuda_h) as f:
+                match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
+            if match:
+                cuda_version = int(match.group(1))
+                return cuda_version // 1000, (cuda_version % 1000) // 10
+        except (OSError, ValueError):  # ValueError covers UnicodeDecodeError on a non-text file
+            pass
+
+    return None
+
+
+@torch._dynamo.assume_constant_result
+def is_sm100() -> bool:
+    """Whether the current CUDA device is Blackwell (SM100+). `@assume_constant_result` makes dynamo
+    evaluate it once at trace time and inline the bool — keeping the untraceable
+    `torch.cuda.get_device_capability()` pybind out of the graph — so the branches on it (SF layout, cast
+    kwargs, psum layout, and the arch guards) stay compile-safe. Re-queries each eager call, so a faked
+    capability in tests is honoured.
+    """
+    return torch.cuda.get_device_capability()[0] >= 10
+
+
+@torch._dynamo.assume_constant_result
+def is_deepgemm_loadable(raise_error: bool = False) -> bool:
+    """Whether the DeepGEMM kernel can be loaded in this environment: `kernels` installed, a CUDA GPU on a
+    supported arch (Hopper SM90 or Blackwell SM100), and a CUDA toolkit/nvcc new enough to JIT-compile it.
+    A one-glance gate for callers — including external stacks — deciding whether to dispatch to DeepGEMM.
+    With `raise_error=True` (used by the loader) it re-raises the specific `ImportError` explaining what's
+    missing instead of returning `False`.
+
+    `@assume_constant_result` makes dynamo evaluate this once at trace time and inline the bool (its probe
+    is untraceable — an `lru_cache`'d import check + the `get_device_capability` pybind + nvcc lookup), so
+    the check can sit in a compiled dispatch gate (e.g. `fp8_linear`) without breaking the graph.
+
+    FP4 / Mega MoE additionally need Blackwell (SM100); the relevant forwards enforce that via
+    `_assert_sm100_requirements` / `is_sm100()`, since this env check can't see which dtype path the
+    caller will take.
+    """
+    if not is_kernels_available():
+        return maybe_import_error(f"DeepGEMM kernel unavailable: {_MISSING_KERNELS_MESSAGE}", raise_error=raise_error)
+    if not torch.cuda.is_available():
+        return maybe_import_error("DeepGEMM kernel requires CUDA, but CUDA is not available.", raise_error=raise_error)
+
+    major, minor = torch.cuda.get_device_capability()
+    # DeepGEMM ships kernels only for SM90 (Hopper) and SM100 (Blackwell); anything
+    # else — Ada (SM89), Ampere (SM80), or future archs (SM110+) — has no build.
+    if major not in (9, 10):
+        return maybe_import_error(
+            f"DeepGEMM requires Hopper (SM90) or Blackwell (SM100); current device is SM{major}{minor}.",
+            raise_error=raise_error,
+        )
+
+    # DeepGEMM JIT-compiles kernels with the system nvcc, so a resolvable CUDA toolkit is required.
+    # Per the DeepGEMM README: SM90 needs CUDA 12.3+, SM100 needs CUDA 12.9+.
+    min_cuda = (12, 9) if major == 10 else (12, 3)
+    cuda_home = _get_cuda_home()
+    if cuda_home is None:
+        return maybe_import_error(
+            f"DeepGEMM's JIT needs a CUDA toolkit ≥ {min_cuda[0]}.{min_cuda[1]}, but none was found. "
+            "Set `CUDA_HOME` to a CUDA toolkit.",
+            raise_error=raise_error,
+        )
+
+    # The Kernel Hub `deep-gemm` build always uses nvcc and ignores `DG_JIT_USE_NVRTC` (there is no
+    # NVRTC fallback), so `CUDA_HOME` must hold an nvcc of the required version.
+    if not os.path.isfile(os.path.join(cuda_home, "bin", "nvcc")):
+        return maybe_import_error(
+            f"DeepGEMM's JIT compiles with nvcc, but none was found in `{cuda_home}/bin`. Point "
+            f"`CUDA_HOME` at a full CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit (not a runtime-only install).",
+            raise_error=raise_error,
+        )
+
+    # Treat an unreadable version as unsupported: `cuda.h` (with `CUDA_VERSION`) ships with every real
+    # toolkit, so `None` here means an incomplete install we can't vouch for — fail early to Triton.
+    nvcc_version = _get_nvcc_version()
+    if nvcc_version is None:
+        return maybe_import_error(
+            f"DeepGEMM found nvcc in `{cuda_home}/bin` but could not read its CUDA version "
+            f"(no parseable `version.json`, `version.txt`, or `include/cuda.h`). Point `CUDA_HOME` at a "
+            f"complete CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit.",
+            raise_error=raise_error,
+        )
+    if nvcc_version < min_cuda:
+        return maybe_import_error(
+            f"DeepGEMM on SM{major}{minor} needs a CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit, but nvcc "
+            f"{nvcc_version[0]}.{nvcc_version[1]} in `{cuda_home}` is too old. Point `CUDA_HOME` at a "
+            f"CUDA ≥ {min_cuda[0]}.{min_cuda[1]} toolkit.",
+            raise_error=raise_error,
+        )
+    return True
+
+
+# Cache the loaded bundle but not failures: re-checking each call is cheap and intended, since the env
+# can change between attempts. A module global (not `@functools.cache`) avoids Dynamo warning about
+# tracing a cache-wrapped function on every compile.
+_DEEPGEMM: DeepGEMM | None = None
+
+
+@torch._dynamo.allow_in_graph
+def _load_deepgemm_kernel() -> None:
+    """Load DeepGEMM once into the `_DEEPGEMM` module global, raising `ImportError` if the env or any
+    required symbol is missing. Under NO circumstances may this function return a value: it rides
+    through `@allow_in_graph` as an opaque fx node, whose return must be proxyable — returning the
+    bundle (e.g. from the warm-cache short-circuit) breaks torch.compile with
+    `Unsupported: torch.* op returned non-Tensor`. Callers read `_DEEPGEMM` back from the global.
+
+    `@allow_in_graph` makes `torch.compile` treat the untraceable cold path (hub download + dynamic
+    import via `lazy_load_kernel`) as a single opaque node instead of tracing into it; it returns `None`
+    (proxyable) and populates the global, which `load_deepgemm_kernel` then returns.
+    """
+    global _DEEPGEMM
+    if _DEEPGEMM is not None:
+        return
+
+    is_deepgemm_loadable(raise_error=True)
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
         raise ImportError(
@@ -144,11 +282,10 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
     ]
     if missing:
         raise ImportError(
-            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
-            f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-            f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. {_MISSING_KERNELS_MESSAGE}"
         )
-    return DeepGEMM(
+
+    _DEEPGEMM = DeepGEMM(
         fp8_fp4_matmul=fp8_fp4_matmul,
         grouped_fp8_fp4_matmul_nt=grouped_fp8_fp4_matmul_nt,
         grouped_fp8_fp4_matmul_nn=grouped_fp8_fp4_matmul_nn,
@@ -159,92 +296,52 @@ def _load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
         transform_weights_for_mega_moe=transform_weights_for_mega_moe,
         get_symm_buffer_for_mega_moe=get_symm_buffer_for_mega_moe,
         fp8_fp4_mega_moe=fp8_fp4_mega_moe,
-        m_alignment=int(get_mk_alignment()),
+        m_alignment=get_mk_alignment(),
     )
 
 
-@torch._dynamo.allow_in_graph
-def _populate_deepgemm_kernel(requires_sm100: bool = False) -> None:
-    _ = _load_deepgemm_kernel(requires_sm100=requires_sm100)
-    return None
-
-
-def load_deepgemm_kernel(requires_sm100: bool = False) -> DeepGEMM:
-    if is_torchdynamo_compiling():
-        _populate_deepgemm_kernel(requires_sm100=requires_sm100)
-    return _load_deepgemm_kernel(requires_sm100=requires_sm100)
+def load_deepgemm_kernel() -> DeepGEMM:
+    _load_deepgemm_kernel()
+    return _DEEPGEMM
 
 
 # ── Scale-factor helpers ───────────────────────────────────────────────────────
 
 
-@functools.cache
-def _is_sm100(device: torch.device) -> bool:
-    """``True`` for Blackwell (SM100+). Cached: device capability is fixed for the
-    process lifetime and this gets hit on every linear/expert forward.
+def _assert_sm100_requirements(weight: torch.Tensor, scale: torch.Tensor) -> None:
+    """Before-load guard for DeepGEMM's FP8/FP4 arch constraints on the given weight/scale dtypes:
+
+      - FP4 (``int8``-packed) weights have no Hopper (SM90) kernel — they need Blackwell (SM100+).
+      - Blackwell has no float32 scale-factor path: ``_coerce_sf_for_kernel`` would silently round a
+        ``float32`` scale to UE8M0 and corrupt the output. UE8M0 scales load as ``float8_e8m0fnu`` (the
+        loader normalizes even float32-container checkpoints like dsv4-flash-base), so a ``float32`` scale
+        on SM100 means a genuine non-UE8M0 checkpoint.
+
+    Uses `is_sm100()` (compile-safe via `assume_constant_result`), so the whole guard folds to a constant under
+    ``torch.compile``: the valid case compiles away to nothing, while an unsupported combo fails loud
+    rather than letting the hot path silently corrupt (unlike an ``is_compiling`` skip, which would miss a
+    model compiled from cold with no eager warmup). Both raise ``NotImplementedError``, which
+    ``fp8_linear`` treats as "DeepGEMM declined" and falls back to Triton (SM90 consuming float32 SFs
+    directly is fine, so those cases are no-ops).
     """
-    return torch.cuda.get_device_capability(device)[0] >= 10
-
-
-def _assert_sm100_scales_are_ue8m0(scale: torch.Tensor) -> None:
-    """On B200 (SM100) DeepGEMM only supports UE8M0 (power-of-two) scales; the float32 scales
-    that work on H100 (SM90) have no SM100 path. UE8M0 scales load as ``float8_e8m0fnu`` (the
-    loader normalizes even float32-container checkpoints like dsv4-flash-base), so a plain
-    ``float32`` scale here means a genuine non-UE8M0 checkpoint — fail loud rather than let
-    ``_coerce_sf_for_kernel`` silently round it and corrupt the output.
-    """
-    if not _is_sm100(scale.device):
-        return  # SM90 consumes float32 SFs directly (no UE8M0 round).
-    if scale.dtype != torch.float32:
-        return  # already UE8M0 (`float8_e8m0fnu`) — kernel-ready as-is.
-    raise ValueError(
-        "DeepGEMM's Blackwell (SM100) experts kernel requires power-of-two (UE8M0) scale "
-        "factors, but this checkpoint's expert scales are plain float32 "
-        "(quantization_config.scale_fmt='float'). Rounding them to UE8M0 would scale the "
-        "dequantized expert weights incorrectly and silently corrupt the output. Use a "
-        "checkpoint quantized with scale_fmt='ue8m0', or an experts implementation that "
-        "consumes float32 block scales directly, e.g. "
-        "`model.set_experts_implementation('grouped_mm')`."
-    )
-
-
-_DEEPGEMM_VISITED_DEVICES: set[int] = set()
-
-
-def _assert_single_device(device: torch.device, context: str) -> None:
-    """Reject DeepGEMM calls that span multiple CUDA devices in the same process
-    (e.g. ``device_map="auto"`` across N GPUs). DeepGEMM loads each kernel via
-    ``cuKernelGetFunction``, which binds the resulting ``CUfunction`` handle to
-    the CUDA context that was current at load time. Driving the same cached
-    handle from a different device's context launches it against the wrong
-    module/context and produces garbage. Distributed setups (torchrun + TP/EP)
-    don't trip this because each process owns exactly one device's context.
-
-    The fix is a build-time choice on the DeepGEMM side: compiling with
-    ``DG_JIT_USE_RUNTIME_API=1`` swaps the loader for the runtime API
-    (context-free ``cudaKernel_t``) and lifts the restriction — but it has to
-    be baked into the wheel, setting the env var at Python runtime won't change
-    the loader the cached ``.so`` already uses. Until the kernels-community build
-    we ship picks that up, we reject single-process multi-device by default.
-
-    Raised as :class:`ImportError` from the per-linear path so :func:`fp8_linear`
-    falls back to Triton (which loads through the runtime API and has no such
-    binding); raised as :class:`RuntimeError` from the experts path where there's
-    no fallback — the user explicitly chose ``experts_implementation="deepgemm"``
-    and must switch to ``"grouped_mm"`` / ``"eager"`` or run distributed.
-    """
-    idx = device.index if device.index is not None else torch.cuda.current_device()
-    _DEEPGEMM_VISITED_DEVICES.add(idx)
-    if len(_DEEPGEMM_VISITED_DEVICES) <= 1:
+    if not is_sm100():
+        # SM90: DeepGEMM has no FP4 (int8-packed) kernel, but consumes float32 SFs directly.
+        if weight.dtype == torch.int8:
+            raise NotImplementedError(
+                "DeepGEMM's FP4 (int8-packed) path requires a Blackwell (SM100+) GPU; FP4 weights have no "
+                "Hopper (SM90) kernel. Use an FP8 checkpoint, or run on a Blackwell GPU."
+            )
         return
-    msg = (
-        "DeepGEMM caches each kernel's `CUfunction` against the CUDA context it was first "
-        "loaded under, so driving it from a different device in the same process produces "
-        "garbage. Run distributed (TP/EP) so each process owns one device, "
-    )
-    if context == "linear":
-        raise ImportError(msg + "or fall back to the Triton kernel (handled automatically).")
-    raise RuntimeError(msg + "or pick `experts_implementation='grouped_mm'`.")
+
+    # SM100: DeepGEMM has no float32 scale-factor path.
+    if scale.dtype == torch.float32:
+        raise NotImplementedError(
+            "DeepGEMM has no float32 scale-factor path on Blackwell (SM100): these scales are plain float32 "
+            "(quantization_config.scale_fmt='float'), and rounding them to UE8M0 would silently corrupt the "
+            "output. Use a checkpoint quantized with scale_fmt='ue8m0', or a path that consumes float32 block "
+            "scales directly — the FP8 linear falls back to Triton automatically; for experts use "
+            "`model.set_experts_implementation('grouped_mm')`."
+        )
 
 
 def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
@@ -260,9 +357,17 @@ def _ceil_to_ue8m0(sf: torch.Tensor) -> torch.Tensor:
     return (int_view + ((1 << 23) - 1)).bitwise_and_(~((1 << 23) - 1)).view(torch.float)
 
 
-def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> torch.Tensor:
-    """Lay out `sf` as DeepGEMM's `check_sf_layout` expects: MN-major
-    (`stride(-2) == 1`) and TMA-aligned (`stride(-1) == align(mn, 16/esize)`).
+def _coerce_sf_for_kernel(sf: torch.Tensor, is_sm100: bool, expected_mn: int | None = None) -> torch.Tensor:
+    """Lay out `sf` as DeepGEMM's dispatch expects, per arch.
+
+    On SM100 the int-SF path only *checks* the SF (`tma_stride_check`) and never
+    transforms it, so we hand it a TMA-aligned MN-major layout (`stride(-2) == 1`,
+    `stride(-1) == align(mn, 16/esize)`). On SM90 DeepGEMM transforms SFA itself
+    (`get_mn_major_tma_aligned_tensor`) and only *checks* SFB against
+    `sm90_sfb_check`, which rejects TMA padding (`stride(-1)` must equal `size(-2)`,
+    not `align(mn, …)`); a padded weight SF trips `layout.hpp` whenever `mn` isn't a
+    multiple of `16/esize` (e.g. N=576 → mn=5). So on SM90 we return the raw
+    row-major SF and let DeepGEMM lay it out.
 
     Inputs come in three flavors:
       - `float8_e8m0fnu` on SM100: raw UE8M0 bytes — pack 4 K-bytes → int32
@@ -280,7 +385,6 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
     DeepGEMM kernel branch is the only UE8M0 path on SM100; for `gran_mn > 1`
     the kernel only handles FP32 SFs and would otherwise reject our INT SF here.
     """
-    is_sm100 = _is_sm100(sf.device)
     if sf.dtype == torch.float8_e8m0fnu:
         if expected_mn is not None and sf.size(-2) < expected_mn:
             gran_mn = expected_mn // sf.size(-2)
@@ -294,6 +398,11 @@ def _coerce_sf_for_kernel(sf: torch.Tensor, expected_mn: int | None = None) -> t
 
     if sf.dim() not in (2, 3):
         raise ValueError(f"DeepGEMM SF must be 2D or 3D, got {sf.dim()}D")
+
+    # SM90 dispatch transforms SFA and only checks SFB (`sm90_sfb_check`), which needs
+    # an unpadded contiguous layout — DeepGEMM does the MN-major alignment itself.
+    if not is_sm100:
+        return sf.contiguous()
 
     mn = sf.size(-2)
     kf = sf.size(-1)
@@ -353,7 +462,9 @@ def _build_deepgemm_contiguous_layout(
     device = expert_ids_sorted.device
     num_tokens = expert_ids_sorted.size(0)
     # `histc` drops values > max, so EP sentinels (== num_experts) don't count.
-    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
+    # CPU requires float input, CUDA requires int input (deterministic mode).
+    histc_input = expert_ids_sorted.float() if device.type == "cpu" else expert_ids_sorted.int()
+    tokens_per_expert = torch.histc(histc_input, bins=num_experts, min=0, max=num_experts - 1).long()
     aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
     # Upper bound — avoids GPU→CPU sync; padding rows are skipped.
     total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
@@ -463,13 +574,14 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
+@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    output_dtype: torch.dtype = torch.bfloat16,
+    output_dtype: torch.dtype | None = None,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
@@ -477,26 +589,27 @@ def deepgemm_fp8_fp4_linear(
     Static (per-tensor) activation quantization is rejected — DeepGEMM needs
     per-row SFs. Callers should route static activations through the Triton fallback.
     """
-    _assert_single_device(input.device, context="linear")
-
     if activation_scale is not None:
         raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
     if input.dtype not in (torch.bfloat16, torch.float16):
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
 
-    deepgemm = load_deepgemm_kernel(requires_sm100=weight.dtype == torch.int8)
-    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, _is_sm100(input.device))
+    # Fail before the (hub-download + JIT) load if this device can't serve these dtypes.
+    _assert_sm100_requirements(weight, weight_scale_inv)
+
+    deepgemm = load_deepgemm_kernel()
+    cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, is_sm100())
 
     input_2d = input.view(-1, input.shape[-1])
     qinput_2d, scale_2d = deepgemm.per_token_cast_to_fp8(input_2d, **cast_kwargs)
-    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=output_dtype)
+    output = torch.empty(qinput_2d.shape[0], weight.shape[0], device=input.device, dtype=input.dtype)
 
     # Pass `(1, 1, gran_k)` for int-SF paths so the kernel uses the right K granularity
     # (the default `(1, 1, 128)` mismatches FP4's gran_k=32). Float-SF leaves it None.
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
     deepgemm.fp8_fp4_matmul(
-        (qinput_2d, _coerce_sf_for_kernel(scale_2d, expected_mn=qinput_2d.size(0))),
-        (weight, _coerce_sf_for_kernel(weight_scale_inv, expected_mn=weight.size(0))),
+        (qinput_2d, _coerce_sf_for_kernel(scale_2d, is_sm100(), expected_mn=qinput_2d.size(0))),
+        (weight, _coerce_sf_for_kernel(weight_scale_inv, is_sm100(), expected_mn=weight.size(0))),
         output,
         recipe=sf_recipe,
     )
@@ -534,7 +647,7 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
     )
 
     weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
@@ -546,7 +659,7 @@ def deepgemm_bf16_experts_forward(
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
     act = _pad_for_deepgemm(sorted_hidden, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=_is_sm100(device))
+    grouped_bf16_matmul(act, weight_up, proj_out, grouped_layout, use_psum_layout=is_sm100())
     if self.has_bias:
         proj_out.index_add_(0, sorted_to_padded, up_bias[expert_ids_g])
 
@@ -554,7 +667,7 @@ def deepgemm_bf16_experts_forward(
 
     # Down projection.
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=_is_sm100(device))
+    grouped_bf16_matmul(proj_out, weight_down, out, grouped_layout, use_psum_layout=is_sm100())
     if self.has_bias:
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
@@ -577,15 +690,24 @@ def deepgemm_fp8_fp4_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    _assert_single_device(hidden_states.device, context="experts")
-    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
+    if self._deepgemm_disabled:
+        # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
+        # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+        raise RuntimeError(
+            "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
+            "its kernels are bound to a single CUDA context and corrupt across devices. Use "
+            "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
+        )
+
+    # Fail before the (hub-download + JIT) load if this device can't serve these dtypes.
+    _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
+
+    deepgemm = load_deepgemm_kernel()
 
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
-
-    deepgemm = load_deepgemm_kernel(requires_sm100=self.down_proj.dtype == torch.int8)
     grouped_fp8_fp4_matmul = (
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
@@ -600,7 +722,7 @@ def deepgemm_fp8_fp4_experts_forward(
     weight_down = to_local(self.down_proj)
     weight_scale_down = to_local(self.down_proj_scale_inv)
 
-    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, _is_sm100(device))
+    cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, is_sm100())
     (
         sorted_hidden,
         sorted_weights,
@@ -611,7 +733,7 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, _is_sm100(device)
+        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
@@ -621,12 +743,12 @@ def deepgemm_fp8_fp4_experts_forward(
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, weight_up.shape[1], device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
-        (act_fp8, _coerce_sf_for_kernel(act_scales, expected_mn=total_padded_rows)),
-        (weight_up, _coerce_sf_for_kernel(weight_scale_up, expected_mn=weight_up.size(-2))),
+        (act_fp8, _coerce_sf_for_kernel(act_scales, is_sm100(), expected_mn=total_padded_rows)),
+        (weight_up, _coerce_sf_for_kernel(weight_scale_up, is_sm100(), expected_mn=weight_up.size(-2))),
         proj_out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=_is_sm100(device),
+        use_psum_layout=is_sm100(),
     )
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
 
@@ -634,12 +756,12 @@ def deepgemm_fp8_fp4_experts_forward(
     proj_fp8, proj_scales = deepgemm.per_token_cast_to_fp8(proj_out, **cast_kwargs)
     out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     grouped_fp8_fp4_matmul(
-        (proj_fp8, _coerce_sf_for_kernel(proj_scales, expected_mn=total_padded_rows)),
-        (weight_down, _coerce_sf_for_kernel(weight_scale_down, expected_mn=weight_down.size(-2))),
+        (proj_fp8, _coerce_sf_for_kernel(proj_scales, is_sm100(), expected_mn=total_padded_rows)),
+        (weight_down, _coerce_sf_for_kernel(weight_scale_down, is_sm100(), expected_mn=weight_down.size(-2))),
         out,
         grouped_layout,
         recipe=sf_recipe,
-        use_psum_layout=_is_sm100(device),
+        use_psum_layout=is_sm100(),
     )
 
     return _combine_routed_output(
@@ -672,7 +794,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     Unwraps any ``DTensor`` wrappers FSDP2/EP may have placed around the loader-
     side Parameters — the kernel takes raw pointers.
     """
-    deepgemm = load_deepgemm_kernel(requires_sm100=True)
+    deepgemm = load_deepgemm_kernel()
     gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
     down_sf_raw = to_local(module.down_proj_scale_inv.data)
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
@@ -738,10 +860,13 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-    _assert_sm100_scales_are_ue8m0(self.down_proj_scale_inv)
+    # Fail before the (hub-download + JIT) load if this device can't serve these dtypes. Mega MoE is
+    # Blackwell-only, and its weights are always FP4 (int8) — so the FP4 arch check doubles as the
+    # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
+    _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
     if self.gate_up_proj.dtype != torch.int8:
-        raise RuntimeError(
+        raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
             f"`{self.gate_up_proj.dtype}`. Use the 'deepgemm' dispatch for FP8 experts."
         )
@@ -752,7 +877,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
         )
 
-    deepgemm = load_deepgemm_kernel(requires_sm100=True)
+    deepgemm = load_deepgemm_kernel()
 
     # First-forward one-shot: pack UE8M0 SFs and interleave the L1/L2 weights for UTCCP.
     # Kept lazy here (instead of in a quantizer load-time hook) so the megamoe-specific

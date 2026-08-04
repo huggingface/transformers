@@ -117,7 +117,7 @@ class SLANetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     has_attentions = False
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent control flow in layout-OCR head
 
     def setUp(self):
         self.model_tester = SLANetModelTester(

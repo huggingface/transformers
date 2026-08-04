@@ -201,11 +201,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # Tekken converter (Mistral)
         if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
-            from .convert_slow_tokenizer import MistralConverter
+            from .integrations.mistral.tokenizer import MistralConverter
 
-            local_kwargs["vocab"], local_kwargs["merges"] = MistralConverter(
-                vocab_file=vocab_file
-            ).extract_vocab_merges_from_model(vocab_file)
+            converter = MistralConverter(vocab_file)
+            local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
         # SentencePiece model (with TikToken fallback)
@@ -1364,7 +1363,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                # only warn if its not explicitly passed
+                # only warn if it's not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
                     logger.warning(

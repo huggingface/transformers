@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.11.0'
+ARG PYTORCH='2.13.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.11.0'
+ARG TORCHCODEC='0.15.0'
 
 ARG FLASH_ATTN='false'
 
@@ -32,12 +32,22 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
+# 4. Warning: torchaudio only publishes wheels for the CUDA version it was released with (e.g. 2.11.0
+#    only has a cu130 build). If torch is installed with a different CUDA suffix (e.g. cu132), pip
+#    will keep the torchaudio installed in the previous step and torchaudio will raise a RuntimeError on import due to the
+#    CUDA version mismatch. When upgrading CUDA, make sure torchaudio has a wheel for the new version.
 RUN set -e; \
     # Determine torch version
     if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
         VERSION="torch==${PYTORCH}.*"; \
-        TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
         TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+        # torchaudio is in maintenance mode: 2.11 is the final release, compatible with torch 2.11+
+        # (no need to upgrade it with torch; it does not pin torch to a specific version)
+        if printf '%s\n' "2.11.0" "${PYTORCH}" | sort -V | head -1 | grep -qx "2.11.0"; then \
+            TORCHAUDIO_VERSION="torchaudio==2.11.0"; \
+        else \
+            TORCHAUDIO_VERSION="torchaudio==${PYTORCH}.*"; \
+        fi; \
     else \
         VERSION="torch"; \
         TORCHAUDIO_VERSION="torchaudio"; \
@@ -84,6 +94,10 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 # For kernels
 RUN python3 -m pip install --no-cache-dir kernels
 
+# For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
+# graph on GPU for faster export testing)
+RUN python3 -m pip install --no-cache-dir onnxscript onnxruntime-gpu
+
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
 
@@ -94,7 +108,22 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+# Notes on the install command below (see https://github.com/huggingface/transformers/pull/47251):
+# - wheel is upgraded before flash-attn: torch 2.13.0 added an unconditional setuptools>=77.0.3
+#   requirement, which pip resolves to setuptools 83.0.0 (which removed pkg_resources). The Ubuntu
+#   22.04 system wheel still imports pkg_resources, so --no-build-isolation builds fail. wheel>=0.43
+#   (Feb 2024) uses importlib.metadata instead and is not affected.
+# - if/else instead of `... || echo`: the old pattern silently swallowed real install failures;
+#   now only FLASH_ATTN=false skips gracefully, and any actual install error will correctly
+#   fail the Docker build.
+RUN if [ "$FLASH_ATTN" != "false" ]; then \
+        python3 -m pip uninstall -y ninja && \
+        python3 -m pip install --no-cache-dir ninja && \
+        python3 -m pip install --no-cache-dir -U wheel && \
+        python3 -m pip install flash-attn --no-cache-dir --no-build-isolation; \
+    else \
+        echo "Skipping FA2 install (FLASH_ATTN=${FLASH_ATTN})"; \
+    fi
 
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
@@ -122,3 +151,16 @@ RUN python3 -m pip uninstall -y kernels
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+# Smoke test: fail the image build immediately if a later `pip install` replaced or broke the pinned
+# CUDA torch stack (e.g. a dep that drags in a different torch/CUDA/NCCL — which surfaces as
+# `undefined symbol: ncclCommResume` at `import torch`; see run 28991812987). We import torch (which
+# eagerly loads `libtorch_cuda.so`) AND assert the version still matches the `${PYTORCH}` pin, since
+# transformers only requires `torch>=2.4` — a silent swap to a newer torch otherwise passes every
+# version check and reaches the GPU test jobs. No GPU is present at build time, so we only exercise
+# the import + CUDA runtime load, not device availability.
+RUN set -e; \
+    python3 -c "import torch; print('torch version:', torch.__version__); torch.cuda.is_available()"; \
+    if [ "$PYTORCH" != "pre" ]; then \
+        python3 -c "import torch, sys; v = torch.__version__.split('+')[0]; sys.exit(0 if v.startswith('${PYTORCH}') else 'ERROR: torch is ' + torch.__version__ + ', expected ${PYTORCH}.* - the pinned CUDA build was clobbered')"; \
+    fi

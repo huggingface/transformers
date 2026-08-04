@@ -159,7 +159,6 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
     # The FastConformer encoder is reused as-is from NemotronAsr and built via AutoModel; this RNN-T model
     # does not re-expose the encoder's attentions/hidden_states through its own output recorder, so the

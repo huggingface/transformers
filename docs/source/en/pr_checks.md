@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -123,6 +123,7 @@ Tests are split across parallel CI jobs, and each job picks up files by path pat
 - `pipelines_torch`: pipeline tests
 - `tests_training_ci`: training loop tests
 - `tests_tensor_parallel_ci`: tensor parallel tests
+- `tests_fsdp_ci`: FSDP tests
 
 ### Slow tests
 

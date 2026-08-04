@@ -23,7 +23,7 @@ from transformers.testing_utils import (
     require_flash_linear_attention,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -253,11 +253,11 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_can_use_device_map(self):
         """
-        Test that this model can be dispatched on multiple gpus. It's not obvious as the Cache is not standard,
-        ant each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
+        Test that this model can be dispatched on multiple accelerators. It's not obvious as the Cache is not standard,
+        and each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
         """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()

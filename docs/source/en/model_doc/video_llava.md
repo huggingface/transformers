@@ -100,7 +100,7 @@ def read_video_pyav(container, indices):
 model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", device_map="auto")
 processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
-# Load the video as an np.arrau, sampling uniformly 8 frames
+# Load the video as an np.array, sampling uniformly 8 frames
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
 container = av.open(video_path)
 total_frames = container.streams.video[0].frames
@@ -147,7 +147,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes for memory efficiency
 
-The model can be loaded in lower bits, significantly reducing memory burden while maintaining the performance of the original model. his allows for efficient deployment on resource-constrained cases.
+The model can be loaded in lower bits, significantly reducing memory burden while maintaining the performance of the original model. This allows for efficient deployment on resource-constrained cases.
 
 First make sure to install bitsandbytes by running `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
 
@@ -159,7 +159,7 @@ We value your feedback to help identify bugs before the full release! Check out 
 
 </Tip>
 
-Load the quantized model by simply adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
+Load the quantized model by simply adding [`BitsAndBytesConfig`] as shown below:
 
 ```python
 from transformers import BitsAndBytesConfig, VideoLlavaForConditionalGeneration

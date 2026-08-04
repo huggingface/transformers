@@ -16,6 +16,7 @@
 from dataclasses import dataclass
 from math import pi
 
+import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
 
@@ -25,7 +26,15 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    logging,
+    torch_compilable_check,
+)
+from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -36,6 +45,9 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..auto import CONFIG_MAPPING
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
@@ -105,6 +117,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def __init__(
@@ -140,13 +153,20 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
         return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
     @property
-    def audio_ids(self):
+    def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
+
+    # Alias for BC
+    @property
+    def audio_ids(self):
+        """Deprecated alias for `audio_token_ids`; will be removed in a future release."""
+        logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
+        return self.audio_token_ids
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
@@ -191,9 +211,9 @@ class MusicFlamingoRotaryEmbedding(MoonshineRotaryEmbedding):
     """
 
     def __init__(self, config: MusicFlamingoConfig, device=None):
-        super().__init__(config, device=device)
+        super().__init__(config)
         position_angles = self._compute_position_angles(self.inv_freq)
-        self.register_buffer("position_angles", position_angles, persistent=False)
+        self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     def _compute_position_angles(self, inv_freq):
         positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)
@@ -352,7 +372,9 @@ class MusicFlamingoModel(AudioFlamingo3Model):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

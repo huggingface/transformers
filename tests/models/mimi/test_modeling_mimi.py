@@ -26,6 +26,7 @@ from tests.utils.test_audio_utils import normalize_waveform
 from transformers import AutoFeatureExtractor, MimiConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     is_torch_available,
     require_flash_attn,
@@ -86,6 +87,7 @@ class MimiModelTester:
         num_key_value_heads=2,
         sliding_window=4,
         use_cache=False,
+        max_position_embeddings=512,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -105,6 +107,7 @@ class MimiModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.sliding_window = sliding_window
         self.use_cache = use_cache
+        self.max_position_embeddings = max_position_embeddings
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -133,6 +136,7 @@ class MimiModelTester:
 
     def get_config(self):
         return MimiConfig(
+            max_position_embeddings=self.max_position_embeddings,
             audio_channels=self.num_channels,
             chunk_in_sec=None,
             hidden_size=self.hidden_size,
@@ -166,7 +170,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in conv padding (`u0 + u1 + 2 < 7`)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
@@ -505,14 +509,30 @@ class MimiIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/34f79f34d423ccf8983c2c6c8dab2bcc
         """
 
-        expected_rmses = {
-            "8": 0.00067151,
-            "32": 0.00049521,
-        }
-        expected_codesums = {
-            "8": 4621433,
-            "32": 18446927,
-        }
+        expected_rmses = Expectations(
+            {
+                (None, None): {
+                    "8": 0.00067151,
+                    "32": 0.00049521,
+                },
+                ("xpu", 5): {
+                    "8": 0.0006640465,
+                    "32": 0.000495249,
+                },
+            }
+        ).get_expectation()
+        expected_codesums = Expectations(
+            {
+                (None, None): {
+                    "8": 4621433,
+                    "32": 18446927,
+                },
+                ("xpu", 5): {
+                    "8": 4578159,
+                    "32": 18459628,
+                },
+            }
+        ).get_expectation()
 
         model_id = "kyutai/mimi"
 

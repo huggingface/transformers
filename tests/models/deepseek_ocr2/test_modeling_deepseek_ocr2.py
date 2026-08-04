@@ -116,7 +116,6 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
 class DeepseekOcr2ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekOcr2VisionText2TextModelTester
     test_all_params_have_gradient = False
-    test_torch_exportable = False
 
     @unittest.skip(
         reason="DeepseekOcr2VisionModel builds a hybrid bidirectional+causal mask internally, so SDPA is always called with a non-null `attn_mask`."

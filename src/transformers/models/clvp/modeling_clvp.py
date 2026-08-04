@@ -249,7 +249,7 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
 
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
@@ -292,7 +292,7 @@ class ClvpSelfAttention(nn.Module):
             max_positions = config.max_position_embeddings
             bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
             bias = bias.view(1, 1, max_positions, max_positions)
-            self.register_buffer("bias", bias, persistent=False)
+            self.bias = nn.Buffer(bias, persistent=False)
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
@@ -765,13 +765,14 @@ class ClvpPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
-        "hidden_states": (ClvpEncoderLayer, ClvpDecoderLayer),
+        "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],
         "attentions": ClvpSelfAttention,
     }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
@@ -779,8 +780,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=factor * 0.02)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, ClvpRMSNorm):
-            init.ones_(module.weight)
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
@@ -811,9 +810,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
             dim = max(self.config.projection_dim // (self.config.num_attention_heads * 2), 32)
             inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
             init.copy_(module.inv_freq, inv_freq)
-        if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class ClvpEncoder(ClvpPreTrainedModel):

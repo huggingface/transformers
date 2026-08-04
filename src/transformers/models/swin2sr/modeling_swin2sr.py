@@ -217,8 +217,8 @@ class Swin2SRSelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
@@ -688,13 +688,11 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Swin2SRSelfAttention):
             init.constant_(module.logit_scale, math.log(10))
             relative_coords_table, relative_position_index = module.create_coords_table_and_index()
@@ -718,7 +716,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
         else:
             mean = torch.zeros(1, 1, 1, 1)
-        self.register_buffer("mean", mean, persistent=False)
+        self.mean = nn.Buffer(mean, persistent=False)
 
         self.img_range = config.img_range
 

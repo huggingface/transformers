@@ -7,7 +7,7 @@ name: Nightly integration-failure triage
 #
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 22 * * *"
   # Allow manual triggers for testing. GitHub only lets users with write access
   # to this repo run workflow_dispatch, so no extra authorization gate is needed.
   workflow_dispatch:
@@ -35,6 +35,7 @@ permissions:
 # we will pin once the feature is stable.
 jobs:
   triage:
+    if: github.repository == 'huggingface/transformers'
     uses: huggingface/transformers-ci/.github/workflows/integration-failure-triage.yml@main # main
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
