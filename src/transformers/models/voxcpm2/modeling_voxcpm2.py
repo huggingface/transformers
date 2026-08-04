@@ -1387,7 +1387,19 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
 
     def __init__(self, config: VoxCPM2Config):
         super().__init__(config)
-        config.lm_config._attn_implementation = config._attn_implementation
+        lm_config = config.lm_config
+        encoder_config = config.encoder_config
+        dit_config = config.dit_config
+        audio_vae_config = config.audio_vae_config
+        if not isinstance(lm_config, VoxCPM2TextConfig):
+            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
+        if not isinstance(encoder_config, VoxCPM2EncoderConfig):
+            raise TypeError("`encoder_config` must be a `VoxCPM2EncoderConfig` instance")
+        if not isinstance(dit_config, VoxCPM2DiTConfig):
+            raise TypeError("`dit_config` must be a `VoxCPM2DiTConfig` instance")
+        if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
+            raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
+        lm_config._attn_implementation = config._attn_implementation
 
         self.feat_dim = config.feat_dim
         self.patch_size = config.patch_size
@@ -1398,17 +1410,17 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         self.feat_decoder = VoxCPM2ConditionalFlowMatching(config)
 
         self.fsq_layer = VoxCPM2ScalarQuantizationLayer(config)
-        self.enc_to_lm_proj = nn.Linear(config.encoder_config.hidden_dim, config.lm_config.hidden_size)
-        self.lm_to_dit_proj = nn.Linear(config.lm_config.hidden_size, config.dit_config.hidden_dim)
-        self.res_to_dit_proj = nn.Linear(config.lm_config.hidden_size, config.dit_config.hidden_dim)
-        self.fusion_concat_proj = nn.Linear(config.lm_config.hidden_size * 2, config.lm_config.hidden_size)
+        self.enc_to_lm_proj = nn.Linear(encoder_config.hidden_dim, lm_config.hidden_size)
+        self.lm_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.res_to_dit_proj = nn.Linear(lm_config.hidden_size, dit_config.hidden_dim)
+        self.fusion_concat_proj = nn.Linear(lm_config.hidden_size * 2, lm_config.hidden_size)
 
-        self.stop_proj = nn.Linear(config.lm_config.hidden_size, config.lm_config.hidden_size)
+        self.stop_proj = nn.Linear(lm_config.hidden_size, lm_config.hidden_size)
         self.stop_actn = nn.SiLU()
-        self.stop_head = nn.Linear(config.lm_config.hidden_size, 2, bias=False)
+        self.stop_head = nn.Linear(lm_config.hidden_size, 2, bias=False)
         self.stop_loss = nn.CrossEntropyLoss(reduction="none")
 
-        self.audio_vae = VoxCPM2AudioVAE(config.audio_vae_config)
+        self.audio_vae = VoxCPM2AudioVAE(audio_vae_config)
         self.chunk_size = self.audio_vae.chunk_size
         self._decode_chunk_size = self.audio_vae.decode_chunk_size
         self._encode_sample_rate = self.audio_vae.sample_rate
