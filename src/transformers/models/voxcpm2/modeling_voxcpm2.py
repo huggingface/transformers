@@ -2182,9 +2182,10 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
                 streaming_decoder.decode_chunk(context_features.to(audio_vae_dtype))
 
             for generation_output in feature_stream:
-                audio = streaming_decoder.decode_chunk(generation_output.latent_features.to(audio_vae_dtype)).squeeze(
-                    1
-                )
+                latent_features = generation_output.latent_features
+                if latent_features is None:
+                    raise RuntimeError("VoxCPM2 streaming generation did not return latent features")
+                audio = streaming_decoder.decode_chunk(latent_features.to(audio_vae_dtype)).squeeze(1)
                 if not return_dict_in_generate:
                     yield audio
                 else:
