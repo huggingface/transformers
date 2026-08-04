@@ -1407,7 +1407,10 @@ def rename_source_key(
     This means that the `WeightConverter` must specify the final name for the key, but some `WeightRenaming`s can act on other
     parts of that key beforehand. If `reverse` is True, i.e. when reverting all the `WeightTransform`s, the opposite is performed
     to be coherent and correctly respect the `scope_prefix` of all `WeightTransform`s: first try to match 1 `WeightConverter`, and only
-    then try to apply all `WeightRenaming`s.
+    then try to apply all `WeightRenaming`s. Indeed, in reverse mode, all reverse transforms should be applied in the opposite order to
+    be consistent.
+    Note that we proceed in this way because there is no need for a Converter-then-Rename order because Converters act only on specific
+    leaf patterns, so no subsequent Renamings should ever target their output.
 
     Args:
         source_key (`str`):
