@@ -194,7 +194,7 @@ class MiniMaxCache(DynamicCache):
                 self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, max_length: int):
-        raise RuntimeError("MiniMaxCache doesnot support `crop` method")
+        raise RuntimeError("MiniMaxCache does not support `crop` method")
 
 
 class MiniMaxLightningAttention(nn.Module):

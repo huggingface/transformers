@@ -407,7 +407,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Under a compileable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
+        # Under a compilable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
         # otherwise we build them here.
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
