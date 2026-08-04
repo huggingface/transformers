@@ -331,7 +331,7 @@ def test_import_without_torch_distributed():
 def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     """
     These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
-    kernel integration reaches through `to_local`. Each carries `@_compile_constant`, so dynamo evaluates
+    kernel integration reaches through `to_local`. Each carries `@_make_compile_constant`, so dynamo evaluates
     it once at trace time and never enters the body; this checks the marker actually takes effect.
 
     Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
