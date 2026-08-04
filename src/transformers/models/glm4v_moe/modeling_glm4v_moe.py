@@ -446,8 +446,6 @@ class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 class Glm4vMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
@@ -839,8 +837,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 
 
 class Glm4vMoeTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vMoeTextConfig, device=None):
         super().__init__()

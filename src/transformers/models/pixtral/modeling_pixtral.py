@@ -57,8 +57,6 @@ class PixtralRotaryEmbedding(nn.Module):
     a corresponding positional embedding, based on its index in the grid.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PixtralVisionConfig, device=None):
         super().__init__()

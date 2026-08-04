@@ -273,8 +273,6 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3VLTextConfig, device=None):
         super().__init__(config)

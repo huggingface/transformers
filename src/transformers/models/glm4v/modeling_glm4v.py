@@ -110,8 +110,6 @@ class Glm4vVisionPatchEmbed(nn.Module):
 
 
 class Glm4vVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
@@ -386,8 +384,6 @@ class Glm4vVisionBlock(GradientCheckpointingLayer):
 
 
 class Glm4vTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()

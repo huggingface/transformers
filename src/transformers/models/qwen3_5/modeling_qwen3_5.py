@@ -83,8 +83,6 @@ logger = logging.get_logger(__name__)
 
 
 class Qwen3_5VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
@@ -97,8 +95,6 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
 
 
 class Qwen3_5TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3_5TextConfig, device=None):
         super().__init__()

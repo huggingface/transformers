@@ -183,8 +183,6 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
 
 
 class Kimi_K25VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Kimi_K25VisionConfig, device=None):
         super().__init__()

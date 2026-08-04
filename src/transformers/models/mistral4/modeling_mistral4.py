@@ -69,8 +69,6 @@ class Mistral4RMSNorm(nn.Module):
 
 
 class Mistral4RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Mistral4Config, device=None):
         super().__init__()

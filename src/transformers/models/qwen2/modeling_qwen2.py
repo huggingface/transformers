@@ -49,8 +49,6 @@ class Qwen2MLP(nn.Module):
 
 
 class Qwen2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen2Config, device=None):
         super().__init__()

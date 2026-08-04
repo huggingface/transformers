@@ -264,8 +264,6 @@ class MiniMaxLightningAttention(nn.Module):
 
 
 class MiniMaxRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MiniMaxConfig, device=None):
         super().__init__()

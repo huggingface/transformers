@@ -47,8 +47,6 @@ from .configuration_smollm3 import SmolLM3Config
 
 
 class SmolLM3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: SmolLM3Config, device=None):
         super().__init__()

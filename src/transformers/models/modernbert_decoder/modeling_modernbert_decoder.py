@@ -89,8 +89,6 @@ class ModernBertDecoderMLP(nn.Module):
 
 
 class ModernBertDecoderRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ModernBertDecoderConfig, device=None):
         super().__init__()
