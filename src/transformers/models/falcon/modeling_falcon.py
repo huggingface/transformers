@@ -117,8 +117,8 @@ class FalconRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -767,8 +767,8 @@ class FalconModel(FalconPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            # Force mask creation for alibi
-            and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+            # Always materialize the mask so alibi can be added onto it below.
+            allow_is_causal_skip=False,
         )
         if alibi is not None and causal_mask is not None and causal_mask.ndim == 4:
             min_dtype = torch.finfo(inputs_embeds.dtype).min

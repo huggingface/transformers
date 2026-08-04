@@ -79,8 +79,8 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             )
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -639,9 +639,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         self.final_norm = RecurrentGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
-        self.register_buffer(
-            "normalizer", torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False
-        )
+        self.normalizer = nn.Buffer(torch.tensor(self.config.hidden_size**0.5, dtype=torch.bfloat16), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 

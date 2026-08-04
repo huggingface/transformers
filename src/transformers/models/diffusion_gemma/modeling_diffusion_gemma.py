@@ -92,8 +92,8 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
             # from a config resolved for this layer type rather than the global one.
             rope_config = config.per_layer_config[layer_type]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -179,10 +179,10 @@ class DiffusionGemmaClippableLinear(nn.Module):
         self.linear = nn.Linear(in_features, out_features, bias=False)
 
         if self.use_clipped_linears:
-            self.register_buffer("input_min", torch.tensor(-float("inf")))
-            self.register_buffer("input_max", torch.tensor(float("inf")))
-            self.register_buffer("output_min", torch.tensor(-float("inf")))
-            self.register_buffer("output_max", torch.tensor(float("inf")))
+            self.input_min = nn.Buffer(torch.tensor(-float("inf")))
+            self.input_max = nn.Buffer(torch.tensor(float("inf")))
+            self.output_min = nn.Buffer(torch.tensor(-float("inf")))
+            self.output_max = nn.Buffer(torch.tensor(float("inf")))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.use_clipped_linears:
@@ -613,7 +613,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -691,7 +691,7 @@ class DiffusionGemmaDecoderTextLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -754,7 +754,7 @@ class DiffusionGemmaTextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -833,7 +833,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
