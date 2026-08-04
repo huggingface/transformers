@@ -274,7 +274,7 @@ class MiniMaxVL01TextModel(MiniMaxModel):
 
 
 def _migrate_legacy_text_config(text_config: dict) -> dict:
-    """Translate the released remote-code MiniMax-Text-01 schema to the native MiniMax schema."""
+    """Translate the released remote-code MiniMax-Text-01 schema to the native VL-01 text schema."""
     text_config = dict(text_config)
     model_type = text_config.get("model_type")
     legacy_keys = {
@@ -355,9 +355,9 @@ def _migrate_legacy_text_config(text_config: dict) -> dict:
 
     text_config.setdefault("bos_token_id", None)
     text_config.setdefault("eos_token_id", None)
-    text_config["model_type"] = "minimax"
+    text_config["model_type"] = "minimax_vl_01_text"
     if text_config.get("architectures") == ["MiniMaxText01ForCausalLM"]:
-        text_config["architectures"] = ["MiniMaxForCausalLM"]
+        text_config["architectures"] = ["MiniMaxVL01TextModel"]
     return text_config
 
 

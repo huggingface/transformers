@@ -97,7 +97,7 @@ class MiniMaxVL01ConfigTest(unittest.TestCase):
             config.text_config.rope_parameters,
             {"rope_type": "default", "rope_theta": 10_000_000.0, "partial_rotary_factor": 0.5},
         )
-        self.assertEqual(config.text_config.architectures, ["MiniMaxForCausalLM"])
+        self.assertEqual(config.text_config.architectures, ["MiniMaxVL01TextModel"])
         self.assertIsNone(config.text_config.bos_token_id)
         self.assertIsNone(config.text_config.eos_token_id)
         self.assertEqual(config.image_token_id, 3)
@@ -112,6 +112,7 @@ class MiniMaxVL01ConfigTest(unittest.TestCase):
             "shared_moe_mode",
         }
         self.assertTrue(legacy_only_keys.isdisjoint(serialized_text_config))
+        self.assertEqual(serialized_text_config["model_type"], "minimax_vl_01_text")
         self.assertIsNone(serialized_text_config["bos_token_id"])
         self.assertIsNone(serialized_text_config["eos_token_id"])
 
