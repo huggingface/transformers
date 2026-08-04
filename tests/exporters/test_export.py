@@ -120,12 +120,28 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
     },
-    # torch.export (Dynamo), dynamic-shape only.
-    "dynamo.dynamic": {
+    # Every backend, dynamic-shape only.
+    "dynamic": {
         "Sam2Model": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the "
-            "10-minute test timeout (12 attention blocks × 3 Q-pool stage transitions on "
-            "symbolic H/W). Same budget overrun as the ONNX/ExecuTorch dynamic Sam2 skips."
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
+            "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
+            "agnostic — the torch.export step itself overruns, so every backend hits it."
+        ),
+    },
+    # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
+    # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
+    # captures a single-token decode with no merge, still runs.
+    "generate.dynamic": {
+        "MllamaForConditionalGeneration": (
+            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
+            "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
+            "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
+            "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
+        ),
+        "ReformerModelWithLMHead": (
+            "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
+            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
+            "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
     },
     # ONNX, every variant.
@@ -162,7 +178,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
             "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
         ),
-        "Sam2Model": "Same Hiera-backbone dynamic-shape budget overrun as `Sam2VisionModel`.",
         "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
@@ -251,7 +266,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Sam2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -556,9 +570,11 @@ class ExportTesterMixin:
 
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
-        for generate tests, ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` for
-        the more-specific intersections. Also skips static-cache variants (a ``generation_config``
-        requesting one) on models that can't compile fullgraph — they don't support a static cache.
+        for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
+        ``"generate.dynamic"`` for the multi-token decode path, ``"<backend>"`` for that backend, and
+        ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
+        (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
+        support a static cache.
         """
         if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
             return True
@@ -566,6 +582,9 @@ class ExportTesterMixin:
         scopes = ["all"]
         if generate:
             scopes.append("generate")
+            if dynamic:
+                scopes.append("generate.dynamic")
+        scopes.append("dynamic" if dynamic else "static")
         if backend:
             scopes.append(backend)
             if generate:
