@@ -156,7 +156,7 @@ class MiniMaxLightningAttention(nn.Module):
         return rate
 
     def decay_factors(self, slope_rate):
-        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
+        block_size_range = torch.arange(self.block_size) + 1
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
         key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
