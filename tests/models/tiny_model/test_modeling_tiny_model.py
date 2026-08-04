@@ -18,8 +18,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 from torch import nn
 
 from transformers.models.tiny_model import TinyModelConfig
-from transformers.models.tiny_model.modeling_tiny_model import TinyModelAttention
-from transformers.models.tiny_model.modular_tiny_model import eager_attention_forward
+from transformers.models.tiny_model.modeling_tiny_model import TinyModelAttention, eager_attention_forward
 
 
 class TinyModelConfigTest(unittest.TestCase):
@@ -76,3 +75,19 @@ class TinyModelAttentionTest(unittest.TestCase):
         self.assertIsNone(attention.k_proj.bias)
         self.assertIsNone(attention.v_proj.bias)
         self.assertEqual(attention.o_proj.bias.shape, (16,))
+
+    def test_forward_matches_causal_scaled_dot_product_attention(self):
+        torch.manual_seed(1)
+        attention = TinyModelAttention(TinyModelConfig(hidden_size=16, num_attention_heads=4)).eval()
+        hidden_states = torch.randn(2, 5, 16)
+        attention_mask = torch.full((1, 1, 5, 5), float("-inf")).triu(diagonal=1)
+
+        actual, weights = attention(hidden_states, attention_mask=attention_mask)
+        query = attention.q_proj(hidden_states).view(2, 5, 4, 4).transpose(1, 2)
+        key = attention.k_proj(hidden_states).view(2, 5, 4, 4).transpose(1, 2)
+        value = attention.v_proj(hidden_states).view(2, 5, 4, 4).transpose(1, 2)
+        expected = nn.functional.scaled_dot_product_attention(query, key, value, is_causal=True)
+        expected = attention.o_proj(expected.transpose(1, 2).reshape(2, 5, 16))
+
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
+        self.assertEqual(weights.shape, (2, 4, 5, 5))
