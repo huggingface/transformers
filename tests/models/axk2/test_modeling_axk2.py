@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, Cache, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -73,23 +73,6 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as A.X-K2 has the MLA cache format (same as DeepSeek-V3.2)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     @unittest.skip("Can be fixed by #47438, currently does not properly considers cases where topk > prefill")
     def test_left_padding_compatibility(self):
