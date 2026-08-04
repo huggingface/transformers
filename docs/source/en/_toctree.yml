@@ -262,54 +262,64 @@
     title: Selecting a quantization method
   - local: quantization/concept_guide
     title: Quantization concepts
-  - local: quantization/aqlm
-    title: AQLM
-  - local: quantization/auto_round
-    title: AutoRound
-  - local: quantization/awq
-    title: AWQ
-  - local: quantization/bitnet
-    title: BitNet
-  - local: quantization/bitsandbytes
-    title: bitsandbytes
-  - local: quantization/compressed_tensors
-    title: compressed-tensors
-  - local: quantization/eetq
-    title: EETQ
-  - local: quantization/fbgemm_fp8
-    title: FBGEMM
-  - local: quantization/finegrained_fp8
-    title: Fine-grained FP8
-  - local: quantization/fouroversix
-    title: Four Over Six
-  - local: quantization/fp_quant
-    title: FP-Quant
-  - local: gguf
-    title: GGUF
-  - local: quantization/gptq
-    title: GPTQ
-  - local: quantization/higgs
-    title: HIGGS
-  - local: quantization/hqq
-    title: HQQ
-  - local: quantization/metal
-    title: Metal
-  - local: quantization/mxfp4
-    title: MXFP4
-  - local: quantization/optimum
-    title: Optimum
-  - local: quantization/quanto
-    title: Quanto
-  - local: quantization/quark
-    title: Quark
-  - local: quantization/torchao
-    title: torchao
-  - local: quantization/spqr
-    title: SpQR
-  - local: quantization/vptq
-    title: VPTQ
-  - local: quantization/sinq
-    title: SINQ
+  - sections:
+    - local: quantization/bitsandbytes
+      title: bitsandbytes
+    - local: quantization/eetq
+      title: EETQ
+    - local: quantization/higgs
+      title: HIGGS
+    - local: quantization/hqq
+      title: HQQ
+    - local: quantization/metal
+      title: Metal
+    - local: quantization/quanto
+      title: Quanto
+    - local: quantization/sinq
+      title: SINQ
+    - local: quantization/torchao
+      title: torchao
+    title: Quantize on the fly
+  - sections:
+    - local: quantization/fbgemm_fp8
+      title: FBGEMM
+    - local: quantization/finegrained_fp8
+      title: Fine-grained FP8
+    - local: quantization/fouroversix
+      title: Four Over Six
+    - local: quantization/fp_quant
+      title: FP-Quant
+    - local: quantization/mxfp4
+      title: MXFP4
+    title: FP4 and FP8 formats
+  - sections:
+    - local: quantization/auto_round
+      title: AutoRound
+    - local: quantization/awq
+      title: AWQ
+    - local: quantization/gptq
+      title: GPTQ
+    title: Calibration-based methods
+  - sections:
+    - local: quantization/aqlm
+      title: AQLM
+    - local: quantization/bitnet
+      title: BitNet
+    - local: quantization/compressed_tensors
+      title: compressed-tensors
+    - local: gguf
+      title: GGUF
+    - local: quantization/spqr
+      title: SpQR
+    - local: quantization/vptq
+      title: VPTQ
+    title: Load pre-quantized models
+  - sections:
+    - local: quantization/optimum
+      title: Optimum
+    - local: quantization/quark
+      title: Quark
+    title: Hardware toolkits
   - local: quantization/contribute
     title: Contribute
   title: Quantization
