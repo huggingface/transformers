@@ -72,16 +72,6 @@ class MiniMaxVL01TextCache(DynamicCache):
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
 
-    def _get_attention_layer_idx(self, layer_idx: int) -> int:
-        if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
-            return layer_idx
-
-        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
-        for attention_layer_idx in range(1, len(self.layers)):
-            if super().get_seq_length(attention_layer_idx) > 0:
-                return attention_layer_idx
-        return layer_idx
-
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
             if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
@@ -98,6 +88,16 @@ class MiniMaxVL01TextCache(DynamicCache):
 
     def crop(self, max_length: int):
         raise RuntimeError("MiniMaxVL01TextCache doesnot support `crop` method")
+
+    def _get_attention_layer_idx(self, layer_idx: int) -> int:
+        if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
+            return layer_idx
+
+        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, len(self.layers)):
+            if super().get_seq_length(attention_layer_idx) > 0:
+                return attention_layer_idx
+        return layer_idx
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         return super().get_seq_length(self._get_attention_layer_idx(layer_idx))
