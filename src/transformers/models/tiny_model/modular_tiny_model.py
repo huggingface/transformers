@@ -159,6 +159,20 @@ class TinyModelDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = TinyModelAttention(config)
         self.mlp = TinyModelMLP(config)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states
+
 
 @auto_docstring
 class TinyModelPreTrainedModel(PreTrainedModel):

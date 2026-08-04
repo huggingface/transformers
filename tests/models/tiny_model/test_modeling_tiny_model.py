@@ -125,3 +125,18 @@ class TinyModelDecoderLayerTest(unittest.TestCase):
         self.assertIsInstance(layer.self_attn, TinyModelAttention)
         self.assertIsInstance(layer.mlp, TinyModelMLP)
         self.assertFalse(any(isinstance(module, nn.LayerNorm) for module in layer.modules()))
+
+    def test_forward_has_two_residual_connections(self):
+        torch.manual_seed(3)
+        layer = TinyModelDecoderLayer(
+            TinyModelConfig(hidden_size=16, intermediate_size=64, num_attention_heads=4)
+        ).eval()
+        hidden_states = torch.randn(2, 5, 16)
+        attention_mask = torch.full((1, 1, 5, 5), float("-inf")).triu(diagonal=1)
+
+        actual = layer(hidden_states, attention_mask=attention_mask)
+        attention_output, _ = layer.self_attn(hidden_states, attention_mask=attention_mask)
+        post_attention = hidden_states + attention_output
+        expected = post_attention + layer.mlp(post_attention)
+
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
