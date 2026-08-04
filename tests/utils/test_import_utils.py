@@ -295,39 +295,35 @@ def test_import_without_torch_distributed():
         from transformers import AutoImageProcessor  # noqa: F401
 
 
+def _compile_constant_helpers():
+    """Every helper carrying `@_make_compile_constant`, as (name, args) for the test below.
+
+    Derived from the marker rather than hand-listed: marking a helper opts it into verification, so the
+    two can never drift. Helpers needing arguments get them here; the rest are called with none.
+    """
+    import inspect
+
+    import transformers.utils.import_utils as import_utils
+
+    with_args = {"is_torch_greater_or_equal": ("2.5",), "is_torch_less_or_equal": ("99.0",)}
+    cases = []
+    for name in sorted(dir(import_utils)):
+        fn = getattr(import_utils, name)
+        if not getattr(fn, "_dynamo_marked_constant", False):
+            continue
+        if name in with_args:
+            cases.append((name, with_args[name]))
+            continue
+        try:
+            inspect.signature(fn).bind()  # skip anything needing args we have not supplied
+        except (TypeError, ValueError):
+            continue
+        cases.append((name, ()))
+    return cases
+
+
 @require_torch
-@parameterized.expand(
-    [
-        ("get_torch_version", ()),
-        ("is_torch_available", ()),
-        ("is_torch_distributed_available", ()),
-        ("is_torch_greater_or_equal", ("2.5",)),
-        ("is_torch_less_or_equal", ("99.0",)),
-        ("is_torchdynamo_compiling", ()),
-        ("is_torch_xla_available", ()),
-        ("is_torch_xpu_available", ()),
-        ("is_torch_npu_available", ()),
-        ("is_torch_flex_attn_available", ()),
-        ("is_accelerate_available", ()),
-        ("is_peft_available", ()),
-        ("is_kernels_available", ()),
-        ("is_compressed_tensors_available", ()),
-        ("is_mistral_common_available", ()),
-        ("is_numba_available", ()),
-        ("is_sudachi_projection_available", ()),
-        ("is_torchao_available", ()),
-        ("is_triton_available", ()),
-        ("get_cuda_runtime_version", ()),
-        ("is_detectron2_available", ()),
-        ("is_flash_attn_greater_or_equal_2_10", ()),
-        ("is_jumanpp_available", ()),
-        ("is_ninja_available", ()),
-        ("is_sagemaker_dp_enabled", ()),
-        ("is_sagemaker_mp_enabled", ()),
-        ("is_torch_bf16_gpu_available", ()),
-        ("is_torch_mps_available", ()),
-    ]
-)
+@parameterized.expand(_compile_constant_helpers())
 def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     """
     These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE

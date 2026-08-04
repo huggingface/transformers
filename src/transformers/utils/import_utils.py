@@ -229,6 +229,7 @@ def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bo
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_accelerator_available() -> bool:
     if is_torch_available():
         import torch
@@ -239,6 +240,7 @@ def is_torch_accelerator_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_cuda_available() -> bool:
     if is_torch_available():
         import torch
@@ -388,6 +390,7 @@ def is_torch_xpu_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_mlu_available() -> bool:
     """
     Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
@@ -413,6 +416,7 @@ def is_torch_mlu_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_musa_available(check_device=False) -> bool:
     "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
     if not is_torch_available() or not _is_package_available("torch_musa")[0]:
@@ -462,6 +466,7 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_hpu_available() -> bool:
     "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
@@ -558,6 +563,7 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_neuron_available(check_device: bool = False) -> bool:
     import torch
 
@@ -580,6 +586,7 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_tpu_available(check_device: bool = False) -> bool:
     import torch
 
@@ -679,6 +686,7 @@ def is_torch_bf16_available_on_device(device: str) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_tf32_available() -> bool:
     if not is_torch_available():
         return False
@@ -730,11 +738,13 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_grouped_mm_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
 
 
 @lru_cache
+@_make_compile_constant
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")[0]
 
@@ -752,16 +762,19 @@ def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: st
 
 
 @lru_cache
+@_make_compile_constant
 def is_cv2_available() -> bool:
     return _is_package_available("cv2")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_yt_dlp_available() -> bool:
     return _is_package_available("yt_dlp")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_libcst_available() -> bool:
     return _is_package_available("libcst")[0]
 
@@ -783,27 +796,32 @@ def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_hadamard_available() -> bool:
     return _is_package_available("fast_hadamard_transform")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     is_available, hqq_version = _is_package_available("hqq", return_version=True)
     return is_available and version.parse(hqq_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_pygments_available() -> bool:
     return _is_package_available("pygments")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torchvision_available() -> bool:
     return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torchvision_v2_available() -> bool:
     return is_torchvision_available()
 
@@ -817,124 +835,148 @@ def is_torchvision_greater_or_equal(library_version: str) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_galore_torch_available() -> bool:
     return _is_package_available("galore_torch")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_apollo_torch_available() -> bool:
     return _is_package_available("apollo_torch")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_optimi_available() -> bool:
     return _is_package_available("optimi")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_lomo_available() -> bool:
     return _is_package_available("lomo_optim")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_grokadamw_available() -> bool:
     return _is_package_available("grokadamw")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
     is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
     return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_pyctcdecode_available() -> bool:
     return _is_package_available("pyctcdecode")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_librosa_available() -> bool:
     return _is_package_available("librosa")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_nagisa_available() -> bool:
     return _is_package_available("nagisa")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_soynlp_available() -> bool:
     return _is_package_available("soynlp")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_multipart_available() -> bool:
     return _is_package_available("multipart")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_essentia_available() -> bool:
     return _is_package_available("essentia")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_pydantic_available() -> bool:
     return _is_package_available("pydantic")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_fastapi_available() -> bool:
     return _is_package_available("fastapi")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_uvicorn_available() -> bool:
     return _is_package_available("uvicorn")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_openai_available() -> bool:
     return _is_package_available("openai")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_serve_available() -> bool:
     return is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 
 
 @lru_cache
+@_make_compile_constant
 def is_pretty_midi_available() -> bool:
     return _is_package_available("pretty_midi")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_mamba_ssm_available() -> bool:
     return is_torch_cuda_available() and _is_package_available("mamba_ssm")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_mamba_2_ssm_available() -> bool:
     is_available, mamba_ssm_version = _is_package_available("mamba_ssm", return_version=True)
     return is_torch_cuda_available() and is_available and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
 
 
 @lru_cache
+@_make_compile_constant
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return is_torch_cuda_available() and is_available and version.parse(fla_version) >= version.parse("0.2.2")
 
 
 @lru_cache
+@_make_compile_constant
 def is_causal_conv1d_available() -> bool:
     return is_torch_cuda_available() and _is_package_available("causal_conv1d")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_xlstm_available() -> bool:
     return is_torch_available() and _is_package_available("xlstm")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_mambapy_available() -> bool:
     return is_torch_available() and _is_package_available("mambapy")[0]
 
@@ -958,57 +1000,68 @@ def is_peft_greater_or_equal(library_version: str, accept_dev: bool = False) -> 
 
 
 @lru_cache
+@_make_compile_constant
 def is_bs4_available() -> bool:
     return _is_package_available("bs4")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_coloredlogs_available() -> bool:
     return _is_package_available("coloredlogs")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_onnx_available() -> bool:
     return _is_package_available("onnx")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_onnxscript_available() -> bool:
     return _is_package_available("onnxscript")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_onnxruntime_available() -> bool:
     return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_executorch_available() -> bool:
     return _is_package_available("executorch")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_flute_available() -> bool:
     is_available, flute_version = _is_package_available("flute", return_version=True)
     return is_available and version.parse(flute_version) >= version.parse("0.4.1")
 
 
 @lru_cache
+@_make_compile_constant
 def is_g2p_en_available() -> bool:
     return _is_package_available("g2p_en")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_neuroncore_available(check_device=True) -> bool:
     return is_torch_xla_available() and _is_package_available("torch_neuronx")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torch_tensorrt_fx_available() -> bool:
     return _is_package_available("torch_tensorrt")[0] and _is_package_available("torch_tensorrt.fx")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_datasets_available() -> bool:
     return _is_package_available("datasets")[0]
 
@@ -1028,52 +1081,62 @@ def is_detectron2_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_rjieba_available() -> bool:
     return _is_package_available("rjieba")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_psutil_available() -> bool:
     return _is_package_available("psutil")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_py3nvml_available() -> bool:
     return _is_package_available("py3nvml")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_sacremoses_available() -> bool:
     return _is_package_available("sacremoses")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_apex_available() -> bool:
     return _is_package_available("apex")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_aqlm_available() -> bool:
     return _is_package_available("aqlm")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
     is_available, vptq_version = _is_package_available("vptq", return_version=True)
     return is_available and version.parse(vptq_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_av_available() -> bool:
     return _is_package_available("av")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_decord_available() -> bool:
     return _is_package_available("decord")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")[0]
 
@@ -1094,12 +1157,14 @@ def is_ninja_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     # FA4 is also distributed under "flash_attn", hence we need to check the naming here
@@ -1129,6 +1194,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
     # Universally available under `flash_attn_interface`
     is_available = _is_package_available("flash_attn_interface")[0]
@@ -1154,6 +1220,7 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_flash_attn_4_available() -> bool:
     is_available = _is_package_available("flash_attn")[0]
     # FA2 is also distributed under "flash_attn", hence we need to check the naming here
@@ -1223,90 +1290,107 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torchdistx_available():
     return _is_package_available("torchdistx")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_faiss_available() -> bool:
     return _is_package_available("faiss")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_fouroversix_available() -> bool:
     return _is_package_available("fouroversix")
 
 
 @lru_cache
+@_make_compile_constant
 def is_scipy_available() -> bool:
     return _is_package_available("scipy")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_sklearn_available() -> bool:
     return _is_package_available("sklearn")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_sentencepiece_available() -> bool:
     return _is_package_available("sentencepiece")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_seqio_available() -> bool:
     return _is_package_available("seqio")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
     is_available, gguf_version = _is_package_available("gguf", return_version=True)
     return is_available and version.parse(gguf_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_protobuf_available() -> bool:
     return _is_package_available("google")[0] and _is_package_available("google.protobuf")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_optimum_available() -> bool:
     return _is_package_available("optimum")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_llm_awq_available() -> bool:
     return _is_package_available("awq")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
     is_available, auto_round_version = _is_package_available("auto_round", return_version=True)
     return is_available and version.parse(auto_round_version) >= version.parse(min_version)
 
 
 @lru_cache
+@_make_compile_constant
 def is_optimum_quanto_available():
     return is_optimum_available() and _is_package_available("optimum.quanto")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_quark_available() -> bool:
     is_available, quark_version = _is_package_available("quark", return_version=True)
     return is_available and version.parse(quark_version) >= version.parse("0.12")
 
 
 @lru_cache
+@_make_compile_constant
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
     return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
+@_make_compile_constant
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
     return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
@@ -1320,36 +1404,43 @@ def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VE
 
 
 @lru_cache
+@_make_compile_constant
 def is_sinq_available() -> bool:
     return _is_package_available("sinq")
 
 
 @lru_cache
+@_make_compile_constant
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_fbgemm_gpu_available() -> bool:
     return _is_package_available("fbgemm_gpu")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_levenshtein_available() -> bool:
     return _is_package_available("Levenshtein")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_optimum_neuron_available() -> bool:
     return is_optimum_available() and _is_package_available("optimum.neuron")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_tokenizers_available() -> bool:
     return _is_package_available("tokenizers")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_vision_available() -> bool:
     try:
         import PIL.Image  # noqa: F401
@@ -1360,51 +1451,61 @@ def is_vision_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_pytesseract_available() -> bool:
     return _is_package_available("pytesseract")[0] and is_vision_available()
 
 
 @lru_cache
+@_make_compile_constant
 def is_pytest_available() -> bool:
     return _is_package_available("pytest")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_pytest_order_available() -> bool:
     return is_pytest_available() and _is_package_available("pytest_order")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_spacy_available() -> bool:
     return _is_package_available("spacy")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_pytorch_quantization_available() -> bool:
     return _is_package_available("pytorch_quantization")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_pandas_available() -> bool:
     return _is_package_available("pandas")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_soundfile_available() -> bool:
     return _is_package_available("soundfile")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_timm_available() -> bool:
     return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_natten_available() -> bool:
     return _is_package_available("natten")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_nltk_available() -> bool:
     return _is_package_available("nltk")[0]
 
@@ -1421,6 +1522,7 @@ def is_numba_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_torchaudio_available() -> bool:
     return is_torch_available() and _is_package_available("torchaudio")[0]
 
@@ -1435,27 +1537,32 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_speech_available() -> bool:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return is_torchaudio_available()
 
 
 @lru_cache
+@_make_compile_constant
 def is_spqr_available() -> bool:
     return _is_package_available("spqr_quant")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_phonemizer_available() -> bool:
     return _is_package_available("phonemizer")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_uroman_available() -> bool:
     return _is_package_available("uroman")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_sudachi_available() -> bool:
     return _is_package_available("sudachipy")[0]
 
@@ -1474,26 +1581,31 @@ def is_jumanpp_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_cython_available() -> bool:
     return _is_package_available("pyximport")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_jinja_available() -> bool:
     return _is_package_available("jinja2")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_num2words_available() -> bool:
     return _is_package_available("num2words")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_tiktoken_available(with_blobfile: bool = True) -> bool:
     if not _is_package_available("tiktoken")[0]:
         return False
@@ -1501,17 +1613,20 @@ def is_tiktoken_available(with_blobfile: bool = True) -> bool:
 
 
 @lru_cache
+@_make_compile_constant
 def is_liger_kernel_available() -> bool:
     is_available, liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
     return is_available and version.parse(liger_kernel_version) >= version.parse("0.3.0")
 
 
 @lru_cache
+@_make_compile_constant
 def is_rich_available() -> bool:
     return _is_package_available("rich")[0]
 
 
 @lru_cache
+@_make_compile_constant
 def is_matplotlib_available() -> bool:
     return _is_package_available("matplotlib")[0]
 
@@ -1526,6 +1641,7 @@ def is_mistral_common_available(min_version: str = MISTRAL_COMMON_MIN_VERSION) -
 
 
 @lru_cache
+@_make_compile_constant
 def is_pynvml_available() -> bool:
     return _is_package_available("pynvml")[0]
 
@@ -1733,6 +1849,7 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
 
 @lru_cache
+@_make_compile_constant
 def is_ipython_available() -> bool:
     return importlib.util.find_spec("IPython") is not None
 
