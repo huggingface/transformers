@@ -169,7 +169,7 @@ class OlmoHybridRMSNormGated(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states, gate=None):
+    def forward(self, hidden_states, gate: torch.Tensor):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -507,30 +507,32 @@ def torch_chunk_gated_delta_rule(
     use_qk_l2norm_in_kernel: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Computes linear attention using the gated delta rule, by chunking along the sequence dimension.
+    """Computes the gated delta rule, by chunking along the sequence dimension.
     Args:
-        query: Query tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
-        key: Key tensor of shape [batch_size, sequence_length, num_heads, k_head_dim]
-        value: Value tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
-        g: Log-decay tensor of shape [batch_size, sequence_length, num_heads]: the recurrent state is multiplied
+        query: Query tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
+        key: Key tensor of shape [batch_size, sequence_length, num_k_heads, k_head_dim]
+        value: Value tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]. num_v_heads can be equal
+            to num_k_heads, same for v_head_dim and k_head_dim.
+        g: Log-decay tensor of shape [batch_size, sequence_length, num_v_heads]: the recurrent state is multiplied
             by exp(g) at each step, so entries must be <= 0.
-        beta: Beta tensor of shape [batch_size, sequence_length, num_heads]
+        beta: Beta tensor of shape [batch_size, sequence_length, num_v_heads]
         chunk_size: Size of the chunks along the sequence dimension.
-        initial_state: The recurrent state, an optional tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
+        initial_state: The recurrent state, an optional tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
         output_final_state: Whether to output the new recurrent state along with the output.
         use_qk_l2norm_in_kernel: If this flag is set to True, query and key vectors are L2-normalized.
     Returns:
-        - The output tensor of shape [batch_size, sequence_length, num_heads, v_head_dim]
-        - Either None or the new recurrent state tensor of shape [batch_size, num_heads, k_head_dim, v_head_dim]
+        - The output tensor of shape [batch_size, sequence_length, num_v_heads, v_head_dim]
+        - Either None or the new recurrent state tensor of shape [batch_size, num_v_heads, k_head_dim, v_head_dim]
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
-    v_head_dim = value.shape[-1]
+    batch_size, sequence_length, _, k_head_dim = key.shape
+    num_v_heads, v_head_dim = value.shape[-2:]
     log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
-    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
-        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, log_decay)
+        x.transpose(1, 2).to(torch.float32, memory_format=torch.contiguous_format)
+        for x in (query, key, value, beta, log_decay)
     ]
     # If enabled, normalize query and key vectors (done once in fp32 for better accuracy)
     if use_qk_l2norm_in_kernel:
@@ -541,11 +543,9 @@ def torch_chunk_gated_delta_rule(
 
     # Pad sequence length to be a multiple of chunk_size. Padding is described as (left_pad, right_pad) for each dim.
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
-    query = F.pad(query, (0, 0, 0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -2
-    key = F.pad(key, (0, 0, 0, pad_size))
-    value = F.pad(value, (0, 0, 0, pad_size))
-    beta = F.pad(beta, (0, pad_size))  # this adds "pad_size" padding coeffs on the right of dimension -1
-    log_decay = F.pad(log_decay, (0, pad_size))
+    if pad_size > 0:
+        query, key, value = (F.pad(x, (0, 0, 0, pad_size)) for x in (query, key, value))
+        beta, log_decay = (F.pad(x, (0, pad_size)) for x in (beta, log_decay))
 
     total_sequence_length = sequence_length + pad_size
     num_chunks = total_sequence_length // chunk_size
@@ -554,76 +554,85 @@ def torch_chunk_gated_delta_rule(
     # state influence the old state. Beta is often normalized to (0, 1) where 0 = no update; 1 = overwrite old state.
     v_beta = value * beta.unsqueeze(-1)
     k_beta = key * beta.unsqueeze(-1)
+    del value  # since this function needs quite a bit of VRAM, we delete the intermediate tensors as soon as possible
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
-    query, key, value, k_beta, v_beta = [
-        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
+    query, key, k_beta, v_beta = [
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, k_beta, v_beta)
     ]
     log_decay = log_decay.reshape(log_decay.shape[0], log_decay.shape[1], -1, chunk_size)
 
-    # Create a chunked-sized causal mask (with and without the diagonal)
-    mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    strictly_upper_mask = mask.triu(1)
+    # Create a chunk-sized strictly upper triangular mask, ie. the mask of what a causal chunk may not attend to
+    strictly_upper_mask = torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device).triu(1)
 
     # Cumulative log-decay within each chunk (dim 3 is the position inside the chunk): cum_log_decay[..., t] is
     # the log of the total decay accumulated between the start of the chunk and position t
     cum_log_decay = log_decay.cumsum(dim=3)
-    cum_decay = cum_log_decay.exp()  # cumulative in the sense of the product: decay is never summed
 
     # First phase: compute intra-chunk quantities.
     # The pairwise decays: pairwise_decay[..., i, j] = exp(cum_log_decay_i - cum_log_decay_j) is the decay
     # accumulated between positions j and i of a chunk
-    pairwise_log_decay = cum_log_decay.unsqueeze(4) - cum_log_decay.unsqueeze(3)
-    pairwise_log_decay = pairwise_log_decay.masked_fill(strictly_upper_mask, float("-inf"))
-    pairwise_decay = pairwise_log_decay.exp()  # no overflow because positive pairwise_log_decay are masked to -inf
+    pairwise_decay = cum_log_decay.unsqueeze(4) - cum_log_decay.unsqueeze(3)
+    pairwise_decay.masked_fill_(strictly_upper_mask, float("-inf"))  # no overflow: positive entries become -inf
+    pairwise_decay.exp_()
 
-    # Compute auxiliary tensors: UT transform (ut_attn) and QK dot product (qk_attn)
-    ut_attn = -(k_beta @ key.transpose(-1, -2)) * pairwise_decay
-    ut_attn = ut_attn.masked_fill(mask, 0)
-    qk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
+    # Compute auxiliary tensors: the UT transform system and the intra-chunk attention (QK dot product)
+    ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
+    intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
+    del pairwise_decay
+    decayed_k_beta = k_beta * cum_log_decay.exp().unsqueeze(-1)
+    del k_beta
 
-    # Apply the UT transform to the within-chunk k/v pairs. The transform computes (I + L)^-1 by forward substitution,
-    # where -L is the strictly lower triangular ut_attn built above.
-    for i in range(1, chunk_size):
-        row = ut_attn[..., i, :i].clone()
-        sub = ut_attn[..., :i, :i].clone()
-        ut_attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
-    ut_attn = ut_attn + torch.eye(chunk_size, dtype=ut_attn.dtype, device=ut_attn.device)
-    # After the UT transformation, the within-chunk k/v pairs are used to create the new_values (called "u" in the
-    # DeltaNet paper and the fla kernels) and the decayed keys reading the old state (k_cumdecay). In the second
-    # phase, the part of new_values that the old state already predicts is subtracted out (v_new), so that only the
-    # correction is written to the recurrent state: this is the delta rule.
-    new_values = ut_attn @ v_beta
-    k_cumdecay = ut_attn @ (k_beta * cum_decay.unsqueeze(-1))
+    # Gated delta attention uses a UT transform to condense several delta rule updates into a few matmuls. After the UT
+    # system is solved, we can then compute the new_values (called "u" in the DeltaNet paper) and the decayed keys
+    # reading the old state (k_cumdecay). In the update, the part of new_values that the old state already predicts is
+    # subtracted out, so that only the correction is written to the recurrent state: this is the delta rule.
+
+    # On CUDA, use a fast solver (which is in torch since 1.11 and backwards compatible); elsewhere, build the inverse
+    # by forward substitution.
+    if ut_system.is_cuda:
+        new_values = torch.linalg.solve_triangular(ut_system, v_beta, upper=False, unitriangular=True)
+        k_cumdecay = torch.linalg.solve_triangular(ut_system, decayed_k_beta, upper=False, unitriangular=True)
+    else:
+        ut_system = -ut_system.tril(-1)  # ut_system is masked to only keep the strictly lower triangle
+        for i in range(1, chunk_size):
+            row = ut_system[..., i, :i].clone()
+            sub = ut_system[..., :i, :i].clone()
+            ut_system[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+        ut_system.diagonal(dim1=-2, dim2=-1).add_(1)
+        new_values, k_cumdecay = ut_system @ v_beta, ut_system @ decayed_k_beta
+    del ut_system, decayed_k_beta, v_beta
 
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
-        recurrent_state_shape = (batch_size, num_heads, k_head_dim, v_head_dim)
+        recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=new_values.dtype, device=new_values.device)
     else:
         last_recurrent_state = initial_state.to(new_values)
     core_attn_out = torch.zeros_like(new_values)
 
-    # Second phase: the sequential scan over chunks. Combine the read of the previous recurrent state (attn_inter)
-    # with the within-chunk attention (qk_attn), then decay + update the recurrent state
+    # Apply decay once rather than in each chunk
+    query = query * cum_log_decay.exp().unsqueeze(-1)
+    key = key * (cum_log_decay[..., -1:] - cum_log_decay).exp().unsqueeze(-1)
+    chunk_decay = cum_log_decay[..., -1].exp()[..., None, None]
+
+    # Second phase: the sequential scan over chunks
     for i in range(num_chunks):
-        q_i, k_i, cum_log_decay_i = query[:, :, i], key[:, :, i], cum_log_decay[:, :, i]
+        # Compute attention output for the current chunk: add the read of the previous recurrent state
+        # (inter_chunk_attn) with the within-chunk attention (intra_chunk_attn)
         v_new = new_values[:, :, i] - k_cumdecay[:, :, i] @ last_recurrent_state
-        inter_chunk_attn = (q_i * cum_decay[:, :, i].unsqueeze(-1)) @ last_recurrent_state
-        core_attn_out[:, :, i] = inter_chunk_attn + qk_attn[:, :, i] @ v_new
-        # chunk_log_decay is the log of the total decay over the whole chunk, used to decay the recurrent state
-        chunk_log_decay = cum_log_decay_i[:, :, -1]
-        state_decay = chunk_log_decay.exp()[..., None, None]
-        key_decay = (chunk_log_decay.unsqueeze(-1) - cum_log_decay_i).exp().unsqueeze(-1)
-        last_recurrent_state = last_recurrent_state * state_decay + (k_i * key_decay).transpose(-1, -2) @ v_new
+        inter_chunk_attn = query[:, :, i] @ last_recurrent_state
+        core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
+        # Update the recurrent state: new recurrent state is decayed old state + update
+        last_recurrent_state = last_recurrent_state * chunk_decay[:, :, i] + key[:, :, i].transpose(-1, -2) @ v_new
 
     # Discard the final state if not requested
     last_recurrent_state = None if not output_final_state else last_recurrent_state
     # Reshape the output to the orignal shape: flatten the chunk dimension, then drop padding
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
     core_attn_out = core_attn_out[:, :, :sequence_length]
-    # Convert back to the original shape [batch_size, sequence_length, num_heads, v_head_dim] and dtype
+    # Convert back to the original shape [batch_size, sequence_length, num_v_heads, v_head_dim] and dtype
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
 
@@ -643,13 +652,14 @@ def torch_recurrent_gated_delta_rule(
     chunked.
     """
     initial_dtype = query.dtype
-    batch_size, sequence_length, num_heads, k_head_dim = key.shape
-    v_head_dim = value.shape[-1]
+    batch_size, sequence_length, _, k_head_dim = key.shape
+    num_v_heads, v_head_dim = value.shape[-2:]
     log_decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
 
-    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, seqlen, ...]
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
     query, key, value, beta, log_decay = [
-        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, log_decay)
+        x.transpose(1, 2).to(torch.float32, memory_format=torch.contiguous_format)
+        for x in (query, key, value, beta, log_decay)
     ]
     # If enabled, normalize query and key vectors (done once in fp32 for better accuracy)
     if use_qk_l2norm_in_kernel:
@@ -662,7 +672,7 @@ def torch_recurrent_gated_delta_rule(
     # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
     # it is the starting point, otherwise start with a zeroed buffer.
     if initial_state is None:
-        recurrent_state_shape = (batch_size, num_heads, k_head_dim, v_head_dim)
+        recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
         last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=value.dtype, device=value.device)
     else:
         last_recurrent_state = initial_state.to(value)
@@ -684,7 +694,7 @@ def torch_recurrent_gated_delta_rule(
 
     # Discard the final state if not requested
     last_recurrent_state = None if not output_final_state else last_recurrent_state
-    # Convert back to the original shape [batch_size, sequence_length, num_heads, v_head_dim] and dtype
+    # Convert back to the original shape [batch_size, sequence_length, num_v_heads, v_head_dim] and dtype
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
 
