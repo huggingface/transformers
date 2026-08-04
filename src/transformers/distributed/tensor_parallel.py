@@ -166,7 +166,9 @@ class ColwiseParallel(TensorParallelLayer):
         self.input_grad_placements = [Partial()]
 
     def requires_local_tensors(self, module):
-        return isinstance(module, torch.nn.Linear) or getattr(module, "_hf_tp_requires_local_tensors", False)
+        uses_local_quantized_kernel = getattr(module, "_hf_tp_uses_local_quantized_kernel", False)
+        uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
+        return uses_local_quantized_kernel or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -180,7 +182,7 @@ class ColwiseParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         x = args[0]
-        if isinstance(module, torch.nn.Linear) and not isinstance(x, DTensor):
+        if self.requires_local_tensors(module) and not isinstance(x, DTensor):
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
             x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
@@ -225,7 +227,9 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def requires_local_tensors(self, module):
-        return isinstance(module, torch.nn.Linear) or getattr(module, "_hf_tp_requires_local_tensors", False)
+        uses_local_quantized_kernel = getattr(module, "_hf_tp_uses_local_quantized_kernel", False)
+        uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
+        return uses_local_quantized_kernel or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -245,7 +249,7 @@ class RowwiseParallel(TensorParallelLayer):
         # Embedding runtime sharding needs a replicated input; Linear needs Shard(-1).
         desired = Replicate() if isinstance(module, torch.nn.Embedding) else Shard(-1)
         x = args[0]
-        if isinstance(module, torch.nn.Linear) and not isinstance(x, DTensor):
+        if self.requires_local_tensors(module) and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
@@ -274,24 +278,29 @@ class RowwiseParallel(TensorParallelLayer):
                     module._parameters["bias"] = bias
 
     def transform_output_post_forward(self, module, output, mesh):
-        # The local forward produced partial sums (weight is sharded along the input dim).
-        if (
+        use_local_inference_path = (
             isinstance(module, torch.nn.Linear)
             and not isinstance(output, DTensor)
             and isinstance(self.output_layouts, Replicate)
-        ):
+            and not output.requires_grad
+        )
+        if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            output = _AllReduceForward.apply(output, process_group)
+            dist.all_reduce(output, group=process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
-            return output
-        if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
-        if output.placements != (self.output_layouts,):
-            output = output.redistribute(placements=[self.output_layouts], async_op=True)
-        if self.requires_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
-            output = output + bias
-        return output.to_local() if self.use_local_output else output
+        else:
+            # Dtensor tracks whether the result is partial, sharded, or replicated.
+            if not isinstance(output, DTensor):
+                output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
+            if output.placements != (self.output_layouts,):
+                output = output.redistribute(placements=[self.output_layouts], async_op=True)
+            if self.requires_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
+                output = output + bias
+            if self.use_local_output:
+                output = output.to_local()
+
+        return output
 
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
@@ -459,6 +468,7 @@ class MoEParamShard(TensorParallelLayer):
 
 if is_torch_distributed_available():
 
+    #TODO(3outeille): To be removed once
     class _AllReduceForward(torch.autograd.Function):
         """Allreduce-sum forward, identity backward."""
 
