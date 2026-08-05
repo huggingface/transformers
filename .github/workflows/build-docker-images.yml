@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - build_ci_docker_image*
+      - default-kernels-ydshieh
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
@@ -49,7 +49,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:dev
 
       - name: Post to Slack
         if: always()
@@ -91,7 +91,7 @@ jobs:
             TORCHCODEC=0.7.0
             FLASH_ATTN=yes
           push: true
-          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn
+          tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn-dev
 
       - name: Post to Slack
         if: always()
@@ -129,7 +129,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}:dev
 
       - name: Post to Slack
         if: always()
@@ -165,7 +165,7 @@ jobs:
         with:
           context: ./docker/transformers-doc-builder
           push: true
-          tags: huggingface/transformers-doc-builder
+          tags: huggingface/transformers-doc-builder:dev
 
       - name: Post to Slack
         if: always()
@@ -203,7 +203,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}:dev
 
       - name: Post to Slack
         if: always()
@@ -272,7 +272,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}:dev
 
       - name: Post to Slack
         if: always()
@@ -310,7 +310,7 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}
+          tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}:dev
 
       - name: Post to Slack
         if: always()
