@@ -273,27 +273,13 @@ class EsmFold2AtomAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmFold2AdaLNModulationLinear(nn.Linear):
-    """The adaLN-Zero modulation projection, which activates its own input.
-
-    ``silu`` belongs to this projection rather than to the caller: the conditioning it reads is a
-    residual-stream tensor that other call sites consume unactivated, so the activation is a property
-    of the modulation, not of the conditioning.
-    """
-
-    def forward(self, conditioning: Tensor) -> Tensor:
-        return super().forward(F.silu(conditioning))
-
-
 class EsmFold2AtomLayer(nn.Module):
-    """adaLN-Zero + SWA attention + SwiGLU FFN, modulated by ``adaln_linear(atom_conditioning)``."""
+    """adaLN-Zero + SWA attention + SwiGLU FFN, modulated by ``adaln_linear(silu(atom_conditioning))``."""
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
         # adaln-Zero gate; zero-init lives in EsmFold2PreTrainedModel._init_weights.
-        self.adaln_linear = EsmFold2AdaLNModulationLinear(
-            atom_config.hidden_size, 6 * atom_config.hidden_size, bias=False
-        )
+        self.adaln_linear = nn.Linear(atom_config.hidden_size, 6 * atom_config.hidden_size, bias=False)
 
         self.self_attn = EsmFold2AtomAttention(config, atom_config)
         self.mlp = EsmFold2SwiGLU(atom_config.hidden_size, atom_config.intermediate_size)
@@ -307,7 +293,7 @@ class EsmFold2AtomLayer(nn.Module):
         attention_mask: Tensor,
         position_embeddings: tuple[Tensor, Tensor],
     ) -> Tensor:
-        modulation = self.adaln_linear(atom_conditioning)
+        modulation = self.adaln_linear(F.silu(atom_conditioning))
         if modulation.dim() == 2:
             modulation = modulation.unsqueeze(1)
         attn_shift, attn_scale, attn_gate, mlp_shift, mlp_scale, mlp_gate = modulation.chunk(6, dim=-1)
