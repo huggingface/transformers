@@ -239,7 +239,19 @@ def rwkv7_chunked(
         outputs.append(out_c.permute(0, 2, 1, 3))
         state = c_last[:, i] * (state + kv[:, i] - torch.einsum("bthn,bhtv->bhnv", b_t[:, i], u))
 
-    return torch.cat(outputs, dim=1)[:, :seq_len].to(dtype), state
+    # The chunked loop pads the sequence up to a multiple of the chunk size and
+    # computes in a wider dtype, so both the trailing slice and the cast back are
+    # no-ops whenever the input needed neither. A no-op slice or cast still returns
+    # a view, ONNX export turns that view into `aten.alias`, functionalization
+    # rewrites the alias to the in-place `aten.detach_`, and aot_autograd rejects
+    # the graph. Doing each step only when it changes something keeps the common
+    # path free of views without changing any value.
+    out = torch.cat(outputs, dim=1)
+    if out.shape[1] != seq_len:
+        out = out[:, :seq_len]
+    if out.dtype != dtype:
+        out = out.to(dtype)
+    return out, state
 
 
 def rwkv7_eager(
