@@ -538,12 +538,12 @@ class AXK2Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-        self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            if self.q_lora_rank is not None
-            else None
+        # Unlike DeepseekV3.2, this model does not use q_b_proj
+        self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
+        self.q_gate_proj = nn.Linear(
+            2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
         )
-        self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -565,10 +565,6 @@ class AXK2Attention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
         self.indexer = AXK2Indexer(config, layer_idx)
-
-        self.q_gate_proj = nn.Linear(
-            2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
-        )
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
