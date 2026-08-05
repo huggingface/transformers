@@ -340,3 +340,61 @@ diff = '''
 -    }
      images_kwargs: Gemma4ImageProcessorKwargs
 '''
+
+[rules.TRF020]
+description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF020.explanation]
+what_it_does = "In model directories whose configuration declares `kv_lora_rank` (Multi-head Latent Attention), checks the attention class that owns the KV LoRA expansion projection (conventionally `kv_b_proj`, or any `nn.Linear(config.kv_lora_rank, ...)`). The expansion must not be applied inside `forward()`; it must live in a dedicated method (e.g. `expand_kv`) that `forward()` calls."
+why_bad = "External backends (vLLM/SGLang) override the KV LoRA expansion so they can store and consume the compressed KV cache directly instead of the materialized key/value states. When the expansion is inlined in `forward()`, there is no single method to override and the backend is forced to materialize the full cache, losing the memory savings that MLA exists to provide."
+diff = '''
++    def expand_kv(self, k_nope, k_pe):
++        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
++        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
++        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
++        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
++        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        return key_states, value_states
++
+     def forward(self, hidden_states, ...):
+         ...
+-        k_nope = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
+-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+-        k_pe = k_rot.expand(*k_nope.shape[:-1], -1)
+-        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        key_states, value_states = self.expand_kv(k_pass, k_rot)
+'''
+
+[rules.TRF021]
+description = "Scalar tensors must be filled on-device with torch.full((), ...) instead of torch.tensor(..., device=...)."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF021.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks calls to torch.tensor(<value>, ..., device=<non-cpu>) whose <value> provably evaluates to a Python scalar. Scalar-ness is resolved statically: numeric literals, arithmetic over them, torch.finfo/torch.iinfo fields, scalar-returning builtins and math.* calls, locals bound exactly once, self.<attr> assigned in the class body, and self.config.<field>/config.<field> whose annotation in the companion configuration file is int/float/bool (following attribute_map aliases). Fields that may also be sequences, such as `eos_token_id: int | list[int] | None`, and any expression that cannot be resolved are left alone. Construction-time methods (__init__, _init_weights, __post_init__, post_init) are exempt because they never run inside a capture region."
+why_bad = "torch.tensor(<python scalar>, device=<accelerator>) materialises the value on the host and then issues a host-to-device copy. CUDA graph capture forbids that copy, so the model cannot be captured. torch.full((), <value>, dtype=..., device=...) fills the same 0-d tensor directly on-device with a capturable kernel and no synchronisation."
+diff = '''
+ def get_placeholder_mask(self, input_ids, inputs_embeds):
+     special_image_mask = (
+         inputs_embeds
+         == self.get_input_embeddings()(
+-            torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
++            torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+         )
+     ).all(-1)
+'''
+
+[rules.TRF022]
+description = "_no_split_modules entries must name module classes that exist in the model."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF022.explanation]
+what_it_does = "Checks that every string in a `_no_split_modules` list on a class in a `modeling_*.py` or `modular_*.py` file names a class that is defined in that file, imported into it, or defined by a sibling module of the same model directory. Complements TRF005, which only validates the shape of the value."
+why_bad = "`device_map` resolves `_no_split_modules` by comparing the strings to `module.__class__.__name__` at runtime. A stale or misspelled name matches nothing and is silently ignored, so the module it was meant to keep together can still be split across devices. Entries naming another model's classes are also redundant and must be dropped rather than corrected: `post_init` already collects `_no_split_modules` from child submodels, so a submodel's layers are registered automatically."
+diff = '''
+ class VideoLlavaPreTrainedModel(PreTrainedModel):
+-    _no_split_modules = ["VideoLlavaVisionAttention"]
+'''
