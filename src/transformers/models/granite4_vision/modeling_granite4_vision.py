@@ -1199,7 +1199,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         )
 
         if expand_size != 1:
-            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("images"):
+            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image"):
                 image_outputs["deepstack_features"] = [
                     (tuple_item[0], tuple_item[1].repeat_interleave(expand_size, dim=0))
                     for tuple_item in image_outputs["deepstack_features"]

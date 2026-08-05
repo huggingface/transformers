@@ -1004,6 +1004,7 @@ class GenerationMixin(ContinuousMixin):
             offsets = [0] + [
                 i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
             ]
+            is_output_tensor = isinstance(modalily_outputs.pooler_output, torch.Tensor)
             modalily_outputs.pooler_output = [
                 out
                 for start, end in zip(offsets[:-1], offsets[1:])
@@ -1011,7 +1012,7 @@ class GenerationMixin(ContinuousMixin):
             ]
 
             # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
-            if isinstance(modalily_outputs.pooler_output, torch.Tensor):
+            if is_output_tensor:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
         return mm_encoder_output
 

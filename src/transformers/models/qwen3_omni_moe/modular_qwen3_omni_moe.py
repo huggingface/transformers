@@ -1463,11 +1463,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             model_kwargs["position_ids"] = position_ids
 
         if expand_size != 1:
-            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("images"):
+            if image_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("image"):
                 image_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in image_outputs["deepstack_features"]
                 ]
-            if video_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("videos"):
+            if video_outputs := model_kwargs.get("mm_encoder_outputs", {}).get("video"):
                 video_outputs["deepstack_features"] = [
                     item.repeat_interleave(expand_size, dim=0) for item in video_outputs["deepstack_features"]
                 ]
