@@ -2803,13 +2803,18 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # assert we have as many conv states as necessary
             self.assertEqual(num_conv_states, layer.number_of_states)
             for i in range(num_conv_states):
+                # Some models may have different conv_shape for each conv inside a single layer, in which case the
+                # `conv_shape` is a list of tuple for each shape
+                current_conv_shape = conv_shape
+                if isinstance(conv_shape, list) and isinstance(conv_shape[0], (list, tuple)):
+                    current_conv_shape = conv_shape[i]
                 # Fix sized only if we do not record the past
                 if not layer.record_past:
-                    self.assertEqual(layer.conv_states[i].shape, conv_shape)
+                    self.assertEqual(layer.conv_states[i].shape, current_conv_shape)
                 # If we record the past, just make sure it's larger
                 else:
-                    self.assertEqual(layer.conv_states[i].shape[:-1], conv_shape[:-1])
-                    self.assertTrue(layer.conv_states[i].shape[-1] >= conv_shape[-1])
+                    self.assertEqual(layer.conv_states[i].shape[:-1], current_conv_shape[:-1])
+                    self.assertTrue(layer.conv_states[i].shape[-1] >= current_conv_shape[-1])
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized[i]:
                     self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
