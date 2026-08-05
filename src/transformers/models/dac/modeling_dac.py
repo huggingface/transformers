@@ -22,6 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
@@ -119,6 +120,7 @@ class DacVectorQuantize(nn.Module):
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
 
+    @force_accelerate_hooks("codebook")
     def forward(self, hidden_state):
         """
         Quantizes the input tensor using a fixed codebook and returns the corresponding codebook vectors.
@@ -155,10 +157,7 @@ class DacVectorQuantize(nn.Module):
         batch_size, hidden_dim, sequence_length = hidden_states.shape
         encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
 
-        # Call the codebook instead of accessing codebook.weight to avoid issues with offloading which
-        # is only handled through the forward pass.
-        # codebook: (N x D)
-        codebook = self.codebook(torch.arange(self.codebook.num_embeddings, device=hidden_states.device))
+        codebook = self.codebook.weight  # codebook: (N x D)
 
         # L2 normalize encodings and codebook (ViT-VQGAN)
         encodings = F.normalize(encodings)
