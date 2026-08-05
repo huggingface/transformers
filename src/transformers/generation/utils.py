@@ -3786,11 +3786,11 @@ class GenerationMixin(ContinuousMixin):
                 streamer.put(valid_tokens.cpu())
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens. When every candidate was
-            # accepted, `input_ids` also holds the bonus token, which is not in the cache yet: nothing to discard (and we should not crop negative tokens!!)
+            # 4.2. Discard past key values relative to unused assistant tokens if any - if `number_of_tokens_to_crop == 0`, `crop` will
+            # still take care of shrinking back sliding window or linear attention cache layers back to their max size, so it's important
+            # to call it still
             number_of_tokens_to_crop = candidate_length - n_matches
-            if number_of_tokens_to_crop > 0:
-                outputs.past_key_values.crop(-number_of_tokens_to_crop)
+            outputs.past_key_values.crop(-number_of_tokens_to_crop)
 
             # 5. Update the candidate generation strategy if needed
             candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
