@@ -63,6 +63,12 @@ uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 uv pip install transformers
 ```
 
+To install Transformers with PyTorch for Intel XPU, add the XPU wheel index.
+
+```bash
+uv pip install "transformers[torch]" --extra-index-url https://download.pytorch.org/whl/xpu
+```
+
 Test whether the install was successful with the following command. It should return a label and score for the provided text.
 
 ```bash
