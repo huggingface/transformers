@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install vllm -e transformers
-          uv pip install tblib
+          uv pip install -r vllm/requirements/test/cpu.txt
 
       - name: Run tests
         working-directory: vllm
