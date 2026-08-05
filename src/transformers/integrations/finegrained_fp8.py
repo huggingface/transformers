@@ -807,7 +807,7 @@ def replace_with_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FineGrainedFP8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
 
@@ -866,8 +866,8 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                 )
             if new_module is not None:
-                # Tensor parallelism uses this marker to determine when inputs and parameters must be local tensors.
-                new_module._hf_tp_requires_local_tensors = True
+                # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
+                new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 

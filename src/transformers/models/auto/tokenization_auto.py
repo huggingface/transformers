@@ -34,7 +34,7 @@ from ...utils import (
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file, has_file
+from ...utils.hub import cached_file
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -447,23 +447,38 @@ def load_merges(merges_file):
     return merges
 
 
-def _has_tekken_tokenizer_file(
+def _use_mistral_format(
     pretrained_model_name_or_path: str | os.PathLike[str],
+    mistral_format: bool | None = None,
     **kwargs,
 ) -> bool:
-    subfolder = kwargs.get("subfolder", "")
-    tekken_filename = os.path.join(subfolder, "tekken.json") if subfolder else "tekken.json"
-    try:
-        return has_file(
-            pretrained_model_name_or_path,
-            tekken_filename,
-            revision=kwargs.get("revision"),
-            token=kwargs.get("token"),
-            cache_dir=kwargs.get("cache_dir"),
-            local_files_only=kwargs.get("local_files_only", False),
-        )
-    except OSError:
+    """Probe whether to use the MistralCommonBackend for *pretrained_model_name_or_path*.
+
+    Args:
+        pretrained_model_name_or_path: Model identifier or local path.
+        mistral_format: Tri-state flag forwarded to ``resolve_mistral_format``.
+            - ``None``: auto-detect — returns ``True`` only when mistral-common is
+              installed *and* ``tekken.json`` can be found.
+            - ``True``: force mode — raises ``ImportError`` if mistral-common is not
+              installed or ``OSError`` if ``tekken.json`` is absent.
+            - ``False``: short-circuits immediately and returns ``False`` without
+              any network/file probe.
+        **kwargs: Forwarded verbatim; only hub-probe keys
+            (``subfolder``, ``revision``, ``token``, ``cache_dir``,
+            ``local_files_only``) are passed through to ``resolve_mistral_format``.
+
+    Returns:
+        ``True`` if the MistralCommonBackend should be used.
+    """
+    from ...integrations.mistral.tokenizer import resolve_mistral_format
+
+    if mistral_format is False:
         return False
+
+    probe_kwargs = {
+        k: kwargs[k] for k in ("subfolder", "revision", "token", "cache_dir", "local_files_only") if k in kwargs
+    }
+    return resolve_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **probe_kwargs)[0]
 
 
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
@@ -720,6 +735,12 @@ class AutoTokenizer:
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         gguf_file = kwargs.get("gguf_file")
+        mistral_format = kwargs.pop("mistral_format", None)
+
+        if mistral_format is True:
+            _use_mistral_format(pretrained_model_name_or_path, mistral_format=True, **kwargs)
+            tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -816,9 +837,8 @@ class AutoTokenizer:
 
             if (
                 registered_class_name == "MistralCommonBackend"
-                and is_mistral_common_available()
                 and "fix_mistral_regex" not in kwargs
-                and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                and _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
             ):
                 tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
                 if tokenizer_class is not None:
@@ -928,7 +948,7 @@ class AutoTokenizer:
             if tokenizer_class is not None:
                 if getattr(tokenizer_class, "__name__", None) == "MistralCommonBackend" and (
                     "fix_mistral_regex" in kwargs
-                    or not _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                    or not _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
                 ):
                     tokenizer_class = TokenizersBackend
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

@@ -288,7 +288,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
     Extraction follows the pytorch `Shard` placement so that sharding and materializing back to full tensor follows `Shard` semantics.
     `Shard` follows torch.chunk style sharding of the tensor. We demonstrate some cases below on how sharding happens including some edge cases
-    such as some ranks having an empty tensor as shard. Below implementation is robut to all these cases.
+    such as some ranks having an empty tensor as shard. Below implementation is robust to all these cases.
 
     Case (1)
     empty_param                 (16, 5120, 8190)
@@ -1499,7 +1499,7 @@ def shard_and_distribute_module(
     All process run this function, so they just load the partition of the tensor that they require.
 
     Main uses cases:
-    - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)
+    - column / rowwise parallelism, you just shard all the weights of the layer (weight and bias)
     - packed layers: you slice the weights, then shard like above
     - custom operation:
         - you want to add an all-gather at the end of a local layer.

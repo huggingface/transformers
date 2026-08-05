@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 import numpy as np
@@ -83,38 +82,89 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
     default_to_square = False
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_convert_rgb = True
     patch_size = 14
-    temporal_patch_size = None  # Unused
+    temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Ernie4_5_VLMoeImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if self.size is not None:
-            if not self.size.shortest_edge or not self.size.longest_edge:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
+    def resize(
+        self,
+        image: np.ndarray,
+        size: SizeDict,
+        resample: "PILImageResampling | int | None",
+        factor: int,
+        **kwargs,
+    ) -> np.ndarray:
+        """Resize dynamically based on input image aspect ratio."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        height, width = image.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=factor,
+            min_pixels=size.shortest_edge,
+            max_pixels=size.longest_edge,
+        )
+        return super().resize(
+            image=image,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+        )
+
+    def patchify(
+        self,
+        image: np.ndarray,
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[np.ndarray, int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        # Ensure float32 for patch processing
+        image = np.asarray(image, dtype=np.float32)
+        channel, resized_height, resized_width = image.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = image.reshape(
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        # (gh, gw, mh, mw, C, ph, pw)
+        patches = np.transpose(patches, (1, 4, 2, 5, 0, 3, 6))
+
+        # expand temporal_patch_size as a broadcast (zero-copy)
+        patches = np.broadcast_to(
+            patches[:, :, :, :, :, None, :, :],
+            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+        )
+
+        flatten_patches = patches.reshape(
+            grid_h * grid_w,
+            channel * temporal_patch_size * patch_size * patch_size,
+        )
+        return flatten_patches, grid_h, grid_w
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[Ernie4_5_VLMoeImageProcessorKwargs],
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
-
-    def _standardize_kwargs(self, **kwargs) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
-        kwargs = super()._standardize_kwargs(**kwargs)
-        size = kwargs.get("size", self.size)
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-
-        return kwargs
 
     def _preprocess(
         self,
@@ -128,77 +178,40 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         patch_size: int,
+        temporal_patch_size: int,
         merge_size: int,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess images one by one for PIL backend.
-        """
-        processed_images = []
-        processed_grids = []
+        all_patches = []
+        all_grids = []
 
         for image in images:
-            height, width = image.shape[-2:]
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height=height,
-                    width=width,
-                    factor=patch_size * merge_size,
-                    min_pixels=size.shortest_edge,
-                    max_pixels=size.longest_edge,
-                )
                 image = self.resize(
                     image,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    size=size,
                     resample=resample,
+                    factor=patch_size * merge_size,
                 )
 
-            # Rescale and normalize
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
                 image = self.normalize(image, image_mean, image_std)
 
-            # Ensure float32 for patch processing
-            image_array = np.asarray(image, dtype=np.float32)
-            if image_array.ndim == 3:  # (C, H, W)
-                image_array = np.expand_dims(image_array, axis=0)  # (1, C, H, W)
-            if image_array.ndim == 4:  # (B, C, H, W)
-                image_array = np.expand_dims(image_array, axis=1)  # (B, T=1, C, H, W)
-
-            resized_height, resized_width = image_array.shape[-2:]
-            batch_size, grid_t, channel = image_array.shape[:3]
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = image_array.reshape(
-                batch_size,
-                grid_t,
-                channel,
-                grid_h // merge_size,
-                merge_size,
-                patch_size,
-                grid_w // merge_size,
-                merge_size,
-                patch_size,
-            )
-            # Reorder dimensions to group grid and patch information for subsequent flattening.
-            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-            patches = np.transpose(patches, (0, 1, 3, 6, 4, 7, 2, 5, 8))
-
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                channel * patch_size * patch_size,
+            patches, grid_h, grid_w = self.patchify(
+                image,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            # Remove batch dimension and append: shape is (seq_len, hidden_dim)
-            processed_images.append(flatten_patches.squeeze(0))
-            processed_grids.append([grid_t, grid_h, grid_w])
+            all_patches.append(patches)
+            all_grids.append([1, grid_h, grid_w])
 
-        # Concatenate all images along sequence dimension: (total_seq_len, hidden_dim)
-        pixel_values = np.concatenate(processed_images, axis=0)
-        image_grid_thw = np.array(processed_grids)
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
 
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -221,8 +234,8 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        min_pixels = self.size["shortest_edge"]
-        max_pixels = self.size["longest_edge"]
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
 
