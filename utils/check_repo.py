@@ -577,7 +577,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "ul2",
     "phobert",
     "herbert",
-    "dit",
     "lasr",
     "mluke",
     "xlsr_wav2vec2",
@@ -594,7 +593,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "bertweet",
     "nllb",
     "xlm-v",
-    "dialogpt",
     "flan-t5",
     "bert-japanese",
     "mms",
@@ -604,7 +602,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "madlad-400",
     "granitevision",
     "falcon3",
-    "megatron_gpt2",
     "code_llama",
 }
 

@@ -216,8 +216,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above). Note that this
             parameter has an effect if the parameter `tensor_type` is set, *otherwise has no effect*.
         n_sequences (`Optional[int]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
-            initialization.
+            The number of input sequences represented by each encoding (`None` for unknown, `1` for a single sequence and `2` for a pair of sequences).
     """
 
     def __init__(
@@ -330,10 +329,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             `list[str]`: The list of tokens at that index.
         """
         if not self._encodings:
-            raise ValueError(
-                "tokens() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("tokens() is not available when using Python based tokenizers")
         return self._encodings[batch_index].tokens
 
     def sequence_ids(self, batch_index: int = 0) -> list[int | None]:
@@ -354,10 +350,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             sequence.
         """
         if not self._encodings:
-            raise ValueError(
-                "sequence_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("sequence_ids() is not available when using Python based tokenizers")
         return self._encodings[batch_index].sequence_ids
 
     def word_ids(self, batch_index: int = 0) -> list[int | None]:
@@ -373,10 +366,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             (several tokens will be mapped to the same word index if they are parts of that word).
         """
         if not self._encodings:
-            raise ValueError(
-                "word_ids() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
-                " class)."
-            )
+            raise ValueError("word_ids() is not available when using Python based tokenizers")
         return self._encodings[batch_index].word_ids
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: int | None = None) -> int:
@@ -402,7 +392,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                 sequence.
 
         Returns:
-            `int`: Index of the word in the input sequence.
+            `int`: Index of the input sequence containing the token (`0` for the first sequence or `1` for the second sequence of a pair).
         """
 
         if not self._encodings:
@@ -433,7 +423,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_token_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the token in the sequence.
             token_index (`int`, *optional*):
                 If a batch index is provided in *batch_or_token_index*, this can be the index of the token in the
@@ -482,10 +472,10 @@ class BatchEncoding(UserDict, Generic[_V]):
                 Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the word in the sequence.
             word_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_word_index*, this can be the index of the word in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided word index belongs to.
 
         Returns:
@@ -526,7 +516,7 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_token_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the token in the sequence.
             token_index (`int`, *optional*):
                 If a batch index is provided in *batch_or_token_index*, this can be the index of the token or tokens in
@@ -564,13 +554,13 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_char_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
-                the word in the sequence
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
+                the character in the sequence
             char_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_char_index*, this can be the index of the character in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided character index belongs to.
 
 
@@ -606,21 +596,21 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_word_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the word in the sequence
             word_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the word in the
+                If a batch index is provided in *batch_or_word_index*, this can be the index of the word in the
                 sequence.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided word index belongs to.
 
         Returns:
-            `CharSpan` or `list[CharSpan]`: Span(s) of the associated character or characters in the string. CharSpan
-            are NamedTuple with:
+            `CharSpan`: Span of the associated character or characters in the string. CharSpan
+            is a NamedTuple with:
 
-                - start: index of the first character associated to the token in the original string
-                - end: index of the character following the last character associated to the token in the original
+                - start: index of the first character associated to the word in the original string
+                - end: index of the character following the last character associated to the word in the original
                   string
         """
 
@@ -649,18 +639,18 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         Args:
             batch_or_char_index (`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the character in the original string.
             char_index (`int`, *optional*):
-                If a batch index is provided in *batch_or_token_index*, this can be the index of the character in the
+                If a batch index is provided in *batch_or_char_index*, this can be the index of the character in the
                 original string.
             sequence_index (`int`, *optional*, defaults to 0):
-                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                If a pair of sequences is encoded in the batch this can be used to specify which sequence in the pair (0
                 or 1) the provided character index belongs to.
 
 
         Returns:
-            `int` or `list[int]`: Index or indices of the associated encoded token(s).
+            `int`: Index of the word containing the character.
         """
 
         if not self._encodings:
@@ -680,7 +670,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
-            prepend_batch_axis (`int`, *optional*, defaults to `False`):
+            prepend_batch_axis (`bool`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
         """
         if tensor_type is None:
@@ -1220,7 +1210,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self, new_tokens: str | AddedToken | Sequence[str | AddedToken], special_tokens: bool = False
     ) -> int:
         """
-        #TODO remove this from here! PreTrainedTOkeniuzerBase should be agnostic of AddedToken.
+        #TODO remove this from here! PreTrainedTokenizerBase should be agnostic of AddedToken.
 
         Add a list of new tokens. If the new tokens are not in the vocabulary, they are added to the end. Added tokens and
         tokens from the vocabulary of the tokenization algorithm are therefore not treated in the same way.

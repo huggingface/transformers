@@ -111,7 +111,6 @@ if TYPE_CHECKING:
     from .depth_pro import *
     from .detr import *
     from .dia import *
-    from .dialogpt import *
     from .diffllama import *
     from .diffusion_gemma import *
     from .dinat import *
@@ -120,7 +119,6 @@ if TYPE_CHECKING:
     from .dinov3_convnext import *
     from .dinov3_vit import *
     from .distilbert import *
-    from .dit import *
     from .doge import *
     from .donut import *
     from .dots1 import *
@@ -267,7 +265,6 @@ if TYPE_CHECKING:
     from .mbart import *
     from .mbart50 import *
     from .megatron_bert import *
-    from .megatron_gpt2 import *
     from .mellum import *
     from .metaclip_2 import *
     from .mgp_str import *
