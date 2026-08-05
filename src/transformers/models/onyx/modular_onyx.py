@@ -755,19 +755,19 @@ class OnyxRMSNorm(Gemma4RMSNorm):
         super().__init__(dim, eps, with_scale)
 
 
-class OnyxCenteredRMSNorm(Gemma2RMSNorm):
+class OnyxTextCenteredRMSNorm(Gemma2RMSNorm):
     pass
 
 
-class OnyxMLP(Gemma2MLP):
+class OnyxTextMLP(Gemma2MLP):
     pass
 
 
-class OnyxRotaryEmbedding(Gemma2RotaryEmbedding):
+class OnyxTextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class OnyxAttention(AfmoeAttention):
+class OnyxTextAttention(AfmoeAttention):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.q_norm
@@ -823,13 +823,15 @@ class OnyxAttention(AfmoeAttention):
         return attn_output, attn_weights
 
 
-class OnyxDecoderLayer(Gemma2DecoderLayer):
+class OnyxTextDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.input_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.pre_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.mlp = OnyxTextMLP(config)
+        self.self_attn = OnyxTextAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
 
 class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
@@ -909,11 +911,14 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
 
 
 class OnyxPreTrainedModel(Gemma2PreTrainedModel):
-    _no_split_modules = ["OnyxDecoderLayer", "OnyxVisionEncoderLayer"]
+    _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": OnyxTextDecoderLayer,
+        "attentions": OnyxTextAttention,
+    }
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        raise NotImplementedError("No need to inherit, we can use the base one")
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
@@ -1035,6 +1040,10 @@ class OnyxTextModel(Gemma2Model):
         self.embed_tokens = OnyxTextNormedWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
+        self.layers = nn.ModuleList(
+            [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = OnyxTextRotaryEmbedding(config)
         self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
 
