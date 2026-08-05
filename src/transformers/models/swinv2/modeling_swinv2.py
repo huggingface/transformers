@@ -378,8 +378,8 @@ class Swinv2SelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)

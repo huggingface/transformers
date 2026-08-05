@@ -58,8 +58,8 @@ if is_torch_available():
 
     from ..modeling_utils import PreTrainedModel
     from ..vision_utils import (
-        get_vision_bilinear_indices_and_weights,
-        get_vision_cu_seqlens,
+        get_vision_attention_seqlens,
+        get_vision_interpolation_indices_and_weights,
         get_vision_merged_shape,
         get_vision_nearest_position_ids,
         get_vision_position_ids,
@@ -233,7 +233,7 @@ def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
 
     Mutates dicts and `__dict__`-bearing objects in place (preserving identity — callers
     rely on this so downstream pops/mutations propagate back to the original mapping);
-    rebuilds lists/tuples/sets (immutable or order-sensitive containers).
+    rebuilds lists/tuples/sets/frozensets (immutable or order-sensitive containers).
     Skips non-traversable leaf types (enum, SymInt, etc.).
     """
     if isinstance(obj, _LEAF_SKIP_TYPES):
@@ -450,20 +450,13 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
     module = sys.modules[type(model).__module__]
     temporal_encoder = hasattr(module, "get_vision_frame_index")
-    inputs["cu_seqlens"] = get_vision_cu_seqlens(grid_thw, merge_temporal=temporal_encoder)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-
-    # Only set the vision `position_ids` when nothing already has: a full (non-decomposed) multimodal
-    # export precomputes the LLM's `position_ids` via `get_rope_index` first, and the vision ids
-    # (different shape/meaning) must not overwrite it. On the decomposed vision sub-model nothing sets
-    # it first, so this still fires there.
-    if inputs.get("position_ids") is None:
-        # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-        # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-        include_temporal = _find_submodule_attr(model, "axis_dim") is not None
-        inputs["position_ids"] = get_vision_position_ids(
-            grid_thw, spatial_merge_size, include_temporal=include_temporal
-        )
+    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
+        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
+    )
+    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
+    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
+    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
+    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")
@@ -477,15 +470,14 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
 
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
-        if hasattr(module, "get_vision_bicubic_indices_and_weights"):
-            # kimi_k25 resamples its learned grid bicubically (helper defined in its own module).
-            inputs["bicubic_indices"], inputs["bicubic_weights"] = module.get_vision_bicubic_indices_and_weights(
-                grid_thw, num_grid_per_side
-            )
-        else:
-            inputs["bilinear_indices"], inputs["bilinear_weights"] = get_vision_bilinear_indices_and_weights(
-                grid_thw, num_grid_per_side, spatial_merge_size
-            )
+        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
+        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear); read it rather than
+        # inferring, so the precomputed tensors match exactly what the model computes.
+        mode = _find_submodule_attr(model, "interpolation_mode")
+        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
+        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
+            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=spatial_merge_size
+        )
 
     # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
     if temporal_encoder:
@@ -666,20 +658,31 @@ def _capture_forward(module: torch.nn.Module):
 def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
-    Each `model.generate` decode step feeds a single new token, so `torch.export` (with
-    `Dim.AUTO`) sees a query-sequence axis of length 1 and specializes it to a constant — the
-    exported decode can then only ever run one token. Concatenating `N` consecutive decode steps
-    along that axis yields a genuine `N`-token decode input: the traced graph is identical (a
-    KV-cache forward), but the sequence axis now has hint `N > 1` so it stays dynamic. The
-    exported decode then handles both a single token (ordinary decoding) and many (chunked prefill
-    / continuation-from-past for multi-turn) — which is all a `past_key_values` forward really is.
+    Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
+    sees a query-sequence axis of length 1 and specializes it to a constant — the exported decode can
+    then only ever run one token. Concatenating `N` consecutive decode steps along that axis yields a
+    genuine `N`-token decode input: the traced graph is identical (a KV-cache forward), but the sequence
+    axis now has hint `N > 1` so it stays dynamic. The exported decode then handles both a single token
+    (ordinary decoding) and many (continuation-from-past for multi-turn, or a plain prefill when the cache is empty).
 
-    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill,
-    before the chunk); the padding `attention_mask` from the LAST (it spans prefill + all `N`
-    tokens). The per-token tensors are concatenated along their sequence axis.
+    The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
+    the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
+    handled below (its layout depends on the cache).
     """
-    first, last = decode_calls[0], decode_calls[-1]
+    first = decode_calls[0]
     merged = copy.copy(first)
+
+    # Concatenation assumes single-token decode steps. When `use_cache` is off the steps re-run the whole
+    # growing sequence (query length > 1) — each is already a valid multi-token forward, so take the last.
+    def query_length(call: dict) -> int | None:
+        for key in ("input_ids", "inputs_embeds"):
+            value = call.get(key)
+            if value is not None:
+                return value.shape[1]
+        return None
+
+    if any(query_length(call) != 1 for call in decode_calls):
+        return copy.copy(decode_calls[-1])
 
     def concat_along(key: str, dim: int) -> None:
         values = [call[key] for call in decode_calls if call.get(key) is not None]
@@ -692,52 +695,79 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.
     concat_along("position_ids", -1)
-    if last.get("attention_mask") is not None:
-        merged["attention_mask"] = last["attention_mask"]
+
+    # `attention_mask` is either a 2D padding mask `[batch, kv]` (a growing `DynamicCache`: the model
+    # rebuilds the causal mask from `position_ids` / `cache_position` internally, so the last step's
+    # mask — spanning the most positions — is all it needs) or a 4D causal mask `[batch, heads, query,
+    # kv]` (a static cache passes the mask in explicitly). For the 4D case each single-token step is one
+    # causal query row against the fixed-size cache, so concatenating along the query axis rebuilds the
+    # correct `N`-token causal mask; taking just the last step would freeze the query axis at 1 and the
+    # exported decode could never run more than one token. Hybrid-attention models pass a dict
+    # `{attention_type: 4D mask}` instead of a single tensor — merge each entry the same way.
+    masks = [call.get("attention_mask") for call in decode_calls]
+    if all(mask is not None for mask in masks):
+        merged["attention_mask"] = _merge_step_masks(masks)
+
     return merged
+
+
+def _merge_step_masks(masks: list[Any]) -> Any:
+    """Merge one attention mask per decode step into a single multi-token mask.
+
+    A 4D causal mask `[batch, heads, query, kv]` is concatenated along the query axis (each step is one
+    causal row against the fixed cache); a 2D padding mask keeps the last step (it already spans the most
+    positions). A dict `{attention_type: mask}` (hybrid-attention models) is merged entry by entry, and a
+    `None` mask (an attention type the model leaves unmasked) is preserved as `None`.
+    """
+    last_mask = masks[-1]
+    if last_mask is None:
+        return None
+    if isinstance(last_mask, dict):
+        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
+    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
+        return torch.cat(masks, dim=2)
+    return last_mask
 
 
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
-    multi_token: bool = False,
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Run `model.generate()` and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
-    `multi_token` (default False) additionally returns a separate `decode_multi_token` component —
-    two consecutive decode steps merged (see `_merge_decode_calls`) so its sequence axis stays dynamic
-    and it can process multiple tokens at once (chunked prefill, continuation-from-past). The plain
-    `decode` component stays the classic single-token hot path; `decode_multi_token` is an add-on.
+    `generation_config` is forwarded to `generate()` (defaulting to the model's own), so the captured
+    inputs use whatever cache `generate()` would build. Pass one with `cache_implementation="static"`
+    and `max_cache_len=N` to capture a **statically sized** cache in the decode inputs — the basis for
+    a static-cache export. `max_cache_len` sizes the cache independently of the capture, so the
+    exported decode takes a fixed `[..., N, ...]` cache rather than a growing one.
 
-    Some multi-modal models (Blip2, Kosmos-2, …) override `generate()` to run their encoders
-    inline and delegate the generation loop to an inner language model, so the top-level
-    `forward()` never runs. To cover those, the decoder returned by `model.get_decoder()` is
-    hooked as well, and whichever module the generation loop actually called is captured
-    (top-level `forward()` preferred when both ran).
+    When `multi_token_decode`, the `decode` component is captured as a **multi-token** decode — two
+    consecutive decode steps merged (see `_merge_decode_calls`) so its query-sequence axis stays
+    symbolic (a single-token decode would specialize that axis to 1). It then handles both one token
+    (ordinary decoding) and many (continuation-from-past, or a plain prefill when the cache is empty). Otherwise `decode` is the
+    classic single-token decode.
 
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
-        `{"prefill": (module, prefill_inputs), "decode": (module, decode_inputs)}`, plus
-        `"decode_multi_token"` when `multi_token=True`. `module` is `model` itself, or its decoder
-        when `generate()` delegates to it.
+        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`.
     """
-    # 1 prefill forward + 1 decode (or 2, merged for `multi_token`) forward to capture.
-    n_new_tokens = 3 if multi_token else 2
-    decoder = model.get_decoder()
+    # 1 prefill forward + 1 decode (or 2 decode steps merged, when `multi_token_decode`) forward to capture.
+    # Set the capture window on the config itself, not as generate() kwargs — passing a
+    # `generation_config` alongside generation kwargs is deprecated. Base it on the model's own config
+    # when none is given (preserving its defaults), and deep-copy into a distinct `capture_config` so
+    # the caller's `generation_config` is never mutated.
+    num_new_tokens = 3 if multi_token_decode else 2
+    capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
+    capture_config.max_new_tokens = num_new_tokens
+    capture_config.min_new_tokens = num_new_tokens
     try:
-        with contextlib.ExitStack() as stack:
-            calls = stack.enter_context(_capture_forward(model))
-            decoder_calls = (
-                stack.enter_context(_capture_forward(decoder)) if decoder is not None and decoder is not model else []
-            )
-            # `use_cache=True`: the prefill/decode split only makes sense with a KV cache, so force
-            # it on regardless of the model's config default (some set `use_cache=False`).
-            model.generate(
-                **copy.deepcopy(inputs), max_new_tokens=n_new_tokens, min_new_tokens=n_new_tokens, use_cache=True
-            )
+        with _capture_forward(model) as calls:
+            model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         raise RuntimeError(
             f"decompose_prefill_decode failed for {type(model).__name__}. "
@@ -745,30 +775,29 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    module, module_calls = (model, calls) if len(calls) >= n_new_tokens else (decoder, decoder_calls)
-    if len(module_calls) < n_new_tokens:
+    if len(calls) < num_new_tokens:
         raise RuntimeError(
-            f"decompose_prefill_decode expected at least {n_new_tokens} forward() calls on {type(model).__name__} "
-            f"or its decoder during generate(max_new_tokens={n_new_tokens}), but captured {len(calls)} on the "
-            f"top-level model and {len(decoder_calls)} on the decoder."
+            f"decompose_prefill_decode expected at least {num_new_tokens} calls to "
+            f"{type(model).__name__}.forward() during generate(max_new_tokens={num_new_tokens}), but "
+            f"captured {len(calls)}. This likely means generate() bypasses the top-level forward() "
+            "(e.g. delegates to an inner model), so prefill/decode decomposition is not supported "
+            "for this architecture."
         )
 
-    # `generate` passes `logits_to_keep=1` (it only needs the last token's logits). An exported model
-    # should produce logits for every query position and let the runtime slice — keeping the value bakes
-    # a spurious scalar input that some backends (e.g. OpenVINO GenAI) reject. Drop it so the default
-    # (0 = all positions) applies.
-    for call in module_calls:
+    # Remove `logits_to_keep` from the captured calls — it's a generation-time hint for the model's
+    # internal top-k pruning, not a forward input. The export graph should not depend on it.
+    for call in calls:
         call.pop("logits_to_keep", None)
 
-    components = {
-        "prefill": (copy.copy(module), module_calls[0]),
-        "decode": (copy.copy(module), module_calls[1]),
+    # A single-token decode specializes its query-sequence axis to 1 (never dynamic). When
+    # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
+    # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
+    prefill_inputs = calls[0]
+    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens]) if multi_token_decode else calls[1]
+    return {
+        "prefill": (copy.copy(model), prefill_inputs),
+        "decode": (copy.copy(model), decode_inputs),
     }
-    if multi_token:
-        # Additive: a separate multi-token decode (two decode steps merged, dynamic sequence axis) for
-        # chunked prefill / continuation-from-past. `decode` stays the classic single-token hot path.
-        components["decode_multi_token"] = (copy.copy(module), _merge_decode_calls(module_calls[1:n_new_tokens]))
-    return components
 
 
 # Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
@@ -868,30 +897,33 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
 
 
 def decompose_for_generation(
-    model: PreTrainedModel, inputs: dict[str, Any], multi_token: bool = False
+    model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Decompose a generative model into independently exportable `(model, forward_inputs)` pairs.
 
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
     further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`. Models whose `generate()` delegates the loop to an inner
-    language model (Blip2, Kosmos-2, …) get prefill/decode captured at that inner model instead.
+    `lm_head`) via `decompose_multimodal`.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
-        multi_token: When `True`, add a separate `decode_multi_token` component (multi-token decode
-            with a dynamic sequence axis, for chunked prefill / continuation); `decode` stays the
-            single-token hot path.
+        generation_config: Optional `GenerationConfig` forwarded to `generate()` during capture. Pass
+            one with `cache_implementation="static"` + `max_cache_len=N` to export against a statically
+            sized cache (see `decompose_prefill_decode`).
+        multi_token_decode: When `True`, capture the `decode` component as a multi-token decode (dynamic
+            query sequence axis: multiple tokens at once — continuation-from-past, or a plain prefill when the cache is empty); a
+            single-token decode can't stay dynamic (see `decompose_prefill_decode`).
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
         plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models, plus
-        `"decode_multi_token"` when `multi_token=True`.
+        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
     """
-    stages = decompose_prefill_decode(model, inputs, multi_token=multi_token)
+    stages = decompose_prefill_decode(
+        model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
+    )
     prefill_model, prefill_inputs = stages["prefill"]
 
     if not is_multimodal(prefill_model):
@@ -899,6 +931,4 @@ def decompose_for_generation(
 
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
-    if "decode_multi_token" in stages:
-        components["decode_multi_token"] = stages["decode_multi_token"]
     return components

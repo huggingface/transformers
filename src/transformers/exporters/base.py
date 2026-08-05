@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         import torch
 
         from ..cache_utils import Cache
+        from ..generation import GenerationConfig
         from ..modeling_utils import PreTrainedModel
 
 
@@ -134,7 +135,8 @@ class HfExporter(ABC):
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
-        multi_token: bool = False,
+        generation_config: GenerationConfig | None = None,
+        multi_token_decode: bool = False,
     ) -> dict[str, object]:
         """
         Decompose a generative model and export each component independently.
@@ -157,10 +159,14 @@ class HfExporter(ABC):
                 component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
                 `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
-            multi_token (`bool`, *optional*, defaults to `False`):
-                Capture the `decode` component with multiple query tokens so its sequence axis stays
-                dynamic — one graph for ordinary decoding, chunked prefill, and continuation. Leave
-                `False` for a classic single-token decoder.
+            generation_config ([`~generation.GenerationConfig`], *optional*):
+                Forwarded to the `generate()` capture (defaults to the model's own). Pass one with
+                `cache_implementation="static"` to export against a fixed-size `StaticCache`.
+            multi_token_decode (`bool`, *optional*, defaults to `False`):
+                Whether the `decode` component processes multiple query tokens at once — a dynamic
+                query axis (prefill on an empty cache, continuation-from-past otherwise) — vs the
+                classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
+                stays dynamic under a dynamic-shape export (`config.dynamic=True`).
 
         Returns:
             `dict[str, Any]`: `{component_name: backend_specific_artifact}` — same keys as
@@ -168,7 +174,13 @@ class HfExporter(ABC):
             [`~HfExporter.export`] returns for the concrete backend (`ExportedProgram`,
             `ONNXProgram`, `ExecutorchProgramManager`).
         """
-        components = decompose_for_generation(model, sample_inputs, multi_token=multi_token)
+        components = decompose_for_generation(
+            model,
+            sample_inputs,
+            generation_config=generation_config,
+            multi_token_decode=multi_token_decode,
+        )
+
         if isinstance(config, dict):
             missing = set(components) - set(config)
             if missing:
@@ -179,6 +191,7 @@ class HfExporter(ABC):
             configs = config
         else:
             configs = dict.fromkeys(components, config)
+
         exported: dict[str, object] = {}
         for name, (submodel, subinputs) in components.items():
             try:
@@ -188,4 +201,5 @@ class HfExporter(ABC):
                     f"{type(self).__name__}.export failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
+
         return exported

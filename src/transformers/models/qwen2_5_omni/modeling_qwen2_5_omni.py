@@ -23,7 +23,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -35,7 +35,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -251,7 +251,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                 fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
                 tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
                 temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
+                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will have a difference of 50 in the temporal position IDs.
                 input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
                 vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
                 vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
@@ -719,7 +719,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+        self.positional_embedding = nn.Buffer(position_embedding, persistent=False)
 
     def compute_default_singular_positional_embedding(self):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
@@ -1146,14 +1146,12 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
 
 
 class Qwen2_5_VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
@@ -1330,9 +1328,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Qwen2_5OmniConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1345,24 +1342,19 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Qwen2_5OmniConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Qwen2_5OmniConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -1371,12 +1363,9 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     # Ignore copy
     def forward(self, x, position_ids):
@@ -1725,7 +1714,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Qwen2.5OmniThinker model which consists of a audio backbone and a language model.
+    The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
@@ -1848,17 +1837,17 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
         else:
@@ -1885,7 +1874,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2051,51 +2039,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_features=None,
-        feature_attention_mask=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
-            use_audio_in_video=use_audio_in_video,
-            video_second_per_grid=video_second_per_grid,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-            model_inputs["input_features"] = None
-
         return model_inputs
 
 
@@ -2130,7 +2076,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
         "attentions": Qwen2_5OmniAttention,
     }
 
-    _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
@@ -2271,7 +2217,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2333,6 +2278,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         if attention_mask is not None and position_ids is None:
             past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
             if past_key_values_length == 0 or self.rope_deltas is None:
+                # Left padding offsets every position by the number of pad tokens, so the delta that continues the
+                # positions during decoding has to discount them, exactly as the thinker does. Without this, padded
+                # rows decode with shifted RoPE positions and their audio degrades.
+                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -2350,7 +2299,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                     inputs_embeds[:, -2, :] += self.get_input_embeddings()(
                         torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
                     )
-                self.rope_deltas = rope_deltas
+                self.rope_deltas = rope_deltas - delta0
 
             else:
                 if inputs_embeds is not None:
@@ -2403,45 +2352,9 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         )
 
     # prepare inputs for talker lm generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        input_text_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        thinker_reply_part=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_audio_features=None,
-        audio_feature_attention_mask=None,
-        audio_feature_lengths=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            thinker_reply_part=thinker_reply_part,
-            input_text_ids=input_text_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_audio_in_video=use_audio_in_video,
-            audio_feature_lengths=audio_feature_lengths,
-            video_second_per_grid=video_second_per_grid,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
-
         return model_inputs
 
     def _update_model_kwargs_for_generation(
@@ -2462,8 +2375,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -2477,24 +2389,19 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Qwen2_5OmniDiTConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -2503,22 +2410,22 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -2936,7 +2843,7 @@ class DiTMLP(nn.Module):
         return hidden_states
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -3152,7 +3059,7 @@ class Qwen2_5OmniUpSample1d(nn.Module):
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
 
         filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -3185,7 +3092,7 @@ class Qwen2_5OmniDownSample1d(nn.Module):
         self.pad_right = kernel_size // 2
         self.stride = ratio
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -3554,7 +3461,9 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
-            time_step = time_step.repeat(batch_size)
+            time_step = time_step.repeat(batch_size * 2 if apply_cfg else batch_size)
+        elif apply_cfg and time_step.shape[0] == batch_size:
+            time_step = torch.cat([time_step, time_step], dim=0)
 
         # Compute embeddings
         time_embedding = self.time_embed(time_step)
@@ -3573,7 +3482,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         # Compute positional encodings
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
-        position_ids = position_ids[None, :].repeat(batch_size, 1)
+        position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
         position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
@@ -3603,8 +3512,6 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         maximum_duration = quantized_code.shape[1] * self.repeats
         batch_size = reference_mel_spectrogram.shape[0]
-        if batch_size != 1:
-            raise ValueError("Only batch size = 1 is currently supported")
 
         if maximum_duration > self.config.max_position_embeddings:
             raise ValueError(
@@ -3860,7 +3767,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
             When `return_audio=True`:
                 - **Text** (`torch.Tensor`): Generated text token sequence.
-                - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
+                - **Audio waveform** (`torch.Tensor` or `list[torch.Tensor]`): A single `(num_samples,)`
+                  waveform when `batch_size == 1`, otherwise one waveform per batch sample, each trimmed to
+                  its own length.
         """
         # check `False` on purpose because the parameter can be `str/bool`. This is needed for BC
         generation_mode = kwargs.pop("generation_mode", None)
@@ -3874,8 +3783,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             )
         if return_audio is None:
             return_audio = self.has_talker
-        if input_ids.shape[0] != 1 and return_audio:
-            raise NotImplementedError("Qwen2.5-Omni currently does not support batched inference with audio output")
+        batch_size = input_ids.shape[0]
 
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
@@ -3888,6 +3796,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             "top_p": talker_top_p,
             "temperature": talker_temperature,
             "eos_token_id": talker_eos_token_id,
+            "pad_token_id": self.talker.codec_pad_token,
             "repetition_penalty": talker_repetition_penalty,
         }
         token2wav_kwargs = {}
@@ -3975,7 +3884,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_text_ids = torch.cat(
             [
                 input_ids,
-                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -3984,8 +3893,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_ids = torch.cat(
             [
                 torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
-                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=input_ids.device),
-                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_pad_token, dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_bos_token, dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -3993,7 +3902,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device)
+        talker_text_bos_token = torch.full(
+            (batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device
+        )
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
@@ -4004,10 +3915,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_token = torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        eos_token = torch.full((batch_size, 1), self.talker.text_eos_token, dtype=torch.long, device=input_ids.device)
         eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_token = torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        pad_token = torch.full((batch_size, 1), self.talker.text_pad_token, dtype=torch.long, device=input_ids.device)
         pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
@@ -4019,10 +3930,31 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
+        # In a batch, rows that finished early keep being forwarded with pad tokens, so their trailing
+        # hidden states are meaningless. Rewrite each row's reply stream so the text EOS embedding sits
+        # right after its last real token, followed by pad embeddings. For the longest row this matches
+        # the appended `eos_embedding`/`pad_embedding` above, keeping single-sample behavior unchanged.
+        thinker_eos_token_id = thinker_kwargs.get("eos_token_id", self.thinker.generation_config.eos_token_id)
+        if thinker_eos_token_id is not None:
+            thinker_eos_token_ids = torch.as_tensor(thinker_eos_token_id, device=input_ids.device).flatten()
+            is_thinker_eos = (thinker_generate_ids.unsqueeze(-1) == thinker_eos_token_ids).any(dim=-1)
+            generated_length = thinker_generate_ids.shape[1]
+            token_positions = torch.arange(generated_length, device=input_ids.device)
+            first_eos_positions = (
+                torch.where(is_thinker_eos, token_positions, generated_length)
+                .min(dim=-1)
+                .values.clamp(min=1, max=generated_length - 1)
+            )
+            reply_positions = torch.arange(thinker_reply_part.shape[1], device=input_ids.device).unsqueeze(0)
+            pad_positions_mask = (reply_positions >= first_eos_positions.unsqueeze(1)).unsqueeze(-1)
+            eos_positions_mask = (reply_positions == (first_eos_positions - 1).unsqueeze(1)).unsqueeze(-1)
+            thinker_reply_part = torch.where(pad_positions_mask, pad_embedding, thinker_reply_part)
+            thinker_reply_part = torch.where(eos_positions_mask, eos_embedding, thinker_reply_part)
+
         talker_attention_mask = None
         if "attention_mask" in kwargs:
             talker_attention_mask = torch.cat(
-                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
+                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((batch_size, 2))], dim=1
             ).to(input_ids.device)
 
         talker_result = self.talker.generate(
@@ -4034,20 +3966,36 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             suppress_tokens=[self.talker.codec_bos_token],
             **{k: (v.to(input_ids.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
         )
-        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] : -1]
+        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] :]
+        eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_generate_codes.device).flatten()
+        eos_mask = (talker_generate_codes.unsqueeze(-1) == eos_token_ids).any(dim=-1)
+        code_positions = torch.arange(talker_generate_codes.shape[-1], device=talker_generate_codes.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, talker_generate_codes.shape[-1]).min(dim=-1).values
 
         # 3. Generate wavs from code
         if self.token2wav.dtype != torch.float:
             self.token2wav.float()
 
-        wav = self.token2wav(
-            talker_generate_codes.to(input_ids.device),
-            conditioning=speaker_params["cond"].to(input_ids.device).float(),
-            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float(),
-            **token2wav_kwargs,
-        )
+        conditioning = speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1)
+        reference_mel = speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1)
+        # Token2Wav starts its diffusion process from random noise. Decoding each sample separately makes batched
+        # generation reproduce single-item generation when the random seed is controlled.
+        wavs = []
+        for index, code_length in enumerate(talker_code_lengths.tolist()):
+            sample_wav = self.token2wav(
+                talker_generate_codes[index : index + 1, :code_length],
+                conditioning=conditioning[index : index + 1],
+                reference_mel=reference_mel[index : index + 1],
+                **token2wav_kwargs,
+            )
+            # The BigVGAN vocoder squeezes its output, so a single-item decode comes back as `(num_samples,)`.
+            wavs.append(sample_wav.reshape(-1).float())
 
-        return thinker_result.sequences, wav.float()
+        if batch_size == 1:
+            # Single-sample generation keeps returning a `(num_samples,)` tensor for backward compatibility.
+            return thinker_result.sequences, wavs[0]
+
+        return thinker_result.sequences, wavs
 
 
 __all__ = [
