@@ -20,7 +20,6 @@
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -28,7 +27,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -43,11 +42,11 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
-    get_vision_bilinear_indices_and_weights,
     get_vision_cu_seqlens,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -159,8 +158,7 @@ class OnyxMLP(nn.Module):
 
 
 class OnyxRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: OnyxConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -174,24 +172,17 @@ class OnyxRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: OnyxConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: OnyxConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -200,12 +191,9 @@ class OnyxRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -230,7 +218,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -467,8 +455,7 @@ class OnyxDecoderLayer(GradientCheckpointingLayer):
 
 
 class OnyxVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: OnyxVisionConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -482,24 +469,17 @@ class OnyxVisionRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: OnyxVisionConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: OnyxVisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -514,11 +494,8 @@ class OnyxVisionRotaryEmbedding(nn.Module):
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (
-            base
-            ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / spatial_dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -569,12 +546,12 @@ class OnyxVisionAttention(nn.Module):
         self.k_proj = nn.Linear(self.dim, self.dim, bias=True)
         self.v_proj = nn.Linear(self.dim, self.dim, bias=True)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -596,7 +573,7 @@ class OnyxVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -659,7 +636,6 @@ class OnyxVisionEncoderLayer(GradientCheckpointingLayer):
         self.attn = OnyxVisionAttention(config=config)
         self.mlp = OnyxVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -675,6 +651,82 @@ class OnyxVisionEncoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
+
+
+# override the fn from `vision_utils.py` since onyx uses `F.grid_sample` in ref
+# and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
+# export-friendly code used in onyx, thus kept in model file
+def get_vision_bilinear_indices_and_weights(
+    grid_thw: torch.Tensor,
+    num_grid_per_side: int,
+    spatial_merge_size: int,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The fn is equivalent with F.grid_sample(inputs, align_coreners=False, padding="zeros")"""
+    if kwargs is not None:
+        bilinear_indices = kwargs.pop("bilinear_indices", None)
+        bilinear_weights = kwargs.pop("bilinear_weights", None)
+        if bilinear_indices is not None and bilinear_weights is not None:
+            return bilinear_indices, bilinear_weights
+    side = num_grid_per_side
+    merge_size = spatial_merge_size
+    device = grid_thw.device
+
+    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+
+    for t, h, w in grid_thw.tolist():
+        t, h, w = int(t), int(h), int(w)
+
+        h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
+        w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
+
+        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
+        h_floor = torch.floor(h_grid).long()
+        w_floor = torch.floor(w_grid).long()
+        h_ceil = h_floor + 1
+        w_ceil = w_floor + 1
+        h_frac = h_grid - h_floor.float()
+        w_frac = w_grid - w_floor.float()
+
+        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
+        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
+        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
+        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
+        h_floor = h_floor.clamp(0, side - 1)
+        h_ceil = h_ceil.clamp(0, side - 1)
+        w_floor = w_floor.clamp(0, side - 1)
+        w_ceil = w_ceil.clamp(0, side - 1)
+
+        h_floor_offset = h_floor * side
+        h_ceil_offset = h_ceil * side
+
+        corner_indices = [
+            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
+        ]
+        corner_weights = [
+            (
+                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
+            ).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
+            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+        ]
+
+        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
+        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
+        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
+
+        for i in range(4):
+            idx_parts[i].append(corner_indices[i][reorder])
+            weight_parts[i].append(corner_weights[i][reorder])
+
+    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
+    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
+    return bilinear_indices, bilinear_weights
 
 
 class OnyxVisionPatchEmbedder(nn.Module):
@@ -701,17 +753,20 @@ class OnyxVisionPatchEmbedder(nn.Module):
         """
         warnings.warn(
             f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
             FutureWarning,
             stacklevel=2,
         )
         grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
         )
-        return (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0).unsqueeze(0)
+        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.11.0")
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -735,7 +790,6 @@ class OnyxVisionPatchEmbedder(nn.Module):
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
             spatial_merge_size=1,
-            align_corners=False,
             kwargs=kwargs,
         )
         # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
@@ -1032,11 +1086,11 @@ class OnyxModel(OnyxPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1091,7 +1145,7 @@ class OnyxModel(OnyxPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = image_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1099,7 +1153,7 @@ class OnyxModel(OnyxPreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = video_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1266,44 +1320,6 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
 
 
 __all__ = ["OnyxPreTrainedModel", "OnyxTextModel", "OnyxVisionModel", "OnyxModel", "OnyxForConditionalGeneration"]

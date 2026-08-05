@@ -49,6 +49,42 @@ class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
     max_image_tokens: int
 
 
+def smart_resize(
+    num_frames: int,
+    height: int,
+    width: int,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
+):
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
+    if height < factor or width < factor:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
+
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
+
+    if t_bar * h_bar * w_bar > max_pixels:
+        beta = math.sqrt((num_frames * height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif t_bar * h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (num_frames * height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+
+    return h_bar, w_bar
+
+
 def get_aspect_ratio_preserving_size(
     height: int,
     width: int,
@@ -103,12 +139,64 @@ class OnyxImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
     max_image_tokens = 4096
 
-    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[OnyxImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
+
+    def resize(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        max_tokens: int,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input image aspect ratio."""
+        height, width = images.shape[-2:]
+        resized_height, resized_width = get_aspect_ratio_preserving_size(
+            height=height,
+            width=width,
+            patch_size=patch_size * merge_size,
+            max_tokens=max_tokens,
+        )
+        return super().resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+            antialias=True,
+        )
+
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.view(
+            batch_size,
+            channel,
+            grid_h,
+            patch_size,
+            grid_w,
+            patch_size,
+        )
+        # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
+        flatten_patches = (
+            patches.unsqueeze(3)
+            .expand(-1, -1, -1, temporal_patch_size, -1, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                temporal_patch_size * channel * patch_size * patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
@@ -136,18 +224,12 @@ class OnyxImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 # Unlike Glm4v's `smart_resize`, the target size keeps aspect ratio under a token cap.
-                height, width = stacked_images.shape[-2:]
-                resized_height, resized_width = get_aspect_ratio_preserving_size(
-                    height=height,
-                    width=width,
-                    patch_size=patch_size * merge_size,
-                    max_tokens=max_image_tokens,
-                )
                 stacked_images = self.resize(
-                    image=stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    stacked_images,
+                    patch_size=patch_size,
+                    merge_size=merge_size,
+                    max_tokens=max_image_tokens,
                     resample=resample,
-                    antialias=True,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -156,39 +238,17 @@ class OnyxImageProcessor(TorchvisionBackend):
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                patches = patches.unsqueeze(1)
-
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
-            )
-            # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
-            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, temporal_patch_size * channel * patch_size * patch_size
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
@@ -229,12 +289,18 @@ class OnyxImageProcessor(TorchvisionBackend):
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
 
+    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
     def _validate_preprocess_kwargs(self, **kwargs):
         # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
         # the base validation doesn't raise an error
         kwargs["do_resize"] = False
         super()._validate_preprocess_kwargs(**kwargs)
+
+    def _standardize_kwargs(self, **super_kwargs):
+        raise NotImplementedError("Model doesn't need to override")
 
 
 __all__ = ["OnyxImageProcessor"]
