@@ -194,8 +194,33 @@ class ImageProcessingTester:
         )
 
     def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
-        size = self.crop_size if hasattr(self, "crop_size") else self.size
-        return self.num_channels, size["height"], size["width"]
+        crop_size = getattr(self, "crop_size", None)
+        if crop_size is not None:
+            return self.num_channels, crop_size["height"], crop_size["width"]
+
+        if "shortest_edge" in self.size:
+            # Images are resized so that their shortest edge matches `size["shortest_edge"]` while keeping the aspect
+            # ratio, then padded to the largest height and width in the batch.
+            shortest_edge = self.size["shortest_edge"]
+            expected_sizes = []
+            for image in images:
+                if isinstance(image, Image.Image):
+                    width, height = image.size
+                elif isinstance(image, np.ndarray):
+                    height, width = image.shape[0], image.shape[1]
+                else:
+                    height, width = image.shape[1], image.shape[2]
+                if width < height:
+                    expected_sizes.append((int(shortest_edge * height / width), shortest_edge))
+                elif width > height:
+                    expected_sizes.append((shortest_edge, int(shortest_edge * width / height)))
+                else:
+                    expected_sizes.append((shortest_edge, shortest_edge))
+            expected_height = max(expected_size[0] for expected_size in expected_sizes)
+            expected_width = max(expected_size[1] for expected_size in expected_sizes)
+            return self.num_channels, expected_height, expected_width
+
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_post_process_semantic_segmentation_inputs(self) -> tuple[dict[str, Any], dict[str, Any]]:
         inputs = {

@@ -17,8 +17,6 @@ import json
 import pathlib
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -90,45 +88,6 @@ class GroundingDinoImageProcessingTester(ImageProcessingTester):
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
         }
-
-    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.get_expected_values with DeformableDetr->GroundingDino
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to GroundingDinoImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
-    # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester.expected_output_image_shape with DeformableDetr->GroundingDino
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)

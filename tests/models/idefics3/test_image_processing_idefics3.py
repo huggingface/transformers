@@ -95,7 +95,12 @@ class Idefics3ImageProcessingTester(ImageProcessingTester):
         effective_nb_images = (
             self.num_images * 5 if self.do_image_splitting else 1
         )  # 5 is a squared image divided into 4 + global image resized
-        return effective_nb_images, self.num_channels, self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
+        return (
+            effective_nb_images,
+            self.num_channels,
+            self.max_image_size["longest_edge"],
+            self.max_image_size["longest_edge"],
+        )
 
     def prepare_image_inputs(
         self,
