@@ -460,7 +460,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config: Exaone4_5_Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Exaone4_5_VisionBlock"]
+    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -614,8 +614,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: Exaone4_5_Config
-    _no_split_modules = ["Exaone4_5_DecoderLayer", "Exaone4_5_VisionBlock"]
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)

@@ -37,12 +37,12 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
-    Qwen2_5_VLModel,
     Qwen2_5_VLPatchMerger,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
+    Qwen2VLModel,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
@@ -203,7 +203,7 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
-    _no_split_modules = ["Exaone4_5_VisionBlock"]
+    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def _init_weights(self, module):
@@ -236,7 +236,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
         self.post_init()
 
 
-class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
+class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)

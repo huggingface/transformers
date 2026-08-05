@@ -284,7 +284,7 @@ class ImageProcessorArgs:
     }
 
 
-# The two as they share common set of kwargs
+# Can inherit as they share common set of kwargs
 class VideoProcessorArgs(ImageProcessorArgs):
     videos = {
         "description": """
