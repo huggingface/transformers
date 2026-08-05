@@ -241,19 +241,19 @@ def pytest_configure(config):
             if getattr(_mod, "hf_hub_download", None) is _original_hf_hub_download:
                 _mod.hf_hub_download = _wrapped_hf_hub_download
 
-        # Special case: `huggingface_hub.hf_api` is skipped by the loop above, but
-        # `HfApi.hf_hub_download` (the instance method) calls `hf_hub_download` by resolving
-        # the bare name from its own module namespace (`hf_api.py`).  Third-party libraries
-        # such as `kernels` call `api.hf_hub_download(...)` (HfApi instance), so their
-        # downloads bypass the wrapping above and the EROFS fallback never fires.
-        # Re-binding the module-level name in `hf_api` fixes this without touching
-        # `snapshot_download` (which imports `hf_hub_download` from `file_download.py`
-        # directly and resolves symlinks in the caller's cache_dir, so redirecting it
-        # would produce a spurious "missing file" — the concern that drove the skip above).
-        import huggingface_hub.hf_api as _hf_api_mod
+        # Special case: third-party libraries such as `kernels` call
+        # `api.hf_hub_download(...)` (HfApi instance method).  Inside that method,
+        # `hf_hub_download` is resolved via a *local* import:
+        #   `from .file_download import hf_hub_download`
+        # Local imports read `file_download.__dict__` at *call time*, so patching
+        # `file_download.hf_hub_download` is the right interception point.
+        # Module-level references already imported by other huggingface_hub modules
+        # (e.g. snapshot_download.py) are frozen before conftest runs and are therefore
+        # unaffected — only call-time local imports pick up the new binding.
+        import huggingface_hub.file_download as _file_download_mod
 
-        if getattr(_hf_api_mod, "hf_hub_download", None) is _original_hf_hub_download:
-            _hf_api_mod.hf_hub_download = _wrapped_hf_hub_download
+        if getattr(_file_download_mod, "hf_hub_download", None) is _original_hf_hub_download:
+            _file_download_mod.hf_hub_download = _wrapped_hf_hub_download
 
     config.addinivalue_line("markers", "slow: mark test as slow")
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
