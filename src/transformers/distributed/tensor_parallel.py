@@ -121,7 +121,7 @@ def _use_local_dtensor_params(module):
 
 
 class TensorParallelLayer:
-    def requires_local_tensors(self, module):
+    def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
         return False
 
@@ -133,7 +133,7 @@ class TensorParallelLayer:
         return args, kwargs
 
     def context_around_forward(self, module, mesh):
-        if self.requires_local_tensors(module):
+        if self.should_use_local_tensors(module):
             return _use_local_dtensor_params(module)
         return contextlib.nullcontext()
 
@@ -161,14 +161,11 @@ class ColwiseParallel(TensorParallelLayer):
         self.input_layouts = input_layouts or Replicate()
         self.output_layouts = output_layouts if output_layouts is not None else Shard(-1)
         self.use_local_output = use_local_output
-        # The input is replicated but each rank only owns a shard of the output features, so its
-        # input gradient (dY_r @ W_r) is one term of a sum and has to be reduced across ranks.
-        self.input_grad_placements = [Partial()]
 
-    def requires_local_tensors(self, module):
-        uses_local_quantized_kernel = getattr(module, "_hf_tp_uses_local_quantized_kernel", False)
+    def should_use_local_tensors(self, module):
+        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return uses_local_quantized_kernel or uses_local_inference_kernel
+        return use_local_quantized_path or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -182,25 +179,36 @@ class ColwiseParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         x = args[0]
-        if self.requires_local_tensors(module) and not isinstance(x, DTensor):
-            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            x = _AllReduceBackward.apply(x, process_group)
+        is_local_input = not isinstance(x, DTensor)
+
+        # Fast path for regular Linear inference: the input is already replicated, the
+        # local weight owns a shard of the output features, and no backward is needed.
+        if is_local_input and isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled():
+            return args, kwargs
+
+        # Quantized path also require local tensors. Integer weights do not
+        # receive gradient but a floating-point input needs a gradient.
+        if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
+            if torch.is_grad_enabled() and x.requires_grad:
+                process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+                x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
-        if not isinstance(x, DTensor):
+
+        # DTensor path used for training regular Linear layers and whenever an input
+        # layout must be redistributed before entering a local quantized kernel.
+        if is_local_input:
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()], async_op=True)
-        if self.requires_local_tensors(module):
-            # After a DTensor becomes a local tensor, DTensor can no longer infer how
-            # the local gradients are distributed. The forward() sees replicated input + partial weights
-            # which means input gradient will be partial as well.
+        if self.should_use_local_tensors(module):
             x = x.to_local(grad_placements=[Partial()])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local forward produced this rank's shard of the output features (last dim).
         if (
-            isinstance(module, torch.nn.Linear)
+            self.should_use_local_tensors(module)
+            and self.use_local_output
             and not isinstance(output, DTensor)
             and isinstance(self.output_layouts, Shard)
             and self.output_layouts.dim in (-1, output.dim() - 1)
@@ -226,10 +234,10 @@ class RowwiseParallel(TensorParallelLayer):
         self.output_layouts = output_layouts or Replicate()
         self.use_local_output = use_local_output
 
-    def requires_local_tensors(self, module):
-        uses_local_quantized_kernel = getattr(module, "_hf_tp_uses_local_quantized_kernel", False)
+    def should_use_local_tensors(self, module):
+        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return uses_local_quantized_kernel or uses_local_inference_kernel
+        return use_local_quantized_path or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -249,19 +257,21 @@ class RowwiseParallel(TensorParallelLayer):
         # Embedding runtime sharding needs a replicated input; Linear needs Shard(-1).
         desired = Replicate() if isinstance(module, torch.nn.Embedding) else Shard(-1)
         x = args[0]
-        if self.requires_local_tensors(module) and not isinstance(x, DTensor):
+        # Local kernels may receive an already-sharded local activation; avoid a
+        # redundant Tensor -> DTensor -> Tensor round trip.
+        if self.should_use_local_tensors(module) and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
             x = x.redistribute(placements=[desired], async_op=True)
-        if self.requires_local_tensors(module):
+        if self.should_use_local_tensors(module):
             x = x.to_local()
         return (x,) + args[1:], kwargs
 
     @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
-        if not self.requires_local_tensors(module):
+        if not self.should_use_local_tensors(module):
             yield
         else:
             # A rowwise local forward must produce only its partial matmul. If we don't hide
@@ -295,7 +305,7 @@ class RowwiseParallel(TensorParallelLayer):
                 output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
             if output.placements != (self.output_layouts,):
                 output = output.redistribute(placements=[self.output_layouts], async_op=True)
-            if self.requires_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
+            if self.should_use_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
                 output = output + bias
             if self.use_local_output:
                 output = output.to_local()
@@ -397,7 +407,7 @@ class PackedColwiseParallel(TensorParallelLayer):
         # gradient is partial.
         self.input_grad_placements = [Partial()]
 
-    def requires_local_tensors(self, module):
+    def should_use_local_tensors(self, module):
         return True
 
     def _packed_output_shard_dim(self, param_ndim: int) -> int:
@@ -507,7 +517,7 @@ class MoEExpertsParallel(TensorParallelLayer):
     def __init__(self, output_layouts=None):
         self.output_layouts = output_layouts or Replicate()
 
-    def requires_local_tensors(self, module):
+    def should_use_local_tensors(self, module):
         return True
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
