@@ -1538,11 +1538,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1), device=input_ids.device)[None, ...]
         input_mask_ids = torch.cat([input_ids[:, -1:], block_mask], dim=-1)
 
-        # the assistant needs embedding without norm which we have merged in ckpt, workaround for now
-        # FIXME: the embed layer needs to be unmerged for dflash to work, otherwise we risk going OOM by loading the table twice!
-        embed_table = torch.load("/raid/raushan/onyx_early_v2/embed_table.pt")
-        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids.cpu(), embed_table).to("cuda")
-        # mask_token_embedding = self.target_model_input_embeddings(input_mask_ids)
+        # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
+        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
         # The slicing is there to strip off alreay cached values, keeping only the new unprocessed tokens

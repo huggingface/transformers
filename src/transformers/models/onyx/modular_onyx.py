@@ -907,16 +907,23 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
+class OnyxTextNormedWordEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_norm: float = 1e-05):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = OnyxRMSNorm(eps=embed_norm, with_scale=False)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
+
+
 class OnyxTextModel(Gemma2Model):
     config: OnyxTextConfig
 
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)
-        # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
-        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
-        # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
-        # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = OnyxTextNormedWordEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
+        )
         self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
 
