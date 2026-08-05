@@ -31,23 +31,51 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from .configuration_utils import PreTrainedConfig
+from .utils import logging
+from .utils.generic import get_max_seqlen
 
-def get_vision_cu_seqlens(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+
+logger = logging.get_logger(__name__)
+
+
+def get_vision_cu_seqlens(
+    grid_thw: torch.Tensor, merge_temporal: bool = False, kwargs: dict | None = None
+) -> torch.Tensor:
     """Get cumulative sequence lengths from vision grid info, or pop from `kwargs` if precomputed.
 
     Args:
         grid_thw: `(num_images_or_videos, 3)` — temporal, height, width per entry.
+        merge_temporal: when `False` (default), each frame is its own attention segment (`h * w`
+            per frame, `t` segments per entry — the qwen2_vl / glm4v convention). When `True`,
+            the whole clip is a single segment (`t * h * w`), i.e. attention spans all frames
+            jointly (the kimi_k25 convention).
         kwargs: optional caller kwargs — if it contains `"cu_seqlens"` it is popped and returned.
 
     Returns:
-        `cu_seqlens`: `(total_patches + 1,)` int32 cumulative sequence boundaries.
+        `cu_seqlens`: `(num_segments + 1,)` int32 cumulative sequence boundaries.
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
-    cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-        dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-    )
-    return F.pad(cu_seqlens, (1, 0), value=0)
+    dtype = grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+    if merge_temporal:
+        seqlens = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
+    else:
+        seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+    return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
+
+
+def get_vision_attention_seqlens(
+    grid_thw: torch.Tensor,
+    config: PreTrainedConfig,
+    merge_temporal: bool = False,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, int | None]:
+    """Get cumulative and maximum sequence lengths for packed vision attention. ``merge_temporal`` is
+    forwarded to [`get_vision_cu_seqlens`] (``True`` for clip-level attention, e.g. kimi_k25)."""
+    cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=merge_temporal, kwargs=kwargs)
+    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+    return cu_seqlens, max_seqlen
 
 
 def get_vision_position_ids(
@@ -160,6 +188,107 @@ def get_vision_window_index(
     return window_index, cu_window_seqlens
 
 
+def _interpolation_axis_taps_weights(
+    index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-axis interpolation taps into a `side`-length source table and their weights, for `index`
+    target positions on an axis of length `size`. `mode` selects the kernel width — 2 taps
+    (`"bilinear"`) or 4 taps (`"bicubic"`, Keys convolution kernel with `a=-0.75`). `size` may be a
+    scalar or a per-element tensor (ragged batches)."""
+    index = index.to(torch.float32)
+    if align_corners:
+        # Closed form of `torch.linspace(0, side-1, size)[index]` — endpoints map to 0 and side-1.
+        # `clamp(min=1)` avoids a divide-by-zero when size == 1 (index is 0, so src is 0 too).
+        src = index * (side - 1) / torch.clamp(size - 1, min=1)
+    else:
+        src = (index + 0.5) * side / size - 0.5  # half-pixel centres (align_corners=False)
+    floor = torch.floor(src)
+    if mode == "bilinear":
+        offsets = torch.arange(0, 2, device=index.device)  # floor, floor+1
+    elif mode == "bicubic":
+        offsets = torch.arange(-1, 3, device=index.device)  # floor-1 .. floor+2
+    else:
+        raise ValueError(f"Unsupported interpolation mode {mode!r} (expected 'bilinear' or 'bicubic').")
+    taps = (floor.long()[:, None] + offsets).clamp(0, side - 1)
+    distance = (src[:, None] - floor[:, None] - offsets).abs()
+    if mode == "bilinear":
+        weights = (1 - distance).clamp(min=0)  # linear hat kernel
+    else:
+        a = -0.75
+        near = ((a + 2) * distance - (a + 3)) * distance * distance + 1
+        far = ((a * distance - 5 * a) * distance + 8 * a) * distance - 4 * a
+        weights = torch.where(distance <= 1, near, far)
+    return taps, weights
+
+
+def get_vision_interpolation_indices_and_weights(
+    grid_thw: torch.Tensor,
+    num_grid_per_side: int,
+    mode: str = "bilinear",
+    align_corners: bool = False,
+    spatial_merge_size: int = 1,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-patch gather indices/weights that resample a square learned `(num_grid_per_side,
+    num_grid_per_side)` position-embedding table to each image's `(h, w)` grid, or pop
+    `"interp_indices"`/`"interp_weights"` from `kwargs` if both precomputed.
+
+    Reproduces `F.interpolate(mode=mode, align_corners=align_corners)` as `(total_patches, n_taps)`
+    indices + weights (`n_taps` = 4 for `"bilinear"`, 16 for `"bicubic"` — the Keys kernel with
+    `a=-0.75`), consumed by a fused `F.embedding_bag` or a weighted `embedding` sum. Fully vectorised
+    over packed patches (ragged `(h, w)` handled with `repeat_interleave`, no per-image loop), so it
+    supports dynamic shapes like the other grid_thw precompute helpers. `spatial_merge_size > 1`
+    emits patches in spatial-merge-block order (for encoders that consume merged tokens); `1` keeps
+    raster order.
+
+    Args:
+        grid_thw: `(num_images_or_videos, 3)` — temporal, height, width per entry.
+        num_grid_per_side: `int(num_position_embeddings ** 0.5)` from the vision config.
+        mode: `"bilinear"` or `"bicubic"`.
+        align_corners: matches the corresponding `F.interpolate` flag.
+        spatial_merge_size: merge block size; `1` keeps raster patch order.
+        kwargs: optional caller kwargs — if it contains both `"interp_indices"` and `"interp_weights"`
+            they are popped and returned.
+
+    Returns:
+        `indices`: `(total_thw, n_taps)` long — gather indices into the flattened pos_embed table.
+        `weights`: `(total_thw, n_taps)` float — interpolation weights.
+    """
+    if kwargs is not None:
+        interp_indices = kwargs.pop("interp_indices", None)
+        interp_weights = kwargs.pop("interp_weights", None)
+        if interp_indices is not None and interp_weights is not None:
+            return interp_indices, interp_weights
+
+    side = num_grid_per_side
+    merge = spatial_merge_size
+    device = grid_thw.device
+
+    counts = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
+    heights = torch.repeat_interleave(grid_thw[:, 1], counts)
+    widths = torch.repeat_interleave(grid_thw[:, 2], counts)
+    starts = torch.repeat_interleave(F.pad(counts.cumsum(0)[:-1], (1, 0)), counts)
+    # Position within a single frame's flat patch sequence (0 .. h*w-1), repeating across the t frames.
+    within = (torch.arange(counts.sum(), device=device) - starts) % (heights * widths)
+    # Decode `within` into (row, col): raster order when merge == 1, else spatial-merge-block order
+    # (block_row, block_col, in_row, in_col) — the inverse of qwen/glm-style merge reordering.
+    blocks_w = widths // merge
+    in_col = within % merge
+    in_row = (within // merge) % merge
+    block_col = (within // (merge * merge)) % blocks_w
+    block_row = within // (merge * merge * blocks_w)
+    row = block_row * merge + in_row
+    col = block_col * merge + in_col
+
+    h_taps, h_weights = _interpolation_axis_taps_weights(row, heights, side, mode, align_corners)
+    w_taps, w_weights = _interpolation_axis_taps_weights(col, widths, side, mode, align_corners)
+    n = h_taps.shape[1]  # taps per axis
+    # 2D separable: outer product of the per-axis taps/weights → n*n taps per patch.
+    indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, n * n)
+    weights = (h_weights[:, :, None] * w_weights[:, None, :]).reshape(-1, n * n)
+    return indices, weights
+
+
 def get_vision_bilinear_indices_and_weights(
     grid_thw: torch.Tensor,
     num_grid_per_side: int,
@@ -167,86 +296,23 @@ def get_vision_bilinear_indices_and_weights(
     align_corners: bool = True,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Get bilinear interpolation indices/weights, or pop `"bilinear_indices"`/`"bilinear_weights"` from `kwargs` if both precomputed.
-
-    Args:
-        grid_thw: `(num_images_or_videos, 3)`
-        num_grid_per_side: `int(num_position_embeddings ** 0.5)` from vision config.
-        spatial_merge_size: merge block size from vision config.
-        kwargs: optional caller kwargs — if it contains both `"bilinear_indices"` and `"bilinear_weights"` they are popped and returned.
-
-    Returns:
-        `bilinear_indices`: `(4, total_thw)` long — bilinear corner indices into pos_embed table.
-        `bilinear_weights`: `(4, total_thw)` float — interpolation weights.
-    """
+    """Deprecated — use [`get_vision_interpolation_indices_and_weights`] with `mode="bilinear"`,
+    `align_corners=True`. Returns the legacy `(4, total_thw)` layout (transpose of the unified helper's
+    `(total_thw, 4)`)."""
+    logger.warning_once(
+        "`get_vision_bilinear_indices_and_weights` is deprecated and will be removed in v5.17. Use "
+        "`get_vision_interpolation_indices_and_weights(..., mode='bilinear', align_corners=True)` "
+        "instead (it returns `(total_thw, n_taps)`, the transpose of this function's output)."
+    )
     if kwargs is not None:
         bilinear_indices = kwargs.pop("bilinear_indices", None)
         bilinear_weights = kwargs.pop("bilinear_weights", None)
         if bilinear_indices is not None and bilinear_weights is not None:
             return bilinear_indices, bilinear_weights
-    side = num_grid_per_side
-    merge_size = spatial_merge_size
-    device = grid_thw.device
-
-    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-
-    for t, h, w in grid_thw.tolist():
-        t, h, w = int(t), int(h), int(w)
-
-        if align_corners:
-            h_grid = torch.linspace(0, side - 1, h, device=device)
-            w_grid = torch.linspace(0, side - 1, w, device=device)
-        else:
-            h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
-            w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
-
-        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
-        h_floor = torch.floor(h_grid).long()
-        w_floor = torch.floor(w_grid).long()
-        h_ceil = h_floor + 1
-        w_ceil = w_floor + 1
-        h_frac = h_grid - h_floor.float()
-        w_frac = w_grid - w_floor.float()
-
-        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
-        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
-        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
-        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
-        h_floor = h_floor.clamp(0, side - 1)
-        h_ceil = h_ceil.clamp(0, side - 1)
-        w_floor = w_floor.clamp(0, side - 1)
-        w_ceil = w_ceil.clamp(0, side - 1)
-
-        h_floor_offset = h_floor * side
-        h_ceil_offset = h_ceil * side
-
-        corner_indices = [
-            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
-        ]
-        corner_weights = [
-            (
-                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
-            ).flatten(),
-            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
-            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-        ]
-
-        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
-        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
-        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
-
-        for i in range(4):
-            idx_parts[i].append(corner_indices[i][reorder])
-            weight_parts[i].append(corner_weights[i][reorder])
-
-    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
-    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
-    return bilinear_indices, bilinear_weights
+    indices, weights = get_vision_interpolation_indices_and_weights(
+        grid_thw, num_grid_per_side, mode="bilinear", align_corners=True, spatial_merge_size=spatial_merge_size
+    )
+    return indices.transpose(0, 1), weights.transpose(0, 1)
 
 
 def get_vision_nearest_position_ids(

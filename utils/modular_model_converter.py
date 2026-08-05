@@ -75,7 +75,18 @@ def get_module_source_from_name(module_name: str) -> str:
     return get_module_source_and_tree_from_name(module_name)[0]
 
 
+# Some exceptions to never replace, usually some package names that may contain model names (they may be used outside
+# `from xxx import y`)
+NAMES_TO_NEVER_REPLACE = ("mamba_ssm", "mamba-ssm", "mamba_inner_fn")
+
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
+    if text in NAMES_TO_NEVER_REPLACE:
+        return text
+    # For strings, node.value is the actual string INCLUDING enclosing quote characters
+    if text.strip('"') in NAMES_TO_NEVER_REPLACE:
+        return text
+
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
@@ -636,7 +647,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 self.imports.append(node)
 
     def leave_SimpleStatementLine(self, node):
-        # No need to check for the parent here -> everytime we exit one, it should be None anyway independently of where the
+        # No need to check for the parent here -> every time we exit one, it should be None anyway independently of where the
         # SimpleStatement is located
         self.current_assignment = None
 
@@ -1307,12 +1318,12 @@ def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[s
     return [new_import] + imports
 
 
-def protect_torch_imports_for_pil(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+def protect_torch_imports(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """
-    For PIL image processor files, collect all torch/torchvision imports — whether bare or
-    already wrapped in a guard — into a single `if is_torch_available():` /
-    `if is_torchvision_available():` block each. Add the required availability checks to the
-    utils import.
+    For files where torch is only a soft dependency (PIL image processors, feature extractors),
+    collect all torch/torchvision imports — whether bare or already wrapped in a guard — into a
+    single `if is_torch_available():` / `if is_torchvision_available():` block each. Add the
+    required availability checks to the utils import.
 
     Pre-existing guarded blocks (no else clause) are absorbed so we never emit duplicate guards
     for the same library.
@@ -1962,8 +1973,8 @@ def create_modules(
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
 
-        if file == "image_processing_pil":
-            needed_imports = protect_torch_imports_for_pil(needed_imports)
+        if file in ("image_processing_pil", "feature_extraction"):
+            needed_imports = protect_torch_imports(needed_imports)
 
         if package_name != "transformers":
             # Convert all transformers relative imports to absolute ones
