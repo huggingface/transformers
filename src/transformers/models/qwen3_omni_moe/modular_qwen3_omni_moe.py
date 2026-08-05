@@ -1747,7 +1747,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
 
-    @auto_docstring
     def forward(
         self,
         input_ids=None,

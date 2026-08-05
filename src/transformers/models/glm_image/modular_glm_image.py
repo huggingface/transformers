@@ -478,7 +478,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
                 max_seqlen=max_seqlen,
             )
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -888,6 +888,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

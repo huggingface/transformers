@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
@@ -337,8 +337,6 @@ class Qwen3VLMoeCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

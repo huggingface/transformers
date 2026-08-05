@@ -842,8 +842,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_video_features(**super_kwargs)
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

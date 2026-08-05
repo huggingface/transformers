@@ -521,8 +521,6 @@ class VideoLlama3Model(Qwen2VLModel):
 
         return vision_outputs
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -637,8 +635,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
