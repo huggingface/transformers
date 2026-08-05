@@ -8,8 +8,8 @@ on:
   push:
     branches:
       - vllm_ci
+
 env:
-  UV_SYSTEM_PYTHON: "1"
   VLLM_TARGET_DEVICE: cpu
 
 permissions:
@@ -39,10 +39,21 @@ jobs:
           persist-credentials: false
           path: vllm
 
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
-          uv pip install vllm -e transformers
-          uv pip install tblib
+          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          uv pip install vllm tblib
 
       - name: Run tests
         working-directory: vllm
