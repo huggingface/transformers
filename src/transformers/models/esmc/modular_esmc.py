@@ -332,12 +332,12 @@ class EsmcModel(EsmcPreTrainedModel):
 
 
 class EsmcMaskedLMHead(nn.Module):
-    def __init__(self, d_model: int, output_dim: int, hidden_dim: int | None = None) -> None:
+    def __init__(self, hidden_size: int, vocab_size: int, intermediate_size: int | None = None) -> None:
         super().__init__()
-        hidden_dim = hidden_dim if hidden_dim is not None else d_model
-        self.dense = nn.Linear(d_model, hidden_dim)
-        self.layer_norm = nn.LayerNorm(hidden_dim)
-        self.decoder = nn.Linear(hidden_dim, output_dim)
+        intermediate_size = intermediate_size if intermediate_size is not None else hidden_size
+        self.dense = nn.Linear(hidden_size, intermediate_size)
+        self.layer_norm = nn.LayerNorm(intermediate_size)
+        self.decoder = nn.Linear(intermediate_size, vocab_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
