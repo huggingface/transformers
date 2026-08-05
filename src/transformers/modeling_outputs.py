@@ -338,7 +338,7 @@ class MoeModelOutputWithPast(ModelOutput):
         router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
+            Raw router logits (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
             loss for Mixture of Experts models.
     """
 
@@ -367,7 +367,7 @@ class MoeCausalLMOutputWithPast(ModelOutput):
         router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
+            Raw router logits (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
             loss for Mixture of Experts models.
 
         past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
