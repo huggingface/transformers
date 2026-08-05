@@ -33,6 +33,7 @@ from .deepgemm import (
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
     is_deepgemm_loadable,
+    is_sm100,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
@@ -243,17 +244,20 @@ def fp8_linear(
             to a single CUDA context and produce garbage across devices (see the multi-device guard
             in ``quantizer_finegrained_fp8.py``).
     """
-    # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only.
-    # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single
-    # dispatcher (the experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation``
-    # for that). Used by the FP8 MoE batched_mm / grouped_mm paths to avoid a still-unexplained
-    # DeepGEMM-vs-Triton interaction that degrades end-to-end generation on B200 (per-row kernel
-    # outputs still measure bit-perfect, but final tokens drift; not reproducible with the
-    # DeepGEMM linear off).
+    # DeepGEMM is CUDA-only, dynamic-only, SM90+ only, FP4/FP8-block-128-only. On SM100 its FP8 GEMM only
+    # consumes UE8M0 scales; float32 scales would be ceil-rounded to UE8M0 without requantizing and
+    # silently corrupt the output (#47030), so we skip DeepGEMM up front for that combo rather than
+    # attempt-then-fall-back every call — `_assert_sm100_requirements` still guards it as a backstop.
+    # ``TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`` forces the Triton fallback for this single dispatcher (the
+    # experts ``"deepgemm"`` impl is unaffected — use ``set_experts_implementation`` for that). Used by the
+    # FP8 MoE batched_mm / grouped_mm paths to avoid a still-unexplained DeepGEMM-vs-Triton interaction that
+    # degrades end-to-end generation on B200 (per-row kernel outputs still measure bit-perfect, but final
+    # tokens drift; not reproducible with the DeepGEMM linear off).
     deepgemm_preferred = (
         allow_deepgemm
         and is_deepgemm_loadable()
         and activation_scale is None
+        and not (is_sm100() and weight_scale_inv.dtype == torch.float32)
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
     )
@@ -807,7 +811,7 @@ def replace_with_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FineGrainedFP8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
 

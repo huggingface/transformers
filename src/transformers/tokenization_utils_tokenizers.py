@@ -1363,7 +1363,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                # only warn if its not explicitly passed
+                # only warn if it's not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
                     logger.warning(

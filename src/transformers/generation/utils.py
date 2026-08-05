@@ -146,6 +146,23 @@ GENERATION_MODES_MAPPING = {
     GenerationMode.CONSTRAINED_BEAM_SEARCH: "transformers-community/constrained-beam-search",
 }
 
+MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "pixel_values",
+    "pixel_mask",
+    "input_features",
+    "input_features_mask",
+    "pixel_values_videos",
+    "num_local_patches",
+    "high_res_pixel_values",
+    "image_patches_indices",
+    "image_patches",
+    "image_sizes",
+    "image_sizes_videos",
+    "pixel_attention_mask",
+    "pixel_values_images",
+    "num_local_patches",
+)
+
 
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
@@ -590,7 +607,16 @@ class GenerationMixin(ContinuousMixin):
         # 5. Forward ALL kwargs that are uninitialized, e.g. `use_cache` (except a few exceptions)
         kwargs_to_avoid_forwarding = ("labels", "next_sequence_length")
         for key, value in kwargs.items():
-            if key not in model_inputs and key not in kwargs_to_avoid_forwarding:
+            # Those keys are never forwarded
+            if key in kwargs_to_avoid_forwarding:
+                continue
+            # Those keys are forwarded only during prefill (or the first forward of a new batch of inputs, such as with cache
+            # continuation), or without a cache
+            elif key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL and (
+                not is_first_iteration and kwargs.get("use_cache", True)
+            ):
+                continue
+            elif key not in model_inputs:
                 model_inputs[key] = value
 
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
@@ -2116,7 +2142,7 @@ class GenerationMixin(ContinuousMixin):
         valid_hardware = self.device.type in ["cuda", "xpu", "neuron", "tpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compileable since all
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
         using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
@@ -3986,7 +4012,7 @@ def _speculative_sampling(
     the selected tokens, as well as the number of candidate matches.
 
     When `assistant_ensemble_weight` is set to a value in (0, 1), applies static ensemble verification from
-    DIVERSED (https://arxiv.org/abs/2604.07622), which relaxes the verification distribution to
+    DIVERSE (https://arxiv.org/abs/2604.07622), which relaxes the verification distribution to
     v(x) = w * p(x) + (1 - w) * q(x), increasing acceptance rate at the cost of controlled distributional bias.
 
     NOTE: Unless otherwise stated, the variable names match those in the paper.

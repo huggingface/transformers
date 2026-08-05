@@ -756,7 +756,7 @@ class NemotronHTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -1103,7 +1103,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Under a compileable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
+        # Under a compilable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
         # otherwise we build them here.
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
@@ -1214,29 +1214,9 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
         kwargs["logits_to_keep"] = self.config.num_logits_to_keep
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         return model_inputs
 
     @staticmethod

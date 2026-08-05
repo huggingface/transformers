@@ -1026,7 +1026,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
-            a one hot representation hof the correct answer *optional*
+            a one hot representation of the correct answer *optional*
         """
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
