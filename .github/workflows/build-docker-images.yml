@@ -47,7 +47,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:dev
 
@@ -85,7 +85,7 @@ jobs:
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
             CUDA=cu126
             PYTORCH=2.8.0
             TORCHCODEC=0.7.0
@@ -127,7 +127,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}:dev
 
@@ -201,7 +201,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}:dev
 
@@ -270,7 +270,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}:dev
 
@@ -308,7 +308,7 @@ jobs:
         with:
           context: ./docker/transformers-quantization-latest-gpu
           build-args: |
-            REF=main
+            REF=default-kernels-ydshieh
           push: true
           tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}:dev
 
