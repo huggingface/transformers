@@ -866,7 +866,7 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                 )
             if new_module is not None:
-                # TP must use local tensors because this quantized kernel does not support DTensor inputs or weights.
+                # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
                 new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True

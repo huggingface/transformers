@@ -75,7 +75,7 @@ class TorchAoQuantize(ConversionOps):
             module.to("cpu")
         else:
             quantize_(module, config, *args, **kwargs)
-        # TP must use local tensors because this quantized kernel does not support DTensor inputs or weights.
+        # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
         module._hf_quantized_needs_local_tp = True
 
     def convert(
@@ -202,7 +202,7 @@ class TorchAoDeserialize(ConversionOps):
         """
         is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
         module, _ = get_module_from_name(model, full_layer_name)
-        # TP must use local tensors because this quantized kernel does not support DTensor inputs or weights.
+        # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
         module._hf_quantized_needs_local_tp = True
 
         param_data = {}
