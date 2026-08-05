@@ -437,7 +437,7 @@ class EsmFold2AtomEncoder(nn.Module):
     def embed_atoms(self, atom_inputs: EsmFold2AtomInputs) -> tuple[Tensor, tuple[Tensor, Tensor]]:
         """Per-atom base embedding and 3D-RoPE position embeddings.
 
-        Depends only on the reference conformer, so the diffusion stack computes it once per fold.
+        Noise-independent, so callers compute it once per fold outside the sampling loop.
         """
         ref_pos = atom_inputs.ref_pos
         batch_size, num_atoms = ref_pos.shape[:2]
@@ -456,7 +456,9 @@ class EsmFold2AtomEncoder(nn.Module):
         return atom_embeds, self.rotary_emb(ref_pos, atom_inputs.ref_space_uid, dtype=atom_embeds.dtype)
 
     def build_attention_mask(self, atom_mask: Tensor, atom_embeds: Tensor) -> Tensor:
-        """Symmetric sliding-window attention mask over atom index, built once per fold.
+        """Symmetric sliding-window attention mask over atom index.
+
+        Noise-independent, so callers build it once per fold outside the sampling loop.
 
         ``atom_embeds`` (the ``embed_atoms`` output) only supplies the mask metadata
         (dtype/device/shape). ``atom_mask`` is the boolean valid-atom mask, passed as the standard 2D
@@ -590,7 +592,8 @@ class EsmFold2AttentionPairBias(nn.Module):
         """This block's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
         the per-head projection of the normed pair representation with token padding folded in.
 
-        Step-invariant, so the sampler builds it once per fold and ``forward`` never sees a mask.
+        Step-invariant, so it is built once per fold outside the sampling loop and ``forward`` never
+        sees a mask.
         """
         pair_bias = self.pair_bias_proj(self.pair_norm(pair_states))
         attention_bias = pair_bias.permute(0, 3, 1, 2)  # [B, Q, K, H] -> [B, H, Q, K]
@@ -671,7 +674,8 @@ class EsmFold2DiffusionTransformer(nn.Module):
         )
 
     def compute_pair_biases(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
-        """Per-block additive attention biases; see ``EsmFold2AttentionPairBias.compute_pair_bias``."""
+        """Per-block additive attention biases, built once per fold outside the sampling loop; see
+        ``EsmFold2AttentionPairBias.compute_pair_bias``."""
         return [attn.compute_pair_bias(pair_states, attention_mask) for attn in self.attention_layers]
 
     def forward(self, token_hidden_states: Tensor, single_states: Tensor, attention_biases: list[Tensor]) -> Tensor:
@@ -721,7 +725,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         )
 
     def compute_pair_repr(self, pair_trunk: Tensor, relative_position_encoding: Tensor) -> Tensor:
-        """The pair half of the conditioning. Noise-independent, so it is built once per fold."""
+        """The pair half of the conditioning. Noise-independent, so it is built once per fold outside
+        the sampling loop; ``forward`` owns the noise-dependent half."""
         # ``pair_trunk`` is fp32, so the concat and the norm stay fp32; z_proj downcasts.
         pair_states = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
         pair_states = self.pair_proj(self.pair_input_norm(pair_states).to(self.pair_proj.weight.dtype))
@@ -732,7 +737,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
     def compute_single_repr(self, single_inputs: Tensor) -> Tensor:
         """Project the single-inputs tensor into the diffusion token width.
 
-        Noise-independent, so only the Fourier embedding ``forward`` adds to it varies per step.
+        Noise-independent, so it is built once per fold outside the sampling loop; only the Fourier
+        noise embedding ``forward`` adds to it varies per step.
         """
         return self.single_proj(self.single_input_norm(single_inputs))
 
@@ -886,111 +892,15 @@ class EsmFold2DiffusionModule(nn.Module):
 
 
 class EsmFold2DiffusionStructureHead(nn.Module):
-    """Wrapper around EsmFold2DiffusionModule with diffusion sampling."""
+    """Holds the denoiser's weights.
+
+    No ``forward``: a denoising step is ``diffusion_module``'s forward, and the sampling loop that
+    drives it lives in ``EsmFold2GenerationMixin``.
+    """
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        # Sampling hyperparameters are read from ``config`` at call time, so edits after loading apply.
-        self.config = config
         self.diffusion_module = EsmFold2DiffusionModule(config)
-
-    def inference_noise_schedule(self, num_steps: int | None = None, device: torch.device | None = None) -> Tensor:
-        """Karras power-law noise schedule."""
-        head_config = self.config.structure_head
-        steps = head_config.inference_num_steps if num_steps is None else int(num_steps)
-        if steps == 1:
-            return torch.tensor(
-                [head_config.inference_sigma_max_ratio * head_config.diffusion_module.sigma_data, 0.0],
-                device=device,
-                dtype=torch.float32,
-            )
-        inverse_exponent = 1.0 / head_config.inference_exponent
-        ramp = torch.arange(steps, device=device, dtype=torch.float32)
-        base = head_config.inference_sigma_max_ratio**inverse_exponent + (ramp / (steps - 1)) * (
-            head_config.inference_sigma_min_ratio**inverse_exponent
-            - head_config.inference_sigma_max_ratio**inverse_exponent
-        )
-        schedule = head_config.diffusion_module.sigma_data * base.pow(head_config.inference_exponent)
-        return F.pad(schedule, (0, 1), value=0.0)
-
-    @staticmethod
-    def _random_rotations(num_rotations: int, dtype: torch.dtype, device: torch.device) -> Tensor:
-        quaternions = torch.randn((num_rotations, 4), dtype=dtype, device=device)
-        scale = torch.sqrt((quaternions * quaternions).sum(dim=1))
-        signs = torch.where(quaternions[:, 0] < 0, -scale, scale)
-        quaternions = quaternions / signs[:, None]
-        r, i, j, k = torch.unbind(quaternions, dim=-1)
-        two_s = 2.0 / (quaternions * quaternions).sum(dim=-1)
-        return torch.stack(
-            (
-                1 - two_s * (j * j + k * k),
-                two_s * (i * j - k * r),
-                two_s * (i * k + j * r),
-                two_s * (i * j + k * r),
-                1 - two_s * (i * i + k * k),
-                two_s * (j * k - i * r),
-                two_s * (i * k - j * r),
-                two_s * (j * k + i * r),
-                1 - two_s * (i * i + j * j),
-            ),
-            dim=-1,
-        ).reshape(num_rotations, 3, 3)
-
-    def _center_random_augmentation(
-        self, coords: Tensor, atom_mask: Tensor, second_coords: Tensor | None = None
-    ) -> tuple[Tensor, Tensor | None]:
-        """Algorithm 19: center + random rotation + translation."""
-        batch_size = coords.shape[0]
-        mask = atom_mask.unsqueeze(-1)  # [B, A, 1]
-        denominator = mask.sum(dim=1, keepdim=True).clamp(min=1)
-        mean = (coords * mask).sum(dim=1, keepdim=True) / denominator
-        coords = coords - mean
-        if second_coords is not None:
-            second_coords = second_coords - mean
-
-        rotations = self._random_rotations(batch_size, coords.dtype, coords.device)
-        coords = coords @ rotations
-        if second_coords is not None:
-            second_coords = second_coords @ rotations
-
-        translations = torch.randn_like(coords[:, 0:1, :])
-        coords = coords + translations
-        if second_coords is not None:
-            second_coords = second_coords + translations
-        return coords, second_coords
-
-    @staticmethod
-    def _weighted_rigid_align(coords: Tensor, target_coords: Tensor, weights: Tensor, mask: Tensor) -> Tensor:
-        """Kabsch alignment: align ``coords`` onto ``target_coords`` with the given weights."""
-        weights = (mask * weights).unsqueeze(-1)  # [batch_size, num_atoms, 1]
-        denominator = weights.sum(dim=-2, keepdim=True).clamp(min=1e-8)
-        centroid = (coords * weights).sum(dim=-2, keepdim=True) / denominator
-        target_centroid = (target_coords * weights).sum(dim=-2, keepdim=True) / denominator
-        centered_coords = coords - centroid
-        centered_target_coords = target_coords - target_centroid
-        covariance = (weights * centered_target_coords).transpose(-1, -2) @ centered_coords
-        U, _, Vh = torch.linalg.svd(covariance, driver="gesvd" if covariance.is_cuda else None)
-        determinant = torch.linalg.det(U @ Vh)
-        ones = torch.ones_like(determinant)
-        rotation = U @ torch.diag_embed(torch.stack([ones, ones, determinant], dim=-1)) @ Vh
-        return centered_coords @ rotation.transpose(-1, -2) + target_centroid
-
-    def _build_noise_schedule(self, num_sampling_steps: int | None, device: torch.device) -> tuple[Tensor, Tensor]:
-        """Karras σ schedule (Algorithm 18) + per-step γ churn factors, capped at
-        ``config.structure_head.inference_sigma_cap``."""
-        head_config = self.config.structure_head
-        steps = head_config.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
-        schedule = self.inference_noise_schedule(steps, device)
-        # Truncate the high-σ tail above the cap and re-prepend the cap, so sampling starts from it.
-        if head_config.inference_sigma_cap is not None:
-            schedule = schedule[schedule <= head_config.inference_sigma_cap]
-            schedule = F.pad(schedule, (1, 0), value=head_config.inference_sigma_cap)
-        gammas = torch.where(
-            schedule > head_config.gamma_min,
-            torch.full_like(schedule, head_config.gamma_0),
-            torch.zeros_like(schedule),
-        )
-        return schedule, gammas
 
 
 class EsmFold2RowAttentionPooling(nn.Module):
