@@ -33,7 +33,6 @@ _LEGACY_FIELDS = (
     "num_diffusion_samples",
     "structure_head.diffusion_module.sigma_data",
     "structure_head.diffusion_module.fourier_dim",
-    "structure_head.diffusion_module.transition_multiplier",
     "structure_head.gamma_0",
     "structure_head.gamma_min",
     "structure_head.noise_scale",
@@ -63,7 +62,6 @@ _LEGACY_RENAMES = {
     "atom_encoder.hidden_size": "inputs.atom_encoder.d_atom",
     "atom_encoder.num_hidden_layers": "inputs.atom_encoder.n_blocks",
     "atom_encoder.num_attention_heads": "inputs.atom_encoder.n_heads",
-    "atom_encoder.expansion_ratio": "inputs.atom_encoder.expansion_ratio",
     "atom_encoder.spatial_rope_base_frequency": "inputs.atom_encoder.spatial_rope_base_frequency",
     "atom_encoder.num_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
     "atom_encoder.num_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
@@ -88,6 +86,15 @@ _LEGACY_RENAMES = {
 }
 
 _LEGACY_PORT_PATHS = (*_LEGACY_FIELDS, *_LEGACY_RENAMES)
+
+# Read by ``_derive_widths`` rather than carried over: the port stores the widths these produce.
+_LEGACY_WIDTH_INPUTS = {
+    "inputs.atom_encoder.expansion_ratio",
+    "structure_head.diffusion_module.transition_multiplier",
+}
+
+# The research code's fixed expansion factor for the pair- and MSA-stream transitions.
+_LEGACY_TRANSITION_EXPANSION_RATIO = 4
 
 # Leaves not carried over: backbone id/size, re-derived fields, always-on head flags, training knobs.
 _LEGACY_DROP_PATHS = {
@@ -232,11 +239,53 @@ def _leaf_paths(cfg: dict, prefix: str = "") -> set[str]:
     return paths
 
 
+def _swiglu_width(hidden_size: int, expansion_ratio: int) -> int:
+    """The research code's atom-stack FFN width: expand, halve for the SwiGLU gate, round up to 256."""
+    return (expansion_ratio * (hidden_size // 3) * 2 + 255) // 256 * 256
+
+
+def _derive_widths(old: dict, config: dict) -> None:
+    """Write out the widths the research config left implicit, which the port stores as values."""
+    defaults = EsmFold2Config()
+    inputs_atom = config["atom_encoder"]
+    diffusion = config["structure_head"]["diffusion_module"]
+    denoiser_atom = diffusion["atom_encoder"]
+
+    inputs_atom["intermediate_size"] = _swiglu_width(
+        inputs_atom["hidden_size"], _get_path(old, "inputs.atom_encoder.expansion_ratio")
+    )
+    # The single inputs are this aggregation concatenated with the residue-type features.
+    inputs_atom["output_dim"] = config["single_inputs_size"] - (2 * defaults.num_res_types + 1)
+
+    # The research config ships no expansion ratio for the denoiser's atom stack; its code uses 2.
+    denoiser_atom["intermediate_size"] = _swiglu_width(denoiser_atom["hidden_size"], 2)
+    # The atom stack scatters straight into the token transformer.
+    denoiser_atom["output_dim"] = diffusion["hidden_size"]
+    # It also shares the inputs embedder's 3D-RoPE settings.
+    for rope_field in (
+        "spatial_rope_base_frequency",
+        "num_spatial_rope_pairs_per_axis",
+        "num_uid_rope_pairs",
+        "uid_rope_base_frequency",
+    ):
+        denoiser_atom[rope_field] = inputs_atom[rope_field]
+
+    transition_multiplier = _get_path(old, "structure_head.diffusion_module.transition_multiplier")
+    diffusion["intermediate_size"] = transition_multiplier * diffusion["hidden_size"]
+    diffusion["pair_intermediate_size"] = transition_multiplier * config["pairwise_hidden_size"]
+
+    config["msa_encoder"]["intermediate_size"] = (
+        _LEGACY_TRANSITION_EXPANSION_RATIO * config["msa_encoder"]["hidden_size"]
+    )
+    config["pair_transition_intermediate_size"] = _LEGACY_TRANSITION_EXPANSION_RATIO * config["pairwise_hidden_size"]
+
+
 def build_legacy_config(old: dict) -> dict:
     """Reshape the research checkpoint's nested config into the port's nested EsmFold2Config layout.
 
     Each port path in ``_LEGACY_PORT_PATHS`` reads from the same path in the source config unless
-    ``_LEGACY_RENAMES`` overrides it.
+    ``_LEGACY_RENAMES`` overrides it; ``_derive_widths`` then fills in the widths the research config
+    left implicit.
     """
     config: dict = {}
     for port_path in _LEGACY_PORT_PATHS:
@@ -247,8 +296,9 @@ def build_legacy_config(old: dict) -> dict:
         node[parts[-1]] = _get_path(old, _LEGACY_RENAMES.get(port_path, port_path))
     if "dtype" in old:
         config["dtype"] = old["dtype"]
+    _derive_widths(old, config)
     mapped = {_LEGACY_RENAMES.get(port_path, port_path) for port_path in _LEGACY_PORT_PATHS}
-    unexpected = _leaf_paths(old) - (mapped | _LEGACY_DROP_PATHS | {"dtype"})
+    unexpected = _leaf_paths(old) - (mapped | _LEGACY_DROP_PATHS | _LEGACY_WIDTH_INPUTS | {"dtype"})
     if unexpected:
         raise ValueError(f"unmapped fields in the source ESMFold2 config: {sorted(unexpected)}")
     return config

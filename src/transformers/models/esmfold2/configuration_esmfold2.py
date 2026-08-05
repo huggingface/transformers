@@ -36,21 +36,16 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     r"""
     hidden_size (`int`, *optional*, defaults to 128):
         Per-atom hidden width of the atom transformer.
-    output_dim (`int`, *optional*):
-        Width this stack aggregates to when scattering atoms back into tokens. Derived by the parent
-        config: the diffusion token width for the denoiser, and whatever makes the single-inputs
-        feature concat total `single_inputs_size` for the inputs embedder.
+    output_dim (`int`, *optional*, defaults to 384):
+        Width this stack aggregates to when scattering atoms back into tokens.
     num_hidden_layers (`int`, *optional*, defaults to 3):
         Number of sliding-window atom-transformer blocks.
     num_attention_heads (`int`, *optional*, defaults to 4):
         Number of attention heads in each atom-transformer block.
     head_dim (`int`, *optional*):
         Per-head width. Derived as `hidden_size // num_attention_heads` if unset.
-    expansion_ratio (`int`, *optional*, defaults to 2):
-        Expansion ratio used to derive `intermediate_size`.
-    intermediate_size (`int`, *optional*):
-        SwiGLU feed-forward width. Derived from `expansion_ratio` and `hidden_size` if unset, rounded
-        up to a multiple of 256.
+    intermediate_size (`int`, *optional*, defaults to 256):
+        SwiGLU feed-forward width.
     spatial_rope_base_frequency (`float`, *optional*, defaults to 20.0):
         Base frequency for the spatial (x/y/z) half of the 3D rotary embedding.
     num_spatial_rope_pairs_per_axis (`int`, *optional*, defaults to 2):
@@ -62,16 +57,30 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     """
 
     hidden_size: int | None = 128
-    output_dim: int | None = None  # atom->token aggregation width; derived in the parent
+    output_dim: int | None = 384
     num_hidden_layers: int | None = 3
     num_attention_heads: int | None = 4
-    head_dim: int | None = None  # derived from hidden_size/num_attention_heads in the parent
-    expansion_ratio: int | None = 2
-    intermediate_size: int | None = None  # derived from expansion_ratio/hidden_size in the parent
+    head_dim: int | None = None
+    intermediate_size: int | None = 256
     spatial_rope_base_frequency: float | None = 20.0
     num_spatial_rope_pairs_per_axis: int | None = 2
     num_uid_rope_pairs: int | None = 10
     uid_rope_base_frequency: float | None = 10000.0
+
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        # The 3D rotary embedding packs three spatial axes plus the space UID into half a head.
+        num_rope_pairs = 3 * self.num_spatial_rope_pairs_per_axis + self.num_uid_rope_pairs
+        if num_rope_pairs > self.head_dim // 2:
+            raise ValueError(
+                f"The 3D rotary embedding needs {num_rope_pairs} frequency pairs, which exceeds the "
+                f"{self.head_dim // 2} available in a head of width {self.head_dim}."
+            )
 
 
 @auto_docstring(
@@ -92,13 +101,16 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
         Number of token-transformer blocks (one attention + one transition each).
     num_attention_heads (`int`, *optional*, defaults to 16):
         Number of attention heads in the token transformer; also the width of each block's pair bias.
-    transition_multiplier (`int`, *optional*, defaults to 2):
-        Multiplier used to derive `intermediate_size`.
-    intermediate_size (`int`, *optional*):
-        SwiGLU width of the token transitions. Derived as
-        `transition_multiplier * hidden_size` if unset.
+    head_dim (`int`, *optional*):
+        Per-head width. Derived as `hidden_size // num_attention_heads` if unset.
+    intermediate_size (`int`, *optional*, defaults to 1536):
+        SwiGLU width of the token transitions, and of the conditioning's single transitions.
+    pair_intermediate_size (`int`, *optional*, defaults to 512):
+        SwiGLU width of the conditioning's pair transitions, which run at
+        `EsmFold2Config.pairwise_hidden_size`.
     atom_encoder (`EsmFold2AtomEncoderConfig`, *optional*):
-        Configuration for the denoiser's atom encoder/decoder stack.
+        Configuration for the denoiser's atom encoder/decoder stack; defaults to one whose `output_dim`
+        is this module's `hidden_size`.
     """
 
     sub_configs = {"atom_encoder": EsmFold2AtomEncoderConfig}
@@ -108,16 +120,28 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
     fourier_dim: int | None = 256
     num_hidden_layers: int | None = 12
     num_attention_heads: int | None = 16
-    transition_multiplier: int | None = 2
-    intermediate_size: int | None = None  # derived in the parent
+    head_dim: int | None = None
+    intermediate_size: int | None = 1536
+    pair_intermediate_size: int | None = 512
     atom_encoder: dict | EsmFold2AtomEncoderConfig | None = None
 
     def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.atom_encoder is None:
-            self.atom_encoder = EsmFold2AtomEncoderConfig()
+            self.atom_encoder = EsmFold2AtomEncoderConfig(output_dim=self.hidden_size)
         elif isinstance(self.atom_encoder, dict):
             self.atom_encoder = EsmFold2AtomEncoderConfig(**self.atom_encoder)
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        # The atom stack scatters straight into the token transformer.
+        if self.atom_encoder.output_dim != self.hidden_size:
+            raise ValueError(
+                f"The atom_encoder.output_dim ({self.atom_encoder.output_dim}) is not the token width "
+                f"hidden_size ({self.hidden_size})."
+            )
 
 
 @auto_docstring(
@@ -239,9 +263,8 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         Number of heads in the pair-weighted averaging.
     head_dim (`int`, *optional*, defaults to 32):
         Per-head width of the pair-weighted averaging.
-    intermediate_size (`int`, *optional*):
-        SwiGLU width of the MSA-stream transition. Derived from the parent's
-        `transition_expansion_ratio` and `hidden_size` if unset.
+    intermediate_size (`int`, *optional*, defaults to 512):
+        SwiGLU width of the MSA-stream transition.
     outer_product_chunk_size (`int`, *optional*):
         Chunk size for the outer-product-mean einsum, off by default. Chunking this one is not always
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
@@ -254,7 +277,7 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     num_hidden_layers: int | None = 4
     num_attention_heads: int | None = 8
     head_dim: int | None = 32
-    intermediate_size: int | None = None
+    intermediate_size: int | None = 512
     outer_product_chunk_size: int | None = None
 
 
@@ -284,11 +307,10 @@ class EsmFold2Config(PreTrainedConfig):
     pairwise_hidden_size (`int`, *optional*, defaults to 256):
         Pair-representation width.
     single_inputs_size (`int`, *optional*, defaults to 451):
-        Width of the concatenated single-input features fed to the trunk and diffusion conditioning.
-    transition_expansion_ratio (`int`, *optional*, defaults to 4):
-        Expansion ratio for the pair / MSA transition FFNs (used to derive their intermediate sizes).
-    pair_transition_intermediate_size (`int`, *optional*):
-        Pair-transition FFN width; defaults to `transition_expansion_ratio * pairwise_hidden_size`.
+        Width of the concatenated single-input features fed to the trunk and diffusion conditioning:
+        `atom_encoder.output_dim` plus two residue-type one-hots and the profile scalar.
+    pair_transition_intermediate_size (`int`, *optional*, defaults to 1024):
+        SwiGLU width of the pair-stream transitions.
     sliding_window (`int`, *optional*, defaults to 128):
         Sliding-window size (token-index distance) for the atom-stack attention.
     chunk_size (`int`, *optional*, defaults to 64):
@@ -312,7 +334,8 @@ class EsmFold2Config(PreTrainedConfig):
     max_atoms_per_token (`int`, *optional*, defaults to 23):
         Maximum number of atoms per token.
     atom_feature_dim (`int`, *optional*):
-        Atom feature width; derived from `max_atomic_number`, `char_vocab_size` and `max_chars` when unset.
+        Atom feature width: xyz, charge and mask, plus the element and atom-name-char one-hots. Derived
+        from `max_atomic_number`, `char_vocab_size` and `max_chars` if unset.
     folding_trunk_num_hidden_layers (`int`, *optional*, defaults to 24):
         Number of pair-update blocks in the folding trunk.
     parcae_num_coda_layers (`int`, *optional*, defaults to 2):
@@ -344,8 +367,7 @@ class EsmFold2Config(PreTrainedConfig):
     hidden_size: int | None = 384
     pairwise_hidden_size: int | None = 256
     single_inputs_size: int | None = 451
-    transition_expansion_ratio: int | None = 4
-    pair_transition_intermediate_size: int | None = None
+    pair_transition_intermediate_size: int | None = 1024
     sliding_window: int | None = 128
     chunk_size: int | None = 64
     num_relative_residx_bins: int | None = 32
@@ -387,39 +409,19 @@ class EsmFold2Config(PreTrainedConfig):
         if self.atom_feature_dim is None:
             self.atom_feature_dim = 3 + 1 + 1 + self.max_atomic_number + self.char_vocab_size * self.max_chars
 
-        if self.pair_transition_intermediate_size is None:
-            self.pair_transition_intermediate_size = self.transition_expansion_ratio * self.pairwise_hidden_size
-        diff = self.structure_head.diffusion_module
-
-        # The diffusion atom stack reuses the inputs embedder's 3D-RoPE settings, as the reference does.
-        for rope_field in (
-            "spatial_rope_base_frequency",
-            "num_spatial_rope_pairs_per_axis",
-            "num_uid_rope_pairs",
-            "uid_rope_base_frequency",
-        ):
-            setattr(diff.atom_encoder, rope_field, getattr(self.atom_encoder, rope_field))
-
-        # Same derivations at both atom-stack call sites; FFN widths round up to a multiple of 256.
-        for atom in (self.atom_encoder, diff.atom_encoder):
-            if atom.head_dim is None:
-                atom.head_dim = atom.hidden_size // atom.num_attention_heads
-            if atom.intermediate_size is None:
-                atom.intermediate_size = (atom.expansion_ratio * (atom.hidden_size // 3) * 2 + 255) // 256 * 256
-
-        # Atom->token aggregation widths: the denoiser feeds the token transformer, while the inputs
-        # embedder's encoding must make the ``single_inputs`` concat total ``single_inputs_size``.
-        if diff.atom_encoder.output_dim is None:
-            diff.atom_encoder.output_dim = diff.hidden_size
-        if self.atom_encoder.output_dim is None:
-            self.atom_encoder.output_dim = self.single_inputs_size - (2 * self.num_res_types + 1)
-
-        if diff.intermediate_size is None:
-            diff.intermediate_size = diff.transition_multiplier * diff.hidden_size
-        if self.msa_encoder.intermediate_size is None:
-            self.msa_encoder.intermediate_size = self.transition_expansion_ratio * self.msa_encoder.hidden_size
-
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Checks the width relations that span sub-configs; each sub-config checks its own."""
+        super().validate_architecture()
+
+        # The single inputs are the atom aggregation concatenated with the residue-type features.
+        expected_output_dim = self.single_inputs_size - (2 * self.num_res_types + 1)
+        if self.atom_encoder.output_dim != expected_output_dim:
+            raise ValueError(
+                f"The atom_encoder.output_dim ({self.atom_encoder.output_dim}) is not single_inputs_size "
+                f"({self.single_inputs_size}) - (2 * num_res_types + 1) = {expected_output_dim}."
+            )
 
 
 __all__ = ["EsmFold2Config"]
