@@ -73,7 +73,7 @@ class EsmFold2GenerationMixin:
         """
         from .modeling_esmfold2 import EsmFold2Output
 
-        n_samples: int = (
+        num_samples: int = (
             num_diffusion_samples if num_diffusion_samples is not None else self.config.num_diffusion_samples
         )
 
@@ -90,14 +90,14 @@ class EsmFold2GenerationMixin:
             relative_position_encoding=trunk.relative_position_encoding,
             atom_inputs=trunk.atom_inputs,
             token_attention_mask=token_attention_mask,
-            num_diffusion_samples=n_samples,
+            num_diffusion_samples=num_samples,
             num_sampling_steps=num_sampling_steps,
         )
 
         confidence_output = self.confidence_head(
             single_inputs=trunk.single_inputs.detach(),
-            z=trunk.pair_states.detach(),
-            x_pred=sample_coords.detach(),
+            pair_states=trunk.pair_states.detach(),
+            predicted_coords=sample_coords.detach(),
             distogram_atom_idx=distogram_atom_idx,
             token_attention_mask=token_attention_mask,
             # From the trunk's featurized copy, as that is the one zeroed at padding.
@@ -105,7 +105,7 @@ class EsmFold2GenerationMixin:
             atom_attention_mask=trunk.atom_inputs.atom_attention_mask,
             asym_id=asym_id,
             mol_type=mol_type,
-            num_diffusion_samples=n_samples,
+            num_diffusion_samples=num_samples,
             relative_position_encoding=trunk.relative_position_encoding.detach(),
             token_bonds_encoding=trunk.token_bonds_encoding.detach(),
         )
@@ -131,7 +131,7 @@ class EsmFold2GenerationMixin:
         Only ``num_sampling_steps`` is an argument; the other sampling hyperparameters come from config.
         """
         denoiser = self.structure_head.diffusion_module
-        n_atoms = atom_inputs.atom_to_token.shape[1]
+        num_atoms = atom_inputs.atom_to_token.shape[1]
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples
 
@@ -148,62 +148,64 @@ class EsmFold2GenerationMixin:
 
         schedule, gammas = self.structure_head._build_noise_schedule(num_sampling_steps, device)
 
-        lam = self.config.structure_head.noise_scale
-        eta = self.config.structure_head.step_scale
+        noise_scale = self.config.structure_head.noise_scale
+        step_scale = self.config.structure_head.step_scale
 
-        x = schedule[0] * torch.randn(target_batch, n_atoms, 3, device=device, dtype=torch.float32)
+        atom_coords = schedule[0] * torch.randn(target_batch, num_atoms, 3, device=device, dtype=torch.float32)
         atom_mask = atom_inputs.atom_attention_mask.repeat_interleave(num_diffusion_samples, 0).float()
 
-        x_denoised_prev: Tensor | None = None
+        prev_denoised_coords: Tensor | None = None
 
-        step_pairs = list(zip(schedule[:-1], schedule[1:], gammas[1:]))
+        schedule_steps = list(zip(schedule[:-1], schedule[1:], gammas[1:]))
 
-        for sigma_tm, sigma_t, gamma in step_pairs:
-            x, x_denoised_prev = self.structure_head._center_random_augmentation(
-                x, atom_mask, second_coords=x_denoised_prev
+        for sigma_prev, sigma_next, gamma in schedule_steps:
+            atom_coords, prev_denoised_coords = self.structure_head._center_random_augmentation(
+                atom_coords, atom_mask, second_coords=prev_denoised_coords
             )
 
-            sigma_tm_val = sigma_tm.item()
-            t_hat_val = sigma_tm_val * (1.0 + gamma.item())
-            eps_std = lam * max(t_hat_val**2 - sigma_tm_val**2, 0.0) ** 0.5
-            x_noisy = x + eps_std * torch.randn_like(x)
+            sigma_prev_value = sigma_prev.item()
+            noise_level_value = sigma_prev_value * (1.0 + gamma.item())
+            churn_noise_std = noise_scale * max(noise_level_value**2 - sigma_prev_value**2, 0.0) ** 0.5
+            noisy_coords = atom_coords + churn_noise_std * torch.randn_like(atom_coords)
 
             # One denoising step: the diffusion module's forward, not the model's.
-            x_denoised = denoiser(
-                x_noisy=x_noisy,
-                t_hat=torch.full((target_batch,), t_hat_val, device=device, dtype=torch.float32),
+            denoised_coords = denoiser(
+                noisy_coords=noisy_coords,
+                noise_level=torch.full((target_batch,), noise_level_value, device=device, dtype=torch.float32),
                 conditioning=conditioning,
             )
 
             # Reverse diffusion alignment (Kabsch); coordinates are fp32 for the whole loop.
-            x_noisy = self.structure_head._weighted_rigid_align(x_noisy, x_denoised, atom_mask, atom_mask)
+            noisy_coords = self.structure_head._weighted_rigid_align(
+                noisy_coords, denoised_coords, atom_mask, atom_mask
+            )
 
             # ODE/SDE step
-            sigma_t_val = sigma_t.item()
-            denoised_over_sigma = (x_noisy - x_denoised) / t_hat_val
-            x = x_noisy + eta * (sigma_t_val - t_hat_val) * denoised_over_sigma
+            sigma_next_value = sigma_next.item()
+            denoised_direction = (noisy_coords - denoised_coords) / noise_level_value
+            atom_coords = noisy_coords + step_scale * (sigma_next_value - noise_level_value) * denoised_direction
 
-            x_denoised_prev = x_denoised
+            prev_denoised_coords = denoised_coords
 
-        return x
+        return atom_coords
 
     @torch.no_grad()
-    def infer_protein(self, seq: str, **forward_kwargs) -> EsmFold2Output:
+    def infer_protein(self, sequence: str, **forward_kwargs) -> EsmFold2Output:
         from .protein_utils import prepare_protein_features
 
-        features = prepare_protein_features(seq)
+        features = prepare_protein_features(sequence)
         features = {k: v.to(self.device) for k, v in features.items()}
         return self.fold(**features, **forward_kwargs)
 
     @torch.no_grad()
-    def infer_protein_as_pdb(self, seq: str, sample_idx: int | None = None, **forward_kwargs) -> str:
-        """Fold ``seq`` and render the prediction as a PDB string.
+    def infer_protein_as_pdb(self, sequence: str, sample_idx: int | None = None, **forward_kwargs) -> str:
+        """Fold ``sequence`` and render the prediction as a PDB string.
 
         ``sample_idx`` picks which diffusion sample to render; by default the best-ranked one.
         """
         from .protein_utils import output_to_pdb, prepare_protein_features
 
-        features = prepare_protein_features(seq)
+        features = prepare_protein_features(sequence)
         features = {k: v.to(self.device) for k, v in features.items()}
         output = self.fold(**features, **forward_kwargs)
         return output_to_pdb(output, features, sample_idx=sample_idx)

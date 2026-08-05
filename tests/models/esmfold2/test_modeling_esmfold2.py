@@ -37,7 +37,7 @@ if is_torch_available():
     import torch
 
     from transformers import EsmFold2Model
-    from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomInputs, EsmFold2SWA3DRoPEAttention
+    from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomAttention, EsmFold2AtomInputs
 
 # TEMP: revert to "biohub/ESMFold2" once that snapshot bundles the ESMC-6B backbone under ``esmc.*``.
 _INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
@@ -154,7 +154,7 @@ class EsmFold2ModelTest(unittest.TestCase):
 
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
-        swa_modules = [m for m in model.modules() if isinstance(m, EsmFold2SWA3DRoPEAttention)]
+        swa_modules = [m for m in model.modules() if isinstance(m, EsmFold2AtomAttention)]
         # Both atom sites (inputs embedder + diffusion decoder) contribute SWA modules.
         self.assertGreaterEqual(len(swa_modules), 1)
         self.assertTrue(all(m.config is model.config for m in swa_modules))
@@ -201,7 +201,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         model = self._build()
         _res, _profile, _deletion, ref_element_oh, ref_chars_oh, atom_to_token = model._prepare_features(
             res_type=features["res_type"],
-            tok_mask=features["token_attention_mask"],
+            token_mask=features["token_attention_mask"],
             msa=None,
             msa_attention_mask=None,
             deletion_mean=None,
@@ -222,8 +222,8 @@ class EsmFold2ModelTest(unittest.TestCase):
         )
         with torch.no_grad():
             encoder = model.inputs_atom_encoder
-            c_base, _position_embeddings = encoder.embed_atoms(atom_inputs)
-            mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, c_base)
+            atom_embeds, _position_embeddings = encoder.embed_atoms(atom_inputs)
+            mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds)
 
         per_head = mask[0, 0]
         self.assertFalse(bool(per_head[valid][:, ~valid].any()), "a valid atom may not attend to padding")
@@ -312,8 +312,8 @@ class EsmFold2ModelTest(unittest.TestCase):
                 self.assertEqual(conditioning.attention_mask.shape[0], 1)
                 self.assertTrue(all(bias.shape[0] == 1 for bias in conditioning.token_attention_bias))
                 # The per-sample tensors *are* expanded, which is what the masks broadcast against.
-                self.assertEqual(conditioning.c_base.shape[0], samples)
-                self.assertEqual(conditioning.single_repr_inputs.shape[0], samples)
+                self.assertEqual(conditioning.atom_embeds.shape[0], samples)
+                self.assertEqual(conditioning.projected_single_inputs.shape[0], samples)
 
         with self.subTest(batch_size=2, num_diffusion_samples=3):
             conditioning = conditioning_for(batch, 3)
