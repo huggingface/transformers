@@ -20,9 +20,10 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import set_seed
+from transformers import logging, set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
+    CaptureLogger,
     CaptureStderr,
     backend_device_count,
     backend_torch_accelerator_module,
@@ -1587,7 +1588,15 @@ class CacheCroppingTests(unittest.TestCase):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
 
             # Crop the layer
-            layer.crop(self.seq_len - 3)
+            # Note that we need to patch `warning_once` if we want to capture the warning for every layer as otherwise it's thrown
+            # only once
+            logger = logging.get_logger("transformers.cache_utils")
+            with patch.object(logger, "warning_once", new=logger.warning):
+                with CaptureLogger(logger) as cl:
+                    layer.crop(self.seq_len - 3)
+
+            # Make sure we trigger deprecation
+            self.assertTrue("Calling `crop` with a positive value is deprecated and will be removed" in cl.out)
 
             # Make sure we cropped correctly, and restricted length correctly
             if hasattr(layer, "keys"):
