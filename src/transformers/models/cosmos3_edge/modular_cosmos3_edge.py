@@ -38,8 +38,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
-    TensorType,
-    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -53,8 +51,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
