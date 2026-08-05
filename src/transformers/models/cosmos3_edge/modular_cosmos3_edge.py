@@ -36,14 +36,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     add_start_docstrings,
     auto_docstring,
-    is_torchvision_available,
-    add_start_docstrings,
-    auto_docstring,
-    can_return_tuple,
     logging,
     torch_compilable_check,
 )
