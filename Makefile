@@ -47,7 +47,6 @@ typing:
 
 # Runs typing, ruff linting/formatting, import-order checks and auto-mappings
 check-code-quality:
-	pip install -q "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@4cbb99c336608b8715641feb27b6b0f6035fe46b"
 	@python utils/checkers.py $(CODE_QUALITY_CHECKERS)
 
 # Runs a full repository consistency check.
