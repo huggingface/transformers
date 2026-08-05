@@ -5,10 +5,11 @@ on:
     # Run every night at 3 AM UTC
     - cron: "0 3 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - vllm_ci
 env:
   UV_SYSTEM_PYTHON: "1"
-  VLLM_USE_PRECOMPILED: "1"
-  VLLM_PRECOMPILED_WHEEL_VARIANT: cpu
   VLLM_TARGET_DEVICE: cpu
 
 permissions:
@@ -43,7 +44,7 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
 
       - name: Install dependencies
-        run: uv pip install -e vllm -e transformers
+        run: uv pip install vllm -e transformers
 
       - name: Run tests
         run: |
