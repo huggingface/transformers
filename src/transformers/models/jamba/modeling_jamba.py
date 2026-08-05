@@ -257,10 +257,7 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "mamba_inner_fn",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
 def mamba_inner_fn(
     xz: torch.Tensor,
     conv1d_weight: torch.Tensor,
@@ -284,10 +281,7 @@ def mamba_inner_fn(
     return None
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_state_update",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
@@ -333,10 +327,7 @@ def mamba_selective_state_update(
     return out.to(input_dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_scan_fn",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_scan_fn", "mamba_ssm")
 def mamba_selective_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,

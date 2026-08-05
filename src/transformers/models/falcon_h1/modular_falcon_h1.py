@@ -195,9 +195,7 @@ class FalconH1Mixer(BambaMixer):
         projected_states = projected_states * self.mup_vector
 
         A = -torch.exp(self.A_log.float())
-        fused_kwargs = (
-            kwargs | {} if self.time_step_limit == (0.0, float("inf")) else kwargs | {"dt_limit": self.time_step_limit}
-        )
+        fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
         if self.training and cache_params is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
@@ -233,7 +231,7 @@ class FalconH1Mixer(BambaMixer):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1:
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,

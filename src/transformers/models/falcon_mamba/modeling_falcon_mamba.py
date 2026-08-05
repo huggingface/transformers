@@ -48,7 +48,7 @@ class FalconMambaWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        # Dummy weights that are not used (only for imitating on kernels path)
+        # Dummy weights that are not used (only for imitating the kernels path)
         self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
     def _norm(self, x):
@@ -116,10 +116,7 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "mamba_inner_fn",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
 def mamba_inner_fn(
     xz: torch.Tensor,
     conv1d_weight: torch.Tensor,
@@ -143,10 +140,7 @@ def mamba_inner_fn(
     return None
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_state_update",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
@@ -192,10 +186,7 @@ def mamba_selective_state_update(
     return out.to(input_dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_scan_fn",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_scan_fn", "mamba_ssm")
 def mamba_selective_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
@@ -356,6 +347,7 @@ class FalconMambaMixer(nn.Module):
         self.use_bias = config.use_bias
 
         self.layer_type = config.layer_types[layer_idx]
+        # These include dummy weights that are not used (only for imitating the kernels path)
         self.dt_layernorm = FalconMambaWeightlessRMSNorm(self.intermediate_size, eps=config.mixer_rms_eps)
         self.b_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)
         self.c_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)
