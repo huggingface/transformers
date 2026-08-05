@@ -257,9 +257,10 @@ class RowwiseParallel(TensorParallelLayer):
         # Embedding runtime sharding needs a replicated input; Linear needs Shard(-1).
         desired = Replicate() if isinstance(module, torch.nn.Embedding) else Shard(-1)
         x = args[0]
-        # Local kernels may receive an already-sharded local activation; avoid a
-        # redundant Tensor -> DTensor -> Tensor round trip.
-        if self.should_use_local_tensors(module) and not isinstance(x, DTensor):
+        # A local kernel can use a plain input when the previous layer already split it.
+        #  avoid a redundant Tensor -> DTensor -> Tensor round trip.
+        input_has_desired_layout = self.input_layouts == desired
+        if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
@@ -636,6 +637,7 @@ class ParallelInterface(GeneralInterface):
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
+            "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "packed_colwise": PackedColwiseParallel(),
             "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "sequence_parallel": SequenceParallel(use_local_output=True),
