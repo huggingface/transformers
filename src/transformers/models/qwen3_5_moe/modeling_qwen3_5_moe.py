@@ -58,6 +58,7 @@ from ...utils import (
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -408,8 +409,7 @@ def torch_recurrent_gated_delta_rule(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes linear attention using the gated delta rule, by iterating over each token in the sequence dimension.
     Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
-    chunked.
-    """
+    chunked."""
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
