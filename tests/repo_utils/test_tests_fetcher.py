@@ -323,7 +323,6 @@ class TestFetcherTester(unittest.TestCase):
             assert (Path(tmp_folder) / "tests_torch_test_list.txt").exists()
             assert not (Path(tmp_folder) / "tests_hub_test_list.txt").exists()
 
-    @unittest.skip(reason="Temporarily. To be removed.")
     def test_create_test_list_from_filter_routes_peft_integration_tests(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             create_test_list_from_filter(
