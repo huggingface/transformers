@@ -121,7 +121,7 @@ class OnyxRMSNorm(nn.Module):
         return normed_output.type_as(hidden_states)
 
 
-class OnyxCenteredRMSNorm(nn.Module):
+class OnyxTextCenteredRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
@@ -132,7 +132,7 @@ class OnyxCenteredRMSNorm(nn.Module):
 
     def forward(self, x):
         output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst OnyxCentered is (x * w).to(float16)
+        # Llama does x.to(float16) * w whilst OnyxTextCentered is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
@@ -141,7 +141,7 @@ class OnyxCenteredRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-class OnyxMLP(nn.Module):
+class OnyxTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -157,7 +157,7 @@ class OnyxMLP(nn.Module):
         return down_proj
 
 
-class OnyxRotaryEmbedding(nn.Module):
+class OnyxTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: OnyxConfig, device=None):
         super().__init__()
@@ -321,7 +321,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class OnyxAttention(nn.Module):
+class OnyxTextAttention(nn.Module):
     """
     Multi-headed attention module with optional sliding window and gating.
 
@@ -353,7 +353,7 @@ class OnyxAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
-        # We only add Onyx-specific attributes
+        # We only add OnyxText-specific attributes
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_local_attention else None
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
@@ -408,17 +408,17 @@ class OnyxAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OnyxDecoderLayer(GradientCheckpointingLayer):
+class OnyxTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.self_attn = OnyxAttention(config=config, layer_idx=layer_idx)
-        self.mlp = OnyxMLP(config)
-        self.input_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.pre_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.self_attn = OnyxTextAttention(config=config, layer_idx=layer_idx)
+        self.mlp = OnyxTextMLP(config)
+        self.input_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
     def forward(
         self,
@@ -805,7 +805,7 @@ class OnyxPreTrainedModel(PreTrainedModel):
     config: OnyxConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OnyxDecoderLayer", "OnyxVisionEncoderLayer"]
+    _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -814,13 +814,9 @@ class OnyxPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": OnyxDecoderLayer,
-        "attentions": OnyxAttention,
+        "hidden_states": OnyxTextDecoderLayer,
+        "attentions": OnyxTextAttention,
     }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
@@ -939,10 +935,10 @@ class OnyxTextModel(OnyxPreTrainedModel):
         # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [OnyxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = OnyxRotaryEmbedding(config)
+        self.rotary_emb = OnyxTextRotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
