@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
-from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config
+from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config, EsmFold2DiffusionModuleConfig
 from .generation_esmfold2 import EsmFold2GenerationMixin
 
 
@@ -114,16 +114,17 @@ class EsmFold2RMSNorm(torch.nn.Module):
 class EsmFold2Transition(nn.Module):
     """LayerNorm + SwiGLU feed-forward residual block, chunked along the token axis.
 
-    ``chunk=False`` keeps a call site unchunked: chunking is exact, but its reassociation moves the
-    last bf16 bits, which the diffusion sampler amplifies over its steps.
+    ``chunk_size`` has no default and every call site states it, because passing ``None`` (unchunked)
+    is a deliberate numerical choice at two of them: chunking is exact, but its reassociation moves
+    the last bf16 bits, which the diffusion sampler amplifies over its steps.
     """
 
-    def __init__(self, config: EsmFold2Config, hidden_size: int, intermediate_size: int, chunk: bool = True) -> None:
+    def __init__(self, hidden_size: int, intermediate_size: int, chunk_size: int | None) -> None:
         super().__init__()
         self.norm = EsmFold2LayerNorm(hidden_size)
-        self.ffn = EsmFold2SwiGLU(hidden_size, intermediate_size)
+        self.mlp = EsmFold2SwiGLU(hidden_size, intermediate_size)
         # A falsy chunk size means one chunk spanning the whole axis, i.e. unchunked.
-        self.chunk_size: int | None = config.chunk_size if chunk else None
+        self.chunk_size = chunk_size
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         seq_len = hidden_states.shape[1]
@@ -131,17 +132,17 @@ class EsmFold2Transition(nn.Module):
         chunks: list[Tensor] = []
         for start in range(0, seq_len, chunk_size):
             chunk = hidden_states[:, start : start + chunk_size]
-            chunks.append(chunk + self.ffn(self.norm(chunk)))
+            chunks.append(chunk + self.mlp(self.norm(chunk)))
         return torch.cat(chunks, dim=1)
 
 
 class EsmFold2AdaptiveLayerNorm(nn.Module):
     """Adaptive layer normalization (adaLN-Zero)."""
 
-    def __init__(self, config: EsmFold2Config, eps: float = 1e-5) -> None:
+    def __init__(self, config: EsmFold2DiffusionModuleConfig, eps: float = 1e-5) -> None:
         super().__init__()
         # Both the token and the single stream are the diffusion token width at both call sites.
-        self.hidden_size = config.structure_head.diffusion_module.token_hidden_size
+        self.hidden_size = config.hidden_size
         self.eps = eps
         self.cond_norm = EsmFold2LayerNorm(self.hidden_size, eps=eps, bias=False)
         self.gate_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -269,7 +270,6 @@ class EsmFold2AtomAttention(nn.Module):
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
-        hidden_size = atom_config.hidden_size
         self.config = config
         self.head_dim = atom_config.head_dim
         self.scaling = self.head_dim**-0.5
@@ -277,11 +277,11 @@ class EsmFold2AtomAttention(nn.Module):
         self.num_key_value_groups = 1
         self.is_causal = False  # bidirectional encoder, even when the mask is None
 
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.gate_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.q_proj = nn.Linear(atom_config.hidden_size, atom_config.hidden_size, bias=False)
+        self.k_proj = nn.Linear(atom_config.hidden_size, atom_config.hidden_size, bias=False)
+        self.v_proj = nn.Linear(atom_config.hidden_size, atom_config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(atom_config.hidden_size, atom_config.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(atom_config.hidden_size, atom_config.hidden_size, bias=False)
         self.q_norm = EsmFold2RMSNorm()
         self.k_norm = EsmFold2RMSNorm()
 
@@ -343,15 +343,15 @@ class EsmFold2AtomLayer(nn.Module):
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
-        hidden_size = atom_config.hidden_size
-        ffn_intermediate_size = atom_config.ffn_intermediate_size
         # adaln-Zero gate; zero-init lives in EsmFold2PreTrainedModel._init_weights.
-        self.adaln_linear = EsmFold2AdaLNModulationLinear(hidden_size, 6 * hidden_size, bias=False)
+        self.adaln_linear = EsmFold2AdaLNModulationLinear(
+            atom_config.hidden_size, 6 * atom_config.hidden_size, bias=False
+        )
 
-        self.attn = EsmFold2AtomAttention(config, atom_config)
-        self.ffn = EsmFold2SwiGLU(hidden_size, ffn_intermediate_size)
-        self.attn_norm = EsmFold2RMSNorm()
-        self.ffn_norm = EsmFold2RMSNorm()
+        self.self_attn = EsmFold2AtomAttention(config, atom_config)
+        self.mlp = EsmFold2SwiGLU(atom_config.hidden_size, atom_config.intermediate_size)
+        self.input_layernorm = EsmFold2RMSNorm()
+        self.post_attention_layernorm = EsmFold2RMSNorm()
 
     def forward(
         self,
@@ -365,12 +365,12 @@ class EsmFold2AtomLayer(nn.Module):
             modulation = modulation.unsqueeze(1)
         attn_shift, attn_scale, attn_gate, mlp_shift, mlp_scale, mlp_gate = modulation.chunk(6, dim=-1)
 
-        attn_hidden_states = self.attn_norm(hidden_states) * (1 + attn_scale) + attn_shift
-        attn_output, _ = self.attn(attn_hidden_states, attention_mask, position_embeddings)
+        attn_hidden_states = self.input_layernorm(hidden_states) * (1 + attn_scale) + attn_shift
+        attn_output, _ = self.self_attn(attn_hidden_states, attention_mask, position_embeddings)
         hidden_states = hidden_states + attn_gate * attn_output
 
-        mlp_hidden_states = self.ffn_norm(hidden_states) * (1 + mlp_scale) + mlp_shift
-        mlp_output = self.ffn(mlp_hidden_states)
+        mlp_hidden_states = self.post_attention_layernorm(hidden_states) * (1 + mlp_scale) + mlp_shift
+        mlp_output = self.mlp(mlp_hidden_states)
         hidden_states = hidden_states + mlp_gate * mlp_output
         return hidden_states
 
@@ -385,8 +385,8 @@ class EsmFold2RotaryEmbedding(nn.Module):
     def __init__(self, atom_config: EsmFold2AtomEncoderConfig) -> None:
         super().__init__()
         self.head_dim = atom_config.head_dim
-        self.num_spatial_pairs_per_axis = atom_config.n_spatial_rope_pairs_per_axis
-        self.num_uid_pairs = atom_config.n_uid_rope_pairs
+        self.num_spatial_pairs_per_axis = atom_config.num_spatial_rope_pairs_per_axis
+        self.num_uid_pairs = atom_config.num_uid_rope_pairs
         self.spatial_rope_base_frequency = atom_config.spatial_rope_base_frequency
         self.uid_rope_base_frequency = atom_config.uid_rope_base_frequency
 
@@ -469,23 +469,23 @@ class EsmFold2AtomEncoder(nn.Module):
         atom_config = (
             config.structure_head.diffusion_module.atom_encoder if structure_prediction else config.atom_encoder
         )
-        hidden_size = atom_config.hidden_size
-        num_hidden_layers = atom_config.num_hidden_layers
         self.structure_prediction = structure_prediction
 
         # The atom-name-char slice of `config.atom_feature_dim`.
         self.char_feature_dim = config.char_vocab_size * config.max_chars
-        self.atom_linear = nn.Linear(config.atom_feature_dim, hidden_size, bias=False)
-        self.atom_norm = EsmFold2LayerNorm(hidden_size)
+        self.atom_linear = nn.Linear(config.atom_feature_dim, atom_config.hidden_size, bias=False)
+        self.atom_norm = EsmFold2LayerNorm(atom_config.hidden_size)
 
         if structure_prediction:
-            self.coords_linear = nn.Linear(6, hidden_size, bias=False)
+            self.coords_linear = nn.Linear(6, atom_config.hidden_size, bias=False)
 
         self.config = config
         self.rotary_emb = EsmFold2RotaryEmbedding(atom_config)
-        self.layers = nn.ModuleList([EsmFold2AtomLayer(config, atom_config) for _ in range(num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [EsmFold2AtomLayer(config, atom_config) for _ in range(atom_config.num_hidden_layers)]
+        )
 
-        self.atom_to_token_linear = nn.Linear(hidden_size, atom_config.output_dim, bias=False)
+        self.atom_to_token_linear = nn.Linear(atom_config.hidden_size, atom_config.output_dim, bias=False)
 
     def embed_atoms(self, atom_inputs: EsmFold2AtomInputs) -> tuple[Tensor, tuple[Tensor, Tensor]]:
         """Per-atom base embedding and 3D-RoPE position embeddings.
@@ -582,17 +582,16 @@ class EsmFold2AtomDecoder(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        atom_config = config.structure_head.diffusion_module.atom_encoder
-        hidden_size = atom_config.hidden_size
-        num_hidden_layers = atom_config.num_hidden_layers
-        self.token_to_atom_linear = nn.Linear(
-            config.structure_head.diffusion_module.token_hidden_size, hidden_size, bias=False
+        diffusion_config = config.structure_head.diffusion_module
+        atom_config = diffusion_config.atom_encoder
+        self.token_to_atom_linear = nn.Linear(diffusion_config.hidden_size, atom_config.hidden_size, bias=False)
+
+        self.layers = nn.ModuleList(
+            [EsmFold2AtomLayer(config, atom_config) for _ in range(atom_config.num_hidden_layers)]
         )
 
-        self.layers = nn.ModuleList([EsmFold2AtomLayer(config, atom_config) for _ in range(num_hidden_layers)])
-
-        self.norm = EsmFold2LayerNorm(hidden_size)
-        self.output_linear = nn.Linear(hidden_size, 3, bias=False)  # (x, y, z) coordinates
+        self.norm = EsmFold2LayerNorm(atom_config.hidden_size)
+        self.output_linear = nn.Linear(atom_config.hidden_size, 3, bias=False)  # (x, y, z) coordinates
 
     def forward(
         self,
@@ -621,26 +620,24 @@ class EsmFold2AttentionPairBias(nn.Module):
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
         self.config = config
-        hidden_size = config.structure_head.diffusion_module.token_hidden_size
-        pairwise_hidden_size = config.pairwise_hidden_size  # the trunk pair rep flows in at this width
-        num_attention_heads = config.structure_head.diffusion_module.token_num_heads
-        self.head_dim = hidden_size // num_attention_heads
+        diffusion_config = config.structure_head.diffusion_module
+        self.head_dim = diffusion_config.hidden_size // diffusion_config.num_attention_heads
         self.scaling = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the attention interface happy.
         self.num_key_value_groups = 1
         self.is_causal = False
 
-        self.adaln = EsmFold2AdaptiveLayerNorm(config)
-        self.out_gate = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config)
+        self.out_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
 
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=True)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.g_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.q_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
+        self.k_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
+        self.v_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
 
-        self.pair_norm = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.pair_bias_proj = nn.Linear(pairwise_hidden_size, num_attention_heads, bias=False)
+        self.pair_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.pair_bias_proj = nn.Linear(config.pairwise_hidden_size, diffusion_config.num_attention_heads, bias=False)
 
     def compute_pair_bias(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> Tensor:
         """This block's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
@@ -674,7 +671,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        gate = torch.sigmoid(self.g_proj(hidden_states)).view(hidden_shape)
+        gate = torch.sigmoid(self.gate_proj(hidden_states)).view(hidden_shape)
 
         # The step-invariant per-head bias doubles as the additive attention mask. Returns [B, Q, H, D].
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -699,19 +696,15 @@ class EsmFold2AttentionPairBias(nn.Module):
 class EsmFold2ConditionedTransition(nn.Module):
     """Conditioned EsmFold2SwiGLU transition with adaptive layer norm."""
 
-    def __init__(self, config: EsmFold2Config) -> None:
+    def __init__(self, config: EsmFold2DiffusionModuleConfig) -> None:
         super().__init__()
-        hidden_size = config.structure_head.diffusion_module.token_hidden_size
-        intermediate_size = config.structure_head.diffusion_module.token_transition_intermediate_size
-
         self.adaln = EsmFold2AdaptiveLayerNorm(config)
-        self.output_gate = nn.Linear(hidden_size, hidden_size, bias=True)
-
-        self.ffn = EsmFold2SwiGLU(hidden_size, intermediate_size)
+        self.output_gate = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.mlp = EsmFold2SwiGLU(config.hidden_size, config.intermediate_size)
 
     def forward(self, token_hidden_states: Tensor, single_states: Tensor) -> Tensor:
         hidden_states = self.adaln(token_hidden_states, single_states)
-        hidden_states = self.ffn(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         return torch.sigmoid(self.output_gate(single_states)) * hidden_states
 
 
@@ -720,19 +713,23 @@ class EsmFold2DiffusionTransformer(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        num_hidden_layers = config.structure_head.diffusion_module.token_num_blocks
-        self.attn_blocks = nn.ModuleList([EsmFold2AttentionPairBias(config) for _ in range(num_hidden_layers)])
-        self.transition_blocks = nn.ModuleList(
-            [EsmFold2ConditionedTransition(config) for _ in range(num_hidden_layers)]
+        # The pair-bias attention also needs trunk-level widths, so it keeps the full config; the
+        # transition is entirely described by the diffusion sub-config and takes only that.
+        diffusion_config = config.structure_head.diffusion_module
+        self.attention_layers = nn.ModuleList(
+            [EsmFold2AttentionPairBias(config) for _ in range(diffusion_config.num_hidden_layers)]
+        )
+        self.transition_layers = nn.ModuleList(
+            [EsmFold2ConditionedTransition(diffusion_config) for _ in range(diffusion_config.num_hidden_layers)]
         )
 
     def compute_pair_biases(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
         """Per-block additive attention biases; see ``EsmFold2AttentionPairBias.compute_pair_bias``."""
-        return [attn.compute_pair_bias(pair_states, attention_mask) for attn in self.attn_blocks]
+        return [attn.compute_pair_bias(pair_states, attention_mask) for attn in self.attention_layers]
 
     def forward(self, token_hidden_states: Tensor, single_states: Tensor, attention_biases: list[Tensor]) -> Tensor:
         hidden_states = token_hidden_states
-        for attn, transition, attention_bias in zip(self.attn_blocks, self.transition_blocks, attention_biases):
+        for attn, transition, attention_bias in zip(self.attention_layers, self.transition_layers, attention_biases):
             attn_output, _ = attn(hidden_states, single_states, attention_bias)
             hidden_states = hidden_states + attn_output
             hidden_states = hidden_states + transition(hidden_states, single_states)
@@ -744,33 +741,34 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        pairwise_hidden_size = config.pairwise_hidden_size
-        token_hidden_size = config.structure_head.diffusion_module.token_hidden_size
-        single_inputs_size = config.single_inputs_size
-        fourier_dim = config.structure_head.diffusion_module.fourier_dim
-        transition_multiplier = config.structure_head.diffusion_module.transition_multiplier
-        self.sigma_data = config.structure_head.diffusion_module.sigma_data
+        diffusion_config = config.structure_head.diffusion_module
+        self.sigma_data = diffusion_config.sigma_data
 
-        self.z_input_norm = EsmFold2LayerNorm(2 * pairwise_hidden_size)
-        self.z_proj = nn.Linear(2 * pairwise_hidden_size, pairwise_hidden_size, bias=False)
-        # ``chunk=False``: chunking these would move the last bf16 bits (see EsmFold2Transition).
-        self.z_transitions = nn.ModuleList(
+        self.pair_input_norm = EsmFold2LayerNorm(2 * config.pairwise_hidden_size)
+        self.pair_proj = nn.Linear(2 * config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
+        self.pair_transitions = nn.ModuleList(
             [
                 EsmFold2Transition(
-                    config, pairwise_hidden_size, transition_multiplier * pairwise_hidden_size, chunk=False
+                    config.pairwise_hidden_size,
+                    diffusion_config.transition_multiplier * config.pairwise_hidden_size,
+                    chunk_size=None,
                 )
                 for _ in range(2)
             ]
         )
 
-        self.s_input_norm = EsmFold2LayerNorm(single_inputs_size)
-        self.s_proj = nn.Linear(single_inputs_size, token_hidden_size, bias=False)
-        self.fourier = EsmFold2FourierEmbedding(fourier_dim)
-        self.noise_norm = EsmFold2LayerNorm(fourier_dim)
-        self.noise_proj = nn.Linear(fourier_dim, token_hidden_size, bias=False)
-        self.s_transitions = nn.ModuleList(
+        self.single_input_norm = EsmFold2LayerNorm(config.single_inputs_size)
+        self.single_proj = nn.Linear(config.single_inputs_size, diffusion_config.hidden_size, bias=False)
+        self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim)
+        self.noise_norm = EsmFold2LayerNorm(diffusion_config.fourier_dim)
+        self.noise_proj = nn.Linear(diffusion_config.fourier_dim, diffusion_config.hidden_size, bias=False)
+        self.single_transitions = nn.ModuleList(
             [
-                EsmFold2Transition(config, token_hidden_size, transition_multiplier * token_hidden_size, chunk=False)
+                EsmFold2Transition(
+                    diffusion_config.hidden_size,
+                    diffusion_config.transition_multiplier * diffusion_config.hidden_size,
+                    chunk_size=None,
+                )
                 for _ in range(2)
             ]
         )
@@ -779,8 +777,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         """The pair half of the conditioning. Noise-independent, so it is built once per fold."""
         # ``pair_trunk`` is fp32, so the concat and the norm stay fp32; z_proj downcasts.
         pair_states = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
-        pair_states = self.z_proj(self.z_input_norm(pair_states).to(self.z_proj.weight.dtype))
-        for block in self.z_transitions:
+        pair_states = self.pair_proj(self.pair_input_norm(pair_states).to(self.pair_proj.weight.dtype))
+        for block in self.pair_transitions:
             pair_states = block(pair_states)
         return pair_states
 
@@ -789,7 +787,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
         Noise-independent, so only the Fourier embedding ``forward`` adds to it varies per step.
         """
-        return self.s_proj(self.s_input_norm(single_inputs))
+        return self.single_proj(self.single_input_norm(single_inputs))
 
     def forward(self, noise_level: Tensor, single_states: Tensor) -> Tensor:
         """The noise-dependent half of the single conditioning: add the Fourier noise embedding to the
@@ -799,7 +797,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
         noise_embeds = self.noise_proj(self.noise_norm(noise_embeds).to(self.noise_proj.weight.dtype))
         single_states = single_states + noise_embeds.unsqueeze(1)
 
-        for block in self.s_transitions:
+        for block in self.single_transitions:
             single_states = block(single_states)
 
         return single_states
@@ -810,16 +808,17 @@ class EsmFold2DiffusionModule(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        token_hidden_size = config.structure_head.diffusion_module.token_hidden_size
-        self.sigma_data = config.structure_head.diffusion_module.sigma_data
+        # Keeps the full config: every submodule below reads trunk-level fields too.
+        diffusion_config = config.structure_head.diffusion_module
+        self.sigma_data = diffusion_config.sigma_data
 
         self.conditioning = EsmFold2DiffusionConditioning(config)
         self.atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=True)
         self.atom_decoder = EsmFold2AtomDecoder(config)
-        self.s_to_token = nn.Linear(token_hidden_size, token_hidden_size, bias=False)
+        self.single_to_token = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
         self.token_transformer = EsmFold2DiffusionTransformer(config)
-        self.s_step_norm = EsmFold2LayerNorm(token_hidden_size)
-        self.token_norm = EsmFold2LayerNorm(token_hidden_size)
+        self.single_step_norm = EsmFold2LayerNorm(diffusion_config.hidden_size)
+        self.token_norm = EsmFold2LayerNorm(diffusion_config.hidden_size)
 
     def prepare_conditioning(
         self,
@@ -907,7 +906,7 @@ class EsmFold2DiffusionModule(nn.Module):
         )
 
         # Step 4: add conditioned single repr
-        token_hidden_states = token_hidden_states + self.s_to_token(self.s_step_norm(single_states))
+        token_hidden_states = token_hidden_states + self.single_to_token(self.single_step_norm(single_states))
 
         # Step 5: token transformer
         token_hidden_states = self.token_transformer(
@@ -951,20 +950,20 @@ class EsmFold2DiffusionStructureHead(nn.Module):
     def inference_noise_schedule(self, num_steps: int | None = None, device: torch.device | None = None) -> Tensor:
         """Karras power-law noise schedule."""
         head_config = self.config.structure_head
-        sigma_data = head_config.diffusion_module.sigma_data
         steps = head_config.inference_num_steps if num_steps is None else int(num_steps)
         if steps == 1:
             return torch.tensor(
-                [head_config.inference_s_max * sigma_data, 0.0],
+                [head_config.inference_sigma_max_ratio * head_config.diffusion_module.sigma_data, 0.0],
                 device=device,
                 dtype=torch.float32,
             )
-        inverse_exponent = 1.0 / head_config.inference_p
+        inverse_exponent = 1.0 / head_config.inference_exponent
         ramp = torch.arange(steps, device=device, dtype=torch.float32)
-        base = head_config.inference_s_max**inverse_exponent + (ramp / (steps - 1)) * (
-            head_config.inference_s_min**inverse_exponent - head_config.inference_s_max**inverse_exponent
+        base = head_config.inference_sigma_max_ratio**inverse_exponent + (ramp / (steps - 1)) * (
+            head_config.inference_sigma_min_ratio**inverse_exponent
+            - head_config.inference_sigma_max_ratio**inverse_exponent
         )
-        schedule = sigma_data * base.pow(head_config.inference_p)
+        schedule = head_config.diffusion_module.sigma_data * base.pow(head_config.inference_exponent)
         return F.pad(schedule, (0, 1), value=0.0)
 
     @staticmethod
@@ -1031,15 +1030,14 @@ class EsmFold2DiffusionStructureHead(nn.Module):
 
     def _build_noise_schedule(self, num_sampling_steps: int | None, device: torch.device) -> tuple[Tensor, Tensor]:
         """Karras σ schedule (Algorithm 18) + per-step γ churn factors, capped at
-        ``config.structure_head.max_inference_sigma``."""
+        ``config.structure_head.inference_sigma_cap``."""
         head_config = self.config.structure_head
         steps = head_config.inference_num_steps if num_sampling_steps is None else int(num_sampling_steps)
         schedule = self.inference_noise_schedule(steps, device)
-        max_inference_sigma = head_config.max_inference_sigma
         # Truncate the high-σ tail above the cap and re-prepend the cap, so sampling starts from it.
-        if max_inference_sigma is not None:
-            schedule = schedule[schedule <= max_inference_sigma]
-            schedule = F.pad(schedule, (1, 0), value=max_inference_sigma)
+        if head_config.inference_sigma_cap is not None:
+            schedule = schedule[schedule <= head_config.inference_sigma_cap]
+            schedule = F.pad(schedule, (1, 0), value=head_config.inference_sigma_cap)
         gammas = torch.where(
             schedule > head_config.gamma_min,
             torch.full_like(schedule, head_config.gamma_0),
@@ -1085,12 +1083,12 @@ class EsmFold2RelativePositionEncoding(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        self.n_relative_residx_bins = config.n_relative_residx_bins
-        self.n_relative_chain_bins = config.n_relative_chain_bins
+        self.num_relative_residx_bins = config.num_relative_residx_bins
+        self.num_relative_chain_bins = config.num_relative_chain_bins
 
-        num_residue_features = 2 * self.n_relative_residx_bins + 2
-        num_token_features = 2 * self.n_relative_residx_bins + 2
-        num_chain_features = 2 * self.n_relative_chain_bins + 2
+        num_residue_features = 2 * self.num_relative_residx_bins + 2
+        num_token_features = 2 * self.num_relative_residx_bins + 2
+        num_chain_features = 2 * self.num_relative_chain_bins + 2
         num_same_entity_features = 1
         num_features = num_residue_features + num_token_features + num_chain_features + num_same_entity_features
         self.embed = nn.Linear(num_features, config.pairwise_hidden_size, bias=False)
@@ -1108,7 +1106,7 @@ class EsmFold2RelativePositionEncoding(nn.Module):
         same_entity = entity_id.unsqueeze(2) == entity_id.unsqueeze(1)
 
         # Residue, token and chain offsets; the last keeps cross-chain pairs, so its mask is inverted.
-        residue_bins, chain_bins = self.n_relative_residx_bins, self.n_relative_chain_bins
+        residue_bins, chain_bins = self.num_relative_residx_bins, self.num_relative_chain_bins
         relative_residue_one_hot = _relative_position_one_hot(
             residue_index.unsqueeze(2) - residue_index.unsqueeze(1), residue_bins, same_chain
         )
@@ -1139,10 +1137,9 @@ class EsmFold2SingleToPair(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        pairwise_hidden_size = config.pairwise_hidden_size
-        self.downproject = nn.Linear(pairwise_hidden_size, pairwise_hidden_size)
-        self.output_fc1 = nn.Linear(2 * pairwise_hidden_size, pairwise_hidden_size)
-        self.output_fc2 = nn.Linear(pairwise_hidden_size, pairwise_hidden_size)
+        self.downproject = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size)
+        self.output_fc1 = nn.Linear(2 * config.pairwise_hidden_size, config.pairwise_hidden_size)
+        self.output_fc2 = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size)
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         hidden_states = self.downproject(hidden_states)
@@ -1162,27 +1159,24 @@ class EsmFold2LanguageModelEncoder(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        pairwise_hidden_size = config.pairwise_hidden_size
-        hidden_size = config.esmc_config.hidden_size
-        num_layers = config.esmc_config.num_hidden_layers
 
-        self.base_z_to_pair = EsmFold2SingleToPair(config)
-        self.base_z_output_norm = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.base_z_input_norm = EsmFold2LayerNorm(hidden_size)
-        self.base_z_proj = nn.Linear(hidden_size, pairwise_hidden_size, bias=False)
-        self.base_z_combine = nn.Parameter(torch.zeros(num_layers + 1))
+        self.single_to_pair = EsmFold2SingleToPair(config)
+        self.pair_output_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.pair_input_norm = EsmFold2LayerNorm(config.esmc_config.hidden_size)
+        self.pair_proj = nn.Linear(config.esmc_config.hidden_size, config.pairwise_hidden_size, bias=False)
+        self.layer_weights = nn.Parameter(torch.zeros(config.esmc_config.num_hidden_layers + 1))
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         """Project ESMC hidden states ``[batch_size, num_tokens, num_layers + 1, lm_hidden_size]`` to a
         ``[batch_size, num_tokens, num_tokens, pairwise_hidden_size]``
         pair representation."""
-        hidden_states = hidden_states.to(self.base_z_proj.weight.dtype)
-        normed = self.base_z_input_norm(hidden_states)
-        lm_pair_states = self.base_z_proj(normed)  # [batch_size, num_tokens, num_layers + 1, pairwise_hidden_size]
-        weights = self.base_z_combine.softmax(0)
+        hidden_states = hidden_states.to(self.pair_proj.weight.dtype)
+        normed = self.pair_input_norm(hidden_states)
+        lm_pair_states = self.pair_proj(normed)  # [batch_size, num_tokens, num_layers + 1, pairwise_hidden_size]
+        weights = self.layer_weights.softmax(0)
         lm_pair_states = (weights @ lm_pair_states).squeeze(-2)  # [batch_size, num_tokens, pairwise_hidden_size]
-        pair_states = self.base_z_to_pair(lm_pair_states)
-        lm_pair_states = self.base_z_output_norm(
+        pair_states = self.single_to_pair(lm_pair_states)
+        lm_pair_states = self.pair_output_norm(
             pair_states
         )  # [batch_size, num_tokens, num_tokens, pairwise_hidden_size]
         return lm_pair_states
@@ -1198,14 +1192,13 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
 
     def __init__(self, config: EsmFold2Config, outgoing: bool = True) -> None:
         super().__init__()
-        dim = config.pairwise_hidden_size
-        self.dim = dim
+        self.dim = config.pairwise_hidden_size
         self.flow = "outgoing" if outgoing else "incoming"
-        self.norm_start = EsmFold2LayerNorm(dim)
-        self.norm_mix = EsmFold2LayerNorm(dim)
-        self.proj_bundle = nn.Linear(dim, 4 * dim, bias=False)
-        self.proj_emit = nn.Linear(dim, dim, bias=False)
-        self.proj_gate = nn.Linear(dim, dim, bias=False)
+        self.norm_start = EsmFold2LayerNorm(self.dim)
+        self.norm_mix = EsmFold2LayerNorm(self.dim)
+        self.proj_bundle = nn.Linear(self.dim, 4 * self.dim, bias=False)
+        self.proj_emit = nn.Linear(self.dim, self.dim, bias=False)
+        self.proj_gate = nn.Linear(self.dim, self.dim, bias=False)
 
         # Chunk the O(N^3) contraction for memory on long sequences.
         self.chunk_size: int | None = config.chunk_size
@@ -1250,7 +1243,7 @@ class EsmFold2PairUpdateLayer(GradientCheckpointingLayer):
         self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=True)
         self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=False)
         self.pair_transition = EsmFold2Transition(
-            config, config.pairwise_hidden_size, config.pair_transition_intermediate_size
+            config.pairwise_hidden_size, config.pair_transition_intermediate_size, config.chunk_size
         )
 
     def forward(self, pair_states: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
@@ -1283,19 +1276,23 @@ class EsmFold2OuterProductMean(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        msa_hidden_size = config.msa_encoder.hidden_size
-        outer_hidden_size = config.msa_encoder.outer_hidden_size
-        self.outer_hidden_size = outer_hidden_size
+        self.outer_hidden_size = config.msa_encoder.outer_hidden_size
         self.divide_outer_before_proj = config.msa_encoder.divide_outer_before_proj
-        self.norm = EsmFold2LayerNorm(msa_hidden_size)
-        self.W = nn.Linear(msa_hidden_size, 2 * outer_hidden_size, bias=False)
-        self.Wout = nn.Linear(outer_hidden_size * outer_hidden_size, config.pairwise_hidden_size, bias=True)
+        self.norm = EsmFold2LayerNorm(config.msa_encoder.hidden_size)
+        self.input_proj = nn.Linear(
+            config.msa_encoder.hidden_size, 2 * config.msa_encoder.outer_hidden_size, bias=False
+        )
+        self.output_proj = nn.Linear(
+            config.msa_encoder.outer_hidden_size * config.msa_encoder.outer_hidden_size,
+            config.pairwise_hidden_size,
+            bias=True,
+        )
         # Its own chunk size, off by default: chunking this einsum is not always bit-exact in bf16.
         self.chunk_size: int | None = config.msa_encoder.outer_product_chunk_size
 
     def forward(self, msa_states: Tensor, msa_attention_mask: Tensor) -> Tensor:
         msa_normed = self.norm(msa_states)
-        projected_msa = self.W(msa_normed) * msa_attention_mask.unsqueeze(-1).to(msa_normed.dtype)
+        projected_msa = self.input_proj(msa_normed) * msa_attention_mask.unsqueeze(-1).to(msa_normed.dtype)
         left, right = projected_msa.chunk(2, dim=-1)
         mask_float = msa_attention_mask.to(left.dtype)
         num_valid_pairs = (mask_float @ mask_float.transpose(-1, -2)).unsqueeze(-1).clamp(min=1.0)
@@ -1307,9 +1304,9 @@ class EsmFold2OuterProductMean(nn.Module):
             window = slice(start, start + chunk_size)
             outer = torch.einsum("bimc,bjmd->bijcd", left[:, window], right).flatten(-2)
             if self.divide_outer_before_proj:
-                out_chunks.append(self.Wout(outer / num_valid_pairs[:, window]))
+                out_chunks.append(self.output_proj(outer / num_valid_pairs[:, window]))
             else:
-                out_chunks.append(self.Wout(outer) / num_valid_pairs[:, window])
+                out_chunks.append(self.output_proj(outer) / num_valid_pairs[:, window])
         return torch.cat(out_chunks, dim=1)
 
 
@@ -1318,17 +1315,15 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        msa_hidden_size = config.msa_encoder.hidden_size
-        pairwise_hidden_size = config.pairwise_hidden_size
         self.num_attention_heads = config.msa_encoder.num_attention_heads
-        self.head_dim = config.msa_encoder.head_width
+        self.head_dim = config.msa_encoder.head_dim
         inner_dim = self.num_attention_heads * self.head_dim
-        self.norm_single = EsmFold2LayerNorm(msa_hidden_size)
-        self.bias_norm = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.bias_proj = nn.Linear(pairwise_hidden_size, self.num_attention_heads, bias=False)
-        self.Wv = nn.Linear(msa_hidden_size, inner_dim, bias=False)
-        self.Wgate = nn.Linear(msa_hidden_size, inner_dim, bias=False)
-        self.Wout = nn.Linear(inner_dim, msa_hidden_size, bias=False)
+        self.norm_single = EsmFold2LayerNorm(config.msa_encoder.hidden_size)
+        self.bias_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.bias_proj = nn.Linear(config.pairwise_hidden_size, self.num_attention_heads, bias=False)
+        self.v_proj = nn.Linear(config.msa_encoder.hidden_size, inner_dim, bias=False)
+        self.gate_proj = nn.Linear(config.msa_encoder.hidden_size, inner_dim, bias=False)
+        self.o_proj = nn.Linear(inner_dim, config.msa_encoder.hidden_size, bias=False)
 
     def forward(self, msa_states: Tensor, pair_states: Tensor, pair_attention_mask: Tensor) -> Tensor:
         """
@@ -1352,12 +1347,12 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
         # Softmax over the attended token axis j, not over the trailing axis.
         attn_weights = torch.softmax(attention_bias, dim=-2, dtype=torch.float32).to(attention_bias.dtype)
 
-        value_states = self.Wv(msa_normed).reshape(hidden_shape)
-        gate = torch.sigmoid(self.Wgate(msa_normed)).reshape(hidden_shape)
+        value_states = self.v_proj(msa_normed).reshape(hidden_shape)
+        gate = torch.sigmoid(self.gate_proj(msa_normed)).reshape(hidden_shape)
 
         attn_output = torch.einsum("bijh,bjmhd->bimhd", attn_weights, value_states)
         attn_output = gate * attn_output
-        return self.Wout(attn_output.reshape(batch_size, seq_len, msa_depth, -1))
+        return self.o_proj(attn_output.reshape(batch_size, seq_len, msa_depth, -1))
 
 
 @dataclass
@@ -1477,15 +1472,13 @@ class EsmFold2ConfidenceInputEmbedder(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        pairwise_hidden_size = config.pairwise_hidden_size
-        single_inputs_size = config.single_inputs_size
-        self.s_inputs_norm = EsmFold2LayerNorm(single_inputs_size)
-        self.z_norm = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.s_to_z = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
-        self.s_to_z_transpose = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
-        self.s_to_z_prod_in1 = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
-        self.s_to_z_prod_in2 = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
-        self.s_to_z_prod_out = nn.Linear(pairwise_hidden_size, pairwise_hidden_size, bias=False)
+        self.single_inputs_norm = EsmFold2LayerNorm(config.single_inputs_size)
+        self.pair_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.single_to_pair = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.single_to_pair_transpose = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.single_to_pair_prod_in1 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.single_to_pair_prod_in2 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.single_to_pair_prod_out = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
 
     def forward(
         self,
@@ -1494,17 +1487,18 @@ class EsmFold2ConfidenceInputEmbedder(nn.Module):
         relative_position_encoding: Tensor | None,
         token_bonds_encoding: Tensor | None,
     ) -> Tensor:
-        s_inputs_normed = self.s_inputs_norm(single_inputs)
+        single_inputs_normed = self.single_inputs_norm(single_inputs)
 
-        pair_states = self.z_norm(pair_states)
+        pair_states = self.pair_norm(pair_states)
         if relative_position_encoding is not None:
             pair_states = pair_states + relative_position_encoding
         if token_bonds_encoding is not None:
             pair_states = pair_states + token_bonds_encoding
-        pair_states = pair_states + self.s_to_z(s_inputs_normed).unsqueeze(2)
-        pair_states = pair_states + self.s_to_z_transpose(s_inputs_normed).unsqueeze(1)
-        pair_states = pair_states + self.s_to_z_prod_out(
-            self.s_to_z_prod_in1(s_inputs_normed)[:, :, None, :] * self.s_to_z_prod_in2(s_inputs_normed)[:, None, :, :]
+        pair_states = pair_states + self.single_to_pair(single_inputs_normed).unsqueeze(2)
+        pair_states = pair_states + self.single_to_pair_transpose(single_inputs_normed).unsqueeze(1)
+        pair_states = pair_states + self.single_to_pair_prod_out(
+            self.single_to_pair_prod_in1(single_inputs_normed)[:, :, None, :]
+            * self.single_to_pair_prod_in2(single_inputs_normed)[:, None, :, :]
         )
         return pair_states
 
@@ -1517,15 +1511,12 @@ class EsmFold2ConfidenceHead(nn.Module):
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
         self.eps = config.confidence_head.eps
-        hidden_size = config.hidden_size
-        pairwise_hidden_size = config.pairwise_hidden_size
-        distogram_bins = config.confidence_head.distogram_bins
 
         boundaries = torch.linspace(
-            config.confidence_head.min_dist, config.confidence_head.max_dist, distogram_bins - 1
+            config.confidence_head.min_dist, config.confidence_head.max_dist, config.confidence_head.distogram_bins - 1
         )
         self.register_buffer("boundaries", boundaries)
-        self.dist_bin_pairwise_embed = nn.Embedding(distogram_bins, pairwise_hidden_size)
+        self.dist_bin_pairwise_embed = nn.Embedding(config.confidence_head.distogram_bins, config.pairwise_hidden_size)
 
         self.input_embedder = EsmFold2ConfidenceInputEmbedder(config)
 
@@ -1534,21 +1525,20 @@ class EsmFold2ConfidenceHead(nn.Module):
         self.folding_trunk = EsmFold2PairUpdateStack(config, config.confidence_head.num_hidden_layers)
 
         # Heads.
-        self.plddt_ln = EsmFold2LayerNorm(hidden_size)
-        max_atoms_per_token = config.max_atoms_per_token
+        self.plddt_layernorm = EsmFold2LayerNorm(config.hidden_size)
         self.plddt_weight = nn.Parameter(
-            torch.zeros(max_atoms_per_token, hidden_size, config.confidence_head.num_plddt_bins)
+            torch.zeros(config.max_atoms_per_token, config.hidden_size, config.confidence_head.num_plddt_bins)
         )
 
-        self.pae_ln = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.pae_head = nn.Linear(pairwise_hidden_size, config.confidence_head.num_pae_bins, bias=False)
+        self.pae_layernorm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.pae_head = nn.Linear(config.pairwise_hidden_size, config.confidence_head.num_pae_bins, bias=False)
 
-        self.pde_ln = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.pde_head = nn.Linear(pairwise_hidden_size, config.confidence_head.num_pde_bins, bias=False)
+        self.pde_layernorm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.pde_head = nn.Linear(config.pairwise_hidden_size, config.confidence_head.num_pde_bins, bias=False)
 
-        self.resolved_ln = EsmFold2LayerNorm(hidden_size)
+        self.resolved_layernorm = EsmFold2LayerNorm(config.hidden_size)
         # 2 = resolved logits ([unresolved, resolved]).
-        self.resolved_weight = nn.Parameter(torch.zeros(max_atoms_per_token, hidden_size, 2))
+        self.resolved_weight = nn.Parameter(torch.zeros(config.max_atoms_per_token, config.hidden_size, 2))
 
     def _build_pair_and_single(
         self,
@@ -1625,7 +1615,7 @@ class EsmFold2ConfidenceHead(nn.Module):
         """Per-atom confidence outputs off the single representation (pLDDT family + resolved)."""
         atom_mask_float = atom_mask_expanded.float()
         single_at_atoms = _gather_along_dim1(single_states, atom_to_token_expanded)
-        normed_single_at_atoms = self.plddt_ln(single_at_atoms)
+        normed_single_at_atoms = self.plddt_layernorm(single_at_atoms)
 
         intra_idx = _compute_intra_token_idx(atom_to_token_expanded)
         intra_idx = intra_idx.clamp(max=self.plddt_weight.shape[0] - 1)
@@ -1666,7 +1656,7 @@ class EsmFold2ConfidenceHead(nn.Module):
             plddt_ca = plddt_per_atom.gather(1, rep_idx_expanded)
 
         # Resolved (per-atom binary): same per-atom single features, its own weight.
-        resolved_single_at_atoms = self.resolved_ln(single_at_atoms)
+        resolved_single_at_atoms = self.resolved_layernorm(single_at_atoms)
         resolved_weights = self.resolved_weight[intra_idx]
         resolved_logits = torch.einsum("...c,...cb->...b", resolved_single_at_atoms, resolved_weights)
 
@@ -1771,8 +1761,8 @@ class EsmFold2ConfidenceHead(nn.Module):
             expanded_batch_size=expanded_batch_size,
         )
 
-        pae_logits = self.pae_head(self.pae_ln(pair_states))
-        pde_logits = self.pde_head(self.pde_ln(pair_states))
+        pae_logits = self.pae_head(self.pae_layernorm(pair_states))
+        pde_logits = self.pde_head(self.pde_layernorm(pair_states))
         # Expected-value pae/pde are reported metrics; only the logits are trained.
         with torch.no_grad():
             pae = _categorical_mean(pae_logits, start=0.0, end=32.0)
@@ -1814,12 +1804,12 @@ class EsmFold2MSAEncoderLayer(nn.Module):
         if not is_final_block:
             self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
             self.msa_transition = EsmFold2Transition(
-                config, config.msa_encoder.hidden_size, config.msa_encoder.transition_intermediate_size
+                config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
             )
         self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=True)
         self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=False)
         self.pair_transition = EsmFold2Transition(
-            config, config.pairwise_hidden_size, config.pair_transition_intermediate_size
+            config.pairwise_hidden_size, config.pair_transition_intermediate_size, config.chunk_size
         )
 
     def forward(
@@ -1844,16 +1834,13 @@ class EsmFold2MSAEncoder(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        msa_hidden_size = config.msa_encoder.hidden_size
-        single_inputs_size = config.single_inputs_size
-        num_hidden_layers = config.msa_encoder.num_hidden_layers
         # num_res_types one-hot + has_deletion + deletion_value.
-        self.embed = nn.Linear(config.num_res_types + 2, msa_hidden_size, bias=False)
-        self.project_inputs = nn.Linear(single_inputs_size, msa_hidden_size, bias=False)
+        self.embed = nn.Linear(config.num_res_types + 2, config.msa_encoder.hidden_size, bias=False)
+        self.project_inputs = nn.Linear(config.single_inputs_size, config.msa_encoder.hidden_size, bias=False)
         self.layers = nn.ModuleList(
             [
-                EsmFold2MSAEncoderLayer(config, is_final_block=(i == num_hidden_layers - 1))
-                for i in range(num_hidden_layers)
+                EsmFold2MSAEncoderLayer(config, is_final_block=(i == config.msa_encoder.num_hidden_layers - 1))
+                for i in range(config.msa_encoder.num_hidden_layers)
             ]
         )
 
@@ -1887,20 +1874,21 @@ class EsmFold2Parcae(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
-        pairwise_hidden_size = config.pairwise_hidden_size
-        self.input_norm = EsmFold2LayerNorm(pairwise_hidden_size)
-        self.log_a = nn.Parameter(torch.zeros(pairwise_hidden_size))
-        self.log_delta = nn.Parameter(torch.empty(pairwise_hidden_size, dtype=torch.float32))
-        self.b_cont = nn.Parameter(torch.empty(pairwise_hidden_size, pairwise_hidden_size))
-        self.readout = nn.Linear(pairwise_hidden_size, pairwise_hidden_size, bias=False)
+        self.input_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
+        self.log_state_decay = nn.Parameter(torch.zeros(config.pairwise_hidden_size))
+        self.log_delta = nn.Parameter(torch.empty(config.pairwise_hidden_size, dtype=torch.float32))
+        self.input_matrix_continuous = nn.Parameter(
+            torch.empty(config.pairwise_hidden_size, config.pairwise_hidden_size)
+        )
+        self.readout = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
         self.coda = EsmFold2PairUpdateStack(config, config.parcae_num_coda_layers)
 
     def discretized_dynamics(self) -> tuple[Tensor, Tensor]:
         """``(state_decay, input_matrix)`` -- the per-channel state transition (Ā) and the discretized
         input projection (B̄) of the recurrence."""
         delta = F.softplus(self.log_delta)
-        state_decay = torch.exp(-delta * torch.exp(self.log_a))
-        input_matrix = delta[:, None] * self.b_cont
+        state_decay = torch.exp(-delta * torch.exp(self.log_state_decay))
+        input_matrix = delta[:, None] * self.input_matrix_continuous
         return state_decay, input_matrix
 
 
@@ -1918,7 +1906,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
     ]
     supports_gradient_checkpointing = True
     # Every norm weight/bias, plus the Fourier noise-embedding buffers, stay fp32 under a bf16 load.
-    _keep_in_fp32_modules_strict = ["fourier", "norm", "_ln"]
+    _keep_in_fp32_modules_strict = ["fourier", "norm"]
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -1926,8 +1914,8 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, EsmFold2Parcae):
             init.eye_(module.readout.weight)
-            init.eye_(module.b_cont)
-            init.zeros_(module.log_a)
+            init.eye_(module.input_matrix_continuous)
+            init.zeros_(module.log_state_decay)
             parcae_delta_init = -math.log(math.sqrt(1.0 / 5.0))
             init.constant_(module.log_delta, _inverse_softplus(parcae_delta_init))
         elif isinstance(module, EsmFold2ConfidenceHead):
@@ -1944,9 +1932,9 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.output_gate.weight)
                 init.constant_(module.output_gate.bias, -2.0)
         elif isinstance(module, EsmFold2DiffusionModule):
-            init.zeros_(module.s_to_token.weight)
+            init.zeros_(module.single_to_token.weight)
         elif isinstance(module, EsmFold2LanguageModelEncoder):
-            init.zeros_(module.base_z_combine)
+            init.zeros_(module.layer_weights)
 
 
 @auto_docstring(
@@ -1959,14 +1947,12 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
 class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__(config)
-        single_inputs_size = config.single_inputs_size
-        pairwise_hidden_size = config.pairwise_hidden_size
 
         self.inputs_atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=False)
-        self.z_init_1 = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
-        self.z_init_2 = nn.Linear(single_inputs_size, pairwise_hidden_size, bias=False)
+        self.pair_init_1 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.pair_init_2 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
         self.rel_pos = EsmFold2RelativePositionEncoding(config)
-        self.token_bonds = nn.Linear(1, pairwise_hidden_size, bias=False)
+        self.token_bonds = nn.Linear(1, config.pairwise_hidden_size, bias=False)
         self.language_model = EsmFold2LanguageModelEncoder(config)
         # Populated by from_pretrained from the checkpoint's ``esmc.*`` weights; run frozen (no_grad).
         self.esmc = AutoModel.from_config(config.esmc_config)
@@ -1978,7 +1964,9 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
 
         # Heads --------------------------------------------------------------
         self.structure_head = EsmFold2DiffusionStructureHead(config)
-        self.distogram_head = nn.Linear(pairwise_hidden_size, config.structure_head.distogram_bins, bias=True)
+        self.distogram_head = nn.Linear(
+            config.pairwise_hidden_size, config.structure_head.num_distogram_bins, bias=True
+        )
         self.confidence_head = EsmFold2ConfidenceHead(config)
 
         self.msa_encoder = EsmFold2MSAEncoder(config)
@@ -2383,7 +2371,9 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             dim=-1,
         )
 
-        initial_pair_states = self.z_init_1(single_inputs).unsqueeze(2) + self.z_init_2(single_inputs).unsqueeze(1)
+        initial_pair_states = self.pair_init_1(single_inputs).unsqueeze(2) + self.pair_init_2(single_inputs).unsqueeze(
+            1
+        )
 
         relative_position_encoding = self.rel_pos(
             residue_index=residue_index,

@@ -63,15 +63,15 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
             "hidden_size": 16,
             "num_hidden_layers": 1,
             "num_attention_heads": 2,
-            "n_spatial_rope_pairs_per_axis": 1,
-            "n_uid_rope_pairs": 1,
+            "num_spatial_rope_pairs_per_axis": 1,
+            "num_uid_rope_pairs": 1,
         },
         "structure_head": {
-            "distogram_bins": 8,
+            "num_distogram_bins": 8,
             "diffusion_module": {
-                "token_hidden_size": 32,
-                "token_num_blocks": 1,
-                "token_num_heads": 2,
+                "hidden_size": 32,
+                "num_hidden_layers": 1,
+                "num_attention_heads": 2,
                 "atom_encoder": {
                     "hidden_size": 16,
                     "num_hidden_layers": 1,
@@ -150,7 +150,7 @@ class EsmFold2ModelTest(unittest.TestCase):
                 self.assertEqual(coords.shape[0], 1)  # num_diffusion_samples
                 self.assertEqual(coords.shape[-1], 3)  # xyz
                 self.assertTrue(torch.isfinite(coords).all())
-                self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head.distogram_bins)
+                self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head.num_distogram_bins)
 
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
