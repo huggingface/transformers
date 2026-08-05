@@ -514,9 +514,6 @@ if is_torch_distributed_available():
 
 
 class MoEExpertsParallel(TensorParallelLayer):
-    def __init__(self, output_layouts=None):
-        self.output_layouts = output_layouts or Replicate()
-
     def should_use_local_tensors(self, module):
         return True
 
@@ -535,16 +532,8 @@ class MoEExpertsParallel(TensorParallelLayer):
         return (hidden_states, top_k_index, top_k_weights), kwargs
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
-        """Install pre / around / post transforms; ``is_expert_parallel`` is baked into the closure."""
+        """Install the transforms but pass `is_expert_parallel` in the forward call."""
         original_forward = module.forward
-        output_source = (
-            Partial()
-            if any(
-                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-                for param in module.parameters()
-            )
-            else Replicate()
-        )
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(
@@ -552,31 +541,24 @@ class MoEExpertsParallel(TensorParallelLayer):
             )
             with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh, source=output_source)
+            return self.transform_output_post_forward(module, output, mesh)
 
         module.forward = tp_forward
         return module
 
-    def transform_output_post_forward(self, module, output, mesh, source=None):
+    def transform_output_post_forward(self, module, output, mesh):
         if output is None:
             return None
-        if source is None:
-            has_sharded_params = any(
-                isinstance(p, DTensor) and any(not pl.is_replicate() for pl in p.placements)
-                for p in module.parameters()
-            )
-            source = Partial() if has_sharded_params else Replicate()
-        target = self.output_layouts
-        if output.dim() == 2 and isinstance(target, Shard) and target.dim == 1:
-            target = Shard(0)
-        if not isinstance(output, DTensor) and isinstance(source, Partial) and isinstance(target, Replicate):
-            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            return _AllReduceForward.apply(output, process_group)
-        if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [source], run_check=False)
-        if output.placements != (target,):
-            output = output.redistribute(placements=(target,))
-        return output.to_local()
+
+        has_sharded_parameters = any(
+            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
+            for param in module.parameters()
+        )
+        if not has_sharded_parameters:
+            return output
+
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return _AllReduceForward.apply(output, process_group)
 
 
 class MoeIdentityParallel(TensorParallelLayer):
@@ -662,7 +644,7 @@ class ParallelInterface(GeneralInterface):
             "all_reduce": AllReduceParallel(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-            "moe_tp_experts": MoEExpertsParallel(output_layouts=Replicate()),
+            "moe_tp_experts": MoEExpertsParallel(),
             "moe_identity_expert": MoeIdentityParallel(),
             "ep_router": EpRouterParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
