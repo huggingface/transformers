@@ -1543,6 +1543,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             video_hidden_states=outputs.video_hidden_states,
         )
 
+    @auto_docstring
     def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
