@@ -48,6 +48,13 @@ if is_mistral_common_available():
         get_one_valid_tokenizer_file,
     )
 
+    _MAP_SPECIAL_TOKENS: dict[str, str] = {
+        "bos_token": SpecialTokens.bos.value,
+        "eos_token": SpecialTokens.eos.value,
+        "pad_token": SpecialTokens.pad.value,
+        "unk_token": SpecialTokens.unk.value,
+    }
+
 
 if is_torch_available():
     import torch
@@ -172,13 +179,6 @@ def _maybe_remove_lang(text: str | list[str], skip_special_tokens: bool) -> str 
     return [re.sub(r"^lang:[a-z]{2}", "", string) for string in text]
 
 
-_MAP_SPECIAL_TOKENS = {
-    "bos_token": SpecialTokens.bos.value,
-    "eos_token": SpecialTokens.eos.value,
-    "pad_token": SpecialTokens.pad.value,
-    "unk_token": SpecialTokens.unk.value,
-}
-
 _VALID_INIT_KWARGS = {"_from_auto", "backend", "files_loaded"}
 
 
@@ -222,7 +222,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     def __init__(
         self,
         tokenizer_path: str | os.PathLike | Path,
-        mode: ValidationMode = ValidationMode.test,
+        mode: "str | ValidationMode" = "test",
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
@@ -286,6 +286,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             if isinstance(self.tokenizer.instruct_tokenizer.tokenizer, Tekkenizer)
             else MistralTokenizerType.spm
         )
+
         self._cache_get_vocab: dict[str, int] | None = None
 
         self._all_special_ids = self._get_all_special_ids()
@@ -304,7 +305,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         )
 
     @property
-    def mode(self) -> ValidationMode:
+    def mode(self) -> "ValidationMode":
         """
         `ValidationMode`: The mode used by the tokenizer. Possible values are:
             - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
@@ -1034,7 +1035,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         max_length: int | None = None,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = True,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: "ReasoningEffort | None" = None,
         **kwargs,
     ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
@@ -1422,7 +1423,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         cls,
         pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
-        mode: str | ValidationMode = ValidationMode.test,
+        mode: "str | ValidationMode" = "test",
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1533,48 +1534,88 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         commit_message: str | None = None,
         repo_id: str | None = None,
         private: bool | None = None,
+        save_format: str | None = None,
         **kwargs,
     ) -> tuple[str, ...]:
-        """
-        Save the full tokenizer state.
+        r"""Save the full tokenizer state.
 
-
-        This method make sure the full tokenizer can then be re-loaded using the
-        [`~MistralCommonBackend.tokenization_mistral_common.from_pretrained`] class method.
+        When `save_format` is `"mistral"` (or *None* for a tekken tokenizer),
+        the original tokenizer file (e.g. `tekken.json`) is written to
+        *save_directory*.  When `save_format` is `"hf"`, HF-format files
+        (`tokenizer.json` + `tokenizer_config.json`) are produced instead.
 
         Args:
-            save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
+            save_directory (`str | os.PathLike | Path`):
+                Directory where the tokenizer will be saved.
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
-                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
-                namespace).
-            token (`str` or *bool*, *optional*, defaults to `None`):
-                The token to use to push to the model hub. If `True`, will use the token in the `HF_TOKEN` environment
-                variable.
-            commit_message (`str`, *optional*): The commit message to use when pushing to the hub.
-            repo_id (`str`, *optional*): The name of the repository to which push to the Hub.
-            private (`bool`, *optional*): Whether the model repository is private or not.
-            kwargs (`Dict[str, Any]`, *optional*):
-                Not supported by `MistralCommonBackend.save_pretrained`.
-                Will raise an error if used.
+                Push to the HF Hub after saving.
+            token (`str` or `bool`, *optional*):
+                Token for Hub authentication.
+            commit_message (`str`, *optional*):
+                Commit message when pushing.
+            repo_id (`str`, *optional*):
+                Hub repository id.
+            private (`bool`, *optional*):
+                Whether the repository is private.
+            save_format (`str`, *optional*):
+                `"mistral"` to save native tekken format, `"hf"` for HuggingFace
+                format.  *None* preserves the original format.
+            kwargs (`dict`, *optional*):
+                Not supported — will raise an error.
 
         Returns:
-            A tuple of `str`: The files saved.
+            `tuple[str, ...]`: Paths of the saved files.
         """
         if kwargs:
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.save_pretrained`."
             )
 
-        save_directory = Path(save_directory)
-        save_directory.mkdir(parents=True, exist_ok=True)
+        if save_format is not None and save_format not in ("hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
 
-        shutil.copy(self._tokenizer_path, save_directory)
+        save_directory = Path(save_directory)
+
+        if save_directory.is_file():
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
+            return
+
+        if save_format == "hf":
+            from transformers.integrations.mistral import convert_tekken_tokenizer
+
+            if not self._tokenizer_path.is_file():
+                raise OSError(
+                    f"Cannot convert to HF format: original tekken.json file is unavailable at {self._tokenizer_path}."
+                )
+            hf_tokenizer = convert_tekken_tokenizer(str(self._tokenizer_path))
+            return hf_tokenizer.save_pretrained(
+                str(save_directory),
+                push_to_hub=push_to_hub,
+                token=token,
+                repo_id=repo_id,
+                commit_message=commit_message,
+                private=private,
+            )
+
+        # Default: save in native mistral format.
+        if not self._tokenizer_path.is_file():
+            raise FileNotFoundError(f"Original tokenizer file {self._tokenizer_path} is no longer accessible.")
+
+        # Snapshot timestamps before the copy below, otherwise the freshly written tekken.json is
+        # already present in the snapshot and `_upload_modified_files` never uploads it.
+        # `save_directory` may not exist yet, hence the empty fallback.
+        files_timestamps = {}
+        if push_to_hub and save_directory.is_dir():
+            files_timestamps = self._get_files_timestamps(save_directory)
+
+        save_directory.mkdir(parents=True, exist_ok=True)
+        dest = save_directory / self._tokenizer_path.name
+        if not (dest.exists() and os.path.samefile(self._tokenizer_path, dest)):
+            shutil.copy(self._tokenizer_path, save_directory)
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
             repo_id = hf_api().create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
-            files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(
                 save_directory,
@@ -1584,10 +1625,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
                 token=token,
             )
 
-        return (str(save_directory / self._tokenizer_path.name),)
+        return (str(dest),)
 
     @staticmethod
-    def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
+    def _get_validation_mode(mode: "str | ValidationMode") -> "ValidationMode":
         """Get the validation mode from a string or a ValidationMode."""
         _invalid_mode_msg = f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are {', '.join([vm.value for vm in list(ValidationMode)])}."
         if isinstance(mode, str):

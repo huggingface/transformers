@@ -450,7 +450,7 @@ class TextGenerationPipeline(Pipeline):
                     split_keys[k] = v.numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_template", None) or getattr(self.tokenizer, "response_schema", None):
+        if getattr(self.tokenizer, "response_template", None):
             skip_special_tokens = False
         for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
@@ -495,11 +495,8 @@ class TextGenerationPipeline(Pipeline):
                                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                                 )
                                 assistant_message = self.tokenizer.parse_response(all_text, prefix=prompt_prefix)
-                            elif getattr(self.tokenizer, "response_schema", None) is not None:
-                                # Legacy schemas parse the generated text alone and don't support `prefix`
-                                assistant_message = self.tokenizer.parse_response(all_text)
                             else:
-                                # If there's no schema, then we have to assume it's all content
+                                # If there's no template, then we have to assume it's all content
                                 assistant_message = {"role": "assistant", "content": all_text}
                             all_text = list(prompt_text.messages) + [assistant_message]
                 record = {"generated_text": all_text}

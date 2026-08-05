@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import importlib
 import os
 import re
 import sys
@@ -62,7 +63,6 @@ if is_kernels_available():
     from kernels import (
         CUDAProperties,
         Device,
-        FuncRepository,
         LayerRepository,
         LocalLayerRepository,
         Mode,
@@ -79,7 +79,7 @@ if is_kernels_available():
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
     )
-    from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
+    from kernels import use_kernelized_func as _kernels_use_kernelized_func
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
@@ -90,14 +90,28 @@ if is_kernels_available():
             )
             return lambda cls: cls
 
-    def use_kernel_func_from_hub(func_name: str):
+    def use_kernelized_func(module_names: list[Callable] | Callable):
         if _kernels_enabled:
-            return _kernels_use_kernel_func_from_hub(func_name)
+            if isinstance(module_names, Callable):
+                module_names = [module_names]
+            return _kernels_use_kernelized_func(*module_names)
         else:
             logger.warning_once(
                 f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
             )
-            return lambda func: func
+            return lambda cls: cls
+
+    def use_kernel_func_from_hub(layer_name: str):
+        if _kernels_enabled:
+            logger.warning_once(
+                "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
+            )
+            return _kernels_use_kernel_forward_from_hub(layer_name)
+        else:
+            logger.warning_once(
+                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+            )
+            return lambda cls: cls
 
     # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
     # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
@@ -168,12 +182,12 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerSwiGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerTiledSwiGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -182,12 +196,12 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerGEGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerTiledGEGLUMLP",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -196,7 +210,7 @@ if is_kernels_available():
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerLinear",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -206,24 +220,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
                 "xpu": {
@@ -244,12 +258,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=2,
+                        version=3,
                     ),
                 },
             },
@@ -341,34 +355,29 @@ if is_kernels_available():
                     )
                 }
             },
-        }
-
-        # Add function kernel mappings
-        _FUNCTION_KERNEL_MAPPING = {
             "rotary_pos_emb": {
                 "xpu": {
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                     )
                 },
-                "cuda": FuncRepository(
-                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers", version=1
+                "cuda": LayerRepository(
+                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers", version=2
                 ),
                 "rocm": {
-                    Mode.INFERENCE: FuncRepository(
-                        repo_id="kernels-community/aiter-rope", func_name="apply_rotary_transformers", version=2
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/aiter-rope", layer_name="apply_rotary_transformers", version=2
                     )
                 },
             },
             "ForCausalLMLoss": {
                 "cuda": {
-                    Mode.TRAINING | Mode.TORCH_COMPILE: FuncRepository(
-                        repo_id="kernels-community/liger-kernels", func_name="LigerForCausalLMLoss", version=2
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/liger-kernels", layer_name="LigerForCausalLMLossLayer", version=3
                     ),
                 },
             },
         }
-        _KERNEL_MAPPING = _KERNEL_MAPPING | _FUNCTION_KERNEL_MAPPING
 
         return _KERNEL_MAPPING
 
@@ -387,7 +396,7 @@ if is_kernels_available():
 else:
     _kernels_enabled = False
 
-    # Stub to make decorators int transformers work when `kernels`
+    # Stub to make decorators in transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
         def decorator(cls):
@@ -395,9 +404,15 @@ else:
 
         return decorator
 
+    def use_kernelized_func(*args, **kwargs):
+        def decorator(cls):
+            return cls
+
+        return decorator
+
     def use_kernel_func_from_hub(*args, **kwargs):
-        def decorator(func):
-            return func
+        def decorator(cls):
+            return cls
 
         return decorator
 
@@ -560,8 +575,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
-        import importlib
-
         new_kernel_name = kernel_name.replace("-", "_")
         func_name = f"is_{new_kernel_name}_available"
 
@@ -590,42 +603,22 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
-    def attach_hidden_kernels(module):
-        for name, fn in getattr(module, "_hidden_kernels", {}).items():
-            if name not in dict(module.named_children()):
-                if not isinstance(fn, nn.Module):
-                    raise ValueError(
-                        f"Attempted to register a kernel for {name}, but it was not a `torch.nn.Module`. "
-                        "This means the underlying function needs to be decorated with `@use_kernel_func_from_hub`. "
-                        "Please submit and issue to the transformers repo: `https://github.com/huggingface/transformers/issues`."
-                    )
-                module.register_module(name, fn)
-
-    def detach_hidden_kernels(module):
-        for name in getattr(module, "_hidden_kernels", {}):
-            # Skip deregistering if it failed to properly register,
-            # i.e. `ValueError` will be raised afterwards
-            if hasattr(module, name):
-                delattr(module, name)
-
-    try:
-        model.apply(attach_hidden_kernels)
-
-        mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
-        device_type = model.device.type
+    def get_device(device_type):
         if device_type == "cuda" and is_rocm_platform():
             device_type = "rocm"
-        device = Device(type=device_type)
-        if model.kernel_config is not None:
-            inherit_mapping = not model.kernel_config.use_local_kernel
-            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                _kernels_kernelize(model, device=device, mode=mode)
-        else:
-            _kernels_kernelize(model, device=device, mode=mode)
+        return Device(type=device_type)
 
-        model._use_kernels = True
-    finally:
-        model.apply(detach_hidden_kernels)
+    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+    device = get_device(model.device.type)
+
+    if model.kernel_config is not None:
+        inherit_mapping = not model.kernel_config.use_local_kernel
+        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+            _kernels_kernelize(model, device=device, mode=mode)
+    else:
+        _kernels_kernelize(model, device=device, mode=mode)
+
+    model._use_kernels = True
 
 
 def get_kernel(
@@ -643,45 +636,6 @@ def get_kernel(
     return get_kernel_hub(
         kernel_name, revision=revision, version=version, user_agent=user_agent, trust_remote_code=allow_all_kernels
     )
-
-
-def use_kernelized_func(module_names: list[Callable] | Callable):
-    """
-    This decorator attaches the target function within the module as a plain attribute (not as a submodule).
-    Keep in mind that this registration is only meant for `kernelize` to recognize its target modules (i.e.
-    function exchanged for a weightless `nn.Module` with the same forward) to then exchange to the kernel
-    variation (in-place) if the conditions are met.
-
-    We cache each of these function-based registrations: After proper registration and exchange it is removed
-    from the module's `_modules` dict as it does not really act as `nn.Module` but a base function.
-    """
-    if isinstance(module_names, Callable):
-        module_names = [module_names]
-
-    def decorator(cls):
-        orig_init = cls.__init__
-
-        def new_init(self, *args, **kwargs):
-            orig_init(self, *args, **kwargs)
-
-            # Register new function as non-submodule within the modules dict
-            hidden_kernels = self.__dict__.setdefault("_hidden_kernels", {})
-            for fn in module_names:
-                name = (
-                    getattr(fn, "__name__", None)
-                    or getattr(fn, "kernel_layer_name", None)
-                    or getattr(fn, "func_name", None)
-                )
-                if name is None:
-                    raise ValueError(f"Could not infer kernel function name for {fn!r}")
-
-                # Do not register as submodule! Hide it behind a dict to be removed later after registering it
-                hidden_kernels[name] = fn
-
-        cls.__init__ = new_init
-        return cls
-
-    return decorator
 
 
 # Whether to allow hub kernels coming from untrusted repos, i.e. repos outside `kernels-community`

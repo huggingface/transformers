@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
+from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -43,7 +43,6 @@ from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import (
-    get_vision_bilinear_indices_and_weights,
     get_vision_cu_seqlens,
     get_vision_position_ids,
     get_vision_window_index,
@@ -77,7 +76,7 @@ from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 logger = logging.get_logger(__name__)
 
 
-def get_aspect_ratio_preserving_size(
+def smart_resize(
     height: int,
     width: int,
     patch_size: int,
@@ -124,9 +123,6 @@ class OnyxImageProcessor(Glm4vImageProcessor):
     merge_size = 2
     max_image_tokens = 4096
 
-    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
-        TorchvisionBackend.__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
@@ -134,8 +130,59 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         kwargs["do_resize"] = False
         TorchvisionBackend._validate_preprocess_kwargs(**kwargs)
 
-    def _standardize_kwargs(self, **super_kwargs):
-        raise NotImplementedError("Model doesn't need to override")
+    def resize(
+        self,
+        images: torch.Tensor,
+        patch_size: int,
+        merge_size: int,
+        max_tokens: int,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Resize dynamically based on input image aspect ratio."""
+        height, width = images.shape[-2:]
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            patch_size=patch_size * merge_size,
+            max_tokens=max_tokens,
+        )
+        return TorchvisionBackend.resize(
+            image=images,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
+            antialias=True,
+        )
+
+    def patchify(
+        self,
+        images: torch.Tensor,
+        patch_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[torch.Tensor, int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.view(
+            batch_size,
+            channel,
+            grid_h,
+            patch_size,
+            grid_w,
+            patch_size,
+        )
+        # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
+        flatten_patches = (
+            patches.unsqueeze(3)
+            .expand(-1, -1, -1, temporal_patch_size, -1, -1, -1)
+            .reshape(
+                batch_size,
+                grid_h * grid_w,
+                temporal_patch_size * channel * patch_size * patch_size,
+            )
+        )
+        return flatten_patches, grid_h, grid_w
 
     def _preprocess(
         self,
@@ -155,23 +202,20 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         disable_grouping: bool = False,
         **kwargs,
     ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
+        """
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 # Unlike Glm4v's `smart_resize`, the target size keeps aspect ratio under a token cap.
-                height, width = stacked_images.shape[-2:]
-                resized_height, resized_width = get_aspect_ratio_preserving_size(
-                    height=height,
-                    width=width,
-                    patch_size=patch_size * merge_size,
-                    max_tokens=max_image_tokens,
-                )
                 stacked_images = self.resize(
-                    image=stacked_images,
-                    size=SizeDict(height=resized_height, width=resized_width),
+                    stacked_images,
+                    patch_size=patch_size,
+                    merge_size=merge_size,
+                    max_tokens=max_image_tokens,
                     resample=resample,
-                    antialias=True,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -180,39 +224,17 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
-            resized_height, resized_width = stacked_images.shape[-2:]
-            patches = self.rescale_and_normalize(
+            stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            if patches.ndim == 4:
-                patches = patches.unsqueeze(1)
-
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
-            )
-            # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
-            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, temporal_patch_size * channel * patch_size * patch_size
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_images_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
@@ -244,7 +266,7 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
 
-        resized_height, resized_width = get_aspect_ratio_preserving_size(
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
             patch_size=patch_size * merge_size,
@@ -303,30 +325,68 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         kwargs["do_resize"] = False
         super()._validate_preprocess_kwargs(**kwargs)
 
-    def aspect_ratio_preserving_resize(
+    def resize(
         self,
-        image: torch.Tensor,
+        videos: torch.Tensor,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
         patch_size: int,
+        merge_size: int,
         max_tokens: int,
-        resample: tvF.InterpolationMode,
+        **kwargs,
     ) -> torch.Tensor:
-        height, width = image.shape[-2], image.shape[-1]
-        target_height, target_width = get_aspect_ratio_preserving_size(
+        """Resize dynamically based on input video aspect ratio."""
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
-            patch_size=patch_size,
+            patch_size=patch_size * merge_size,
             max_tokens=max_tokens,
         )
 
-        if target_height == height and target_width == width:
-            return image
-
-        return tvF.resize(
-            image,
-            size=[target_height, target_width],
-            interpolation=resample,
+        return super().resize(
+            videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
             antialias=True,
         )
+
+    def patchify(
+        self,
+        videos: torch.Tensor,
+        patch_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[torch.Tensor, int, int]:
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        # Check that videos have `num_frames` divisible by `temporal_patch_size`
+        if pad := -num_frames % temporal_patch_size:
+            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
+            videos = torch.cat((videos, repeats), dim=1)
+            num_frames += pad
+
+        grid_t = num_frames // temporal_patch_size
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = videos.view(
+            batch_size,
+            grid_t,
+            temporal_patch_size,
+            channel,
+            grid_h,
+            patch_size,
+            grid_w,
+            patch_size,
+        )
+        # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
+        patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
+        flatten_patches = patches.reshape(
+            batch_size,
+            grid_t * grid_h * grid_w,
+            temporal_patch_size * channel * patch_size * patch_size,
+        )
+
+        return flatten_patches, grid_t, grid_h, grid_w
 
     def sample_frames(
         self,
@@ -395,9 +455,10 @@ class OnyxVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.aspect_ratio_preserving_resize(
-                    image=stacked_videos,
-                    patch_size=patch_size * merge_size,
+                stacked_videos = self.resize(
+                    stacked_videos,
+                    patch_size=patch_size,
+                    merge_size=merge_size,
                     max_tokens=max_video_frame_tokens,
                     resample=resample,
                 )
@@ -410,43 +471,18 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         processed_videos_grouped = {}
         processed_grids = {}
         for shape, stacked_videos in grouped_videos.items():
-            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
-
             # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            patches = stacked_videos
-
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            T = patches.shape[1]
-            if pad := -T % temporal_patch_size:
-                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
-                patches = torch.cat((patches, repeats), dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
-            )
-            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                temporal_patch_size * channel * patch_size * patch_size,
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_videos_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
@@ -638,6 +674,82 @@ class OnyxConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+# override the fn from `vision_utils.py` since onyx uses `F.grid_sample` in ref
+# and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
+# export-friendly code used in onyx, thus kept in model file
+def get_vision_bilinear_indices_and_weights(
+    grid_thw: torch.Tensor,
+    num_grid_per_side: int,
+    spatial_merge_size: int,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The fn is equivalent with F.grid_sample(inputs, align_coreners=False, padding="zeros")"""
+    if kwargs is not None:
+        bilinear_indices = kwargs.pop("bilinear_indices", None)
+        bilinear_weights = kwargs.pop("bilinear_weights", None)
+        if bilinear_indices is not None and bilinear_weights is not None:
+            return bilinear_indices, bilinear_weights
+    side = num_grid_per_side
+    merge_size = spatial_merge_size
+    device = grid_thw.device
+
+    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+
+    for t, h, w in grid_thw.tolist():
+        t, h, w = int(t), int(h), int(w)
+
+        h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
+        w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
+
+        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
+        h_floor = torch.floor(h_grid).long()
+        w_floor = torch.floor(w_grid).long()
+        h_ceil = h_floor + 1
+        w_ceil = w_floor + 1
+        h_frac = h_grid - h_floor.float()
+        w_frac = w_grid - w_floor.float()
+
+        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
+        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
+        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
+        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
+        h_floor = h_floor.clamp(0, side - 1)
+        h_ceil = h_ceil.clamp(0, side - 1)
+        w_floor = w_floor.clamp(0, side - 1)
+        w_ceil = w_ceil.clamp(0, side - 1)
+
+        h_floor_offset = h_floor * side
+        h_ceil_offset = h_ceil * side
+
+        corner_indices = [
+            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
+        ]
+        corner_weights = [
+            (
+                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
+            ).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
+            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+        ]
+
+        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
+        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
+        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
+
+        for i in range(4):
+            idx_parts[i].append(corner_indices[i][reorder])
+            weight_parts[i].append(corner_weights[i][reorder])
+
+    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
+    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
+    return bilinear_indices, bilinear_weights
+
+
 class OnyxRMSNorm(Gemma4RMSNorm):
     def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
@@ -786,7 +898,6 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
             spatial_merge_size=1,
-            align_corners=False,
             kwargs=kwargs,
         )
         # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
