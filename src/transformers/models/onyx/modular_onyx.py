@@ -158,7 +158,6 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         self,
         images: torch.Tensor,
         patch_size: int,
-        merge_size: int,
         temporal_patch_size: int,
     ) -> tuple[torch.Tensor, int, int]:
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
