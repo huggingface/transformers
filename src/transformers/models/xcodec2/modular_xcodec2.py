@@ -356,9 +356,9 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         super().__init__()
         self.quantization_levels = list(config.quantization_levels)
         levels, basis, codebook = self._compute_buffers()
-        self.register_buffer("levels", levels, persistent=False)
-        self.register_buffer("basis", basis, persistent=False)
-        self.register_buffer("codebook", codebook, persistent=False)
+        self.levels = nn.Buffer(levels, persistent=False)
+        self.basis = nn.Buffer(basis, persistent=False)
+        self.codebook = nn.Buffer(codebook, persistent=False)
 
     def _compute_buffers(self, device=None):
         """Compute the levels, basis, and codebook buffers for the FSQ quantizer."""
@@ -405,7 +405,7 @@ class Xcodec2FiniteScalarQuantization(nn.Module):
         return (hidden_states + shift).tanh() * half_range - offset
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # NOTE: could rerwite to pass tensor to a decorator such that device type is handled internally
+        # NOTE: could rewrite to pass tensor to a decorator such that device type is handled internally
         original_dtype = hidden_states.dtype
         device_type = (
             hidden_states.device.type
@@ -441,7 +441,7 @@ class Xcodec2ISTFTHead(nn.Module):
         self.hop_length = config.hop_length
         self.padding = (self.n_fft - self.hop_length) // 2
         window = torch.hann_window(config.n_fft)
-        self.register_buffer("window", window, persistent=False)
+        self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         stft_pred = self.linear(hidden_states).transpose(1, 2)
@@ -451,7 +451,7 @@ class Xcodec2ISTFTHead(nn.Module):
         phase = phase.float()
         # Clamp like original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L138
         magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = magnitude * torch.exp(1j * phase)
+        spectrogram_complex = torch.polar(magnitude, phase)
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
