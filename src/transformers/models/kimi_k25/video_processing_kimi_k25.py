@@ -33,6 +33,7 @@ from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
 
+# Same resize as in image processing
 def navit_resize(
     height: int,
     width: int,
