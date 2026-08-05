@@ -51,6 +51,7 @@ class DeepseekVLHybridModelTester:
         initializer_range=0.02,
         is_training=True,
         use_cache=False,
+        image_token_id=3,
         text_config={
             "num_hidden_layers": 2,
             "vocab_size": 99,
@@ -104,7 +105,7 @@ class DeepseekVLHybridModelTester:
         self.image_size = vision_config["image_size"]
         self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = image_token_id
 
     def get_config(self):
         return DeepseekVLHybridConfig(
