@@ -18,7 +18,8 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_greater_or_equal, logging
+from ..integrations.tensor_parallel import apply_tensor_parallelism as apply_legacy_tensor_parallelism
+from ..utils import is_env_variable_true, is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
@@ -193,8 +194,16 @@ class DistributedMixin:
             model._device_mesh = device_mesh
 
             if distributed_config.tp_size > 1:
-                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-                model = apply_tensor_parallelism(model, tp_mesh)
+                if is_env_variable_true("TRANSFORMERS_USE_LEGACY_TP"):
+                    model = apply_legacy_tensor_parallelism(
+                        model,
+                        distributed_config.tp_plan,
+                        distributed_config,
+                        device_mesh,
+                    )
+                else:
+                    tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                    model = apply_tensor_parallelism(model, tp_mesh)
 
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
