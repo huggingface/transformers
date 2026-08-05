@@ -333,6 +333,28 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `timeout` as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` as `GroundingDinoModel`.",
+        "Xcodec2Model": (
+            "OpenVINO can't convert a rank-0 `aten.slice.Tensor` in the codec's dynamic-shape path "
+            "(`input_rank.get_length() > 0` fails in slice shape inference). Static export converts fine."
+        ),
+        "HieraModel": (
+            "OpenVINO export marks every input axis dynamic (`Dim.AUTO`), driving the Hiera mask-unit "
+            "backbone's data-dependent unroll into `GuardOnDataDependentSymNode` (`416*(u0//416) < 2`). "
+            "Pure `torch.export`/dynamo dynamic export passes (verified), so this is OpenVINO-specific. "
+            "Static export works."
+        ),
+        "HieraBackbone": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+        "HieraForImageClassification": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+        "HieraForPreTraining": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
+    },
+    # OpenVINO, static-cache generate variants only (a `generation_config` requesting a static cache).
+    "openvino.static-cache": {
+        "MiniMaxM3SparseForConditionalGeneration": (
+            "Exports fine, but OpenVINO inference of the language-model component fails at runtime "
+            "(`Eltwise 'add_31' shape mismatch`): the sparse-MoE static cache (`MiniMaxM3VLSparseStaticCacheLayer`, "
+            "an `idx_keys` state of shape `[2,1,9,16]`) doesn't broadcast against the decode inputs. Its "
+            "non-static-cache generate variants pass."
+        ),
     },
 }
 
@@ -464,48 +486,16 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     return dict(zip(onnx_names, onnx_outputs))
 
 
-def _stage_openvino_artifact(ov_model, model_dir: str, component: str, config=None) -> None:
-    """Stage the OpenVINO IR (+ ``config.json`` once per model) into the shared artifact tree as
-    ``<model_dir>/<component>.{xml,bin}`` + ``<model_dir>/config.json``.
-
-    Only the dynamic export is staged (the caller passes ``model_dir=None`` for static runs) — its
-    symbolic shapes are the more useful reference and it avoids the two modes overwriting each other.
-
-    The tree lives at ``OPENVINO_ARTIFACTS_DIR`` — created and exported by conftest's
-    ``pytest_configure`` when ``PUSH_OPENVINO_ARTIFACTS`` is set. Under ``pytest -n`` every worker
-    inherits that path and stages into the same tree; the controller uploads it once in one commit
-    at session finish (see conftest). This avoids the per-process / per-worker upload races that an
-    in-process ``atexit`` upload would cause.
-    """
-    import openvino
-
-    root = os.environ.get("OPENVINO_ARTIFACTS_DIR")
-    if root is None:  # conftest didn't set up staging (flag off) — nothing to do
-        return
-    dest = os.path.join(root, model_dir)
-    os.makedirs(dest, exist_ok=True)
-    openvino.save_model(ov_model, os.path.join(dest, f"{component}.xml"))
-    config_path = os.path.join(dest, "config.json")
-    if config is not None and not os.path.exists(config_path):
-        config.to_json_file(config_path)
-
-
-def _run_openvino_model(ov_model, inputs, model_dir=None, component=None, config=None) -> dict:
+def _run_openvino_model(ov_model, inputs) -> dict:
     """Compile an OpenVINO model and run it, returning outputs as a `{name: array}` dict.
 
     Feeds the tensor leaves that survived as input ports (stateful folding removes cache
     inputs), seeds folded state variables from the sample cache leaves so outputs correspond
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
-
-    When ``PUSH_OPENVINO_ARTIFACTS`` is set, stages the IR under ``<model_dir>/<component>`` for a
-    single Hub upload at process exit.
     """
     import numpy as np
     import openvino
-
-    if model_dir is not None and os.environ.get("PUSH_OPENVINO_ARTIFACTS"):
-        _stage_openvino_artifact(ov_model, model_dir, component, config)
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
@@ -702,12 +692,14 @@ class ExportTesterMixin:
         Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
         ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
         for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.dynamic"`` for the multi-token decode path, ``"<backend>"`` for that backend, and
-        ``"<backend>.<variant>"`` for the more-specific intersections. Also skips static-cache variants
-        (a ``generation_config`` requesting one) on models that can't compile fullgraph — they don't
-        support a static cache.
+        ``"generate.dynamic"`` for the multi-token decode path, ``"static-cache"`` for a variant whose
+        ``generation_config`` requests a static cache, ``"<backend>"`` for that backend, and
+        ``"<backend>.<variant>"`` (including ``"<backend>.static-cache"``) for the more-specific
+        intersections. Also skips static-cache variants on models that can't compile fullgraph — they
+        don't support a static cache at all.
         """
-        if _needs_static_cache(generation_config) and not model_class._can_compile_fullgraph:
+        static_cache = _needs_static_cache(generation_config)
+        if static_cache and not model_class._can_compile_fullgraph:
             return True
         name = model_class.__name__
         scopes = ["all"]
@@ -716,11 +708,15 @@ class ExportTesterMixin:
             if dynamic:
                 scopes.append("generate.dynamic")
         scopes.append("dynamic" if dynamic else "static")
+        if static_cache:
+            scopes.append("static-cache")
         if backend:
             scopes.append(backend)
             if generate:
                 scopes.append(f"{backend}.generate")
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
+            if static_cache:
+                scopes.append(f"{backend}.static-cache")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
@@ -862,9 +858,7 @@ class ExportTesterMixin:
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model.config
-                    )
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
@@ -1058,9 +1052,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
-                    ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model.config
-                    )
+                    ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
 
