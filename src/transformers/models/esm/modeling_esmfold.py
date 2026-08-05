@@ -1858,7 +1858,7 @@ class EsmFoldingTrunk(nn.Module):
     def set_chunk_size(self, chunk_size):
         # This parameter means the axial attention will be computed
         # in a chunked manner. This should make the memory used more or less O(L) instead of O(L^2).
-        # It's equivalent to running a for loop over chunks of the dimension we're iterative over,
+        # It's equivalent to running a for loop over chunks of the dimension we're iterating over,
         # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-length chunks.
         self.chunk_size = chunk_size
 

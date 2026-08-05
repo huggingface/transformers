@@ -1999,7 +1999,7 @@ class PreTrainedModel(
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. Inspects the module
         source as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_attn_implementation_cached_value", None)
@@ -2020,7 +2020,7 @@ class PreTrainedModel(
         # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
         else:
             can_set = True
-        # Succesful read of source code -> cache the result
+        # Successful read of source code -> cache the result
         cls._can_set_attn_implementation_cached_value = can_set
         return cls._can_set_attn_implementation_cached_value
 
@@ -2028,7 +2028,7 @@ class PreTrainedModel(
     def _can_set_experts_implementation(cls) -> bool:
         """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
         as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
@@ -3848,7 +3848,7 @@ class PreTrainedModel(
             if kernel_config is not None:
                 if not isinstance(kernel_config, KernelConfig):
                     raise ValueError(
-                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                        f"Expected `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
                     )
 
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.

@@ -103,8 +103,8 @@ class MiniMaxCache(DynamicCache):
             else:
                 self.layers[layer_idx].batch_select_indices(indices)
 
-    def crop(self, max_length: int):
-        raise RuntimeError("MiniMaxCache doesnot support `crop` method")
+    def crop(self, tokens_to_remove: int) -> None:
+        raise RuntimeError("MiniMaxCache does not support `crop` method")
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):

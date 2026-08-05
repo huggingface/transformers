@@ -341,7 +341,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+            `list[Union[str, np.ndarray]]`: The decoded text or generated audio.
         """
         if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(

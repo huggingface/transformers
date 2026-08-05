@@ -35,31 +35,31 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 
 # Same resize as in image processing
 def navit_resize(
-    width: int,
     height: int,
+    width: int,
     patch_size: int,
     merge_kernel_size: int,
     max_patches: int,
     max_size_per_side: int,
-):
-    num_patches_w = max(1.0, width // patch_size)
+) -> tuple[tuple[int, int], tuple[int, int]]:
     num_patches_h = max(1.0, height // patch_size)
-    current_patch_count = num_patches_w * num_patches_h
+    num_patches_w = max(1.0, width // patch_size)
+    current_patch_count = num_patches_h * num_patches_w
 
     # Scale to satisfy total patch budget (affects both dims, hence sqrt)
     scale_for_total_patches = math.sqrt(max_patches / current_patch_count)
 
     # Scale to satisfy per-side patch budget
-    scale_for_width_patches = (max_size_per_side * patch_size) / width
     scale_for_height_patches = (max_size_per_side * patch_size) / height
+    scale_for_width_patches = (max_size_per_side * patch_size) / width
 
     # Use the most restrictive scale, never upscale
-    scale = min(1.0, scale_for_total_patches, scale_for_width_patches, scale_for_height_patches)
+    scale = min(1.0, scale_for_total_patches, scale_for_height_patches, scale_for_width_patches)
 
     # Make sure the resized size doesn't go beyond predefined `max`
-    new_width, new_height = max(1, int(width * scale)), max(1, int(height * scale))
-    new_width = min(new_width, max_size_per_side * patch_size)
+    new_height, new_width = max(1, int(height * scale)), max(1, int(width * scale))
     new_height = min(new_height, max_size_per_side * patch_size)
+    new_width = min(new_width, max_size_per_side * patch_size)
 
     # Calculate the padding to make the height and width divisible by the merge kernel size and patch size.
     factor = merge_kernel_size * patch_size
@@ -72,7 +72,7 @@ def navit_resize(
 class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
-        The max limit to resize resize the video.
+        The max limit to resize the video.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):

@@ -901,7 +901,7 @@ def create_causal_mask(
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard causal mask based on the attention implementation used (stored in the config). If `past_key_values`
-    has an hybrid cache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
+    has a hybrid cache structure, this function will return the mask corresponding to one of the "full_attention" layers (to align
     to what is needed in the `modeling_xxx.py` files).
 
     Args:
@@ -1138,7 +1138,7 @@ def create_sliding_window_causal_mask(
 ) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Mistral. If `past_key_values` has an hybrid cache structure, this
+    of attention pattern was mostly democratized by Mistral. If `past_key_values` has a hybrid cache structure, this
     function will return the mask corresponding to one of the "sliding_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -1410,7 +1410,7 @@ def create_chunked_causal_mask(
 ) -> torch.Tensor | BlockMask | AttentionMasksByAttributeValue | None:
     """
     Create a chunked attention causal mask based on the attention implementation used (stored in the config). This type
-    of attention pattern was mostly democratized by Llama4. If `past_key_values` has an hybrid cache structure, this
+    of attention pattern was mostly democratized by Llama4. If `past_key_values` has a hybrid cache structure, this
     function will return the mask corresponding to one of the "chunked_attention" layers (to align to what is needed in the
     `modeling_xxx.py` files).
 
@@ -1645,7 +1645,7 @@ def create_masks_for_generate(
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
     """
-    # The attribute reside in the text config for composite models
+    # The attribute resides in the text config for composite models
     effective_config = config.get_text_config()
     # Prepare the mask args
     mask_kwargs = {
