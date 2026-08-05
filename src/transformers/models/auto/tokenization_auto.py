@@ -376,6 +376,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl_v2",
     "deepseek_ocr",
     "deepseek_ocr2",
+    "unlimited_ocr",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
