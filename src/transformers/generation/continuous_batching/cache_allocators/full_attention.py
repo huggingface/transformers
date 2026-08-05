@@ -88,11 +88,20 @@ class FullAttentionCacheAllocator(CacheAllocator):
 
         # Precompute the per-layer shifted views used by update()
         flattened_view = self.cache_tensor.view(total_tokens * 2, self.num_key_value_heads, self.head_dim)
-        self._kv_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+        self._kv_token_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
         for i, layer_idx in enumerate(self.layer_indices):
             k_view = flattened_view[(2 * i + 0) * self.tokens_per_page :]
             v_view = flattened_view[(2 * i + 1) * self.tokens_per_page :]
-            self._kv_views[layer_idx] = (k_view, v_view)
+            self._kv_token_views[layer_idx] = (k_view, v_view)
+
+        # Precompute the same views at page granularity for the decode fast path. The block table kernel requires K and
+        # V to hold the same number of pages, so both are truncated to the shorter one (which is always V)
+        page_shape = (-1, self.tokens_per_page, self.num_key_value_heads, self.head_dim)
+        self._kv_page_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+        for layer_idx, (k_view, v_view) in self._kv_token_views.items():
+            k_pages, v_pages = k_view.view(*page_shape), v_view.view(*page_shape)
+            num_pages = min(k_pages.shape[0], v_pages.shape[0])
+            self._kv_page_views[layer_idx] = (k_pages[:num_pages], v_pages[:num_pages])
 
     @classmethod
     def get_bytes_per_page(
@@ -142,10 +151,10 @@ class FullAttentionCacheAllocator(CacheAllocator):
         # Compute the physical indices
         physical_indices = []
         for b in range(num_full_pages):
-            start = block_table[b] * self.rows_per_block
+            start = block_table[b] * self.block_physical_stride
             physical_indices.extend(range(start, start + self.tokens_per_page))
         if remainder:
-            start = block_table[num_full_pages] * self.rows_per_block
+            start = block_table[num_full_pages] * self.block_physical_stride
             physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
@@ -163,7 +172,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         # Compute the physical indices
         physical_indices = []
         for b in range(start_page, end_page + 1):
-            physical_start = block_table[b] * self.rows_per_block
+            physical_start = block_table[b] * self.block_physical_stride
             # First page may start mid-page, last page may end mid-page
             local_start = start_offset if b == start_page else 0
             local_end = (end_pos - 1) % self.tokens_per_page + 1 if b == end_page else self.tokens_per_page
@@ -173,8 +182,11 @@ class FullAttentionCacheAllocator(CacheAllocator):
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
     ) -> None:
-        """Fills the block table for a given request_id, past_length and query_length."""
-        raise NotImplementedError("Not implemented for full attention cache allocator")
+        """Fills the request's row of the kernel block table."""
+        block_ids = self.block_table[request_id]
+        pages_stride = self.block_physical_stride // self.tokens_per_page
+        entries = torch.tensor(block_ids, dtype=block_table.dtype) * pages_stride
+        block_table[: len(block_ids)].copy_(entries, non_blocking=True)
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 
@@ -197,7 +209,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         Returns the complete KV states (cached + new) for attention computation.
         """
         # Select the shifted views of this layer's keys and values
-        k_cache, v_cache = self._kv_views[layer_idx]
+        k_cache, v_cache = self._kv_token_views[layer_idx]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_q, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)

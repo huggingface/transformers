@@ -143,7 +143,7 @@ class CacheAllocator(ABC):
         # Cache dimensions attributes
         self.tokens_per_page = tokens_per_page
         self.tokens_per_block = tokens_per_page * self.pages_per_block
-        self.rows_per_block = self.rows_per_token * self.tokens_per_block
+        self.block_physical_stride = self.rows_per_token * self.tokens_per_block
         self.bytes_per_page = bytes_per_page
         self.bytes_per_block = bytes_per_page * self.pages_per_block
         # Bookkeeping attributes

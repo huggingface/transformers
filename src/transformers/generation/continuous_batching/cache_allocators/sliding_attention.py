@@ -87,7 +87,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         for token_idx in range(start_index, start_index + length):
             ring_idx = token_idx % self.sliding_window
             page_idx, page_offset = divmod(ring_idx, self.tokens_per_page)
-            physical_indices.append(block_table[page_idx] * self.rows_per_block + page_offset)
+            physical_indices.append(block_table[page_idx] * self.block_physical_stride + page_offset)
         return physical_indices
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
