@@ -40,15 +40,18 @@ jobs:
           path: vllm
 
       - name: Install dependencies
-        run: uv pip install vllm -e transformers
+        run: |
+          uv pip install vllm -e transformers
+          uv pip install -r vllm/requirements/test.txt
 
       - name: Run tests
+        working-directory: vllm
         run: |
-          pytest -v -s vllm/tests/models/test_initialization.py
-          pytest -v -s vllm/tests/models/test_transformers.py
-          pytest -v -s vllm/tests/models/multimodal/processing/
-          pytest -v -s vllm/tests/models/multimodal/test_mapping.py
-          python3 vllm/examples/basic/offline_inference/chat.py
-          python3 vllm/examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
+          pytest -v -s tests/models/test_initialization.py
+          pytest -v -s tests/models/test_transformers.py
+          pytest -v -s tests/models/multimodal/processing/
+          pytest -v -s tests/models/multimodal/test_mapping.py
+          python3 examples/basic/offline_inference/chat.py
+          python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
           # Whisper needs spawn method to avoid deadlock
-          VLLM_WORKER_MULTIPROC_METHOD=spawn python3 vllm/examples/generate/multimodal/audio_language_offline.py --model-type whisper
+          VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
