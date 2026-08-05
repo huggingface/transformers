@@ -165,20 +165,18 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
 
         patches = image.reshape(
             channel,
-            grid_h // merge_size,
-            merge_size,
+            grid_h,
             patch_size,
-            grid_w // merge_size,
-            merge_size,
+            grid_w,
             patch_size,
         )
-        # (gh, gw, mh, mw, C, ph, pw)
-        patches = np.transpose(patches, (1, 4, 2, 5, 0, 3, 6))
+        # [batch, grid_h, grid_w, channel, patch, patch]
+        patches = np.transpose(patches, ((0, 2, 4, 1, 3, 5)))
 
         # expand temporal_patch_size as a broadcast (zero-copy)
         patches = np.broadcast_to(
-            patches[:, :, :, :, :, None, :, :],
-            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+            patches[:, :, :, :, None, :, :],
+            (*patches.shape[:4], temporal_patch_size, *patches.shape[4:]),
         )
 
         flatten_patches = patches.reshape(
