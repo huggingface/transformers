@@ -86,4 +86,5 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
+    model_splits = [["models/auto", "models/bert", "models/gpt2", "models/t5", "models/modernbert", "models/vit", "models/clip", "models/detr", "models/table_transformer", "models/got_ocr2", "models/whisper", "models/wav2vec2", "models/qwen2_audio", "models/speecht5", "models/csm", "models/llama", "models/gemma3", "models/qwen2", "models/mistral3", "models/qwen2_5_vl", "models/llava", "models/smolvlm", "models/internvl", "models/gemma3n", "models/gpt_oss", "models/qwen2_5_omni", "models/pi0"]]
     print(model_splits)
