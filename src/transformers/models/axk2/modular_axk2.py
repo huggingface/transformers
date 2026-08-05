@@ -285,20 +285,21 @@ class AXK2Attention(DeepseekV32Attention):
 
         self.is_causal = True
         # Unlike DeepseekV3.2, this model does not use q_b_proj
-        self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-        self.q_a_layernorm = AXK2RMSNorm(config.q_lora_rank)
+        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_a_layernorm = AXK2RMSNorm(self.q_lora_rank)
+        # Fused projection for q and gate, needs to be kept fused as the FP8 scales won't match otherwise when split
         self.q_gate_proj = nn.Linear(
-            2 * config.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
+            2 * self.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
+            self.kv_lora_rank + self.qk_rope_head_dim,
             bias=config.attention_bias,
         )
-        self.kv_a_layernorm = AXK2RMSNorm(config.kv_lora_rank)
+        self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
+            self.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
