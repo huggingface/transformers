@@ -368,11 +368,11 @@ def _encode_atom_name(name: str) -> list[int]:
     return [ord(c) - 32 if c != " " else 0 for c in padded]
 
 
-def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
+def prepare_protein_features(sequence: str, device: torch.device | str | None = None) -> dict[str, Tensor]:
     """Featurize a single protein sequence for [`EsmFold2Model.fold`].
 
     Covers a single-chain protein with no MSA, modifications, distogram conditioning or covalent
-    bonds. All tensors have a leading batch dim of 1 and are left on the CPU.
+    bonds. All tensors have a leading batch dim of 1, on ``device`` (the CPU when it is not given).
     """
     if not sequence:
         raise ValueError("sequence must be non-empty")
@@ -470,7 +470,7 @@ def prepare_protein_features(sequence: str) -> dict[str, Tensor]:
         "deletion_value": deletion_value,
         "deletion_mean": deletion_mean,
     }
-    return {k: v.unsqueeze(0) for k, v in features.items()}
+    return {k: v.unsqueeze(0).to(device) for k, v in features.items()}
 
 
 # 0-32 res_type → 3-letter name (only protein indices 2-22 are populated).
