@@ -171,12 +171,23 @@ def prepare_video_inputs(
 class ImageProcessingTester:
     """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self,
+        batch_size=None,
+        min_resolution=None,
+        max_resolution=None,
+        num_channels=None,
+        size_divisor=None,
+        equal_resolution=False,
+        numpify=False,
+        torchify=False,
+    ):
         return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            num_channels=self.num_channels if num_channels is None else num_channels,
+            min_resolution=self.min_resolution if min_resolution is None else min_resolution,
+            max_resolution=self.max_resolution if max_resolution is None else max_resolution,
+            size_divisor=size_divisor,
             equal_resolution=equal_resolution,
             numpify=numpify,
             torchify=torchify,
