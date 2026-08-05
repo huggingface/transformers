@@ -120,7 +120,6 @@ class DacVectorQuantize(nn.Module):
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
 
-    @force_accelerate_hooks("codebook")
     def forward(self, hidden_state):
         """
         Quantizes the input tensor using a fixed codebook and returns the corresponding codebook vectors.
@@ -153,6 +152,7 @@ class DacVectorQuantize(nn.Module):
 
         return quantized_representation, commitment_loss, codebook_loss, audio_codes, projected_latents
 
+    @force_accelerate_hooks("codebook")
     def decode_latents(self, hidden_states):
         batch_size, hidden_dim, sequence_length = hidden_states.shape
         encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
