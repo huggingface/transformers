@@ -263,8 +263,6 @@ class Starcoder2PreTrainedModel(PreTrainedModel):
 
 
 class Starcoder2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Starcoder2Config, device=None):
         super().__init__()
@@ -279,8 +277,8 @@ class Starcoder2RotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

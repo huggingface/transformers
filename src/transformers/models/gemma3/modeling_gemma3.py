@@ -111,7 +111,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -154,8 +154,6 @@ class Gemma3RMSNorm(nn.Module):
 
 
 class Gemma3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma3TextConfig, device=None):
         super().__init__()
@@ -174,8 +172,8 @@ class Gemma3RotaryEmbedding(nn.Module):
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -436,12 +434,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     config: Gemma3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "Gemma3DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
-    ]
+    _no_split_modules = ["Gemma3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

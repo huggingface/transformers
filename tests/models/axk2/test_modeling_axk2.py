@@ -90,6 +90,10 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("AXK2 uses deepseek_sparse_attention layers which are not compatible with QuantizedCache.")
+    def test_generate_with_quant_cache(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
@@ -110,11 +114,17 @@ class AXK1IntegrationTest(unittest.TestCase):
 
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
-            {("cuda", (8, 6)): [[-1.9062, -3.9688, 2.8438], [-3.5625, -1.6562, 4.2500], [-1.6172, -2.7812, 2.6094]]}
+            {
+                ("cuda", (8, 6)): [[-1.9062, -3.9688, 2.8438], [-3.5625, -1.6562, 4.2500], [-1.6172, -2.7812, 2.6094]],
+                ("xpu", None): [[-1.9219, -3.9844, 2.8438], [-3.5938, -1.6484, 4.2500], [-1.5859, -2.7812, 2.6094]],
+            }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=model.device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
-            {("cuda", (8, 6)): [[0.6211, -0.4336, 1.8906], [-3.4219, -1.9219, 2.7188], [-2.0156, -1.5547, -1.3906]]}
+            {
+                ("cuda", (8, 6)): [[0.6211, -0.4336, 1.8906], [-3.4219, -1.9219, 2.7188], [-2.0156, -1.5547, -1.3906]],
+                ("xpu", None): [[0.6250, -0.3906, 1.8984], [-3.4375, -1.8672, 2.7500], [-2.0156, -1.5391, -1.3828]],
+            }
         )
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=model.device)
 
@@ -128,6 +138,7 @@ class AXK1IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간を実{acknowledgements 사건과-OctCTPコロ passengers Dice GD workloads 울진 Fibonacci announcesdest denote 이야기도 scrap',
+                ("xpu", None): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()

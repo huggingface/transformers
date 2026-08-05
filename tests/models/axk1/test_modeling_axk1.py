@@ -106,12 +106,18 @@ class AXK1IntegrationTest(unittest.TestCase):
 
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
-            {("cuda", (8, 6)): [[-0.2910, 1.8047, 0.4121], [0.4277, -0.3027, -1.0000], [-0.3535, 0.1221, 0.9961]]}
+            {
+                ("cuda", (8, 6)): [[-0.2910, 1.8047, 0.4121], [0.4277, -0.3027, -1.0000], [-0.3535, 0.1221, 0.9961]],
+                ("xpu", None): [[-0.1934, 1.7266, 0.9141], [0.2393, -0.2363, -1.0156], [-0.4062, 0.1309, 1.0234]],
+            }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=torch_device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
-            {("cuda", (8, 6)): [[-0.5234, -0.0388, -0.3574], [-0.4980, -0.2119, -0.0713], [-0.8359, 0.0669, -0.4219]]}
-        )
+            {
+                ("cuda", (8, 6)): [[-0.5234, -0.0388, -0.3574], [-0.4980, -0.2119, -0.0713], [-0.8359, 0.0669, -0.4219]],
+                ("xpu", None): [[-0.5469, -0.0574, -0.3691], [-0.3301, -0.3770, 0.2012], [-0.8320, 0.0732, -0.4492]],
+            }
+        )  # fmt: skip
         expected_unpadded = torch.tensor(EXPECTED_LOGITS_UNPADDED.get_expectation(), device=torch_device)
 
         with torch.no_grad():
@@ -124,6 +130,7 @@ class AXK1IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): 'Tell me about the french revolution._object BGCOLOR(preething间 씨름 discretization那 OPEN 해주며사진은 Epstein 투수 무언가를테니까요 간식으로 거울 DataSource했다가 공간을 snacking 이것으로(keys妇.reset courtesy이미지Saved 관리하고 Archaeological 받으시면补',
+                ("xpu", None): 'Tell me about the french revolution._object BGCOLOR(preething间 씨름 discretization那 OPEN 해주며사진은 Epstein 투수 무언가를테니까요 간식으로 거울 DataSource했다가 공간을 snacking 이것으로(keys妇.reset courtesy이미지Saved 관리하고 Archaeological 받으시면补',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
