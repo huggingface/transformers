@@ -169,7 +169,10 @@ def _unit_lower_triangular_inverse(strict: torch.Tensor, block: int = 8) -> torc
     `aten.detach_`, and aot_autograd rejects -- one of the two ops that made every ONNX
     export subtest fail. Inverting once for every chunk at a time, rather than solving
     inside the serial chunk loop, is what keeps that affordable; it is not free even
-    so -- a T=1024 forward runs about a third slower on CPU than it did on the solve.
+    so. Measured against the per-chunk solve, loop included, on an RTX 5090 at 1.5B
+    shapes: 2.5x at T=1024 where 16 chunks cannot fill the card, falling to 1.2x at
+    T=4096, and flat in batch and head count. End to end on CPU, a T=1024 forward
+    runs about a third slower than it did on the solve.
     """
     span = strict.shape[-1]
     block = min(block, span)
