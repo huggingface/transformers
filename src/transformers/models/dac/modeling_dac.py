@@ -22,6 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
@@ -151,6 +152,7 @@ class DacVectorQuantize(nn.Module):
 
         return quantized_representation, commitment_loss, codebook_loss, audio_codes, projected_latents
 
+    @force_accelerate_hooks("codebook")
     def decode_latents(self, hidden_states):
         batch_size, hidden_dim, sequence_length = hidden_states.shape
         encodings = hidden_states.permute(0, 2, 1).reshape(batch_size * sequence_length, hidden_dim)
