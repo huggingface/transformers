@@ -194,7 +194,8 @@ class ImageProcessingTester:
         )
 
     def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
-        return self.num_channels, self.size["height"], self.size["width"]
+        size = self.crop_size if hasattr(self, "crop_size") else self.size
+        return self.num_channels, size["height"], size["width"]
 
     def prepare_post_process_semantic_segmentation_inputs(self) -> tuple[dict[str, Any], dict[str, Any]]:
         inputs = {

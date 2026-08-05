@@ -86,6 +86,9 @@ class TvpImageProcessingTester(ImageProcessingTester):
             "pad_size": self.pad_size,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
+
     def get_expected_values(self, image_inputs, batched=False):
         """
         This function computes the expected height and width when providing images to TvpImageProcessor,

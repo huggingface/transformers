@@ -78,9 +78,6 @@ class MobileViTImageProcessingTester(ImageProcessingTester):
             "do_reduce_labels": self.do_reduce_labels,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
             "outputs": SemanticSegmenterOutput(

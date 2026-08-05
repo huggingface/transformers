@@ -85,6 +85,9 @@ class PerceiverImageProcessingTester(ImageProcessingTester):
             "resample": self.resample,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
+
 
 @require_torch
 @require_vision

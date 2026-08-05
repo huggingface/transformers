@@ -80,10 +80,6 @@ class ChameleonImageProcessingTester(ImageProcessingTester):
             "resample": self.resample,
         }
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.expected_output_image_shape
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
 
 @require_torch
 @require_vision

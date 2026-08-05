@@ -82,9 +82,6 @@ class PerceptionLMImageProcessingTester(ImageProcessingTester):
             "size": self.size,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
 
 @require_torch
 @require_vision

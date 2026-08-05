@@ -67,9 +67,6 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
-    def expected_output_image_shape(self, images):
-        return 3, self.crop_size["height"], self.crop_size["width"]
-
 
 @require_torch
 @require_vision

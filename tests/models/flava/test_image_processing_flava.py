@@ -157,6 +157,9 @@ class FlavaImageProcessingTester(ImageProcessingTester):
     def get_expected_codebook_image_size(self):
         return (self.codebook_size["height"], self.codebook_size["width"])
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.size["height"], self.size["width"]
+
 
 @require_torch
 @require_vision
