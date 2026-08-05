@@ -142,9 +142,6 @@ class OlmoHybridConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        # The architecture separate the linear conv modules in q/k/v, so we need 3 cache entries per layer
-        self.number_of_conv_states = 3
-
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

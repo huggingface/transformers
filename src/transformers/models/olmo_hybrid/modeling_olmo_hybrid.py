@@ -31,30 +31,18 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, maybe_replace_from_package, merge_with_config_defaults
-from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_olmo_hybrid import OlmoHybridConfig
-
-
-if is_flash_linear_attention_available():
-    from fla.modules import FusedRMSNormGated, ShortConvolution
-    from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
-else:
-    chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
-    FusedRMSNormGated = None
-    ShortConvolution = None
-
-
-logger = logging.get_logger(__name__)
 
 
 class OlmoHybridRMSNormGated(nn.Module):
@@ -94,109 +82,6 @@ class OlmoHybridRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-class OlmoHybridShortConvolution(nn.Conv1d):
-    def __init__(
-        self,
-        hidden_size: int,
-        kernel_size: int,
-        bias: bool = False,
-        activation: str | None = "silu",
-        layer_idx: int | None = None,
-        conv_idx: int | None = None,
-    ):
-        super().__init__(
-            in_channels=hidden_size,
-            out_channels=hidden_size,
-            kernel_size=kernel_size,
-            groups=hidden_size,
-            padding=kernel_size - 1,
-            bias=bias,
-        )
-        self.hidden_size = hidden_size
-        self.conv_kernel_size = kernel_size
-        self.activation = activation
-        self.layer_idx = layer_idx
-        self.conv_idx = conv_idx
-
-    def forward(self, hidden_states: torch.Tensor, cache_params: Cache, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
-        seq_len = hidden_states.shape[1]
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(
-            self.layer_idx, self.conv_idx
-        )
-
-        hidden_states = hidden_states.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[self.conv_idx]
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.weight.squeeze(1), self.bias, self.activation
-            )
-        else:
-            if cache_params is not None:
-                hidden_states = cache_params.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states,
-                self.weight.squeeze(1),
-                self.bias,
-                activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),
-            )
-
-            # Drop the additional previous states
-            if cache_params is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
-
-        hidden_states = hidden_states.transpose(1, 2)
-
-        return hidden_states
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -358,8 +243,6 @@ class OlmoHybridRotaryEmbedding(nn.Module):
     RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: OlmoHybridConfig, device=None):
         super().__init__()
@@ -372,10 +255,10 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -424,6 +307,49 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
+
+
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
 
 
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
@@ -557,18 +483,15 @@ def torch_recurrent_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
-is_fast_path_available = all(
-    (ShortConvolution, chunk_gated_delta_rule, fused_recurrent_gated_delta_rule, FusedRMSNormGated)
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
 )
-
-
 class OlmoHybridGatedDeltaNet(nn.Module):
     """
     GatedDeltaNet linear attention for OLMo Hybrid.
 
     Key differences from Qwen3NextGatedDeltaNet:
     - Fully separate q/k/v/a/b projections (vs. fused qkvz + partially split ba)
-    - Per-projection conv1d for q, k, v (vs. single conv1d over concatenated qkv)
     - Dedicated g_proj gate (vs. z derived from the fused qkvz projection)
     - Supports allow_neg_eigval: scales beta by 2.0 to allow range [0, 2]
     """
@@ -586,30 +509,27 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.conv_kernel_size = config.linear_conv_kernel_dim
         self.allow_neg_eigval = config.linear_allow_neg_eigval
         self.eps = config.rms_norm_eps
+        self.activation = config.hidden_act
 
         self.q_proj = nn.Linear(self.hidden_size, self.key_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.key_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.value_dim, bias=False)
         self.a_proj = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.b_proj = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
+
         self.g_proj = nn.Linear(self.hidden_size, self.value_dim, bias=False)
+
         self.o_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
 
-        conv1d_kwargs = {"kernel_size": self.conv_kernel_size, "bias": False, "activation": "silu"}
-        if ShortConvolution is not None:
-            self.q_conv1d = ShortConvolution(hidden_size=self.key_dim, **conv1d_kwargs)
-            self.k_conv1d = ShortConvolution(hidden_size=self.key_dim, **conv1d_kwargs)
-            self.v_conv1d = ShortConvolution(hidden_size=self.value_dim, **conv1d_kwargs)
-        else:
-            self.q_conv1d = OlmoHybridShortConvolution(
-                hidden_size=self.key_dim, **conv1d_kwargs, layer_idx=self.layer_idx, conv_idx=0
-            )
-            self.k_conv1d = OlmoHybridShortConvolution(
-                hidden_size=self.key_dim, **conv1d_kwargs, layer_idx=self.layer_idx, conv_idx=1
-            )
-            self.v_conv1d = OlmoHybridShortConvolution(
-                hidden_size=self.value_dim, **conv1d_kwargs, layer_idx=self.layer_idx, conv_idx=2
-            )
+        self.conv_dim = self.key_dim * 2 + self.value_dim
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
 
         A = torch.empty(self.num_v_heads, dtype=torch.float32).uniform_(
             config.linear_a_log_min, config.linear_a_log_max
@@ -625,27 +545,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         self.dt_bias = nn.Parameter(inv_dt)
 
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
-        self.o_norm = (
-            OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
-            if FusedRMSNormGated is None
-            else FusedRMSNormGated(
-                self.head_v_dim,
-                eps=1e-5,
-            )
-        )
-
-        self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
-        self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
-
-        if not is_fast_path_available:
-            logger.warning_once(
-                "The fast path is not available because one of the required libraries is not installed. "
-                "Falling back to torch implementation. To install, follow: "
-                "https://github.com/fla-org/flash-linear-attention#installation"
-            )
+        self.o_norm = OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
 
         self.layer_type = config.layer_types[layer_idx]
 
+    @force_accelerate_hooks("conv1d")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -662,35 +566,54 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
-        use_precomputed = use_cache and cache_params.has_previous_state()
+        use_precomputed_states = use_cache and cache_params.has_previous_state()
 
-        q = self.q_proj(hidden_states)
-        k = self.k_proj(hidden_states)
-        v = self.v_proj(hidden_states)
+        mixed_qkv = torch.cat(
+            [
+                self.q_proj(hidden_states),
+                self.k_proj(hidden_states),
+                self.v_proj(hidden_states),
+            ],
+            dim=-1,
+        ).transpose(1, 2)
 
-        if ShortConvolution is not None:
-            conv_state_q = cache_params.layers[self.layer_idx].conv_states[0] if cache_params else None
-            conv_state_k = cache_params.layers[self.layer_idx].conv_states[1] if cache_params else None
-            conv_state_v = cache_params.layers[self.layer_idx].conv_states[2] if cache_params else None
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
-            q, new_conv_state_q = self.q_conv1d(
-                q, cache=conv_state_q, use_precomputed=use_precomputed, output_final_state=use_cache
+        # Single token decode path
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+            mixed_qkv = causal_conv1d_update(
+                mixed_qkv,
+                conv_state,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
             )
-            k, new_conv_state_k = self.k_conv1d(
-                k, cache=conv_state_k, use_precomputed=use_precomputed, output_final_state=use_cache
-            )
-            v, new_conv_state_v = self.v_conv1d(
-                v, cache=conv_state_v, use_precomputed=use_precomputed, output_final_state=use_cache
-            )
-            if cache_params is not None:
-                cache_params.layers[self.layer_idx].conv_states[0] = new_conv_state_q
-                cache_params.layers[self.layer_idx].conv_states[1] = new_conv_state_k
-                cache_params.layers[self.layer_idx].conv_states[2] = new_conv_state_v
+        # Multi token prefill or simple "full" prefill
         else:
-            # Our native implementation takes care of updating the cache natively
-            q = self.q_conv1d(q, cache_params=cache_params)
-            k = self.k_conv1d(k, cache_params=cache_params)
-            v = self.v_conv1d(v, cache_params=cache_params)
+            # Concatenated state for prefill
+            if cache_params is not None:
+                mixed_qkv = cache_params.update_conv_state(
+                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            mixed_qkv = causal_conv1d_fn(
+                mixed_qkv,
+                weight=self.conv1d.weight.squeeze(1),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+                **kwargs,
+            )
+
+            # Cut out any tail
+            mixed_qkv = mixed_qkv[:, :, -seq_len:]
+
+        q, k, v = torch.split(
+            mixed_qkv.transpose(1, 2),
+            [self.key_dim, self.key_dim, self.value_dim],
+            dim=-1,
+        )
 
         q = q.view(batch_size, seq_len, -1, self.head_k_dim)
         k = k.view(batch_size, seq_len, -1, self.head_k_dim)
@@ -707,9 +630,8 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         g = -self.A_log.float().exp() * F.softplus(self.a_proj(hidden_states).float() + self.dt_bias)
 
-        recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if cache_params else None
-        if use_precomputed and seq_len == 1:
-            output, new_recurrent_state = self.recurrent_gated_delta_rule(
+        if use_precomputed_states and seq_len == 1:
+            output, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 q,
                 k,
                 v,
@@ -718,21 +640,26 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                **kwargs,
             )
         else:
-            output, new_recurrent_state = self.chunk_gated_delta_rule(
+            output, last_recurrent_state = torch_chunk_gated_delta_rule(
                 q,
                 k,
                 v,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed else None,
+                initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=use_cache,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                **kwargs,
             )
 
+        # Update cache
         if cache_params is not None:
-            cache_params.update_recurrent_state(new_recurrent_state, self.layer_idx)
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         gate = self.g_proj(hidden_states)
         output = output.reshape(-1, self.head_v_dim)
@@ -829,6 +756,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             cache_params=past_key_values,
             attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -854,7 +782,8 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
-    _can_compile_fullgraph = True
+    # Uses a custom ``OlmoHybridDynamicCache``; StaticCache compatibility hasn't been wired up here.
+    _can_compile_fullgraph = False
 
     @torch.no_grad()
     def _init_weights(self, module):
