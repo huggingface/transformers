@@ -431,8 +431,9 @@ class Mistral4Attention(nn.Module):
 
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        # Concatenate k_nope and k_rot in a new tensor. The .copy_ broadcasts k_rot accross heads.
+        # Concatenate k_nope and k_rot in a new tensor
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
