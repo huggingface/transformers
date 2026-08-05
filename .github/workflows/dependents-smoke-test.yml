@@ -44,6 +44,7 @@ jobs:
           uv venv /opt/venv312 --python 3.12
           echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
           echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
