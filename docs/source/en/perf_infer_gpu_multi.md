@@ -101,24 +101,26 @@ print(model.tp_plan)
 The [`ParallelInterface`] class defines all partitioning strategies. It maps a string to the strategy implementation. You don't need to interact with this class directly since you set strategies with `tp_plan` in [`~PreTrainedModel.from_pretrained`]. It's useful for checking available strategies.
 
 ```py
-class ParallelInterface(MutableMapping):
-    """
-    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
-    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
-    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
-    """
+class ParallelInterface(GeneralInterface):
     _global_mapping = {
+        "embedding_rowwise": EmbeddingParallel(embedding_dim_sharding=0),
+        "embedding_colwise": EmbeddingParallel(embedding_dim_sharding=1),
+        "colwise_gather_output": ColwiseParallel(gather_output=True),
         "colwise": ColwiseParallel(),
         "rowwise": RowwiseParallel(),
-        "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-        "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-        "local_colwise": ColwiseParallel(use_dtensor=False),
-        "local_rowwise": RowwiseParallel(use_dtensor=False),
-        "local": IsolatedParallel(),
-        "moe_tp_experts": MoeTensorParalellExperts(),
-        "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+        "rowwise_split_input": RowwiseParallel(split_input=True),
+        "packed_colwise": PackedColwiseParallel(),
+        "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(),
-        "replicate": ReplicateParallel(),
+        "grouped_gemm": GroupedGemmParallel(),
+        "ep_router": RouterParallel(),
+        "megamoe_router": RouterParallelMegaMoe(),
+        "moe_tp_experts": MoeTensorParalellExperts(),
+        "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
+        "moe_identity_expert": MoeIdentityExpertParallel(),
+        "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+        "mla_kv_a_proj": MlaKvAProjParallel(),
+        "all_reduce": AllReduceParallel(),
     }
 ```
 
@@ -126,14 +128,21 @@ The table below describes each strategy.
 
 | Strategy | Description |
 |---|---|
-| `ColwiseParallel` | Partitions weights and biases column-wise. |
-| `RowwiseParallel` | Partitions weights and biases row-wise. Supports `nn.Embedding` modules partitioning. |
-| `SequenceParallel` | Sequence parallel implementation to support `LayerNorm` and `Dropout` layers. Supports Python implementation of [RMSNorm](https://github.com/facebookresearch/llama/blob/main/llama/model.py#L34). |
-| `PackedColwiseParallel` | A variant of `ColwiseParallel` that supports packed weights (for example, packing `up_proj` and `gate_proj` together). Refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details. |
-| `PackedRowwiseParallel` | A variant of `RowwiseParallel` that supports packed weights (refer to the [code](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for more details). |
-| `GatherParallel` | Gathers module outputs across devices. |
-| `IsolatedParallel` | Isolates a module from other devices. Used for Experts in Mixture-of-Experts (MoE) layers. |
-| `ReplicateParallel` | Replicates modules across all devices. Prevents `torch.distributed` APIs from breaking due to a partially sharded model. |
+| `ColwiseParallel` | Shards weights on dim `-2` (output features). Expects replicated input and produces output sharded on the last dim. Set `gather_output=True` (the `colwise_gather_output` key) to all-gather the full output. |
+| `RowwiseParallel` | Shards weights on dim `-1` (input features). Expects input sharded by a preceding column-wise layer and all-reduces the partial output. Set `split_input=True` (the `rowwise_split_input` key) when the input arrives replicated instead. |
+| `PackedColwiseParallel` | A variant of `ColwiseParallel` for fused weights (for example, `up_proj` and `gate_proj` packed into `gate_up_proj`). |
+| `PackedRowwiseParallel` | A variant of `RowwiseParallel` for fused weights. |
+| `EmbeddingParallel` | Shards an embedding table and handles masked lookups. `embedding_dim_sharding=0` shards the vocabulary dim, `1` shards the hidden dim. |
+| `SequenceParallel` | Shards inputs and outputs on the sequence dimension while replicating weights. |
+| `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Used for parameters like `q_norm` and `k_norm` that sit between column-wise and row-wise layers. |
+| `AllReduceParallel` | All-reduces a module's forward output across the mesh. Use it as a sync point for a module whose compute ends in a partial sum. |
+| `MlaKvAProjParallel` | Handles the split `kv_a_proj_with_mqa` output in DeepSeek-V2 style MLA attention. |
+| `GroupedGemmParallel` | Applies expert parallelism to MoE experts by loading the correct experts on each device. |
+| `RouterParallel` | Reshapes router scores so experts can run with expert parallelism. |
+| `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which handles expert-parallel dispatch inside the kernel. |
+| `MoeTensorParalellExperts` | Tensor parallel MoE experts, including the gradient syncs for hidden states, routing weights, and partial expert outputs. |
+| `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. |
+| `MoeIdentityExpertParallel` | Compensates for the parent all-reduce on zero/identity experts, which produce the same output on every rank. |
 
 ### Packed strategies
 
@@ -159,82 +168,63 @@ def forward(self, hidden_states):
 > [!TIP]
 > See [this comment](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py#L79-#L108) for a visual representation of why `Packed*` needs to be used.
 
-### Local strategies
-
-Local strategies (`local_colwise`, `local_rowwise`, `local_packed_rowwise`) don't use [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) because it lacks support for some operations like [torch.chunk](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html). Instead, local strategies use the basic [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html) and perform distributed logic manually.
-
-<!--
-Re-add this when I get the exact error message
-> [!TIP]
-> If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
--->
-
 ## Custom partitioning strategies
 
-Inherit from [TensorParallelLayer](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) to create a custom partitioning strategy. Implement `partition_tensor`, `_prepare_input_fn` and `_prepare_output_fn`.
+Inherit from [TensorParallelLayer](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/tensor_parallel.py) to create a custom partitioning strategy. Implement `shard_tensor`, `_prepare_input_fn` and `_prepare_output_fn`.
 
 Register the strategy in the `ParallelInterface` mapping so the dispatching logic finds it when specified in `tp_plan`.
 
 The example below shows how to implement `ColwiseParallel` with this workflow.
 
-1. Inherit from `TensorParallelLayer`. In the `__init__` method, define `input_layouts` and `output_layouts` to describe how the input and output tensors should be placed on devices. The `desired_input_layouts` attribute is used to specify *how* the input should be placed on devices.
+1. Inherit from `TensorParallelLayer`. Use the `__init__` method to store any options that change how the layer shards weights or handles its input and output. `ColwiseParallel` only needs `gather_output`, which controls whether the sharded output is all-gathered back into a full tensor.
 
     ```python
     class ColwiseParallel(TensorParallelLayer):
-        def __init__(
-            self,
-            *,
-            input_layouts: Optional[Placement] = None, # The input layout coming from the previous layer
-            output_layouts: Optional[Placement] = None, # The output layout we want to achieve
-            use_local_output: bool = True, # Whether to use local output or not
-            use_dtensor=True, # Whether to use DTensor or not
-        ):
-            self.input_layouts = (input_layouts or Replicate(),) # The input sharding coming from the previous layer
-            self.output_layouts = (output_layouts or Shard(-1),) # Desired output sharding
-            self.desired_input_layouts = (Replicate(),) # Desired input sharding, inputs should be replicated across GPUs
-            self.use_local_output = use_local_output
-            self.use_dtensor = use_dtensor
+        def __init__(self, gather_output: bool = False, **kwargs):
+            super().__init__(**kwargs) # Sets device_mesh, rank, and empty_param
+            self.gather_output = gather_output
     ```
 
-2. Implement the `partition_tensor`, `_prepare_input_fn`, and `_prepare_output_fn` methods.
+2. Implement the `shard_tensor`, `_prepare_input_fn`, and `_prepare_output_fn` methods.
 
-    The `partition_tensor` method partitions the tensor and fills `empty_param` with the partitioned tensor. Use the utility function `get_tensor_shard` to help you get the correct shard of the original parameter for a given rank and `get_packed_weights` to help with packed weights.
+    The `shard_tensor` method returns this rank's shard of a full parameter. Use the utility function `get_tensor_shard` to get the correct shard of the original parameter for a given rank, and `get_packed_weights` for packed weights. The mesh, rank, and target parameter are available as `self.device_mesh`, `self.rank`, and `self.empty_param`.
 
     ```python
-    def partition_tensor(
+    def shard_tensor(
         self,
         param, # Full tensor of the parameter
-        empty_param, # Empty tensor of the parameter, will be filled with the partitioned tensor
-        param_type, # Type of the parameter, `bias` or `weight`
-        param_casting_dtype, # The type to cast the parameter to
-        to_contiguous, # Whether to convert the tensor to a contiguous memory layout
-        rank, # The rank of the current device
-        device_mesh, # The device mesh
-    ) -> nn.Parameter: # Return the partitioned parameter
-        ...
+        tensor_idx=None, # Index of the tensor when a parameter is loaded from several tensors
+        device=None, # The device to place the shard on
+        dtype=None, # The dtype to cast the shard to
+    ) -> torch.Tensor: # Return this rank's shard
+        # Shard dim -2 for weights, dim -1 for 1D tensors such as a bias
+        dim = -1 if param.dim() == 1 else -2
+        parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, dim)
+        return parameter.to(device=device, dtype=dtype)
     ```
 
-    The `_prepare_input_fn` and `_prepare_output_fn` methods are used in the [pre-forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks. They redistribute the inputs and outputs to the desired layout as specified in the `__init__`.
+    The `_prepare_input_fn` and `_prepare_output_fn` methods are used in the [pre-forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_pre_hook.html) and [forward](https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.module.register_module_forward_hook.html) hooks. They apply the communication the strategy needs around the module's compute.
 
     ```python
-    def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
-        ...
-        # Do some custom logic, cast to DTensor etc.
-        ...
-        return inputs.redistribute(placements=desired_input_layouts, device_mesh=device_mesh)
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
-        ...
-        # Do some custom logic, cast to DTensor etc.
-        ...
-        return outputs.redistribute(placements=output_layouts, device_mesh=device_mesh)
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        input_tensor = inputs[0] if inputs else inputs
+        # Column-wise expects a replicated input, so only the backward pass needs a reduction
+        return all_reduce_backward(input_tensor, device_mesh)
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        if self.gather_output:
+            return all_gather(outputs, device_mesh)
+        return outputs
     ```
 
-3. Register the strategy to [`ParallelInterface`] to enable it for use with `tp_plan`.
+    Optionally implement `get_expected_sharded_shape` and `update_module_attributes` so the loader knows the sharded shape and the module reports sharded attributes such as `out_features`.
+
+3. Register the strategy on [`ParallelInterface`] to enable it for use with `tp_plan`. Pass an instance of the strategy, configured however you need it.
 
     ```python
     from transformers.integrations.tensor_parallel import ParallelInterface
 
-    ParallelInterface.register_strategy("colwise_custom", ColwiseParallel)
+    ParallelInterface.register("colwise_custom", ColwiseParallel())
     tp_plan = {
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...

@@ -142,7 +142,7 @@ Use [`~ContinuousMixin.generate_batch`] to enable continuous batching.
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation import GenerationConfig
+from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
@@ -164,12 +164,13 @@ generation_config = GenerationConfig(
     eos_token_id=tokenizer.eos_token_id,
     pad_token_id=tokenizer.pad_token_id,
     do_sample=False,
-    max_batch_tokens=512,
 )
+continuous_batching_config = ContinuousBatchingConfig(max_batch_tokens=512)
 
 outputs = model.generate_batch(
     inputs=inputs,
     generation_config=generation_config,
+    continuous_batching_config=continuous_batching_config,
 )
 
 for request_id, output in outputs.items():

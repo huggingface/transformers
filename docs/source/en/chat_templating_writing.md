@@ -20,7 +20,7 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 
 ```jinja
 {%- for message in messages %}
-    {{- '<|' + message['role'] + |>\n' }}
+    {{- '<|' + message['role'] + '|>\n' }}
     {{- message['content'] + eos_token }}
 {%- endfor %}
 {%- if add_generation_prompt %}
@@ -243,7 +243,7 @@ An example of handling tool definitions in a chat template is shown below. The s
             {{- argument + ': ' + tool['function']['parameters']['properties'][argument]['description'] + '\n' }}
         {%- endfor %}
         {{- '\n</tool>' }}
-    {%- endif %}
+    {%- endfor %}
 {%- endif %}
 ```
 
@@ -276,8 +276,7 @@ A common pattern for handling tool calls is shown below. You can use this as a s
 ```jinja
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
     {%- for tool_call in message['tool_calls'] %}
-            {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
-        {%- endif %}
+        {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
     {%- endfor %}
 {%- endif %}
 ```

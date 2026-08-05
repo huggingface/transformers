@@ -47,7 +47,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 ```py
 quant_path = "/path/to/save/quantized/model"
-model.save_pretrained(quant_path)
+quantized_model.save_pretrained(quant_path)
 model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 ```
 
