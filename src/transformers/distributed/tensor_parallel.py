@@ -181,21 +181,21 @@ class ColwiseParallel(TensorParallelLayer):
         x = args[0]
         is_local_input = not isinstance(x, DTensor)
 
-        # Fast path for regular Linear inference: the input is already replicated, the
+        # regular Linear inference fast path: the input is already replicated, the
         # local weight owns a shard of the output features, and no backward is needed.
         if is_local_input and isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled():
             return args, kwargs
 
-        # Quantized path also require local tensors. Integer weights do not
-        # receive gradient but a floating-point input needs a gradient.
+        # Plain-local quantized fast path. The input is already replicated, so avoid
+        # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
+        # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
             if torch.is_grad_enabled() and x.requires_grad:
                 process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
                 x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
 
-        # DTensor path used for training regular Linear layers and whenever an input
-        # layout must be redistributed before entering a local quantized kernel.
+        # DTensor path: handle regular training and layout redistribution.
         if is_local_input:
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
