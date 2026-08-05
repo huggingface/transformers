@@ -38,7 +38,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
