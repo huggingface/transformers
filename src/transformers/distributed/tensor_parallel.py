@@ -478,7 +478,6 @@ class MoEParamShard(TensorParallelLayer):
 
 if is_torch_distributed_available():
 
-    #TODO(3outeille): To be removed once
     class _AllReduceForward(torch.autograd.Function):
         """Allreduce-sum forward, identity backward."""
 
