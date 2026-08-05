@@ -15,8 +15,6 @@
 
 import unittest
 
-from datasets import load_dataset
-
 from transformers.modeling_outputs import SemanticSegmenterOutput
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
@@ -98,17 +96,6 @@ class BeitImageProcessingTester(ImageProcessingTester):
             "width": self.crop_size["width"],
         }
         return inputs, expected_shape
-
-
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -206,7 +193,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processing(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -231,7 +218,9 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processing(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -261,7 +250,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 150)
@@ -272,7 +261,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Ensure reduce label returns the same number of masks
-            image, map = prepare_semantic_batch_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
@@ -280,7 +269,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -304,7 +293,9 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

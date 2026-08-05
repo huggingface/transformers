@@ -59,6 +59,15 @@ COCO_CATS_IMAGE_URL = (
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
 )
 
+ADE20K_IMAGE_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.jpg",
+]
+ADE20K_SEGMENTATION_MAP_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.png",
+]
+
 
 def load_test_image(url: str):
     """
@@ -192,6 +201,19 @@ class ImageProcessingTester:
             numpify=numpify,
             torchify=torchify,
         )
+
+    def prepare_semantic_segmentation_inputs_ade20k(self, batched: bool = False):
+        """Loads image/segmentation map pairs from ADE20k as PIL images."""
+        num_inputs = 2 if batched else 1
+        images = [load_test_image(url) for url in ADE20K_IMAGE_URLS[:num_inputs]]
+        # `load_test_image` converts the single channel label maps to RGB, duplicating the labels across channels
+        segmentation_maps = [
+            Image.fromarray(np.array(load_test_image(url))[..., 0])
+            for url in ADE20K_SEGMENTATION_MAP_URLS[:num_inputs]
+        ]
+        if batched:
+            return images, segmentation_maps
+        return images[0], segmentation_maps[0]
 
     def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
         crop_size = getattr(self, "crop_size", None)

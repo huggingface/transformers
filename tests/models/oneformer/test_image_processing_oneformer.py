@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -114,19 +113,6 @@ class OneFormerImageProcessingTester(ImageProcessingTester):
             "width": self.width,
         }
         return inputs, expected_shape
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -312,7 +298,7 @@ class OneFormerImageProcessingTest(
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -341,7 +327,9 @@ class OneFormerImageProcessingTest(
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

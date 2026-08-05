@@ -15,8 +15,6 @@
 
 import unittest
 
-from datasets import load_dataset
-
 from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
@@ -81,19 +79,6 @@ class SamImageProcessingTester(ImageProcessingTester):
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.pad_size["height"], self.pad_size["width"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -189,7 +174,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processor(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -214,7 +199,9 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processor(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -243,7 +230,7 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -271,7 +258,9 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
