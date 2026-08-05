@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -55,7 +55,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_exporting,
-    logging,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -64,10 +63,8 @@ from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
-    maybe_replace_from_package,
     merge_with_config_defaults,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -78,20 +75,7 @@ from ..auto.modeling_auto import AutoModel
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 
-if is_flash_linear_attention_available():
-    from fla.modules import FusedRMSNormGated
-    from fla.ops.gated_delta_rule import chunk_gated_delta_rule, fused_recurrent_gated_delta_rule
-else:
-    chunk_gated_delta_rule, fused_recurrent_gated_delta_rule = None, None
-    FusedRMSNormGated = None
-
-
-logger = logging.get_logger(__name__)
-
-
 class Qwen3_5VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
@@ -104,8 +88,6 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
 
 
 class Qwen3_5TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen3_5TextConfig, device=None):
         super().__init__()
@@ -188,11 +170,13 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
         return freqs_t
 
 
+@use_kernel_forward_from_hub("RMSNormGated")
 class Qwen3_5RMSNormGated(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.activation = "silu"
 
     def forward(self, hidden_states, gate: torch.Tensor):
         input_dtype = hidden_states.dtype
@@ -201,7 +185,7 @@ class Qwen3_5RMSNormGated(nn.Module):
         # Norm before gate
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * F.silu(gate.to(torch.float32))
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
 
         return hidden_states.to(input_dtype)
 
@@ -211,14 +195,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
 
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -238,7 +222,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -267,6 +251,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+@use_kernel_func_from_hub_with_fallback("chunk_gated_delta_rule", "fla")
 def torch_chunk_gated_delta_rule(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -409,6 +394,7 @@ def torch_chunk_gated_delta_rule(
     return core_attn_out, last_recurrent_state
 
 
+@use_kernel_func_from_hub_with_fallback("recurrent_gated_delta_rule", "fla")
 def torch_recurrent_gated_delta_rule(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -418,11 +404,11 @@ def torch_recurrent_gated_delta_rule(
     initial_state: torch.Tensor | None = None,
     output_final_state: bool = False,
     use_qk_l2norm_in_kernel: bool = False,
+    **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Computes linear attention using the gated delta rule, by iterating over each token in the sequence dimension.
     Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
-    chunked.
-    """
+    chunked."""
     initial_dtype = query.dtype
     batch_size, sequence_length, _, k_head_dim = key.shape
     num_v_heads, v_head_dim = value.shape[-2:]
@@ -472,6 +458,9 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+)
 class Qwen3_5GatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
         super().__init__()
@@ -506,27 +495,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         A = torch.empty(self.num_v_heads).uniform_(0, 16)
         self.A_log = nn.Parameter(torch.log(A))
 
-        self.norm = (
-            Qwen3_5RMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
-            if FusedRMSNormGated is None
-            else FusedRMSNormGated(
-                self.head_v_dim,
-                eps=self.layer_norm_epsilon,
-                activation=self.activation,
-            )
-        )
-
+        self.norm = Qwen3_5RMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
         self.out_proj = nn.Linear(self.value_dim, self.hidden_size, bias=False)
-
-        self.chunk_gated_delta_rule = chunk_gated_delta_rule or torch_chunk_gated_delta_rule
-        self.recurrent_gated_delta_rule = fused_recurrent_gated_delta_rule or torch_recurrent_gated_delta_rule
-
-        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
-            logger.warning_once(
-                "The fast path is not available because one of the required library is not installed. Falling back to "
-                "torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and"
-                " https://github.com/Dao-AILab/causal-conv1d"
-            )
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -579,7 +549,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 activation=self.activation,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
 
             # Drop the additional previous states
@@ -610,7 +580,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
 
         recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0] if use_precomputed_states else None
         if use_precomputed_states and seq_len == 1:
-            core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -619,9 +589,11 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                **kwargs,
             )
         else:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+            core_attn_out, last_recurrent_state = torch_chunk_gated_delta_rule(
                 query,
                 key,
                 value,
@@ -630,8 +602,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
-                cu_seqlens=kwargs.get("cu_seq_lens_q"),
+                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                **kwargs,
             )
 
         # Update cache

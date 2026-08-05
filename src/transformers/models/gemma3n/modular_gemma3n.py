@@ -2298,9 +2298,9 @@ class Gemma3nModel(PaliGemmaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
         r"""
-        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(

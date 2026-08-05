@@ -176,8 +176,6 @@ class Llama4TextMoe(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Llama4Text
 class Llama4TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     # Ignore copy
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Llama4TextConfig, device=None):
@@ -509,7 +507,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

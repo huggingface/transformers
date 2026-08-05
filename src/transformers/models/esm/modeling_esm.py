@@ -109,8 +109,6 @@ class EsmRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EsmConfig, device=None):
         super().__init__()

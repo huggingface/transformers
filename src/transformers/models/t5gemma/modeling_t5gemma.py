@@ -98,8 +98,6 @@ class T5GemmaMLP(nn.Module):
 
 
 class T5GemmaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: T5GemmaConfig, device=None):
         super().__init__()

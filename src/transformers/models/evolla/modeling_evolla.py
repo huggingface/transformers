@@ -163,8 +163,6 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: SaProtConfig, device=None):
         super().__init__()
@@ -1029,8 +1027,6 @@ class EvollaRMSNorm(nn.Module):
 
 
 class EvollaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
@@ -1345,9 +1341,9 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_feats (torch.FloatTensor):
             The input IDs for purely MSA-based features. Should be of shape `(batch_size, msa_seq_length, msa_feat_dim)` and type `torch.FloatTensor`. Dummy input for now.
         structure_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummy input for now.
         msa_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummy input for now.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

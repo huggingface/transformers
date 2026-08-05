@@ -88,8 +88,6 @@ def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: i
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()

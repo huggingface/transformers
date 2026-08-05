@@ -75,8 +75,6 @@ class Exaone4_5_PatchEmbed(nn.Module):
 
 
 class Exaone4_5_VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim

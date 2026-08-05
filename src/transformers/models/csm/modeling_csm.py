@@ -118,8 +118,6 @@ class CsmRMSNorm(nn.Module):
 
 
 class CsmRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: CsmConfig, device=None):
         super().__init__()

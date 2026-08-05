@@ -2887,7 +2887,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
-        >>> # download texting image
+        >>> # download test image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))

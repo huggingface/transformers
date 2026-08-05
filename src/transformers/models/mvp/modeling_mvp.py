@@ -1405,7 +1405,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
 
         Example:
 
-        Fine-tuning a model for extrative question answering, and our model also supports generative question answering
+        Fine-tuning a model for extractive question answering, and our model also supports generative question answering
         using `BartForConditionalGeneration`
         ```python
         >>> import torch

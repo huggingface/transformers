@@ -211,8 +211,6 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
 
 
 class Granite4VisionTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Granite4VisionTextConfig, device=None):
         super().__init__()
@@ -857,7 +855,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -1064,7 +1062,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).

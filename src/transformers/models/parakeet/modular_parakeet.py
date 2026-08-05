@@ -72,8 +72,6 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
@@ -423,7 +421,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,

@@ -45,8 +45,6 @@ from .configuration_zaya import ZayaConfig
 
 
 class ZayaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ZayaConfig, device=None):
         super().__init__()
@@ -648,7 +646,7 @@ class ZayaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {

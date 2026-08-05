@@ -4132,7 +4132,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 If `False`, will only returns the text tokens and won't generate speech.
 
             kwargs (*optional*):
-                Remaining dictioy of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
                 arguments are of two types:
 
                     - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,

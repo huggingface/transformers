@@ -107,8 +107,6 @@ class PaddleOCRProjector(nn.Module):
 
 
 class PaddleOCRVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
@@ -121,8 +119,6 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
 
 
 class PaddleOCRRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PaddleOCRVLConfig, device=None):
         super().__init__()

@@ -33,7 +33,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_vision_available,
     logging,
     torch_compilable_check,
 )
@@ -52,9 +51,6 @@ from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 
-
-if is_vision_available():
-    pass
 
 logger = logging.get_logger(__name__)
 

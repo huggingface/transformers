@@ -55,8 +55,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
