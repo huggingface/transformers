@@ -32,10 +32,33 @@ jobs:
           persist-credentials: false
           path: transformers
 
-      - name: Checkout vLLM
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          # path field is like '../../../{full_commit_hash}/{wheel_filename}' relative to nightly/cpu/vllm/
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          VLLM_WHEEL_URL=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          rel = '/'.join(wheel['path'].split('/')[3:])
+          print(f'https://wheels.vllm.ai/{rel}')
+          ")
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "VLLM_WHEEL_URL=$VLLM_WHEEL_URL" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+          echo "vLLM wheel: $VLLM_WHEEL_URL"
+
+      - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
           persist-credentials: false
           path: vllm
 
@@ -54,7 +77,7 @@ jobs:
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
-          uv pip install vllm tblib
+          uv pip install "$VLLM_WHEEL_URL" tblib
 
       - name: Run tests
         working-directory: vllm
