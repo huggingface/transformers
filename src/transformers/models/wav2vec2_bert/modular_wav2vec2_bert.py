@@ -387,7 +387,7 @@ class Wav2Vec2BertEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         conv_attention_mask = attention_mask
         if attention_mask is not None:
@@ -451,7 +451,7 @@ class Wav2Vec2BertAdapter(nn.Module):
         seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
         return seq_lens.floor()
 
-    def forward(self, hidden_states, attention_mask=None, **kwargs):
+    def forward(self, hidden_states, attention_mask=None, **kwargs: Unpack[TransformersKwargs]):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
@@ -571,6 +571,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = ["Wav2Vec2BertEncoderLayer"]
     _can_record_outputs = {
         "hidden_states": Wav2Vec2BertEncoderLayer,

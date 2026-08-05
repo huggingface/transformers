@@ -27,7 +27,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
@@ -164,10 +164,13 @@ class SEWEncoder(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask is not None:
+            # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0.0
 
             # Pool the attention mask to match the pooled hidden_states shape.
+            # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+            # the sequence length as a constant during ONNX export.
             attention_mask = (
                 nn.functional.max_pool1d(
                     attention_mask.float().unsqueeze(1),
@@ -178,10 +181,6 @@ class SEWEncoder(nn.Module):
                 .long()
             )
 
-            if is_flash_attention_requested(self.config):
-                # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-
         n_input_timesteps = hidden_states.shape[1]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -191,10 +190,9 @@ class SEWEncoder(nn.Module):
         hidden_states = pooled_hidden_states[..., :min_length] + position_embeddings[..., :min_length]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if not is_flash_attention_requested(self.config):
-            attention_mask = create_bidirectional_mask(
-                config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=hidden_states, attention_mask=attention_mask
+        )
 
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -226,7 +224,7 @@ class SEWPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False  # needs a proper look into the mask creation
+    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": SEWEncoderLayer,
         "attentions": OutputRecorder(SEWAttention, index=1, layer_name="encoder"),

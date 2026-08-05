@@ -423,6 +423,10 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
+# NOTE: this differs on purpose from the eager attention of other models that support a position bias
+# (e.g. `inkling`), in order to stay equivalent to the original conformer implementation:
+# - no `repeat_kv` as these models do not use GQA
+# - the softmax stays in the input dtype instead of being upcast to fp32
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -680,7 +684,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if attention_mask is not None:
             # make sure padded tokens output 0
@@ -853,6 +857,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": Wav2Vec2ConformerEncoderLayer,
         "attentions": OutputRecorder(Wav2Vec2ConformerSelfAttention, index=1, layer_name="encoder"),

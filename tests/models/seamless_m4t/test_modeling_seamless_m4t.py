@@ -334,6 +334,7 @@ class SeamlessM4TModelTester:
             input_name: input_ids,
             "attention_mask": input_mask,
             "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": input_mask,
             "labels": lm_labels,
         }
         return config, inputs_dict
@@ -379,6 +380,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             _test_eager_matches_sdpa_inference(
                 self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
             )
+
+    def test_flex_attention_with_grads(self):
+        with patch.object(SeamlessM4TModel, "main_input_name", "input_features"):
+            super().test_flex_attention_with_grads()
 
     @unittest.skip(
         reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"

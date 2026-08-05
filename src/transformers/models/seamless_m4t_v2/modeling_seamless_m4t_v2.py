@@ -594,7 +594,7 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         conv_attention_mask = attention_mask
         if attention_mask is not None:
@@ -742,7 +742,7 @@ class SeamlessM4Tv2ConformerAdapter(nn.Module):
             SeamlessM4Tv2ConformerAdapterLayer(config) for _ in range(config.num_adapter_layers)
         )
 
-    def forward(self, hidden_states, attention_mask, **kwargs):
+    def forward(self, hidden_states, attention_mask, **kwargs: Unpack[TransformersKwargs]):
         # down project hidden_states if necessary
 
         for layer in self.layers:
@@ -1257,6 +1257,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "seamless_m4t_v2"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _no_split_modules = [
         "SeamlessM4Tv2EncoderLayer",
         "SeamlessM4Tv2DecoderLayer",
@@ -1630,16 +1631,14 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
             )
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if input_ids is not None:
             input = input_ids
-            input_shape = input.shape
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input = inputs_embeds[:, :, -1]
+            input_ids = input_ids.view(-1, input_ids.shape[-1])
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            input = inputs_embeds[:, :, -1]
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1760,17 +1759,14 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of decoder_input_ids or decoder_inputs_embeds")
+
+        if input_ids is not None:
             input = input_ids
-            input_shape = input.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
+            input_ids = input_ids.view(-1, input_ids.size(-1))
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            input = inputs_embeds[:, :, -1]
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -2007,7 +2003,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -2108,7 +2104,7 @@ class SeamlessM4Tv2TextToUnitForConditionalGeneration(SeamlessM4Tv2PreTrainedMod
         encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
@@ -2548,7 +2544,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2786,7 +2782,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3041,7 +3037,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3371,7 +3367,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3741,7 +3737,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput | tuple[torch.FloatTensor]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
