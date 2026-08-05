@@ -87,25 +87,7 @@ class TvpImageProcessingTester(ImageProcessingTester):
         }
 
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to TvpImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            return (int(self.pad_size["height"]), int(self.pad_size["width"]))
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
+        return self.num_channels, self.pad_size["height"], self.pad_size["width"]
 
     def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_video_inputs(
@@ -163,7 +145,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(video[0], Image.Image)
 
             # Test not batched input
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_videos.shape,
@@ -177,9 +159,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             # Test batched
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(
-                video_inputs, batched=True
-            )
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_videos.shape,
@@ -215,7 +195,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 test_inputs = video_inputs
 
             # Test not batched input
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(test_inputs[0], return_tensors="pt").pixel_values
             self.assertListEqual(
                 list(encoded_videos.shape),
@@ -229,9 +209,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             # Test batched
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(
-                video_inputs, batched=True
-            )
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(test_inputs, return_tensors="pt").pixel_values
             self.assertListEqual(
                 list(encoded_videos.shape),
@@ -267,7 +245,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 test_inputs = video_inputs
 
             # Test not batched input
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(
                 test_inputs[0],
                 return_tensors="pt",
@@ -287,9 +265,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             # Test batched
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(
-                video_inputs, batched=True
-            )
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(
                 test_inputs,
                 return_tensors="pt",
@@ -321,7 +297,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertIsInstance(video[0], torch.Tensor)
 
             # Test not batched input
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_videos.shape,
@@ -335,9 +311,7 @@ class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
             # Test batched
-            expected_height, expected_width = self.image_processor_tester.get_expected_values(
-                video_inputs, batched=True
-            )
+            _, expected_height, expected_width = self.image_processor_tester.expected_output_image_shape(video_inputs)
             encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 encoded_videos.shape,

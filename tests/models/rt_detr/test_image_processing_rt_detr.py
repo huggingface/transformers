@@ -72,12 +72,8 @@ class RTDetrImageProcessingTester(ImageProcessingTester):
             "return_tensors": self.return_tensors,
         }
 
-    def get_expected_values(self):
-        return self.size["height"], self.size["width"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values()
-        return self.num_channels, height, width
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
