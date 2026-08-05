@@ -468,6 +468,44 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     msg=f"{name} differs under checkpointing (use_reentrant={reentrant})",
                 )
 
+    def test_a_long_prefill_stays_finite_where_a_series_inverse_would_not(self):
+        """The chunked kernel must not manufacture a NaN from a finite prompt.
+
+        `(I + tril(Q~ B~^T, -1))` is unit lower triangular, so its inverse can be
+        written as a terminating series and taken by repeated squaring. That is exact
+        in exact arithmetic and wrong in float32: the intermediate powers are not
+        bounded by the answer. On a real chunk here the matrix has entries at most
+        0.977 and its true inverse has entries at most 1.0, while the 32nd power
+        reaches 1.3e11 -- eleven orders of magnitude of cancellation, against the seven
+        digits float32 carries. The result came back with entries of 1e4 where the
+        answer is 1, then went to NaN in the next layer.
+
+        Seeded, and at a length several chunks long, because neither is optional. At
+        T=128 and below no initialisation triggers it; at T=256 one in forty does; at
+        T=1024 one in five. The seeds below are two of that fifth, so this test fails
+        on a series inverse and passes on the substitution -- checked by running it
+        against both, which is the only way to know a regression test regresses.
+
+        Asserted as finiteness rather than against a reference, because that is the
+        failure: the states go to NaN, and every downstream comparison then passes or
+        fails for the wrong reason.
+        """
+        for seed in (7, 33):
+            with self.subTest(seed=seed):
+                torch.manual_seed(seed)
+                config = _tiny_config()
+                model = _sharpened(Rwkv7ForCausalLM(config)).to(torch_device).eval()
+                input_ids = torch.randint(0, config.vocab_size, (1, 1024), device=torch_device)
+
+                with torch.no_grad():
+                    out = model(input_ids=input_ids, use_cache=True)
+
+                self.assertTrue(torch.isfinite(out.logits).all(), "logits are not finite")
+                for layer in range(config.num_hidden_layers):
+                    for slot in (Rwkv7Cache.WKV, Rwkv7Cache.ATT_SHIFT, Rwkv7Cache.FFN_SHIFT):
+                        state = out.state.layers[layer].recurrent_states[slot]
+                        self.assertTrue(torch.isfinite(state).all(), f"layer {layer} slot {slot} state is not finite")
+
     def test_the_last_real_token_is_found_by_index_not_by_float_arithmetic(self):
         """Finding the last unmasked position must not depend on the model's dtype.
 

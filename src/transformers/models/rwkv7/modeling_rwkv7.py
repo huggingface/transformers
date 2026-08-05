@@ -136,6 +136,74 @@ def rwkv7_recurrent(
     return out.to(dtype), state
 
 
+def _unit_lower_triangular_inverse(strict: torch.Tensor, block: int = 8) -> torch.Tensor:
+    """Inverse of a batch of unit lower triangular matrices `I + strict`.
+
+    `strict` is strictly lower triangular, so it is nilpotent and the Neumann series
+    `I - strict + strict^2 - ...` terminates -- which makes an inverse by repeated
+    squaring look like the obvious choice, and it is wrong here. The intermediate
+    powers are not bounded by the answer: on a real chunk from a 3-layer model at
+    T=1024, `strict` has entries at most 0.977 and the true inverse has entries at
+    most 1.0, but `strict^32` reaches 1.3e11. Summing a series whose terms exceed the
+    result by eleven orders of magnitude cancels away every digit float32 has -- both
+    Newton doubling and a plain Neumann sum came back with entries of 1e4 where the
+    answer is 1, and the NaNs that followed reached the states two layers on. It shows
+    up in a fifth of randomly initialised 3-layer models at T=1024, one in forty at
+    T=256 and none at all at T=128 or below: it needs several chunks to compound, so a
+    short-prompt test cannot see it however many initialisations it tries.
+
+    Block forward substitution never forms a high power. `block` bounds the largest
+    power taken, and the same chunk that breaks the series gives 6.6e-7 at block 8 and
+    1.3e-7 at block 4, against float64 `linalg.solve_triangular`; 16 already costs a
+    digit and a half (1.9e-5) because the within-block series runs longer.
+
+    Random triangular matrices do not show any of this, which is worth stating because
+    it is what a test would reach for first: they agree with the series to 1e-6, since
+    their own inverses are as large as the intermediate powers. The cancellation needs
+    an inverse that stays near 1 while the powers do not, which is what the delta rule
+    produces and what a random matrix does not.
+
+    `linalg.solve_triangular` is the obvious call and is the accurate one, but it
+    decomposes for export into a graph carrying a scalar tensor constant, which
+    `lift_fresh` turns into `aten.alias`, functionalization turns into the in-place
+    `aten.detach_`, and aot_autograd rejects -- one of the two ops that made every ONNX
+    export subtest fail. Inverting once for every chunk at a time, rather than solving
+    inside the serial chunk loop, is what keeps that affordable; it is not free even
+    so -- a T=1024 forward runs about a third slower on CPU than it did on the solve.
+    """
+    span = strict.shape[-1]
+    block = min(block, span)
+    # Padding with zeros extends the matrix by an identity block, whose inverse is
+    # itself, so the leading span x span block of the result is unchanged.
+    pad = -span % block
+    if pad:
+        strict = torch.nn.functional.pad(strict, (0, pad, 0, pad))
+    width = span + pad
+    blocks = width // block
+
+    eye = torch.eye(block, device=strict.device, dtype=strict.dtype)
+    # Every diagonal block at once: [..., blocks, block, block].
+    diag = strict.reshape(*strict.shape[:-2], blocks, block, blocks, block)
+    diag = diag.diagonal(dim1=-4, dim2=-2).movedim(-1, -3)
+    # Exact after `block` terms, and `block` is small enough that the powers stay near
+    # the answer -- which is the whole point of the blocking.
+    inverse, term = eye - diag, -diag
+    for _ in range(block - 2):
+        term = -(diag @ term)
+        inverse = inverse + term
+
+    # `out` grows one block row at a time and is the inverse of the leading principal
+    # submatrix throughout, so the substitution reads exactly the columns it has
+    # already filled and never multiplies the zeros above the diagonal.
+    out = inverse[..., 0, :, :]
+    for i in range(1, blocks):
+        start, stop = i * block, (i + 1) * block
+        d = inverse[..., i, :, :]
+        row = torch.cat([-d @ (strict[..., start:stop, :start] @ out), d], dim=-1)
+        out = torch.cat([torch.nn.functional.pad(out, (0, block)), row], dim=-2)
+    return out[..., :span, :span] if pad else out
+
+
 def rwkv7_chunked(
     r: torch.Tensor,
     w_log: torch.Tensor,
@@ -223,9 +291,18 @@ def rwkv7_chunked(
     grouped = lambda t: t.reshape(batch, chunks, chunk_size, num_heads, head_dim)  # noqa: E731
     rg, kg, vg, kkg, ag, wg = (grouped(t) for t in (r, k, v, kk, a, w_log))
 
-    w_c = torch.exp(wg)
-    c = torch.cumprod(w_c, dim=2)
-    c_prev = c / w_c
+    # `cumprod(exp(x))` and `exp(cumsum(x))` are the same function, and the running
+    # decay is only ever needed in the exponentiated form, so the sum is taken first.
+    # Two reasons to prefer it. Numerically, a cumulative product of up-to-1 factors
+    # underflows the further it runs while the equivalent sum of logs does not, and
+    # `c_prev` becomes a subtraction instead of a division by a possibly-tiny `w_c`.
+    # For export, `aten.cumprod` decomposes into a graph carrying a scalar tensor
+    # constant; `aten.lift_fresh` on that constant decomposes to `aten.alias`, which
+    # functionalization rewrites to the in-place `aten.detach_`, and aot_autograd
+    # rejects the result -- which is what made every ONNX export subtest fail.
+    cum = torch.cumsum(wg, dim=2)
+    c = torch.exp(cum)
+    c_prev = torch.exp(cum - wg)
     bg = kkg * ag
     b_t, k_t = bg / c, kg / c
     q_t, r_t = kkg * c_prev, rg * c
@@ -233,14 +310,13 @@ def rwkv7_chunked(
     span = chunk_size
     tri = torch.ones(span, span, device=r.device, dtype=r.dtype).tril(-1)
     causal = torch.ones(span, span, device=r.device, dtype=r.dtype).tril(0)
-    eye = torch.eye(span, device=r.device, dtype=r.dtype)
 
     # [batch, chunks, heads, span, span] -- one launch each instead of one per chunk.
     qb = torch.einsum("bcthn,bcshn->bchts", q_t, b_t) * tri
     qk = torch.einsum("bcthn,bcshn->bchts", q_t, k_t) * tri
     rk = torch.einsum("bcthn,bcshn->bchts", r_t, k_t) * causal
     rb = torch.einsum("bcthn,bcshn->bchts", r_t, b_t) * causal
-    lhs = eye + qb
+    lhs_inv = _unit_lower_triangular_inverse(qb)
     qkv = torch.einsum("bchts,bcshv->bchtv", qk, vg)
     rkv = torch.einsum("bchts,bcshv->bchtv", rk, vg)
     c_last = c[:, :, -1].unsqueeze(-1)
@@ -258,7 +334,7 @@ def rwkv7_chunked(
     for i in range(chunks):
         qr_s = torch.einsum("bthn,bhnv->bhtv", qr[:, i], state)
         rhs = qr_s[:, :, :chunk_size] + qkv[:, i]
-        u = torch.linalg.solve_triangular(lhs[:, i], rhs, upper=False, unitriangular=True)
+        u = lhs_inv[:, i] @ rhs
         out_c = qr_s[:, :, chunk_size:] + rkv[:, i] - torch.einsum("bhts,bhsv->bhtv", rb[:, i], u)
         outputs.append(out_c.permute(0, 2, 1, 3))
         state = c_last[:, i] * (state + kv[:, i] - torch.einsum("bthn,bhtv->bhnv", b_t[:, i], u))
