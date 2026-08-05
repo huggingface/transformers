@@ -22,27 +22,25 @@ unpacking the whole weight on every forward costs more than unpacking it once at
 `get_gguf_plan` asks `kernels.py` first, and why these modules exist only where the answer was yes.
 """
 
+import re
+from copy import deepcopy
+
 import torch
 from torch import nn
 
 from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform
 from ...utils import logging
 from .dequant import GGML_BLOCK
-from .gguf_conversion_mapping import GGUF_ARCHS
-from .kernels import MAX_GEMV_ROWS, dequantize_blocks, get_gguf_kernel, mul_mat_vec
-from .reader import read_gguf_architecture, read_gguf_tensor_types
+from .gguf_conversion_mapping import GGUF_ARCHS, Dequantize
+from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_vec
+from .reader import GgufHeader
 
 
 logger = logging.get_logger(__name__)
 
 
-def is_gguf_arch_supported(gguf_path: str) -> bool:
-    """Whether this file's architecture has a mapping here.
-
-    Architectures without one still load through the legacy GGUF loader, which dequantizes
-    everything; this path is opt-in per architecture as they are migrated.
-    """
-    return read_gguf_architecture(gguf_path) in GGUF_ARCHS
+def is_gguf_arch_supported(header: GgufHeader) -> bool:
+    return header.architecture in GGUF_ARCHS
 
 
 def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]:
@@ -52,104 +50,100 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
     return GGUF_ARCHS[gguf_arch](config)
 
 
-class GgufPlan(dict):
-    """`{param_name: ggml_type}` that also remembers each entry's GGUF tensor name."""
+def get_gguf_plan(header: GgufHeader, mapping: list[WeightTransform]) -> tuple[dict[str, int], dict[str, int]]:
+    """`{param_name: ggml_type}` for the file's quantized tensors, and the subset that can stay packed.
 
-    def __init__(self):
-        super().__init__()
-        self.gguf_name: dict[str, str] = {}
-
-
-def get_gguf_plan(gguf_file: str, config) -> GgufPlan:
-    """`{param_name: ggml_type}` for weights whose bytes can stay packed, plus their gguf names.
-
-    Empty when nothing can stay packed: the architecture has no mapping (so the legacy loader handles
-    the file), or no fused dequant-matmul kernel is available — without one, unpacking on every
-    forward costs more than unpacking once at load.
-
-    Callers that already know they want dense weights should not call this at all.
+    Reads `mapping` as it is before `add_gguf_dequantize_ops` has touched it: what a converter does to a
+    tensor decides whether it can stay packed, so the answer has to be taken before the unpacking op is
+    inserted at the head of those same operations.
     """
-    if not is_gguf_arch_supported(gguf_file):
-        return GgufPlan()
-    kernel = get_gguf_kernel("cuda" if torch.cuda.is_available() else "cpu")
-    if kernel is None:
-        logger.warning(
-            "No GGUF matmul kernel is available, so weights will be dequantized at load time. "
-            "Set TRANSFORMERS_GGUF_KERNEL_LIB to a built extension to keep them packed."
-        )
-        return GgufPlan()
+    # On a copy: asking a transform whether it matches a name marks it as used and arms the stateful
+    # renamings, and the mapping handed back to the loader has to be untouched by that.
+    mapping = deepcopy(mapping)
+    renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
 
-    arch = read_gguf_architecture(gguf_file)
-    types = read_gguf_tensor_types(gguf_file)
-    mapping = get_gguf_conversion_mapping(arch, config)
-    renamings = [m for m in mapping if isinstance(m, WeightRenaming)]
-    converters = [m for m in mapping if isinstance(m, WeightConverter)]
-
-    plan = GgufPlan()
-    for gguf_name, ggml_type in types.items():
-        if ggml_type not in GGML_BLOCK or not kernel.supports(ggml_type):
+    quantized, packable = {}, {}
+    for gguf_name, ggml_type in header.ggml_types.items():
+        if ggml_type not in GGML_BLOCK:
             continue
-        renamed = gguf_name
+        param_name = gguf_name
         for renaming in renamings:
-            renamed, _ = renaming.rename_source_key(renamed)
+            param_name, _ = renaming.rename_source_key(param_name)
+        quantized[param_name] = ggml_type
+
         # every conversion applied to this tensor must be safe on packed bytes
-        for converter in converters:
-            _, pattern = converter.rename_source_key(renamed)
-            if pattern is not None:
-                if not all(getattr(op, "supports_packed", False) for op in converter.operations):
-                    renamed = None  # needs dense data (e.g. a column permute): dequantize it
-                break
-        if renamed is not None:
-            plan[renamed] = ggml_type
-            plan.gguf_name[renamed] = gguf_name
-    return plan
+        converter = next((entry for entry in converters if entry.rename_source_key(param_name)[1]), None)
+        if converter is None or all(getattr(op, "supports_packed", False) for op in converter.operations):
+            packable[param_name] = ggml_type
+    return quantized, packable
+
+
+def add_gguf_dequantize_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], dtype) -> list:
+    """Give every quantized tensor that has to land dense a `Dequantize` as its first conversion.
+
+    `to_unpack` maps a parameter name to its ggml type. It holds only the tensors that need unpacking:
+    the ones the file stores quantized whose module cannot compute on blocks.
+    """
+    if not to_unpack:
+        return mapping
+    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
+
+    dequantize_op = Dequantize(to_unpack, dtype)
+    for converter in converters:
+        converter.operations.insert(0, dequantize_op)
+    unconverted = [name for name in to_unpack if not any(c.rename_source_key(name)[1] for c in converters)]
+    if unconverted:
+        return mapping + [
+            WeightConverter(
+                source_patterns=[f"({re.escape(name)})" for name in unconverted],
+                target_patterns=[r"\1"],
+                operations=[dequantize_op],
+            )
+        ]
+    return mapping
 
 
 class GgufLinear(nn.Module):
     """`nn.Linear` whose weight stays as GGUF blocks: `(out_features, bytes_per_row)` uint8."""
 
-    dequant_chunk_elems = 64 << 20  # ~128 MB of bf16 per chunk
-
-    def __init__(self, in_features: int, out_features: int, ggml_type: int, kernel=None, device=None):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        ggml_type: int,
+        bias: bool = False,
+        gemv: bool = False,
+    ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.ggml_type = ggml_type
+        self.gemv = gemv
         block_elems, block_bytes = GGML_BLOCK[ggml_type]
         bytes_per_row = in_features // block_elems * block_bytes
-        self.weight = nn.Parameter(
-            torch.empty((out_features, bytes_per_row), dtype=torch.uint8, device=device), requires_grad=False
-        )
+        self.weight = nn.Parameter(torch.empty((out_features, bytes_per_row), dtype=torch.uint8), requires_grad=False)
+        # A GGUF stores a bias as its own f32 tensor, never quantized, so it stays an ordinary
+        # parameter and the loader fills it like any other.
+        self.bias = None
+        if bias:
+            self.bias = nn.Parameter(torch.empty(out_features), requires_grad=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Pick a path from the row count: the fused kernel for a few rows, unpack-and-matmul beyond.
-
-        The kernel reads the blocks straight out of the weight and never materializes it, but it only
-        goes up to `MAX_GEMV_ROWS`. There is no fused kernel to use above that — llama.cpp's quantized
-        gemm needs a ggml backend context to allocate from, so it is not ported — so prefill unpacks
-        instead, which is what llama.cpp also does once a batch is large enough to amortize it.
-
-        The kernel writes f32 whatever `x` was, so the cast back is here rather than inside the op: as
-        a plain `aten` op, inductor can fuse it into whatever consumes the output.
-
-        It is also CUDA-only, so a module whose blocks are offloaded to CPU takes the unpacking path
-        at every row count. Unpacking runs wherever the blocks are.
-        """
         flat = x.reshape(-1, self.in_features)
-        if flat.shape[0] <= MAX_GEMV_ROWS and self.weight.is_cuda:
+        # `gemv` says the kernel implements one for this quantization. Where the weight sits is not checked:
+        # running the gemv on a weight the kernel cannot read is a misconfiguration, and it faults there.
+        if self.gemv and flat.shape[0] <= MAX_GEMV_ROWS:
             out = mul_mat_vec(self.weight, flat, self.ggml_type, self.out_features)
         else:
             out = self._unpack_matmul(flat)
+        if self.bias is not None:
+            out = out + self.bias
         return out.reshape(*x.shape[:-1], self.out_features).to(x.dtype)
 
     def _unpack_matmul(self, flat: torch.Tensor) -> torch.Tensor:
-        """Matmul against the weight unpacked a row chunk at a time, so it is never fully materialized.
-
-        A row slice of the blocks stands on its own because GGUF quantizes each row independently, and
-        rows of the weight are columns of the result. Chunking bounds the transient: unpacking a large
-        tied `lm_head` in one go costs more than the packed model itself.
-        """
-        rows_per_chunk = max(1, self.dequant_chunk_elems // self.in_features)
+        """Matmul against the weight unpacked a row chunk at a time, so it is never fully materialized."""
+        rows_per_chunk = max(1, DEQUANT_CHUNK_ELEMS // self.in_features)
         out = torch.empty(flat.shape[0], self.out_features, dtype=flat.dtype, device=flat.device)
         for start in range(0, self.out_features, rows_per_chunk):
             rows = self.weight[start : start + rows_per_chunk]
@@ -158,17 +152,14 @@ class GgufLinear(nn.Module):
         return out
 
     def extra_repr(self) -> str:
-        return f"in_features={self.in_features}, out_features={self.out_features}, ggml_type={self.ggml_type}"
+        return (
+            f"in_features={self.in_features}, out_features={self.out_features}, "
+            f"bias={self.bias is not None}, ggml_type={self.ggml_type}, gemv={self.gemv}"
+        )
 
 
 class GgufEmbedding(nn.Module):
-    """`nn.Embedding` whose table stays as GGUF blocks.
-
-    GGUF quantizes each row independently, so gathering the rows for a batch of ids is exact on the
-    packed bytes: only the gathered `(n_tokens, embedding_dim)` slice is ever dequantized, never the
-    whole vocabulary. For a 248k-token vocabulary that is the difference between 0.5 GB of blocks and
-    1.3 GB of bf16.
-    """
+    """`nn.Embedding` whose table stays as GGUF blocks."""
 
     def __init__(self, num_embeddings: int, embedding_dim: int, ggml_type: int, dtype=None, device=None):
         super().__init__()
@@ -195,39 +186,33 @@ class GgufEmbedding(nn.Module):
         return f"{self.num_embeddings}, {self.embedding_dim}, ggml_type={self.ggml_type}"
 
 
-def replace_with_gguf_modules(model, plan: GgufPlan, dtype: "torch.dtype") -> dict[str, nn.Module]:
-    """Replace every module named in `plan` with one that holds GGUF blocks; return `{gguf_name: module}`.
+def replace_with_gguf_modules(model, plan: dict[str, int], kernel) -> dict[str, nn.Module]:
+    """Replace every module named in `plan` with one that holds GGUF blocks; return `{param_name: module}`.
 
-    Keyed by GGUF tensor name because that is what the caller owes the reader: the names whose bytes
-    must come back as raw blocks rather than dequantized.
-
-    Only `<module>.weight` is looked up, since that is the one parameter `GgufLinear` and
-    `GgufEmbedding` can hold. A plan entry that is not a module weight — the arch table also renames
-    tensors to plain parameters, like `linear_attn.A_log` — matches nothing here and is dequantized,
-    which is what we want for anything with no packed module.
-
-    Likewise a planned weight whose module cannot hold blocks: none at that name, a `Linear` with a
-    bias (`GgufLinear` has none), or anything that is not exactly an `nn.Linear`/`nn.Embedding` — a
-    subclass may compute more than a plain matmul, so it is left alone rather than assumed equivalent.
-    That is all decided here, by looking at the modules, so no name rule or per-architecture list is
-    needed for it.
+    Runs under the model's init context, so the modules built here get meta weights and the requested
+    dtype from `torch.get_default_dtype()`, exactly like the ones they replace.
     """
-    replaced: dict[str, nn.Module] = {}
+    # update plan for tied weights
+    for target, source in (model._tied_weights_keys or {}).items():
+        if source in plan and target not in plan:
+            plan[target] = plan[source]
+
+    replaced = {}
     for module_name, module in model.named_modules():
         param_name = f"{module_name}.weight"
         ggml_type = plan.get(param_name)
         if ggml_type is None:
             continue
-
-        new_module = None
-        with torch.device("meta"):
-            if type(module) is nn.Linear and module.bias is None:
-                new_module = GgufLinear(module.in_features, module.out_features, ggml_type)
-            elif type(module) is nn.Embedding:
-                new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type, dtype=dtype)
-        if new_module is not None:
-            model.set_submodule(module_name, new_module)
-            replaced[plan.gguf_name[param_name]] = new_module
+        if type(module) is nn.Linear:
+            # the fused gemv is used only where one exists; without it the forward unpacks instead
+            gemv = kernel is not None and kernel.supports(ggml_type)
+            new_module = GgufLinear(module.in_features, module.out_features, ggml_type, module.bias is not None, gemv)
+        elif type(module) is nn.Embedding:
+            new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type)
+        else:
+            continue
+        model.set_submodule(module_name, new_module)
+        replaced[param_name] = new_module
 
     # An empty plan is not worth a warning: either the file holds nothing quantized, or `get_gguf_plan`
     # already said why. Weights that could have stayed packed and found no module to hold them are.
@@ -237,21 +222,3 @@ def replace_with_gguf_modules(model, plan: GgufPlan, dtype: "torch.dtype") -> di
             " Every quantized tensor will be dequantized at load time."
         )
     return replaced
-
-
-def retie_gguf_lm_head(model, embedding: GgufEmbedding) -> None:
-    """Repair an `lm_head` that ordinary weight tying pointed at packed blocks.
-
-    A tied `lm_head` has no tensor of its own in the file — it reuses `token_embd`. `tie_weights` has
-    already run by now and assigned the embedding's uint8 block buffer onto the head, which is still a
-    dense `nn.Linear` and cannot compute with it; the fix is a `GgufLinear` over that same buffer.
-
-    Sharing that exact storage is the test, rather than `config.tie_word_embeddings`: it is the
-    observed outcome of tying, so a head holding its own loaded `output.weight` is left alone even
-    when the config claims the weights are tied and `tie_weights` declined to tie them.
-    """
-    head = getattr(model, "lm_head", None)
-    if isinstance(head, nn.Linear) and head.weight is embedding.weight:
-        tied = GgufLinear(embedding.embedding_dim, embedding.num_embeddings, embedding.ggml_type, device="meta")
-        tied.weight = embedding.weight  # same blocks, no copy
-        model.lm_head = tied

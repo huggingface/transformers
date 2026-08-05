@@ -28,6 +28,8 @@ adding an architecture. Everything is declarative:
 import torch
 
 from ...core_model_loading import ConversionOps, WeightConverter, WeightRenaming, WeightTransform
+from .dequant import GGML_BLOCK
+from .kernels import dequantize_blocks
 
 
 # Shared skeleton for decoder-only models: llama, mistral, qwen2/3, phi3, ... all use these names.
@@ -55,7 +57,10 @@ def _tiled_to_grouped(num_k_heads: int, heads_per_k: int, head_dim: int) -> torc
     the latter. `head_dim=1` gives the permutation over head indices alone (for `A_log`, `dt_bias`).
     """
     total = num_k_heads * heads_per_k * head_dim
-    tiled_from_grouped = torch.arange(total).reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
+    # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
+    # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
+    indices = torch.arange(total, device="cpu")
+    tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
     return torch.argsort(tiled_from_grouped)
 
 
@@ -330,6 +335,43 @@ class PermuteInputFeatures(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return PermuteInputFeatures(torch.argsort(self.permutation))
+
+
+class Dequantize(ConversionOps):
+    """Unpack GGUF blocks into values.
+
+    Weights arrive as blocks whatever their destination: the ones with a packed module keep them, and
+    these are unpacked here — by which point the loading pipeline has put the bytes on the parameter's
+    own device, so the unpacking happens there rather than on the host.
+
+    First in its chain, because every transform after it is defined on dense values — a column permute
+    moves values between blocks, which on packed data would mean requantizing.
+
+    One instance serves the whole file: llama.cpp mixes quantization types across a checkpoint, so the
+    type is looked up per parameter. A parameter that is not listed keeps its blocks, which is how a
+    chain shared with packed weights leaves those alone.
+    """
+
+    def __init__(self, ggml_types: dict[str, int], dtype: "torch.dtype"):
+        self.ggml_types = ggml_types
+        self.dtype = dtype
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        ggml_type = self.ggml_types.get(full_layer_name)
+        if ggml_type is None:
+            return input_dict
+        blocks = _single_tensor(input_dict)
+        block_elements, block_bytes = GGML_BLOCK[ggml_type]
+        rows, cols = blocks.shape[0], blocks.shape[1] // block_bytes * block_elements
+        return {full_layer_name: dequantize_blocks(blocks, ggml_type, rows, cols, self.dtype)}
 
 
 def _single_tensor(input_dict: dict[str, torch.Tensor]) -> torch.Tensor:

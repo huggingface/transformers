@@ -11,15 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from .gguf_config_mapping import GGUF_CONFIG_ARCHS, get_gguf_config
 from .gguf_conversion_mapping import GGUF_ARCHS
 from .reader import (
+    GgufHeader,
     load_gguf_state_dict,
-    read_gguf_architecture,
-    read_gguf_tensor_types,
-    unused_gguf_tensors,
+    read_gguf_metadata,
 )
 from .utils import (
-    GgufPlan,
     get_gguf_conversion_mapping,
     get_gguf_plan,
     is_gguf_arch_supported,
@@ -29,13 +28,13 @@ from .utils import (
 
 __all__ = [
     "GGUF_ARCHS",
-    "GgufPlan",
+    "GGUF_CONFIG_ARCHS",
+    "get_gguf_config",
     "get_gguf_conversion_mapping",
     "get_gguf_plan",
     "is_gguf_arch_supported",
     "load_gguf_state_dict",
-    "read_gguf_architecture",
-    "read_gguf_tensor_types",
+    "read_gguf_metadata",
+    "GgufHeader",
     "replace_with_gguf_modules",
-    "unused_gguf_tensors",
 ]

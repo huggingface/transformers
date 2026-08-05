@@ -842,16 +842,17 @@ def _get_dtype(
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
                     elif checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
-                        dtype = torch.float32
+                        dtype = None
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
                         dtype = get_state_dict_dtype(state_dict)
-                    logger.info(
-                        f"Since the `dtype` attribute can't be found in model's config object, "
-                        f"will use dtype={dtype} as derived from model's weights"
-                    )
+                    if dtype is not None:
+                        logger.info(
+                            f"Since the `dtype` attribute can't be found in model's config object, "
+                            f"will use dtype={dtype} as derived from model's weights"
+                        )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
             else:
@@ -870,9 +871,6 @@ def _get_dtype(
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
 
-    if hf_quantizer is not None:
-        dtype = hf_quantizer.update_dtype(dtype)
-
     # Get the main dtype
     if isinstance(dtype, dict):
         main_dtype = dtype.get("", torch.get_default_dtype())
@@ -886,6 +884,9 @@ def _get_dtype(
 
     else:
         main_dtype = dtype
+
+    if hf_quantizer is not None:
+        main_dtype = hf_quantizer.update_dtype(main_dtype)
 
     # Set it on the config and subconfigs
     config.dtype = main_dtype
@@ -4266,13 +4267,15 @@ class PreTrainedModel(
 
         is_quantized = hf_quantizer is not None
 
+        if gguf_file:
+            # `checkpoint_files[0]` is the local path the file was resolved to. Read before the dtype is
+            # settled: the file's own float type is what `dtype="auto"` resolves to for a GGUF.
+            hf_quantizer.read_header(checkpoint_files[0])
+
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
-
-        if gguf_file:
-            hf_quantizer.gguf_file = checkpoint_files[0]  # now resolved to a local path
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4313,15 +4316,11 @@ class PreTrainedModel(
                 )
 
         if gguf_file:
-            from .integrations.gguf import is_gguf_arch_supported, load_gguf_state_dict
+            from .integrations.gguf import load_gguf_state_dict
 
-            if is_gguf_arch_supported(checkpoint_files[0]):
-                # Read the checkpoint only now that the modules exist and the quantizer has swapped
-                # the ones whose weights stay in GGUF blocks: it can then answer *which* tensors stay
-                # packed from the modules themselves, instead of guessing from tensor names.
-                state_dict = load_gguf_state_dict(
-                    checkpoint_files[0], dtype=dtype, keep_packed=hf_quantizer.keep_packed
-                )
+            # the quantizer parsed the file's metadata and answered both questions already
+            if hf_quantizer.supported:
+                state_dict = load_gguf_state_dict(hf_quantizer.header, dtype=dtype)
             else:
                 # No mapping for this architecture yet: fall back to the legacy loader, which renames
                 # and dequantizes everything itself.
@@ -4337,12 +4336,6 @@ class PreTrainedModel(
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
-        if gguf_file and is_gguf_arch_supported(checkpoint_files[0]):
-            from .integrations.gguf import get_gguf_conversion_mapping, read_gguf_architecture
-
-            gguf_arch = read_gguf_architecture(checkpoint_files[0])
-            weight_conversions = get_gguf_conversion_mapping(gguf_arch, config) + weight_conversions
-
         model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
