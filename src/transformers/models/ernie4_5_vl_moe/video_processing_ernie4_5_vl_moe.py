@@ -65,6 +65,23 @@ logger = logging.get_logger(__name__)
 
 
 class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    min_frames (`int`, *optional*, defaults to 16):
+        The minimum number of frames that will be sampled.
+    max_frames (`int`, *optional*, defaults to 180):
+        The maximum number of frames that will be sampled.
+    draw_on_frames (`bool`, *optional*, defaults to `True`):
+        Whether to draw timestamps on each video frame.
+    font (`str`, *optional*, defaults to `True`):
+        The fint used to draw timestamps when `draw_on_frames` is set.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int

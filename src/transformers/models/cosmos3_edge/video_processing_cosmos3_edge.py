@@ -36,6 +36,15 @@ logger = logging.get_logger(__name__)
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int

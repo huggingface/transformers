@@ -73,6 +73,19 @@ def smart_resize(
 
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    max_duration (`int`, *optional*, defaults to 300):
+        The maximum duration of a video that will be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 55790`):
+        The maximum pixels a video can be resized to.
+    """
+
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
