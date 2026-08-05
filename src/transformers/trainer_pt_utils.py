@@ -800,7 +800,9 @@ class BatchRebalanceSampler(Sampler):
             K = self.dp_size * self.grad_accum
             if len(batch_indices) < K:
                 pad = K - len(batch_indices)
-                batch_indices = batch_indices + order[:pad]
+                # Wrap `order` enough times to fill `pad` indices (handles len(order) < pad).
+                padding = (order * math.ceil(pad / len(order)))[:pad]
+                batch_indices = batch_indices + padding
             batch_lengths = [self.lengths[i] for i in batch_indices]
             rank_mbs = self._assign(batch_indices, batch_lengths)
             for ga in range(self.grad_accum):

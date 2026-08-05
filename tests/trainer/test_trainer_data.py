@@ -999,6 +999,43 @@ class TrainerSamplerTest(unittest.TestCase):
         self.assertEqual(total_yielded, eff_bs + K)
         self.assertLess(total_yielded, eff_bs + eff_bs)
 
+    def test_batch_rebalance_drop_last_padding_when_dataset_smaller_than_K(self):
+        """Regression: when the whole dataset is smaller than K (= dp_size * grad_accum), the tail
+        IS the whole dataset and must be padded up to K by wrapping the order repeatedly. The naive
+        `order[:pad]` only returns at most len(order) elements, so it underfills the tail and
+        `_poormans_rebalance(..., min_per_group=1)` raises ValueError. Padding must repeat the order
+        until `pad` elements are available."""
+        eff_bs = 8
+        dp_size = 4
+        grad_accum = 2  # K = 8 > len(dataset)=1 -> padding must wrap around
+        K = dp_size * grad_accum
+        lengths = [100]
+
+        total_yielded = 0
+        micro_batch_sizes = []
+        covered = set()
+        for rank in range(dp_size):
+            s = BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=eff_bs,
+                dp_size=dp_size,
+                grad_accum=grad_accum,
+                shuffle=False,
+                rank=rank,
+                drop_last=False,
+            )
+            for batch in s:
+                micro_batch_sizes.append(len(batch))
+                covered.update(batch)
+                total_yielded += len(batch)
+        # No crash, tail padded up to K: K samples distributed across dp_size*grad_accum groups,
+        # 1 per group. Each rank yields grad_accum micro-batches of >= 1 sample.
+        self.assertEqual(total_yielded, K)
+        self.assertEqual(len(micro_batch_sizes), dp_size * grad_accum)
+        self.assertTrue(all(sz >= 1 for sz in micro_batch_sizes))
+        # The single real sample survives.
+        self.assertEqual(covered, {0})
+
     @require_accelerate
     def test_batch_rebalance_defeats_double_sharding(self):
         """Regression: `accelerator.prepare` wraps the already rank-aware batch_sampler in
