@@ -125,6 +125,7 @@ _LEGACY_DROP_PATHS = {
 # from_pretrained needs no runtime conversion. Shapes and order are unchanged.
 _WEIGHT_KEY_RENAMES = (
     ("inputs_embedder.atom_attention_encoder.", "inputs_atom_encoder."),
+    ("structure_head.diffusion_module.", "structure_head."),
     (".atom_transformer.", "."),
     ("._engine.", "."),
     (".blocks.", ".layers."),
@@ -150,6 +151,9 @@ _WEIGHT_KEY_RENAMES = (
     # The recurrence's A/B matrices, named after what they do. Must follow the ``parcae_`` rule above.
     ("parcae.log_a", "parcae.log_state_decay"),
     ("parcae.b_cont", "parcae.input_matrix_continuous"),
+    # The recurrence's C matrix is a plain output projection; ``coda`` is the pair stack that refines it.
+    ("parcae.readout.", "parcae.out_proj."),
+    ("parcae.coda.", "parcae.output_stack."),
     ("output_mlp.0.", "output_fc1."),
     ("output_mlp.2.", "output_fc2."),
     ("adaln_modulation.1.", "adaln_linear."),

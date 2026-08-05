@@ -234,7 +234,7 @@ class EsmFold2GenerationMixin:
 
         Only ``num_sampling_steps`` is an argument; the other sampling hyperparameters come from config.
         """
-        denoiser = self.structure_head.diffusion_module
+        denoiser = self.structure_head
         num_atoms = atom_inputs.atom_to_token.shape[1]
         device = single_inputs.device
         target_batch = single_inputs.shape[0] * num_diffusion_samples

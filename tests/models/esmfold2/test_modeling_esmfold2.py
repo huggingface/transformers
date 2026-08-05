@@ -290,7 +290,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         they must be expanded; both shapes are asserted to keep the two paths honest.
         """
         model = self._build()
-        denoiser = model.structure_head.diffusion_module
+        denoiser = model.structure_head
         batch, single = self._build_padded_batch()
 
         def conditioning_for(features, samples):
