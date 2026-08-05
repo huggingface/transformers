@@ -81,16 +81,8 @@ class AriaImageProcessingTester(ImageProcessingTester):
             "resample": self.resample,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to AriaImageProcessor,
-        assuming do_resize is set to True. The expected size in that case the max image size.
-        """
-        return self.max_image_size, self.max_image_size
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
+        return self.num_channels, self.max_image_size, self.max_image_size
 
     def prepare_image_inputs(
         self,

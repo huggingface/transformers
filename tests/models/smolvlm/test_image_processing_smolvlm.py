@@ -91,19 +91,11 @@ class SmolVLMImageProcessingTester(ImageProcessingTester):
             "do_image_splitting": self.do_image_splitting,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to SmolVLMImageProcessor,
-        assuming do_resize is set to True. The expected size in that case the max image size.
-        """
-        return self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
         effective_nb_images = (
             self.num_images * 5 if self.do_image_splitting else 1
         )  # 5 is a squared image divided into 4 + global image resized
-        return effective_nb_images, self.num_channels, height, width
+        return effective_nb_images, self.num_channels, self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
 
     def prepare_image_inputs(
         self,

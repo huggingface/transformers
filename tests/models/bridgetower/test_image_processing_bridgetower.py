@@ -67,12 +67,8 @@ class BridgeTowerImageProcessingTester(ImageProcessingTester):
             "size_divisor": self.size_divisor,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        return self.size["shortest_edge"], self.size["shortest_edge"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
+        return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
 
 
 @require_torch
