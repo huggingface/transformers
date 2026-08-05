@@ -21,6 +21,8 @@ ESMFold2's forward takes ~18 structural feature tensors rather than the standard
 import tempfile
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import EsmFold2Config, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -46,13 +48,13 @@ _INTEGRATION_CKPT = "Rocketknight1/ESMFold2-merged-temp"
 def get_tiny_config(**overrides) -> "EsmFold2Config":
     """A minimal but internally consistent ESMFold2 config for CPU testing.
 
-    Both atom sub-configs must satisfy ``3 * n_spatial + n_uid <= head_dim // 2``, and
-    ``single_inputs_size`` must leave room for the derived ``atom_encoder.output_dim``.
+    The widths ``EsmFold2Config.validate_architecture`` pins are spelled out; see there for the relations.
     """
     kwargs = {
         "hidden_size": 32,
         "pairwise_hidden_size": 16,
         "single_inputs_size": 83,
+        "pair_transition_intermediate_size": 64,
         "num_loops": 1,
         "num_diffusion_samples": 1,
         "esmc_config": {"hidden_size": 32, "num_attention_heads": 2, "num_hidden_layers": 1, "vocab_size": 64},
@@ -61,6 +63,8 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "parcae_num_coda_layers": 1,
         "atom_encoder": {
             "hidden_size": 16,
+            "intermediate_size": 32,
+            "output_dim": 16,
             "num_hidden_layers": 1,
             "num_attention_heads": 2,
             "num_spatial_rope_pairs_per_axis": 1,
@@ -70,12 +74,18 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
             "num_distogram_bins": 8,
             "diffusion_module": {
                 "hidden_size": 32,
+                "intermediate_size": 64,
+                "pair_intermediate_size": 32,
                 "num_hidden_layers": 1,
                 "num_attention_heads": 2,
                 "atom_encoder": {
                     "hidden_size": 16,
+                    "intermediate_size": 32,
+                    "output_dim": 32,
                     "num_hidden_layers": 1,
                     "num_attention_heads": 2,
+                    "num_spatial_rope_pairs_per_axis": 1,
+                    "num_uid_rope_pairs": 1,
                 },
             },
         },
@@ -110,7 +120,16 @@ class EsmFold2ConfigTest(unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_config_round_trip(self):
-        config = EsmFold2Config(pairwise_hidden_size=72, single_inputs_size=99, atom_encoder={"hidden_size": 64})
+        config = EsmFold2Config(
+            pairwise_hidden_size=72,
+            single_inputs_size=99,
+            atom_encoder={
+                "hidden_size": 64,
+                "output_dim": 32,
+                "num_spatial_rope_pairs_per_axis": 1,
+                "num_uid_rope_pairs": 4,
+            },
+        )
         with tempfile.TemporaryDirectory() as tmp:
             config.save_pretrained(tmp)
             reloaded = EsmFold2Config.from_pretrained(tmp)
@@ -121,6 +140,16 @@ class EsmFold2ConfigTest(unittest.TestCase):
         self.assertEqual(reloaded.atom_encoder.hidden_size, 64)
         # The bundled ESMC backbone round-trips as a PreTrainedConfig sub-config, not a dict.
         self.assertEqual(type(reloaded.esmc_config).__name__, "EsmcConfig")
+
+    def test_inconsistent_widths_are_rejected(self):
+        # single inputs vs. the atom aggregation they contain
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "atom_encoder.output_dim"):
+            EsmFold2Config(single_inputs_size=99)
+        # the denoiser's atom stack vs. the token width it scatters into
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "output_dim"):
+            EsmFold2Config(structure_head={"diffusion_module": {"atom_encoder": {"output_dim": 64}}})
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "frequency pairs"):
+            EsmFold2Config(atom_encoder={"num_uid_rope_pairs": 64})
 
     def test_attn_implementation_propagates_to_subconfigs(self):
         config = EsmFold2Config(attn_implementation="sdpa")

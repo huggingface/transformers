@@ -614,7 +614,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         super().__init__()
         self.config = config
         diffusion_config = config.structure_head.diffusion_module
-        self.head_dim = diffusion_config.hidden_size // diffusion_config.num_attention_heads
+        self.head_dim = diffusion_config.head_dim
         self.scaling = self.head_dim**-0.5
         # No grouped-query attention; identity repeat keeps the attention interface happy.
         self.num_key_value_groups = 1
@@ -745,7 +745,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
             [
                 EsmFold2Transition(
                     config.pairwise_hidden_size,
-                    diffusion_config.transition_multiplier * config.pairwise_hidden_size,
+                    diffusion_config.pair_intermediate_size,
                     chunk_size=None,
                 )
                 for _ in range(2)
@@ -761,7 +761,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
             [
                 EsmFold2Transition(
                     diffusion_config.hidden_size,
-                    diffusion_config.transition_multiplier * diffusion_config.hidden_size,
+                    diffusion_config.intermediate_size,
                     chunk_size=None,
                 )
                 for _ in range(2)
