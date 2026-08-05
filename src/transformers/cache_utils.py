@@ -886,7 +886,7 @@ class HQQQuantizedLayer(QuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compileable
+    # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
@@ -1087,7 +1087,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
 
 class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
-    # The dynamic Attention part makes it non-compileable
+    # The dynamic Attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, number_of_states: int = 1, **kwargs):
@@ -1127,7 +1127,7 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
 
 
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
-    # The dynamic sliding attention part makes it non-compileable
+    # The dynamic sliding attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, sliding_window: int, number_of_states: int = 1, **kwargs):
@@ -1509,7 +1509,7 @@ class Cache:
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
         Returns the maximum length of the cache. If `layer_idx` is not provided (default), this returns the maximum
-        accross all layers. Otherwise, return the maximum supported value for the given layer.
+        across all layers. Otherwise, return the maximum supported value for the given layer.
         A value of `-1` means no maximum, or undefined maximum, e.g. for dynamic attention layers that can grow indefinitely,
         or linear attention layer that do not have a sequence length dimension.
         """

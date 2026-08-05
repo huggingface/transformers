@@ -1853,65 +1853,45 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs,
     ) -> Cache:
         """
-        Sets a cache for `generate`, that will persist across calls. A new cache will only be initialized a
-        new `generate` call requires a larger cache or uses a different batch size.
-
-        Returns the resulting cache object.
+        Create a static cache for `generate`. To avoid recompilation, the new cache will use the maximum between the current
+        `max_cache_len` and the potential previous value of `max_cache_len`, if there was some previous `generate` calls with
+        static cache.
         """
         offload_cache = "offloaded" in cache_implementation
+        previous_max_len = getattr(self, "_previous_max_cache_length", -1)
+        effective_length = max(max_cache_len, previous_max_len)
 
-        cache_to_check: StaticCache | None = None
-        if hasattr(self, "_cache"):
-            if isinstance(self._cache, EncoderDecoderCache):
-                cache_to_check = self._cache.self_attention_cache
-            elif isinstance(self._cache, StaticCache):
-                cache_to_check = self._cache
-
-        need_new_cache = (
-            cache_to_check is None
-            or cache_to_check.offloading != offload_cache
-            or cache_to_check.batch_size != batch_size
-            or cache_to_check.get_max_length() < max_cache_len
-        )
-
-        encoder_decoder_cache = getattr(self, "_cache", None)
-        if isinstance(encoder_decoder_cache, EncoderDecoderCache):
-            need_new_cache = (
-                need_new_cache
-                or encoder_decoder_cache.cross_attention_cache.get_max_length()
-                != model_kwargs["encoder_outputs"][0].shape[1]
-            )
-
-        if need_new_cache:
-            self_attention_cache_kwargs = {
+        self_attention_cache_kwargs = {
+            "config": self.config.get_text_config(decoder=True),
+            "max_cache_len": effective_length,
+            "offloading": offload_cache,
+        }
+        cache = StaticCache(**self_attention_cache_kwargs)
+        if self.config.is_encoder_decoder:
+            cross_attention_cache_kwargs = {
                 "config": self.config.get_text_config(decoder=True),
-                "max_cache_len": max_cache_len,
+                "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
                 "offloading": offload_cache,
             }
-            self._cache = StaticCache(**self_attention_cache_kwargs)
-            if self.config.is_encoder_decoder:
-                cross_attention_cache_kwargs = {
-                    "config": self.config.get_text_config(decoder=True),
-                    "max_cache_len": model_kwargs["encoder_outputs"][0].shape[1],
-                    "offloading": offload_cache,
-                }
-                self._cache = EncoderDecoderCache(self._cache, StaticCache(**cross_attention_cache_kwargs))
-            elif prefill_chunk_size is not None:
-                # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next call
-                # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
-                init_shape = self._get_static_cache_init_shape()
-                if init_shape is not None:
-                    num_heads, head_dim = init_shape
-                    self._cache.early_initialization(
-                        batch_size=batch_size,
-                        num_heads=num_heads,
-                        head_dim=head_dim,
-                        dtype=self.dtype,
-                        device=self.device,
-                    )
-        else:
-            self._cache.reset()
-        return self._cache
+            cache = EncoderDecoderCache(cache, StaticCache(**cross_attention_cache_kwargs))
+        elif prefill_chunk_size is not None:
+            # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next call
+            # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
+            init_shape = self._get_static_cache_init_shape()
+            if init_shape is not None:
+                num_heads, head_dim = init_shape
+                cache.early_initialization(
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    head_dim=head_dim,
+                    dtype=self.dtype,
+                    device=self.device,
+                )
+
+        # Set the current length on the current model, to avoid recompilation later if we can
+        self._previous_max_cache_length = effective_length
+
+        return cache
 
     @classmethod
     def _supports_default_dynamic_cache(cls: type["GenerativePreTrainedModel"]) -> bool:
@@ -2142,7 +2122,7 @@ class GenerationMixin(ContinuousMixin):
         valid_hardware = self.device.type in ["cuda", "xpu", "neuron", "tpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compileable since all
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
         using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
@@ -4012,7 +3992,7 @@ def _speculative_sampling(
     the selected tokens, as well as the number of candidate matches.
 
     When `assistant_ensemble_weight` is set to a value in (0, 1), applies static ensemble verification from
-    DIVERSED (https://arxiv.org/abs/2604.07622), which relaxes the verification distribution to
+    DIVERSE (https://arxiv.org/abs/2604.07622), which relaxes the verification distribution to
     v(x) = w * p(x) + (1 - w) * q(x), increasing acceptance rate at the cost of controlled distributional bias.
 
     NOTE: Unless otherwise stated, the variable names match those in the paper.

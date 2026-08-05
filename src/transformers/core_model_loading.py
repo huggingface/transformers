@@ -740,7 +740,7 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
     This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method in conditioned
+    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
@@ -1400,14 +1400,17 @@ def rename_source_key(
     weight_converters: list[WeightConverter],
     base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
+    reverse: bool = False,
 ) -> tuple[str, str | None]:
     """
     Rename a checkpoint key by first applying all `WeightRenaming`s, then at most one `WeightConverter`.
-
-    A renaming and a converter may act on the same key in that order: the renaming normalises the
-    key into the namespace the converter expects. The reverse holds on the save path (converter
-    first, then renaming). There is no need for a converter-then-rename order because converters
-    act only on specific leaf patterns; no subsequent renamings should ever target their output.
+    This means that the `WeightConverter` must specify the final name for the key, but some `WeightRenaming`s can act on other
+    parts of that key beforehand. If `reverse` is True, i.e. when reverting all the `WeightTransform`s, the opposite is performed
+    to be coherent and correctly respect the `scope_prefix` of all `WeightTransform`s: first try to match 1 `WeightConverter`, and only
+    then try to apply all `WeightRenaming`s. Indeed, in reverse mode, all reverse transforms should be applied in the opposite order to
+    be consistent.
+    Note that we proceed in this way because there is no need for a Converter-then-Rename order because Converters act only on specific
+    leaf patterns, so no subsequent Renamings should ever target their output.
 
     Args:
         source_key (`str`):
@@ -1420,23 +1423,35 @@ def rename_source_key(
             Base-model prefix to add or strip when both `base_model_prefix` and `meta_state_dict` are given.
         meta_state_dict (`dict`, *optional*):
             Meta state dict used to decide whether `base_model_prefix` should be added or stripped.
+        reverse (`bool`, *optional*):
+            This specifies if we are reverting all the `WeightTransform`s (saving back original format).
 
     Returns:
         `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
         (or `None` if no converter matched).
     """
     renamed_key = source_key
-    # 1. apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure they
-    # are coherent)
-    for renaming in weight_renamings:
-        renamed_key, _ = renaming.rename_source_key(renamed_key)
+    converter_source_pattern = None
+    # 1. If `reverse` is False: apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure
+    # they are coherent).
+    # Else, first apply the `WeightConverter` if any
+    first_iterable = weight_renamings if not reverse else weight_converters
+    for transform in first_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is True
+        if reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
+            break
 
-    # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
-    # the first match, as we assume only 1 converter can match any source key)
-    source_pattern = None
-    for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
-        if source_pattern is not None:
+    # 2. If `reverse` is False: apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
+    # the first match, as we assume only 1 converter can match any source key).
+    # Else, apply all the `WeightRenaming`s
+    second_iterable = weight_converters if not reverse else weight_renamings
+    for transform in second_iterable:
+        renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is False
+        if not reverse and source_pattern is not None:
+            converter_source_pattern = source_pattern
             break
 
     # 3. check if we need to add or remove base_model_prefix if necessary (only during loading, not saving)
@@ -1449,7 +1464,7 @@ def rename_source_key(
         elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
             renamed_key = f"{base_model_prefix}.{renamed_key}"
 
-    return renamed_key, source_pattern
+    return renamed_key, converter_source_pattern
 
 
 def convert_and_load_state_dict_in_model(
@@ -1772,41 +1787,33 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     weight_conversions = weight_conversions[::-1]
-
-    # Two-phase save: first reverse converters, then reverse renamings. Relies on the rule that
-    # WeightRenamings never operate on WeightConverter outputs (see WeightTransform docstring).
-    inverted_transforms = [transform.reverse_transform() for transform in weight_conversions]
-    inverted_converters = [transform for transform in inverted_transforms if isinstance(transform, WeightConverter)]
-    inverted_renamings = [transform for transform in inverted_transforms if not isinstance(transform, WeightConverter)]
-    pattern_to_converter = {
-        pattern: converter for converter in inverted_converters for pattern in converter.source_patterns
-    }
+    # Reverse all Transforms
+    reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
+    renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # `converter_key`: key after phase-1 (converter namespace, used as layer_name by convert()).
-        # `checkpoint_key`: key after phase-2 (final saved name, layer_name for plain renamings).
-        converter_key, matched_pattern = rename_source_key(original_key, [], inverted_converters)
-        checkpoint_key, _ = rename_source_key(converter_key, inverted_renamings, [])
-
-        if matched_pattern is not None:
-            # Bucket under converter_key so all sibling inputs land in the same converter instance.
-            mapping = conversion_mapping.setdefault(converter_key, deepcopy(pattern_to_converter[matched_pattern]))
+        # Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
+        if source_pattern is not None:
+            new_converter = deepcopy(pattern_to_converter[source_pattern])
+            # each target key gets its own converter instance
+            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         else:
-            mapping = conversion_mapping.setdefault(checkpoint_key, WeightRenaming(original_key, checkpoint_key))
-            matched_pattern = original_key
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            source_pattern = original_key
 
-        mapping.add_tensor(checkpoint_key, original_key, matched_pattern, tensor)
+        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
     new_state_dict = {}
-    for layer_name, mapping in conversion_mapping.items():
-        realized = mapping.convert(layer_name, model=model, config=model.config)
-        for target_name, param in realized.items():
+    for first_param_name, reversed_converter in conversion_mapping.items():
+        # Apply the reverse converter
+        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
-            if isinstance(mapping, WeightConverter):
-                # Bring converter outputs from converter namespace into checkpoint namespace.
-                target_name, _ = rename_source_key(target_name, inverted_renamings, [])
             new_state_dict[target_name] = param
 
     return new_state_dict

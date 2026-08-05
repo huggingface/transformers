@@ -104,7 +104,7 @@ class MiniMaxCache(DynamicCache):
                 self.layers[layer_idx].batch_select_indices(indices)
 
     def crop(self, tokens_to_remove: int) -> None:
-        raise RuntimeError("MiniMaxCache doesnot support `crop` method")
+        raise RuntimeError("MiniMaxCache does not support `crop` method")
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -137,10 +137,10 @@ class MiniMaxLightningAttention(nn.Module):
         slope_rate = self.get_slope_rate()
         query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
 
-        self.register_buffer("slope_rate", slope_rate)
-        self.register_buffer("query_decay", query_decay)
-        self.register_buffer("key_decay", key_decay)
-        self.register_buffer("diagonal_decay", diagonal_decay)
+        self.slope_rate = nn.Buffer(slope_rate)
+        self.query_decay = nn.Buffer(query_decay)
+        self.key_decay = nn.Buffer(key_decay)
+        self.diagonal_decay = nn.Buffer(diagonal_decay)
 
         self.layer_type = config.layer_types[layer_idx]
 
@@ -264,8 +264,6 @@ class MiniMaxLightningAttention(nn.Module):
 
 
 class MiniMaxRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MiniMaxConfig, device=None):
         super().__init__()
@@ -280,8 +278,8 @@ class MiniMaxRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")

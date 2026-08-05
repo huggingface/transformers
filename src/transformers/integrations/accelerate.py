@@ -147,7 +147,7 @@ def compute_module_sizes(
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
-    Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
+    Returns a tuple of 2 dicts, the first one containing a mapping of all the modules and the corresponding size
     in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
     the model graph) and the corresponding sizes.
     If `only_modules` is set to False, the first mapping will not only contain the size of all modules, but also
