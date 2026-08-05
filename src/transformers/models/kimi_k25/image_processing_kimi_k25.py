@@ -14,7 +14,6 @@
 """Torchvision Image processor class for KimiK2.5."""
 
 import math
-from typing import Any
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
