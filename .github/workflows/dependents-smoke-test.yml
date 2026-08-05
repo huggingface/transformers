@@ -30,10 +30,25 @@ jobs:
         with:
           repository: huggingface/transformers
           persist-credentials: false
+          path: transformers
+
+      - name: Checkout vLLM
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          persist-credentials: false
+          path: vllm
 
       - name: Install dependencies
-        run: uv pip install vllm -e .
+        run: uv pip install vllm -e transformers
 
       - name: Run tests
         run: |
-          echo "TODO: add tests"
+          pytest -v -s vllm/tests/models/test_initialization.py
+          pytest -v -s vllm/tests/models/test_transformers.py
+          pytest -v -s vllm/tests/models/multimodal/processing/
+          pytest -v -s vllm/tests/models/multimodal/test_mapping.py
+          python3 vllm/examples/basic/offline_inference/chat.py
+          python3 vllm/examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
+          # Whisper needs spawn method to avoid deadlock
+          VLLM_WORKER_MULTIPROC_METHOD=spawn python3 vllm/examples/generate/multimodal/audio_language_offline.py --model-type whisper
