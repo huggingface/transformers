@@ -20,6 +20,7 @@ from huggingface_hub.utils import are_progress_bars_disabled
 import transformers.models.roberta.tokenization_roberta
 from transformers import logging
 from transformers.testing_utils import CaptureLogger, mockenv, mockenv_context
+from transformers.utils import logging as transformers_logging
 from transformers.utils.logging import disable_progress_bar, enable_progress_bar
 
 
@@ -133,3 +134,21 @@ def test_set_progress_bar_enabled():
 
     enable_progress_bar()
     assert not are_progress_bars_disabled()
+
+
+def test_set_tqdm_ascii_does_not_mutate_kwargs():
+    previous_hook = transformers_logging.set_tqdm_hook(None)
+    try:
+        transformers_logging.set_tqdm_ascii(True)
+
+        kwargs = {"total": 3}
+
+        def factory(*args, **factory_kwargs):
+            return factory_kwargs
+
+        result = transformers_logging._tqdm_hook(factory, (), kwargs)
+
+        assert result["ascii"] is True
+        assert kwargs == {"total": 3}
+    finally:
+        transformers_logging.set_tqdm_hook(previous_hook)

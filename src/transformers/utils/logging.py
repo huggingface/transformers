@@ -439,3 +439,28 @@ def set_tqdm_hook(hook: Callable[[Callable[..., Any], tuple[Any, ...], dict[str,
     previous_hook = _tqdm_hook
     _tqdm_hook = hook
     return previous_hook
+
+
+def set_tqdm_ascii(force_ascii: bool) -> Callable[[Callable[..., Any], tuple[Any, ...], dict[str, Any]], Any] | None:
+    """
+    Install a tqdm hook that forces the `ascii` kwarg on tqdm bars.
+
+    Args:
+        force_ascii (`bool`): If `True`, force ASCII progress bars. If `False`, only set `ascii=False` when the
+            caller did not already provide a value.
+
+    Returns:
+        The previous tqdm hook, which can be restored later.
+    """
+
+    previous_hook = _tqdm_hook
+
+    def _ascii_hook(factory: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        kwargs = dict(kwargs)
+        if "ascii" not in kwargs or force_ascii:
+            kwargs["ascii"] = force_ascii
+        if previous_hook is not None:
+            return previous_hook(factory, args, kwargs)
+        return factory(*args, **kwargs)
+
+    return set_tqdm_hook(_ascii_hook)
