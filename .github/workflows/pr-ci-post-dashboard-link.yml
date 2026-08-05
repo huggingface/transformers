@@ -40,6 +40,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download mlinter findings artifact
+        id: download
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: mlinter-findings
@@ -47,8 +49,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show mlinter findings
+        if: steps.download.outcome == 'success'
         run: |
           echo "=== mlinter-pr-number.txt ==="
-          cat mlinter-pr-number.txt || echo "(not found)"
+          cat mlinter-pr-number.txt
           echo "=== mlinter-findings.json ==="
-          cat mlinter-findings.json || echo "(not found)"
+          cat mlinter-findings.json
