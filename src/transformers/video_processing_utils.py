@@ -75,7 +75,6 @@ logger = logging.get_logger(__name__)
 
 
 @requires(backends=("vision", "torchvision"))
-@auto_docstring
 class BaseVideoProcessor(TorchvisionBackend):
     _auto_class = None
 
