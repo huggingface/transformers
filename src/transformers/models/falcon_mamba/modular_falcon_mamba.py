@@ -103,13 +103,14 @@ class FalconMambaConfig(MambaConfig):
 class FalconMambaWeightlessRMSNorm(NanoChatRMSNorm):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__(eps)
-        # Dummy weights that are not used (only for imitating on kernels path)
+        # Dummy weights that are not used (only for imitating the kernels path)
         self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
 
 class FalconMambaMixer(MambaMixer):
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx, initialize_mixer_weights)
+        # These include dummy weights that are not used (only for imitating the kernels path)
         self.dt_layernorm = FalconMambaWeightlessRMSNorm(self.intermediate_size, eps=config.mixer_rms_eps)
         self.b_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)
         self.c_layernorm = FalconMambaWeightlessRMSNorm(self.ssm_state_size, eps=config.mixer_rms_eps)

@@ -82,6 +82,18 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
 }
 
 
+# Maps from func name to the internal module path
+_KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_gated_delta_rule": "ops.gated_delta_rule",
+    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
+    "selective_state_update": "ops.triton.selective_state_update",
+    "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
+    "mamba_inner_fn": "ops.selective_scan_interface",
+    "selective_scan_fn": "ops.selective_scan_interface",
+}
+
+
 if is_kernels_available():
     from kernels import (
         CUDAProperties,

@@ -391,10 +391,7 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "mamba_split_conv1d_scan_combined",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("mamba_split_conv1d_scan_combined", "mamba_ssm")
 def mamba2_split_conv1d_scan_combined(
     zxbcdt: torch.Tensor,
     conv1d_weight: torch.Tensor,
@@ -419,10 +416,7 @@ def mamba2_split_conv1d_scan_combined(
     return None
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_state_update",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba2_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
@@ -484,10 +478,7 @@ def mamba2_selective_state_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "mamba_chunk_scan_combined",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("mamba_chunk_scan_combined", "mamba_ssm")
 def mamba2_chunk_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
@@ -692,9 +683,7 @@ class FalconH1Mixer(nn.Module):
         projected_states = projected_states * self.mup_vector
 
         A = -torch.exp(self.A_log.float())
-        fused_kwargs = (
-            kwargs | {} if self.time_step_limit == (0.0, float("inf")) else kwargs | {"dt_limit": self.time_step_limit}
-        )
+        fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
         if self.training and cache_params is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
@@ -730,7 +719,7 @@ class FalconH1Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1:
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,

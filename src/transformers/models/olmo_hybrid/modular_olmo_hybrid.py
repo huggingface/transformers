@@ -368,7 +368,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
