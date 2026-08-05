@@ -75,14 +75,12 @@ class Exaone4_5_PatchEmbed(nn.Module):
 
 
 class Exaone4_5_VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
@@ -462,7 +460,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config: Exaone4_5_Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
+    _no_split_modules = ["Exaone4_5_VisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

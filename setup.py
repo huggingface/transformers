@@ -92,7 +92,7 @@ _deps = [
     "kenlm",
     "kernels>=0.16.0,<0.17",
     "librosa",
-    "mistral-common[image]>=1.11.5",
+    "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",

@@ -221,7 +221,7 @@ class Glm4vMoeTextTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -450,14 +450,12 @@ class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 class Glm4vMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
@@ -843,8 +841,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 
 
 class Glm4vMoeTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vMoeTextConfig, device=None):
         super().__init__()
@@ -859,8 +855,8 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
     @staticmethod

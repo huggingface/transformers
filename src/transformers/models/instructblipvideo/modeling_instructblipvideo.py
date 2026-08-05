@@ -142,9 +142,7 @@ class InstructBlipVideoQFormerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.config = config
 
@@ -1179,7 +1177,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> # sample uniformly 4 frames from the video
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)

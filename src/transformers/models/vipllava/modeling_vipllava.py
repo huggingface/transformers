@@ -151,7 +151,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
@@ -291,7 +291,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
