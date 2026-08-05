@@ -241,6 +241,20 @@ def pytest_configure(config):
             if getattr(_mod, "hf_hub_download", None) is _original_hf_hub_download:
                 _mod.hf_hub_download = _wrapped_hf_hub_download
 
+        # Special case: third-party libraries such as `kernels` call
+        # `api.hf_hub_download(...)` (HfApi instance method).  Inside that method,
+        # `hf_hub_download` is resolved via a *local* import:
+        #   `from .file_download import hf_hub_download`
+        # Local imports read `file_download.__dict__` at *call time*, so patching
+        # `file_download.hf_hub_download` is the right interception point.
+        # Module-level references already imported by other huggingface_hub modules
+        # (e.g. snapshot_download.py) are frozen before conftest runs and are therefore
+        # unaffected — only call-time local imports pick up the new binding.
+        import huggingface_hub.file_download as _file_download_mod
+
+        if getattr(_file_download_mod, "hf_hub_download", None) is _original_hf_hub_download:
+            _file_download_mod.hf_hub_download = _wrapped_hf_hub_download
+
     config.addinivalue_line("markers", "slow: mark test as slow")
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
