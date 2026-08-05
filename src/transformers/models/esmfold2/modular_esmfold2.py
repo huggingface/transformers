@@ -877,18 +877,6 @@ class EsmFold2DiffusionModule(nn.Module):
         return denoised_coords
 
 
-class EsmFold2DiffusionStructureHead(nn.Module):
-    """Holds the denoiser's weights.
-
-    No ``forward``: a denoising step is ``diffusion_module``'s forward, and the sampling loop that
-    drives it lives in ``EsmFold2GenerationMixin``.
-    """
-
-    def __init__(self, config: EsmFold2Config) -> None:
-        super().__init__()
-        self.diffusion_module = EsmFold2DiffusionModule(config)
-
-
 class EsmFold2RowAttentionPooling(nn.Module):
     """Row-wise attention pooling: attn_proj, out_proj."""
 
@@ -1709,10 +1697,12 @@ class EsmFold2MSAEncoder(nn.Module):
 
 
 class EsmFold2Parcae(nn.Module):
-    """The trunk's linear-recurrence state update (internally "parcae") and its coda pair stack.
+    """The trunk's linear-recurrence state update (internally "parcae").
 
-    Each trunk loop injects the refreshed pair representation into a discretized linear state-space
-    recurrence; the final state is read out through ``readout`` and refined by ``coda``.
+    A diagonal state-space recurrence whose time axis is the *recycling loop*, not the sequence: each
+    trunk loop injects the refreshed pair representation into the state, which decays geometrically and
+    so converges however many loops run (the fork sampled the loop count during training). The final
+    state is projected by ``out_proj`` and refined by ``output_stack``.
     """
 
     def __init__(self, config: EsmFold2Config) -> None:
@@ -1723,16 +1713,29 @@ class EsmFold2Parcae(nn.Module):
         self.input_matrix_continuous = nn.Parameter(
             torch.empty(config.pairwise_hidden_size, config.pairwise_hidden_size)
         )
-        self.readout = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
-        self.coda = EsmFold2PairUpdateStack(config, config.parcae_num_coda_layers)
+        self.out_proj = nn.Linear(config.pairwise_hidden_size, config.pairwise_hidden_size, bias=False)
+        self.output_stack = EsmFold2PairUpdateStack(config, config.parcae_num_coda_layers)
 
-    def discretized_dynamics(self) -> tuple[Tensor, Tensor]:
+    def discretize(self) -> tuple[Tensor, Tensor]:
         """``(state_decay, input_matrix)`` -- the per-channel state transition (Ā) and the discretized
-        input projection (B̄) of the recurrence."""
+        input projection (B̄) of the recurrence.
+
+        Loop-invariant, so the trunk computes it once outside the loop and passes it to ``forward``.
+        """
         delta = F.softplus(self.log_delta)
         state_decay = torch.exp(-delta * torch.exp(self.log_state_decay))
         input_matrix = delta[:, None] * self.input_matrix_continuous
         return state_decay, input_matrix
+
+    def forward(
+        self, state: Tensor, injected_pair_states: Tensor, state_decay: Tensor, input_matrix: Tensor
+    ) -> Tensor:
+        """One recurrence step: decay the state and inject the refreshed pair representation."""
+        return state_decay * state + F.linear(self.input_norm(injected_pair_states), input_matrix)
+
+    def decode_state(self, state: Tensor, pair_attention_mask: Tensor | None = None) -> Tensor:
+        """Project the final state to a pair representation and refine it with the output stack."""
+        return self.output_stack(self.out_proj(state), pair_attention_mask=pair_attention_mask)
 
 
 @auto_docstring
@@ -1756,9 +1759,10 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         # The non-default inits: adaLN-Zero gates, the parcae recurrence, zeroed output projections.
         super()._init_weights(module)
         if isinstance(module, EsmFold2Parcae):
-            init.eye_(module.readout.weight)
+            init.eye_(module.out_proj.weight)
             init.eye_(module.input_matrix_continuous)
             init.zeros_(module.log_state_decay)
+            # Chosen so the initial per-step state decay is exactly 1/sqrt(5).
             parcae_delta_init = -math.log(math.sqrt(1.0 / 5.0))
             init.constant_(module.log_delta, _inverse_softplus(parcae_delta_init))
         elif isinstance(module, EsmFold2ConfidenceHead):
@@ -1806,7 +1810,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         self.parcae = EsmFold2Parcae(config)
 
         # Heads --------------------------------------------------------------
-        self.structure_head = EsmFold2DiffusionStructureHead(config)
+        # The denoiser itself; the sampling loop that drives it lives in ``EsmFold2GenerationMixin``.
+        self.structure_head = EsmFold2DiffusionModule(config)
         self.distogram_head = nn.Linear(
             config.pairwise_hidden_size, config.structure_head.num_distogram_bins, bias=True
         )
@@ -2069,8 +2074,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
             if refined_lm_pair_states is not None:
                 injected_pair_states = injected_pair_states + refined_lm_pair_states
 
-            injected_pair = self.parcae.input_norm(injected_pair_states)
-            pair_states = state_decay * pair_states + F.linear(injected_pair, input_matrix)
+            pair_states = self.parcae(pair_states, injected_pair_states, state_decay, input_matrix)
             pair_states = self.folding_trunk(pair_states, pair_attention_mask=pair_mask)
 
         return pair_states
@@ -2239,7 +2243,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
 
         pair_states = self._init_pair_state(initial_pair_states)
 
-        state_decay, input_matrix = self.parcae.discretized_dynamics()
+        state_decay, input_matrix = self.parcae.discretize()
         state_decay = state_decay.view(1, 1, 1, -1).to(device=pair_states.device, dtype=pair_states.dtype)
         input_matrix = input_matrix.to(device=pair_states.device, dtype=pair_states.dtype)
 
@@ -2264,8 +2268,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         )
         del initial_pair_states, lm_pair_states, msa_kwargs, state_decay, input_matrix
 
-        pair_states = self.parcae.readout(pair_states)
-        pair_states = self.parcae.coda(pair_states, pair_attention_mask=pair_mask)
+        pair_states = self.parcae.decode_state(pair_states, pair_attention_mask=pair_mask)
 
         pair_states = pair_states.float()
         distogram_logits = self.distogram_head(
