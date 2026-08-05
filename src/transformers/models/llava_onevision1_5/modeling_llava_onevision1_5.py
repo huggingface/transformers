@@ -56,14 +56,12 @@ from .configuration_llava_onevision1_5 import (
 
 
 class LlavaOnevision1_5RiceRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
@@ -341,6 +339,9 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         pos_ids = []
         for t, h, w in grid_thw:
+            t = int(t.item())
+            h = int(h.item())
+            w = int(w.item())
             hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
@@ -362,7 +363,7 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
             wpos_ids = wpos_ids.flatten()
             pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
         pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
+        max_grid_size = int(grid_thw[:, 1:].max().item())
         rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
@@ -428,7 +429,9 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         for i in range(1, num_segments + 1):
             seg_start = cu[i - 1].item()
             seg_end = cu[i].item()
-            new_hidden[seg_start:seg_end] = hidden_states[seg_start + 1 : seg_end + 1]
+            shifted_start = new_cu[i - 1] + 1
+            shifted_end = new_cu[i]
+            new_hidden[seg_start:seg_end] = hidden_states[shifted_start:shifted_end]
         hidden_states = new_hidden
 
         return self.merger(hidden_states)
@@ -472,8 +475,6 @@ class LlavaOnevision1_5TextMLP(nn.Module):
 
 
 class LlavaOnevision1_5TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: LlavaOnevision1_5TextConfig, device=None):
         super().__init__()
@@ -488,8 +489,8 @@ class LlavaOnevision1_5TextRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
