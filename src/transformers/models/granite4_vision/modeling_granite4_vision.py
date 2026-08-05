@@ -211,8 +211,6 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
 
 
 class Granite4VisionTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Granite4VisionTextConfig, device=None):
         super().__init__()
@@ -225,10 +223,10 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -516,7 +514,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
@@ -525,6 +522,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _no_split_modules = ["Granite4VisionTextDecoderLayer", "Granite4VisionWindowQFormerDownsampler"]
     _can_record_outputs = {
         "hidden_states": Granite4VisionTextDecoderLayer,
         "attentions": Granite4VisionTextAttention,
@@ -857,7 +855,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -1064,7 +1062,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -1172,40 +1170,6 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_sizes=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-
-        return model_inputs
 
 
 __all__ = [

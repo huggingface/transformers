@@ -64,8 +64,6 @@ class HYV3RMSNorm(nn.Module):
 
 
 class HYV3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HYV3Config, device=None):
         super().__init__()
@@ -78,10 +76,10 @@ class HYV3RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -355,7 +353,7 @@ class HYV3MoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.gate = HYV3TopKRouter(config)
         self.experts = HYV3Experts(config)
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
         self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)

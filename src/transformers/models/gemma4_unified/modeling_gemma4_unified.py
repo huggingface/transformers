@@ -194,8 +194,6 @@ class Gemma4UnifiedRMSNorm(nn.Module):
 
 
 class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma4UnifiedTextConfig, device=None):
         super().__init__()
@@ -223,15 +221,15 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
             # `inv_freq` depends on the head dim, which varies by layer type, so initialise
             # from a config resolved for this layer type rather than the global one.
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type, device=device)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Gemma4UnifiedTextConfig, layer_type: str, device=None, **kwargs
+        config: Gemma4UnifiedTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -500,7 +498,7 @@ class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
     def forward(
         self,
@@ -546,7 +544,7 @@ class Gemma4UnifiedTextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -1010,7 +1008,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1293,7 +1291,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1345,50 +1343,6 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             shared_kv_states=outputs.shared_kv_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
-            # Don't pass to not apply bidirectional mask on top
-            model_inputs["mm_token_type_ids"] = None
-
-        return model_inputs
-
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,
@@ -1419,6 +1373,16 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             )
 
         return create_masks_for_generate(**mask_kwargs)
+
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
+        )
+        if not (is_first_iteration or not use_cache):
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
+
+        return model_inputs
 
 
 __all__ = [

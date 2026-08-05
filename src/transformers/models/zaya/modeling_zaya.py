@@ -45,8 +45,6 @@ from .configuration_zaya import ZayaConfig
 
 
 class ZayaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: ZayaConfig, device=None):
         super().__init__()
@@ -64,15 +62,15 @@ class ZayaRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type, device=device)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: ZayaConfig, layer_type: str, device=None, **kwargs
+        config: ZayaConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -537,7 +535,7 @@ class ZayaRouter(nn.Module):
 
         self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_router_classes, config.rms_norm_eps)
 
-        self.register_buffer("balancing_biases", torch.zeros(self.num_router_classes, dtype=torch.float32))
+        self.balancing_biases = nn.Buffer(torch.zeros(self.num_router_classes, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
 
     def forward(
@@ -648,7 +646,7 @@ class ZayaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {

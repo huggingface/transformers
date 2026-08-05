@@ -48,8 +48,6 @@ if is_torch_available():
 
 
 class GlmAsrRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: GlmAsrConfig, device=None):
         super().__init__()
@@ -62,10 +60,10 @@ class GlmAsrRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -462,7 +460,9 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -599,20 +599,6 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrModel", "GlmAsrPreTrainedModel"]

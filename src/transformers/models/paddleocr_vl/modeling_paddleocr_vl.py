@@ -61,7 +61,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
-    get_vision_bilinear_indices_and_weights,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
@@ -107,22 +107,18 @@ class PaddleOCRProjector(nn.Module):
 
 
 class PaddleOCRVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class PaddleOCRRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: PaddleOCRVLConfig, device=None):
         super().__init__()
@@ -135,10 +131,10 @@ class PaddleOCRRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -563,8 +559,11 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = True
+        self.interpolation_mode = "bilinear"
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -577,15 +576,19 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         """
         warnings.warn(
             f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
+            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
             FutureWarning,
             stacklevel=2,
         )
         grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
         )
-        return (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0).unsqueeze(0)
+        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
     def forward(
         self,
@@ -607,10 +610,15 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size * sequence_len, -1)
 
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-            grid_thw, num_grid_per_side=self.num_grid_per_side, spatial_merge_size=1, kwargs=kwargs
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            kwargs=kwargs,
         )
-        pos_embeds = (self.position_embedding(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings
@@ -1418,44 +1426,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids

@@ -92,8 +92,6 @@ class T5Gemma2MLP(nn.Module):
 
 
 class T5Gemma2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: T5Gemma2TextConfig, device=None):
         super().__init__()
@@ -111,15 +109,15 @@ class T5Gemma2RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type, device=device)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: T5Gemma2TextConfig, layer_type: str, device=None, **kwargs
+        config: T5Gemma2TextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -630,7 +628,7 @@ class T5Gemma2TextScaledWordEmbedding(nn.Embedding):
     ):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
         self.eoi_token_index = eoi_token_index
         self.eoi_embedding = nn.Parameter(torch.zeros(self.embedding_dim))
 
@@ -649,9 +647,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
     ]
     _skip_keys_device_placement = ["past_key_values"]
 
@@ -1007,16 +1002,15 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(self_attn_mask_mapping := attention_mask, dict):
-            # this masking function does nothing to masking but forces `allow_is_causal_skip` to be False
-            # as we always need a mask during decoding for merged attention.
-            dummy_and_mask_function = lambda *args: torch.tensor(True, dtype=torch.bool)  # noqa
+            # Always materialize the mask (no `is_causal` skip) as it is concatenated with the cross-attention
+            # mask below for merged attention during decoding.
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
                 "position_ids": position_ids,
-                "and_mask_function": dummy_and_mask_function,
+                "allow_is_causal_skip": False,
             }
             self_attn_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -1030,7 +1024,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
                     inputs_embeds=inputs_embeds,
                     attention_mask=encoder_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
-                    and_mask_function=dummy_and_mask_function,
+                    allow_is_bidirectional_skip=False,
                 )
             }
 

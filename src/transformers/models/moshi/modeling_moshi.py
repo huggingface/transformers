@@ -264,8 +264,6 @@ class MoshiLinear(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Moshi
 class MoshiRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MoshiConfig, device=None):
         super().__init__()
@@ -278,10 +276,10 @@ class MoshiRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -573,7 +571,7 @@ class MoshiPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
+    _no_split_modules = ["MoshiDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1622,7 +1620,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         position_ids=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         user_delay_pattern_mask=None,
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,

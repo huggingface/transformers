@@ -186,7 +186,7 @@ class DiffusionGemmaConfig(Gemma4Config):
 class DiffusionGemmaTextRotaryEmbedding(Gemma4TextRotaryEmbedding):
     @staticmethod
     def compute_default_rope_parameters(
-        config: DiffusionGemmaTextConfig, layer_type: str, device=None, **kwargs
+        config: DiffusionGemmaTextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -496,7 +496,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -574,7 +574,7 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.router = DiffusionGemmaTextRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
@@ -682,7 +682,6 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     _no_split_modules = [
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
-        "DiffusionGemmaVisionEncoderLayer",
     ]
     supports_gradient_checkpointing = True
     _can_record_outputs = None  # override

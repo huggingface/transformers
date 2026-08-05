@@ -66,8 +66,6 @@ class LongcatFlashRMSNorm(nn.Module):
 
 
 class LongcatFlashRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: LongcatFlashConfig, device=None):
         super().__init__()
@@ -80,10 +78,10 @@ class LongcatFlashRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -151,7 +149,7 @@ class LongcatFlashTopkRouter(nn.Module):
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.router_bias = getattr(config, "router_bias", False)
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.n_routed_experts))
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     def forward(self, hidden_states):

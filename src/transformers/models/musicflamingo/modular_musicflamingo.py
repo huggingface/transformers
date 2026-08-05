@@ -16,6 +16,7 @@
 from dataclasses import dataclass
 from math import pi
 
+import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
 
@@ -212,7 +213,7 @@ class MusicFlamingoRotaryEmbedding(MoonshineRotaryEmbedding):
     def __init__(self, config: MusicFlamingoConfig, device=None):
         super().__init__(config)
         position_angles = self._compute_position_angles(self.inv_freq)
-        self.register_buffer("position_angles", position_angles, persistent=False)
+        self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     def _compute_position_angles(self, inv_freq):
         positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)
@@ -371,7 +372,9 @@ class MusicFlamingoModel(AudioFlamingo3Model):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

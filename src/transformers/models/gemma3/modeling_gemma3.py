@@ -111,7 +111,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -154,8 +154,6 @@ class Gemma3RMSNorm(nn.Module):
 
 
 class Gemma3RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma3TextConfig, device=None):
         super().__init__()
@@ -173,15 +171,15 @@ class Gemma3RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type, device=device)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Gemma3TextConfig, layer_type: str, device=None, **kwargs
+        config: Gemma3TextConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -436,12 +434,7 @@ class Gemma3PreTrainedModel(PreTrainedModel):
     config: Gemma3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "Gemma3DecoderLayer",
-        "SiglipVisionEmbeddings",
-        "SiglipEncoderLayer",
-        "SiglipMultiheadAttentionPoolingHead",
-    ]
+    _no_split_modules = ["Gemma3DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1056,42 +1049,11 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `pixel_values` handling
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache). NOTE: use_cache=False needs pixel_values always
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-        else:
+        if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
             model_inputs["token_type_ids"] = None
 

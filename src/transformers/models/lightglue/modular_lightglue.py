@@ -465,7 +465,7 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[tor
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
@@ -750,8 +750,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
                     config=self.config,
                     inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
                     attention_mask=mask,
-                    # Model is too sensitive to the FA backend --> force mask to avoid the backend
-                    and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
+                    # Model is too sensitive to the FA backend, so always materialize the mask to avoid it.
+                    allow_is_bidirectional_skip=False,
                 )
             else:
                 extended_attention_mask = torch.ones((batch_size, descriptors.size()[-2]), device=keypoints.device)
