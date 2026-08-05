@@ -50,42 +50,6 @@ class OnyxImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 def smart_resize(
-    num_frames: int,
-    height: int,
-    width: int,
-    temporal_factor: int = 2,
-    factor: int = 28,
-    min_pixels: int = 112 * 112,
-    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
-):
-    if num_frames < temporal_factor:
-        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
-    if height < factor or width < factor:
-        scale = max(factor / height, factor / width)
-        height = int(height * scale)
-        width = int(width * scale)
-
-    if max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    t_bar = round(num_frames / temporal_factor) * temporal_factor
-
-    if t_bar * h_bar * w_bar > max_pixels:
-        beta = math.sqrt((num_frames * height * width) / max_pixels)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif t_bar * h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (num_frames * height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-
-    return h_bar, w_bar
-
-
-def get_aspect_ratio_preserving_size(
     height: int,
     width: int,
     patch_size: int,
@@ -145,16 +109,16 @@ class OnyxImageProcessor(TorchvisionBackend):
 
     def resize(
         self,
-        images: "torch.Tensor",
+        images: torch.Tensor,
         patch_size: int,
         merge_size: int,
         max_tokens: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """Resize dynamically based on input image aspect ratio."""
         height, width = images.shape[-2:]
-        resized_height, resized_width = get_aspect_ratio_preserving_size(
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
             patch_size=patch_size * merge_size,
@@ -169,11 +133,11 @@ class OnyxImageProcessor(TorchvisionBackend):
 
     def patchify(
         self,
-        images: "torch.Tensor",
+        images: torch.Tensor,
         patch_size: int,
         merge_size: int,
         temporal_patch_size: int,
-    ) -> tuple["torch.Tensor", int, int]:
+    ) -> tuple[torch.Tensor, int, int]:
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
@@ -280,7 +244,7 @@ class OnyxImageProcessor(TorchvisionBackend):
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
 
-        resized_height, resized_width = get_aspect_ratio_preserving_size(
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
             patch_size=patch_size * merge_size,
@@ -289,18 +253,12 @@ class OnyxImageProcessor(TorchvisionBackend):
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
 
-    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
         # the base validation doesn't raise an error
         kwargs["do_resize"] = False
         super()._validate_preprocess_kwargs(**kwargs)
-
-    def _standardize_kwargs(self, **super_kwargs):
-        raise NotImplementedError("Model doesn't need to override")
 
 
 __all__ = ["OnyxImageProcessor"]

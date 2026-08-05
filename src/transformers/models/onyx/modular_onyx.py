@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
+from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -76,7 +76,7 @@ from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 logger = logging.get_logger(__name__)
 
 
-def get_aspect_ratio_preserving_size(
+def smart_resize(
     height: int,
     width: int,
     patch_size: int,
@@ -123,18 +123,12 @@ class OnyxImageProcessor(Glm4vImageProcessor):
     merge_size = 2
     max_image_tokens = 4096
 
-    def __init__(self, **kwargs: Unpack[OnyxImageProcessorKwargs]):
-        TorchvisionBackend.__init__(**kwargs)
-
     def _validate_preprocess_kwargs(self, **kwargs):
         # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
         # the base validation doesn't raise an error
         kwargs["do_resize"] = False
         TorchvisionBackend._validate_preprocess_kwargs(**kwargs)
-
-    def _standardize_kwargs(self, **super_kwargs):
-        raise NotImplementedError("Model doesn't need to override")
 
     def resize(
         self,
@@ -147,13 +141,13 @@ class OnyxImageProcessor(Glm4vImageProcessor):
     ) -> torch.Tensor:
         """Resize dynamically based on input image aspect ratio."""
         height, width = images.shape[-2:]
-        resized_height, resized_width = get_aspect_ratio_preserving_size(
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
             patch_size=patch_size * merge_size,
             max_tokens=max_tokens,
         )
-        return super().resize(
+        return TorchvisionBackend.resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,
@@ -273,7 +267,7 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_image_tokens = images_kwargs.get("max_image_tokens", self.max_image_tokens)
 
-        resized_height, resized_width = get_aspect_ratio_preserving_size(
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
             patch_size=patch_size * merge_size,
@@ -332,30 +326,68 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         kwargs["do_resize"] = False
         super()._validate_preprocess_kwargs(**kwargs)
 
-    def aspect_ratio_preserving_resize(
+    def resize(
         self,
-        image: torch.Tensor,
+        videos: torch.Tensor,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
         patch_size: int,
+        merge_size: int,
         max_tokens: int,
-        resample: tvF.InterpolationMode,
+        **kwargs,
     ) -> torch.Tensor:
-        height, width = image.shape[-2], image.shape[-1]
-        target_height, target_width = get_aspect_ratio_preserving_size(
+        """Resize dynamically based on input video aspect ratio."""
+        height, width = videos.shape[-2:]
+        resized_height, resized_width = smart_resize(
             height=height,
             width=width,
-            patch_size=patch_size,
+            patch_size=patch_size * merge_size,
             max_tokens=max_tokens,
         )
 
-        if target_height == height and target_width == width:
-            return image
-
-        return tvF.resize(
-            image,
-            size=[target_height, target_width],
-            interpolation=resample,
+        return super().resize(
+            videos,
+            size=SizeDict(height=resized_height, width=resized_width),
+            resample=resample,
             antialias=True,
         )
+
+    def patchify(
+        self,
+        videos: torch.Tensor,
+        patch_size: int,
+        temporal_patch_size: int,
+    ) -> tuple[torch.Tensor, int, int]:
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        # Check that videos have `num_frames` divisible by `temporal_patch_size`
+        if pad := -num_frames % temporal_patch_size:
+            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
+            videos = torch.cat((videos, repeats), dim=1)
+            num_frames += pad
+
+        grid_t = num_frames // temporal_patch_size
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+        patches = videos.view(
+            batch_size,
+            grid_t,
+            temporal_patch_size,
+            channel,
+            grid_h,
+            patch_size,
+            grid_w,
+            patch_size,
+        )
+        # Unlike Glm4v, each flattened patch is laid out (temporal, channel), not (channel, temporal).
+        patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
+        flatten_patches = patches.reshape(
+            batch_size,
+            grid_t * grid_h * grid_w,
+            temporal_patch_size * channel * patch_size * patch_size,
+        )
+
+        return flatten_patches, grid_t, grid_h, grid_w
 
     def sample_frames(
         self,
@@ -424,9 +456,10 @@ class OnyxVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.aspect_ratio_preserving_resize(
-                    image=stacked_videos,
-                    patch_size=patch_size * merge_size,
+                stacked_videos = self.resize(
+                    stacked_videos,
+                    patch_size=patch_size,
+                    merge_size=merge_size,
                     max_tokens=max_video_frame_tokens,
                     resample=resample,
                 )
@@ -439,43 +472,18 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         processed_videos_grouped = {}
         processed_grids = {}
         for shape, stacked_videos in grouped_videos.items():
-            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
-
             # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            patches = stacked_videos
-
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            T = patches.shape[1]
-            if pad := -T % temporal_patch_size:
-                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
-                patches = torch.cat((patches, repeats), dim=1)
-
-            batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-            patches = patches.view(
-                batch_size,
-                grid_t,
-                temporal_patch_size,
-                channel,
-                grid_h,
-                patch_size,
-                grid_w,
-                patch_size,
-            )
-            patches = patches.permute(0, 1, 4, 6, 2, 3, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size,
-                grid_t * grid_h * grid_w,
-                temporal_patch_size * channel * patch_size * patch_size,
+            patches, grid_t, grid_h, grid_w = self.patchify(
+                stacked_videos,
+                patch_size=patch_size,
+                temporal_patch_size=temporal_patch_size,
             )
 
-            processed_videos_grouped[shape] = flatten_patches
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_videos_grouped[shape] = patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * len(stacked_videos)
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
