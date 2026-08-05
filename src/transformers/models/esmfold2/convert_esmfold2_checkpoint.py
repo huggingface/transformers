@@ -29,23 +29,15 @@ from transformers.models.esmc.convert_esmc_checkpoint import build_esmc_config_d
 # EsmFold2Config paths spelled the same in the research checkpoint's config.json; renamed ones live
 # in ``_LEGACY_RENAMES`` below.
 _LEGACY_FIELDS = (
-    "n_relative_residx_bins",
-    "n_relative_chain_bins",
     "num_loops",
     "num_diffusion_samples",
     "structure_head.diffusion_module.sigma_data",
     "structure_head.diffusion_module.fourier_dim",
-    "structure_head.diffusion_module.token_num_blocks",
-    "structure_head.diffusion_module.token_num_heads",
     "structure_head.diffusion_module.transition_multiplier",
-    "structure_head.distogram_bins",
     "structure_head.gamma_0",
     "structure_head.gamma_min",
     "structure_head.noise_scale",
     "structure_head.step_scale",
-    "structure_head.inference_s_max",
-    "structure_head.inference_s_min",
-    "structure_head.inference_p",
     "structure_head.inference_num_steps",
     "confidence_head.num_plddt_bins",
     "confidence_head.num_pde_bins",
@@ -66,24 +58,32 @@ _LEGACY_RENAMES = {
     "msa_encoder.overwrite": "msa_encoder_overwrite",
     "folding_trunk_num_hidden_layers": "folding_trunk.n_layers",
     "parcae_num_coda_layers": "parcae.coda_n_layers",
+    "num_relative_residx_bins": "n_relative_residx_bins",
+    "num_relative_chain_bins": "n_relative_chain_bins",
     "atom_encoder.hidden_size": "inputs.atom_encoder.d_atom",
     "atom_encoder.num_hidden_layers": "inputs.atom_encoder.n_blocks",
     "atom_encoder.num_attention_heads": "inputs.atom_encoder.n_heads",
     "atom_encoder.expansion_ratio": "inputs.atom_encoder.expansion_ratio",
     "atom_encoder.spatial_rope_base_frequency": "inputs.atom_encoder.spatial_rope_base_frequency",
-    "atom_encoder.n_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
-    "atom_encoder.n_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
+    "atom_encoder.num_spatial_rope_pairs_per_axis": "inputs.atom_encoder.n_spatial_rope_pairs_per_axis",
+    "atom_encoder.num_uid_rope_pairs": "inputs.atom_encoder.n_uid_rope_pairs",
     "atom_encoder.uid_rope_base_frequency": "inputs.atom_encoder.uid_rope_base_frequency",
     "structure_head.diffusion_module.atom_encoder.hidden_size": "structure_head.diffusion_module.c_atom",
     "structure_head.diffusion_module.atom_encoder.num_hidden_layers": "structure_head.diffusion_module.atom_num_blocks",
     "structure_head.diffusion_module.atom_encoder.num_attention_heads": "structure_head.diffusion_module.atom_num_heads",
-    "structure_head.diffusion_module.token_hidden_size": "structure_head.diffusion_module.c_token",
+    "structure_head.diffusion_module.hidden_size": "structure_head.diffusion_module.c_token",
+    "structure_head.diffusion_module.num_hidden_layers": "structure_head.diffusion_module.token_num_blocks",
+    "structure_head.diffusion_module.num_attention_heads": "structure_head.diffusion_module.token_num_heads",
+    "structure_head.num_distogram_bins": "structure_head.distogram_bins",
+    "structure_head.inference_sigma_max_ratio": "structure_head.inference_s_max",
+    "structure_head.inference_sigma_min_ratio": "structure_head.inference_s_min",
+    "structure_head.inference_exponent": "structure_head.inference_p",
     "confidence_head.num_hidden_layers": "confidence_head.folding_trunk.n_layers",
     "msa_encoder.hidden_size": "msa_encoder.d_msa",
     "msa_encoder.outer_hidden_size": "msa_encoder.d_hidden",
     "msa_encoder.num_hidden_layers": "msa_encoder.n_layers",
     "msa_encoder.num_attention_heads": "msa_encoder.n_heads_msa",
-    "msa_encoder.head_width": "msa_encoder.msa_head_width",
+    "msa_encoder.head_dim": "msa_encoder.msa_head_width",
     "lm_encoder.num_hidden_layers": "lm_encoder.n_layers",
 }
 
@@ -128,16 +128,28 @@ _WEIGHT_KEY_RENAMES = (
     (".atom_transformer.", "."),
     ("._engine.", "."),
     (".blocks.", ".layers."),
+    # ``blocks`` -> ``layers`` for the two parallel diffusion-transformer stacks, which the rule above
+    # does not reach (their keys read ``.attn_blocks.``/``.transition_blocks.``, not ``.blocks.``).
+    (".attn_blocks.", ".attention_layers."),
+    (".transition_blocks.", ".transition_layers."),
+    (".attn.", ".self_attn."),
     (".w_up.", ".gate_up_proj."),
     (".w_down.", ".down_proj."),
-    (".lin_swish.", ".ffn.gate_up_proj."),
-    (".lin_out.", ".ffn.down_proj."),
+    (".lin_swish.", ".mlp.gate_up_proj."),
+    (".lin_out.", ".mlp.down_proj."),
     # The pair/msa transitions are already fused as w12/w3, unlike the blocks above.
-    (".ffn.w12.", ".ffn.gate_up_proj."),
-    (".ffn.w3.", ".ffn.down_proj."),
+    (".ffn.w12.", ".mlp.gate_up_proj."),
+    (".ffn.w3.", ".mlp.down_proj."),
+    # ``ffn`` -> ``mlp``. Must come last of the feed-forward rules: the four above rewrite the whole
+    # ``.ffn.<proj>.`` span, while the atom layers' ``.ffn.w_up.``/``.w_down.`` were rewritten by the
+    # projection-only rules further up and still carry an ``.ffn.`` segment to fix here.
+    (".ffn.", ".mlp."),
     ("fourier.w", "fourier.frequencies"),  # fixed Fourier freq/phase buffers
     ("fourier.b", "fourier.phases"),
     ("parcae_", "parcae."),  # loose attributes, now grouped under an ``EsmFold2Parcae`` submodule
+    # The recurrence's A/B matrices, named after what they do. Must follow the ``parcae_`` rule above.
+    ("parcae.log_a", "parcae.log_state_decay"),
+    ("parcae.b_cont", "parcae.input_matrix_continuous"),
     ("output_mlp.0.", "output_fc1."),
     ("output_mlp.2.", "output_fc2."),
     ("adaln_modulation.1.", "adaln_linear."),
@@ -145,23 +157,48 @@ _WEIGHT_KEY_RENAMES = (
     ("adaln.s_gate.", "adaln.gate_proj."),
     ("adaln.s_shift.", "adaln.shift_proj."),
     ("adaln.s_scale", "adaln.cond_norm.weight"),
-    ("base_z_linear.0.", "base_z_input_norm."),
-    ("base_z_linear.1.", "base_z_proj."),
-    ("base_z_mlp.0.", "base_z_to_pair."),
-    ("base_z_mlp.1.", "base_z_output_norm."),
+    ("base_z_linear.0.", "pair_input_norm."),
+    ("base_z_linear.1.", "pair_proj."),
+    ("base_z_mlp.0.", "single_to_pair."),
+    ("base_z_mlp.1.", "pair_output_norm."),
+    ("base_z_combine", "layer_weights"),
     ("compute_bias.0.", "bias_norm."),
     ("compute_bias.1.", "bias_proj."),
+    # Diffusion conditioning and denoiser: ``z_`` is the pair stream, ``s_`` the single stream.
+    (".z_input_norm.", ".pair_input_norm."),
+    (".z_proj.", ".pair_proj."),
+    (".z_transitions.", ".pair_transitions."),
+    (".s_input_norm.", ".single_input_norm."),
+    (".s_proj.", ".single_proj."),
+    (".s_transitions.", ".single_transitions."),
+    (".s_to_token.", ".single_to_token."),
+    (".s_step_norm.", ".single_step_norm."),
+    (".g_proj.", ".gate_proj."),
+    ("z_init_1.", "pair_init_1."),
+    ("z_init_2.", "pair_init_2."),
+    # The two ``W``-prefixed stacks. Scoped by module, since ``Wout`` means a different projection in each.
+    ("outer_product_mean.W.", "outer_product_mean.input_proj."),
+    ("outer_product_mean.Wout.", "outer_product_mean.output_proj."),
+    ("msa_pair_weighted_averaging.Wv.", "msa_pair_weighted_averaging.v_proj."),
+    ("msa_pair_weighted_averaging.Wgate.", "msa_pair_weighted_averaging.gate_proj."),
+    ("msa_pair_weighted_averaging.Wout.", "msa_pair_weighted_averaging.o_proj."),
+    # ``_ln`` -> ``_layernorm``, which also lets ``"_ln"`` come out of _keep_in_fp32_modules_strict.
+    ("confidence_head.plddt_ln.", "confidence_head.plddt_layernorm."),
+    ("confidence_head.pae_ln.", "confidence_head.pae_layernorm."),
+    ("confidence_head.pde_ln.", "confidence_head.pde_layernorm."),
+    ("confidence_head.resolved_ln.", "confidence_head.resolved_layernorm."),
     # Grouped under an input_embedder submodule; the trailing dots keep the prefixes distinct.
-    ("confidence_head.s_inputs_norm.", "confidence_head.input_embedder.s_inputs_norm."),
-    ("confidence_head.z_norm.", "confidence_head.input_embedder.z_norm."),
-    ("confidence_head.s_to_z.", "confidence_head.input_embedder.s_to_z."),
-    ("confidence_head.s_to_z_transpose.", "confidence_head.input_embedder.s_to_z_transpose."),
-    ("confidence_head.s_to_z_prod_in1.", "confidence_head.input_embedder.s_to_z_prod_in1."),
-    ("confidence_head.s_to_z_prod_in2.", "confidence_head.input_embedder.s_to_z_prod_in2."),
-    ("confidence_head.s_to_z_prod_out.", "confidence_head.input_embedder.s_to_z_prod_out."),
+    ("confidence_head.s_inputs_norm.", "confidence_head.input_embedder.single_inputs_norm."),
+    ("confidence_head.z_norm.", "confidence_head.input_embedder.pair_norm."),
+    ("confidence_head.s_to_z.", "confidence_head.input_embedder.single_to_pair."),
+    ("confidence_head.s_to_z_transpose.", "confidence_head.input_embedder.single_to_pair_transpose."),
+    ("confidence_head.s_to_z_prod_in1.", "confidence_head.input_embedder.single_to_pair_prod_in1."),
+    ("confidence_head.s_to_z_prod_in2.", "confidence_head.input_embedder.single_to_pair_prod_in2."),
+    ("confidence_head.s_to_z_prod_out.", "confidence_head.input_embedder.single_to_pair_prod_out."),
 )
-# The SWA attention packed q/k/v into one Wqkv; the port uses separate projections.
-_PACKED_QKV_SUFFIX = "attn.Wqkv.weight"
+# The SWA attention packed q/k/v into one Wqkv; the port uses separate projections. Spelled with the
+# post-rename ``self_attn``, since _WEIGHT_KEY_RENAMES has already run by the time this is matched.
+_PACKED_QKV_SUFFIX = "self_attn.Wqkv.weight"
 
 # Dead research-checkpoint tensors, vestigial in the fork too; the port never allocates them.
 _WEIGHT_KEY_DROPS = (
@@ -255,35 +292,40 @@ def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, t
     """Bring the two multi-head attention modules onto the standard transformers layout: split the
     pair-bias attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
     ``chunk`` order) and rename the attention output projection ``out_proj`` -> ``o_proj``. Scoped to
-    the atom ``.attn.`` modules and the token ``attn_blocks`` so the (non-MHA) row-attention-pooling
-    ``out_proj`` is left untouched."""
+    the atom ``.self_attn.`` modules and the token ``attention_layers`` so the (non-MHA)
+    row-attention-pooling ``out_proj`` is left untouched. Both names are the post-rename spellings,
+    since _WEIGHT_KEY_RENAMES has already run."""
     out: dict[str, torch.Tensor] = {}
     for key, tensor in renamed.items():
-        if "attn_blocks." in key and key.endswith(".kv_proj.weight"):
+        if "attention_layers." in key and key.endswith(".kv_proj.weight"):
             base = key[: -len("kv_proj.weight")]
             k, v = (chunk.clone() for chunk in torch.chunk(tensor, 2, dim=0))
             out[base + "k_proj.weight"] = k
             out[base + "v_proj.weight"] = v
             continue
-        if key.endswith(".attn.out_proj.weight") or ("attn_blocks." in key and key.endswith(".out_proj.weight")):
+        if key.endswith(".self_attn.out_proj.weight") or (
+            "attention_layers." in key and key.endswith(".out_proj.weight")
+        ):
             key = key.replace(".out_proj.weight", ".o_proj.weight")
         out[key] = tensor
     return out
 
 
 def _fuse_transition_swiglu(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Consolidate the diffusion-conditioning transitions (``z_transitions``/``s_transitions``) onto the
-    shared ``EsmFold2SwiGLU``: fuse the unfused gate/up projections into ``ffn.gate_up_proj`` (gate first,
-    matching ``EsmFold2SwiGLU``'s split) and rename the output projection to ``ffn.down_proj``. Scoped to
-    the transitions so it never touches the attention ``out_proj``."""
+    """Consolidate the diffusion-conditioning transitions (``pair_transitions``/``single_transitions``,
+    post-rename) onto the shared ``EsmFold2SwiGLU``: fuse the unfused gate/up projections into
+    ``mlp.gate_up_proj`` (gate first, matching ``EsmFold2SwiGLU``'s split) and rename the output
+    projection to ``mlp.down_proj``. Scoped to the transitions so it never touches the attention
+    ``out_proj``, and it runs before _standardize_attention_keys so these never reach that pass."""
     for key in list(renamed):
-        if (".z_transitions." in key or ".s_transitions." in key) and key.endswith(".a_proj.weight"):
+        is_transition = ".pair_transitions." in key or ".single_transitions." in key
+        if is_transition and key.endswith(".a_proj.weight"):
             base = key[: -len("a_proj.weight")]
             gate = renamed.pop(base + "a_proj.weight")
             up = renamed.pop(base + "b_proj.weight")
-            renamed[base + "ffn.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
-        elif (".z_transitions." in key or ".s_transitions." in key) and key.endswith(".out_proj.weight"):
-            renamed[key.replace(".out_proj.weight", ".ffn.down_proj.weight")] = renamed.pop(key)
+            renamed[base + "mlp.gate_up_proj.weight"] = torch.cat([gate, up], dim=0)
+        elif is_transition and key.endswith(".out_proj.weight"):
+            renamed[key.replace(".out_proj.weight", ".mlp.down_proj.weight")] = renamed.pop(key)
     return renamed
 
 

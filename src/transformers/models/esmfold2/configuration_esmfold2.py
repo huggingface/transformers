@@ -47,15 +47,15 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     head_dim (`int`, *optional*):
         Per-head width. Derived as `hidden_size // num_attention_heads` if unset.
     expansion_ratio (`int`, *optional*, defaults to 2):
-        Expansion ratio used to derive `ffn_intermediate_size`.
-    ffn_intermediate_size (`int`, *optional*):
+        Expansion ratio used to derive `intermediate_size`.
+    intermediate_size (`int`, *optional*):
         SwiGLU feed-forward width. Derived from `expansion_ratio` and `hidden_size` if unset, rounded
         up to a multiple of 256.
     spatial_rope_base_frequency (`float`, *optional*, defaults to 20.0):
         Base frequency for the spatial (x/y/z) half of the 3D rotary embedding.
-    n_spatial_rope_pairs_per_axis (`int`, *optional*, defaults to 2):
+    num_spatial_rope_pairs_per_axis (`int`, *optional*, defaults to 2):
         Number of rotary frequency pairs allocated to each spatial axis.
-    n_uid_rope_pairs (`int`, *optional*, defaults to 10):
+    num_uid_rope_pairs (`int`, *optional*, defaults to 10):
         Number of rotary frequency pairs allocated to the per-atom space UID.
     uid_rope_base_frequency (`float`, *optional*, defaults to 10000.0):
         Base frequency for the space-UID half of the 3D rotary embedding.
@@ -67,10 +67,10 @@ class EsmFold2AtomEncoderConfig(PreTrainedConfig):
     num_attention_heads: int | None = 4
     head_dim: int | None = None  # derived from hidden_size/num_attention_heads in the parent
     expansion_ratio: int | None = 2
-    ffn_intermediate_size: int | None = None  # derived from expansion_ratio/hidden_size in the parent
+    intermediate_size: int | None = None  # derived from expansion_ratio/hidden_size in the parent
     spatial_rope_base_frequency: float | None = 20.0
-    n_spatial_rope_pairs_per_axis: int | None = 2
-    n_uid_rope_pairs: int | None = 10
+    num_spatial_rope_pairs_per_axis: int | None = 2
+    num_uid_rope_pairs: int | None = 10
     uid_rope_base_frequency: float | None = 10000.0
 
 
@@ -83,20 +83,20 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
     r"""
     sigma_data (`float`, *optional*, defaults to 16.0):
         Data noise scale of the EDM preconditioning; sets the scale at which coordinates are normalized.
-    token_hidden_size (`int`, *optional*, defaults to 768):
+    hidden_size (`int`, *optional*, defaults to 768):
         Token-stream width of the diffusion transformer. Also the width the atom stack projects to and
         from, so `atom_encoder.output_dim` mirrors it.
     fourier_dim (`int`, *optional*, defaults to 256):
         Width of the Fourier noise-level embedding.
-    token_num_blocks (`int`, *optional*, defaults to 12):
+    num_hidden_layers (`int`, *optional*, defaults to 12):
         Number of token-transformer blocks (one attention + one transition each).
-    token_num_heads (`int`, *optional*, defaults to 16):
+    num_attention_heads (`int`, *optional*, defaults to 16):
         Number of attention heads in the token transformer; also the width of each block's pair bias.
     transition_multiplier (`int`, *optional*, defaults to 2):
-        Multiplier used to derive `token_transition_intermediate_size`.
-    token_transition_intermediate_size (`int`, *optional*):
+        Multiplier used to derive `intermediate_size`.
+    intermediate_size (`int`, *optional*):
         SwiGLU width of the token transitions. Derived as
-        `transition_multiplier * token_hidden_size` if unset.
+        `transition_multiplier * hidden_size` if unset.
     atom_encoder (`EsmFold2AtomEncoderConfig`, *optional*):
         Configuration for the denoiser's atom encoder/decoder stack.
     """
@@ -104,12 +104,12 @@ class EsmFold2DiffusionModuleConfig(PreTrainedConfig):
     sub_configs = {"atom_encoder": EsmFold2AtomEncoderConfig}
 
     sigma_data: float | None = 16.0
-    token_hidden_size: int | None = 768
+    hidden_size: int | None = 768
     fourier_dim: int | None = 256
-    token_num_blocks: int | None = 12
-    token_num_heads: int | None = 16
+    num_hidden_layers: int | None = 12
+    num_attention_heads: int | None = 16
     transition_multiplier: int | None = 2
-    token_transition_intermediate_size: int | None = None  # derived in the parent
+    intermediate_size: int | None = None  # derived in the parent
     atom_encoder: dict | EsmFold2AtomEncoderConfig | None = None
 
     def __post_init__(self, **kwargs):
@@ -129,7 +129,7 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
     r"""
     diffusion_module (`EsmFold2DiffusionModuleConfig`, *optional*):
         Configuration for the denoiser this head samples from.
-    distogram_bins (`int`, *optional*, defaults to 128):
+    num_distogram_bins (`int`, *optional*, defaults to 128):
         Number of distance bins predicted by the distogram head.
     gamma_0 (`float`, *optional*, defaults to 0.605):
         Churn factor applied at noise levels above `gamma_min` (extra noise re-injected before a step).
@@ -139,32 +139,37 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         Scale of the noise added by the churn step. `0.0` makes sampling a deterministic ODE.
     step_scale (`float`, *optional*, defaults to 1.0):
         Scale applied to each denoising update.
-    inference_s_max (`float`, *optional*, defaults to 160.0):
-        Highest sigma of the Karras noise schedule, in units of `sigma_data`.
-    inference_s_min (`float`, *optional*, defaults to 4e-4):
-        Lowest sigma of the Karras noise schedule, in units of `sigma_data`.
-    inference_p (`float`, *optional*, defaults to 8.0):
-        Exponent shaping the Karras schedule between `inference_s_min` and `inference_s_max`.
+    inference_sigma_max_ratio (`float`, *optional*, defaults to 160.0):
+        Highest sigma of the Karras noise schedule, as a multiple of `sigma_data` (so the default is a
+        sigma of `160 * sigma_data`). Shapes the schedule; it is not where sampling starts, because
+        `inference_sigma_cap` truncates the top of the schedule -- see there.
+    inference_sigma_min_ratio (`float`, *optional*, defaults to 4e-4):
+        Lowest sigma of the Karras noise schedule, likewise a multiple of `sigma_data`.
+    inference_exponent (`float`, *optional*, defaults to 8.0):
+        Exponent shaping the Karras schedule between `inference_sigma_min_ratio` and `inference_sigma_max_ratio`.
     inference_num_steps (`int`, *optional*, defaults to 68):
-        Default number of denoising steps.
-    max_inference_sigma (`float`, *optional*, defaults to 256.0):
-        Cap on the schedule: the high-sigma tail above this is truncated and the cap re-prepended, so
-        sampling still starts from it.
+        Length of the Karras schedule built before truncation. Note this is not the number of denoising
+        steps run: `inference_sigma_cap` drops the entries above the cap without lengthening the
+        schedule to compensate, so the sampler runs fewer steps than this (with the released
+        checkpoint's values, 14 becomes 10).
+    inference_sigma_cap (`float`, *optional*, defaults to 256.0):
+        Cap on the schedule, as an *absolute* sigma rather than a multiple of `sigma_data`. The
+        high-sigma tail above it is truncated and the cap re-prepended, so sampling starts from the cap.
     """
 
     sub_configs = {"diffusion_module": EsmFold2DiffusionModuleConfig}
 
     diffusion_module: dict | EsmFold2DiffusionModuleConfig | None = None
-    distogram_bins: int | None = 128
+    num_distogram_bins: int | None = 128
     gamma_0: float | None = 0.605
     gamma_min: float | None = 1.107
     noise_scale: float | None = 0.0
     step_scale: float | None = 1.0
-    inference_s_max: float | None = 160.0
-    inference_s_min: float | None = 4e-4
-    inference_p: float | None = 8.0
+    inference_sigma_max_ratio: float | None = 160.0
+    inference_sigma_min_ratio: float | None = 4e-4
+    inference_exponent: float | None = 8.0
     inference_num_steps: int | None = 68
-    max_inference_sigma: float | None = 256.0
+    inference_sigma_cap: float | None = 256.0
 
     def __post_init__(self, **kwargs):
         if self.diffusion_module is None:
@@ -232,9 +237,9 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         would be discarded.
     num_attention_heads (`int`, *optional*, defaults to 8):
         Number of heads in the pair-weighted averaging.
-    head_width (`float`, *optional*, defaults to 32):
+    head_dim (`int`, *optional*, defaults to 32):
         Per-head width of the pair-weighted averaging.
-    transition_intermediate_size (`int`, *optional*):
+    intermediate_size (`int`, *optional*):
         SwiGLU width of the MSA-stream transition. Derived from the parent's
         `transition_expansion_ratio` and `hidden_size` if unset.
     outer_product_chunk_size (`int`, *optional*):
@@ -248,8 +253,8 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     outer_hidden_size: int | None = 32
     num_hidden_layers: int | None = 4
     num_attention_heads: int | None = 8
-    head_width: int | None = 32
-    transition_intermediate_size: int | None = None
+    head_dim: int | None = 32
+    intermediate_size: int | None = None
     outer_product_chunk_size: int | None = None
 
 
@@ -288,9 +293,9 @@ class EsmFold2Config(PreTrainedConfig):
         Sliding-window size (token-index distance) for the atom-stack attention.
     chunk_size (`int`, *optional*, defaults to 64):
         Chunk size for the memory-heavy pair-/MSA-stream ops. `None` disables chunking.
-    n_relative_residx_bins (`int`, *optional*, defaults to 32):
+    num_relative_residx_bins (`int`, *optional*, defaults to 32):
         Number of relative residue-index bins in the relative-position encoding.
-    n_relative_chain_bins (`int`, *optional*, defaults to 2):
+    num_relative_chain_bins (`int`, *optional*, defaults to 2):
         Number of relative chain-index bins in the relative-position encoding.
     num_loops (`int`, *optional*, defaults to 10):
         Number of trunk refinement loops.
@@ -343,8 +348,8 @@ class EsmFold2Config(PreTrainedConfig):
     pair_transition_intermediate_size: int | None = None
     sliding_window: int | None = 128
     chunk_size: int | None = 64
-    n_relative_residx_bins: int | None = 32
-    n_relative_chain_bins: int | None = 2
+    num_relative_residx_bins: int | None = 32
+    num_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
     num_diffusion_samples: int | None = 8
     num_res_types: int | None = 33
@@ -389,8 +394,8 @@ class EsmFold2Config(PreTrainedConfig):
         # The diffusion atom stack reuses the inputs embedder's 3D-RoPE settings, as the reference does.
         for rope_field in (
             "spatial_rope_base_frequency",
-            "n_spatial_rope_pairs_per_axis",
-            "n_uid_rope_pairs",
+            "num_spatial_rope_pairs_per_axis",
+            "num_uid_rope_pairs",
             "uid_rope_base_frequency",
         ):
             setattr(diff.atom_encoder, rope_field, getattr(self.atom_encoder, rope_field))
@@ -399,22 +404,20 @@ class EsmFold2Config(PreTrainedConfig):
         for atom in (self.atom_encoder, diff.atom_encoder):
             if atom.head_dim is None:
                 atom.head_dim = atom.hidden_size // atom.num_attention_heads
-            if atom.ffn_intermediate_size is None:
-                atom.ffn_intermediate_size = (atom.expansion_ratio * (atom.hidden_size // 3) * 2 + 255) // 256 * 256
+            if atom.intermediate_size is None:
+                atom.intermediate_size = (atom.expansion_ratio * (atom.hidden_size // 3) * 2 + 255) // 256 * 256
 
         # Atom->token aggregation widths: the denoiser feeds the token transformer, while the inputs
         # embedder's encoding must make the ``single_inputs`` concat total ``single_inputs_size``.
         if diff.atom_encoder.output_dim is None:
-            diff.atom_encoder.output_dim = diff.token_hidden_size
+            diff.atom_encoder.output_dim = diff.hidden_size
         if self.atom_encoder.output_dim is None:
             self.atom_encoder.output_dim = self.single_inputs_size - (2 * self.num_res_types + 1)
 
-        if diff.token_transition_intermediate_size is None:
-            diff.token_transition_intermediate_size = diff.transition_multiplier * diff.token_hidden_size
-        if self.msa_encoder.transition_intermediate_size is None:
-            self.msa_encoder.transition_intermediate_size = (
-                self.transition_expansion_ratio * self.msa_encoder.hidden_size
-            )
+        if diff.intermediate_size is None:
+            diff.intermediate_size = diff.transition_multiplier * diff.hidden_size
+        if self.msa_encoder.intermediate_size is None:
+            self.msa_encoder.intermediate_size = self.transition_expansion_ratio * self.msa_encoder.hidden_size
 
         super().__post_init__(**kwargs)
 
