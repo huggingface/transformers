@@ -67,170 +67,121 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # Every backend, every variant.
     "all": {
         "VideoMAEForPreTraining": (
-            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in `mse_loss`. TODO: "
-            "skip loss when labels aren't provided."
+            "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
+            "`mse_loss`. TODO: skip loss when labels aren't provided."
         ),
         "OpenAIPrivacyFilterModel": (
-            "`get_correct_experts_implementation` defaults to `eager` because the model is sensitive to "
-            "accumulation order. Eager experts forward iterates over `expert_hit.nonzero()` (data-dependent "
-            "shape). Users can opt into `set_experts_implementation('batched_mm')` to export."
+            "`get_correct_experts_implementation` defaults to `eager` because the model is "
+            "sensitive to accumulation order. Eager experts forward iterates over "
+            "`expert_hit.nonzero()` (data-dependent shape). Users can opt into "
+            "`set_experts_implementation('batched_mm')` to export."
         ),
         "OpenAIPrivacyFilterForTokenClassification": (
             "Same root cause as `OpenAIPrivacyFilterModel` — eager experts implementation."
         ),
         "GlmImageModel": (
-            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` over "
-            "`cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
-            "vision-attention export patch, and even with it the export runs long (further guards / slow symbolic "
-            "lowering). Not worth the model-specific export support for a diffusers-pipeline model. TODO: revisit "
-            "on demand."
+            "Vision attention does a data-dependent chunked split (`torch.split(..., lengths.tolist())` "
+            "over `cu_seqlens`), which hits `GuardOnDataDependentSymNode: u0 > 1` — it needs the shared "
+            "vision-attention export patch, and even with it the export runs long (further guards / slow "
+            "symbolic lowering). Not worth the model-specific export support for a diffusers-pipeline "
+            "model. TODO: revisit on demand."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
     },
     # Every backend, generate path only.
     "generate": {
         "Blip2ForConditionalGeneration": (
-            "`generate()` delegates to the inner language model without calling top-level `forward()`, so "
-            "`decompose_prefill_decode` can't capture inputs. TODO: route generate through top-level `forward()`."
+            "`generate()` delegates to the inner language model without calling top-level "
+            "`forward()`, so `decompose_prefill_decode` can't capture inputs. "
+            "TODO: route generate through top-level `forward()`."
         ),
         "InstructBlipForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "InstructBlipVideoForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "Kosmos2ForConditionalGeneration": "Same `generate()`-delegation as Blip2.",
         "RecurrentGemmaForCausalLM": (
-            "Stores recurrent/conv state as module attributes (not a `Cache` object); `torch.export` can't carry "
-            "that state between calls. TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
+            "Stores recurrent/conv state as module attributes (not a `Cache` object); "
+            "`torch.export` can't carry that state between calls. "
+            "TODO: refactor to a cache-based SSM pattern (like Mamba/Mamba2)."
         ),
         "MoshiForConditionalGeneration": (
-            "`generate()` creates `blank_user_audio_codes` outside the traced forward and passes it as a kwarg; "
-            "the resulting ONNX input has mismatched rank (scalar vs 3D). TODO: make `blank_user_audio_codes` "
-            "part of the model state."
+            "`generate()` creates `blank_user_audio_codes` outside the traced forward and "
+            "passes it as a kwarg; the resulting ONNX input has mismatched rank (scalar vs 3D). "
+            "TODO: make `blank_user_audio_codes` part of the model state."
         ),
         "UdopForConditionalGeneration": (
-            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder cross-attention mask "
-            "doesn't flow through the generate decomposition correctly."
+            "Exported decoder output is missing `attention_mask` vs eager — encoder-decoder "
+            "cross-attention mask doesn't flow through the generate decomposition correctly."
         ),
         "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` tensors that eager "
-            "returns. Plain forward exports work. TODO: align generate-decomposition path with the realtime "
-            "KV-cache shape."
+            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "tensors that eager returns. Plain forward exports work. "
+            "TODO: align generate-decomposition path with the realtime KV-cache shape."
         ),
         "Gemma3nForConditionalGeneration": (
-            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; exported prefill "
-            "returns only `logits` while eager surfaces the populated KV cache. Same shape as Voxtral. TODO: "
-            "align the generate-decomposition path."
+            "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
+            "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
+            "Same shape as Voxtral. TODO: align the generate-decomposition path."
         ),
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
         "Sam2Model": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute test timeout "
-            "(12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-agnostic — the "
-            "torch.export step itself overruns, so every backend hits it."
+            "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
+            "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
+            "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
-        "Sam2VisionModel": "Same Hiera-backbone dynamic-shape `timeout` as `Sam2Model`.",
-        "HieraModel": (
-            "Hiera mask-unit window `reroll` produces nested symbolic floordivs that `torch.export` can't guard "
-            "under dynamic shapes (same backbone family as `Sam2Model`). Static exports fine."
-        ),
-        "HieraBackbone": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
-        "HieraForImageClassification": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
-        "HieraForPreTraining": "Same Hiera `reroll` dynamic-shape failure as `HieraModel`.",
     },
-    # Generate path, dynamic-shape only (multi-token decode / `_merge_decode_calls`).
+    # Generate path, dynamic-shape only — the multi-token decode (`_merge_decode_calls`) that keeps the
+    # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
+    # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
-        "RecurrentGemmaForCausalLM": (
-            "RG-LRU + local-attention recurrent decode is single-token by construction; a multi-token continued "
-            "forward mismatches its recurrent/conv state shapes."
-        ),
-        "ProphetNetForCausalLM": (
-            "Encoder-decoder decoder asserts `use_cache` is only supported for `decoder_input_ids` of length 1 — "
-            "no multi-token decode."
-        ),
-        "XLNetLMHeadModel": (
-            "Permutation / two-stream attention isn't shaped for a multi-token cached forward (query vs. cache "
-            "length mismatch)."
-        ),
-        "XLMWithLMHeadModel": "Cached forward assumes a single decode step; multi-token continuation is unsupported.",
-        "ReformerModelWithLMHead": (
-            "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query (seq 2) "
-            "mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. Same "
-            "chunked-attention limitation as the `onnx.generate` skip."
-        ),
-        "OpenAIGPTLMHeadModel": "Multi-token cached forward mismatches the attention-mask length (a≠b at dim 1).",
-        "HiggsAudioV2ForConditionalGeneration": (
-            "Multi-token cached forward mismatches the audio cross-attention mask (a≠b at dim 3)."
-        ),
         "MllamaForConditionalGeneration": (
-            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; the "
-            "multi-token merge grows the query axis but not the captured cross-attention mask, so the index runs "
-            "past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. TODO: grow "
-            "`cross_attention_mask` in `_merge_decode_calls`."
+            "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
+            "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
+            "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
+            "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
+        ),
+        "ReformerModelWithLMHead": (
+            "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
+            "(seq 2) mismatches the chunked key axis (`size 2 vs 6`). Single-token static generate is fine. "
+            "Same chunked-attention limitation as the `onnx.generate` skip."
         ),
     },
     # ONNX, every variant.
     "onnx": {
-        "HunYuanVLModel": (
-            "ONNX export trips an int32-overflow `GuardOnDataDependentSymNode` (`64*h*w`) in the vision "
-            "patch-merger conv on symbolic spatial dims. Plain `torch.export` (dynamo) exports fine."
-        ),
-        "HunYuanVLForConditionalGeneration": "Same ONNX vision-conv int32 guard as `HunYuanVLModel`.",
         "CHMv2ForDepthEstimation": (
-            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` pair the "
-            "functional-graph assertion rejects (independent of any source `.detach()` — verified). Torch export "
-            "works. TODO: file upstream `torch.export` issue."
+            "`run_decompositions` retraces through aot_autograd which emits a `detach_(alias(...))` "
+            "pair the functional-graph assertion rejects (independent of any source `.detach()` — "
+            "verified). Torch export works. TODO: file upstream `torch.export` issue."
         ),
-        "PixioModel": "Lowering exceeds the 10-minute test timeout.",
+        "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
     "onnx.generate": {
         "ReformerModelWithLMHead": (
-            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis length under static "
-            "decode (prefill+1 token, seq=17 vs chunked axis of 16). The same computation stays symbolic under "
-            "dynamic so ORT can't pre-validate it. The other three Reformer-local-attn ONNX variants pass."
+            "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
+            "length under static decode (prefill+1 token, seq=17 vs chunked axis of 16). The same "
+            "computation stays symbolic under dynamic so ORT can't pre-validate it. The other "
+            "three Reformer-local-attn ONNX variants pass."
         ),
     },
     # ONNX, dynamic-shape only.
     "onnx.dynamic": {
-        "SwinModel": "Same `timeout` failure as `BigBirdModel`.",
-        "SwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
-        "SwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "SwinForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
-        "Swinv2Model": "Same `timeout` failure as `BigBirdModel`.",
-        "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
-        "Swinv2Backbone": "Same `timeout` failure as `BigBirdModel`.",
-        "DonutSwinModel": "Same `timeout` failure as `BigBirdModel`.",
-        "DonutSwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerModel": "Same shifted-window (Swin backbone) `timeout` as `SwinModel`.",
-        "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
-        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "FunnelModel": (
-            "onnxscript's constant-folding optimizer raises `Bitwidth not available for ONNX data type: STRING` "
-            "on funnel's dynamic-shape graph. `torch.export`/OpenVINO and static ONNX all export fine."
-        ),
-        "FunnelForMaskedLM": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelForPreTraining": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelForQuestionAnswering": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelForTokenClassification": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelBaseModel": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelForMultipleChoice": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
-        "FunnelForSequenceClassification": "Same onnxscript optimizer `STRING` failure as `FunnelModel`.",
         "GroundingDinoModel": (
-            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic shapes — "
-            "`aot_autograd`'s decomposition pipeline emits the detach itself (verified by guarding all three "
-            "modeling-side detaches with `if self.training`). Static works."
+            "Same `detach_(alias(...))` retrace bug as CHMv2, but only triggered under dynamic "
+            "shapes — `aot_autograd`'s decomposition pipeline emits the detach itself (verified "
+            "by guarding all three modeling-side detaches with `if self.training`). Static works."
         ),
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "Sam2VisionModel": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min even after "
-            "simplifying `window_partition`/`window_unpartition` (12 attention blocks × 3 Q-pool stage "
-            "transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
+            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
+            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
+            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
         ),
-        "BigBirdModel": "Lowering exceeds the 10-minute test timeout under dynamic shapes.",
+        "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMultipleChoice": "Same `timeout` failure as `BigBirdModel`.",
@@ -238,125 +189,74 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "DonutSwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerSwinModel": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerSwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerModel": "Same `timeout` failure as `BigBirdModel`.",
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinModel": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinBackbone": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Model": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `BigBirdModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `BigBirdModel`.",
     },
-    # ExecuTorch, every variant.
+    # ExecuTorch — lowering failures grouped by root cause; see the first entry of each
+    # `Same ... as` chain for the full description.
     "executorch": {
-        "BarkFineModel": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — "
-            "a dtype-size mismatch in the lowered program."
-        ),
-        "ClvpModelForConditionalGeneration": (
-            "A pass-through output aliases an input (`Output node is already in the inputs`)."
-        ),
-        "ColQwen2ForRetrieval": (
-            "ExecuTorch dim-order lowering requires a copying view (`Cannot view a tensor ... with shape/strides`)."
-        ),
-        "DabDetrModel": "XNNPACK partitioner: `Attempting to convert non-NHWC compatible node to NHWC`.",
-        "DabDetrForObjectDetection": "Same `nhwc` failure as `DabDetrModel`.",
-        "Ernie4_5_VLMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Ernie4_5_VLMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
-        "GPT2Model": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2LMHeadModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2DoubleHeadsModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForQuestionAnswering": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForSequenceClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GPT2ForTokenClassification": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Gemma3nModel": "Same `spec` failure as `BarkFineModel`.",
-        "Gemma3nForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Glm46VModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm46VForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Glm4vMoeForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmImageForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrModel": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GlmOcrForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "GroundingDinoModel": "Lowering exceeds the test timeout under dynamic shapes.",
-        "GroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "InstructBlipModel": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "InstructBlipVideoModel": "Same `spec` failure as `BarkFineModel`.",
-        "MMGroundingDinoModel": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `GroundingDinoModel`.",
-        "MiniMaxM3VLModel": "Serialization rejects an i64 constant (`bad number for type int32`).",
-        "MiniMaxM3SparseForConditionalGeneration": "Same `int32` failure as `MiniMaxM3VLModel`.",
-        "PPDocLayoutV3ForObjectDetection": (
-            "A single detection head applied at every decoder layer and tied to the encoder head is duplicated by "
-            "the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the shared target once and "
-            "raises `KeyError` on the next copy while stripping delegated params."
-        ),
-        "PaddleOCRVLForConditionalGeneration": (
-            "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`."
-        ),
-        "PerceptionLMModel": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "PerceptionLMForConditionalGeneration": "Same `passthrough` failure as `ClvpModelForConditionalGeneration`.",
-        "Qwen2VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5OmniThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen2_5_VLModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen2_5_VLForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3OmniMoeThinkerForConditionalGeneration": "Same `view` failure as `ColQwen2ForRetrieval`.",
-        "Qwen3_5Model": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForSequenceClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5ForTokenClassification": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeModel": "Same `spec` failure as `BarkFineModel`.",
-        "Qwen3_5MoeForConditionalGeneration": "Same `spec` failure as `BarkFineModel`.",
         "JetMoeModel": (
             "MoE and mixture-of-attention route tokens with a data-dependent `inputs.split(expert_size)` "
             "(per-expert token counts), which ExecuTorch's ahead-of-time memory planner can't size "
-            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but duplicates "
-            "expert weights per token, so it's only viable for low-batch decode — not as the eager default — and "
-            "the framework's `@use_experts_implementation` is MLP-only, so it can't host the mixture-of-attention "
-            "experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
+            "(`GuardOnDataDependentSymNode`). A static rewrite exists (per-token weight gather) but "
+            "duplicates expert weights per token, so it's only viable for low-batch decode — not as the "
+            "eager default — and the framework's `@use_experts_implementation` is MLP-only, so it can't "
+            "host the mixture-of-attention experts. Exports fine on torch.export/ONNX (dynamic dim at runtime)."
         ),
         "JetMoeForCausalLM": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
         "JetMoeForSequenceClassification": "Same data-dependent MoE/MoA routing as `JetMoeModel`.",
         "FastVlmForConditionalGeneration": (
-            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the failure is "
-            "uncatchable in-process, so the pytest worker dies rather than raising."
+            "ExecuTorch lowering of the vision stack crashes the process (native segfault/OOM) — the "
+            "failure is uncatchable in-process, so the pytest worker dies rather than raising."
         ),
         "FastVlmModel": "Same native ExecuTorch crash as `FastVlmForConditionalGeneration`.",
-        "LlavaOnevisionForConditionalGeneration": (
-            "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`."
-        ),
+        "LlavaOnevisionForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
         "LlavaOnevisionModel": "Same native ExecuTorch crash as `LlavaOnevisionForConditionalGeneration`.",
+        "PaddleOCRVLForConditionalGeneration": "Same native ExecuTorch vision-stack crash as `FastVlmForConditionalGeneration`.",
         "PaddleOCRVLModel": "Same native ExecuTorch crash as `PaddleOCRVLForConditionalGeneration`.",
         "Qwen3ASRForConditionalGeneration": (
-            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked packed length "
-            "can't be sized by ExecuTorch's ahead-of-time memory planner (`GuardOnDataDependentSymNode`). Exports "
-            "fine on torch.export/ONNX, which carry the dynamic dim at runtime."
+            "Audio encoder packs valid frames with a data-dependent `.nonzero()`; the unbacked "
+            "packed length can't be sized by ExecuTorch's ahead-of-time memory planner "
+            "(`GuardOnDataDependentSymNode`). Exports fine on torch.export/ONNX, which carry the "
+            "dynamic dim at runtime."
         ),
         "Qwen3ASRModel": "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`.",
         "Qwen3ASRForTokenClassification": (
             "Same data-dependent audio-encoder `.nonzero()` as `Qwen3ASRForConditionalGeneration`."
         ),
         "FlavaModel": (
-            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner emit "
-            "partitions that form a dependency cycle once fused (`Invalid partition, found dependency cycles`). "
-            "The single-stream sub-models (image/text/multimodal/codebook) export fine."
+            "The interleaved text/image/multimodal encoder streams make XNNPACK's disjoint-set partitioner "
+            "emit partitions that form a dependency cycle once fused (`Invalid partition, found dependency "
+            "cycles`). The single-stream sub-models (image/text/multimodal/codebook) export fine."
+        ),
+        "FlavaForPreTraining": "Same fused-partition dependency cycle as `FlavaModel` (wraps it).",
+        "PPDocLayoutV3ForObjectDetection": (
+            "A single detection head applied at every decoder layer and tied to the encoder head is "
+            "duplicated by the constant-dedup pass; `_unsafe_adjust_original_program` then deletes the "
+            "shared target once and raises `KeyError` on the next copy while stripping delegated params."
         ),
         "EfficientNetModel": (
-            "ExecuTorch export exceeds the 1000s test timeout under both static and dynamic shapes (dynamic "
-            "~1400s); the depthwise-conv / SiLU stack lowers slowly."
+            "ExecuTorch export exceeds the 1000s test timeout under both static and dynamic shapes "
+            "(dynamic ~1400s); the depthwise-conv / SiLU stack lowers slowly."
         ),
         "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
     },
-    # ExecuTorch, generate path only.
-    "executorch.generate": {
-        "PPFormulaNetForConditionalGeneration": (
-            "ExecuTorch memory planning miscomputes the tensor spec (`buffer of size N, expected nbytes of M`) — "
-            "a dtype-size mismatch in the lowered program."
-        ),
-    },
-    # ExecuTorch, dynamic-shape only.
+    "executorch.generate": {},
     "executorch.dynamic": {
+        "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
+        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdForPreTraining": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -365,56 +265,22 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForQuestionAnswering": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdForSequenceClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "BigBirdForTokenClassification": "Same `timeout` failure as `Mask2FormerModel`.",
-        "DepthProModel": (
-            "`_ViewSpec is incompatible with its base` — mixed shape dynamism between a view and its base."
-        ),
-        "DepthProForDepthEstimation": "Same `viewspec` failure as `DepthProModel`.",
-        "DonutSwinModel": (
-            "ExecuTorch memory planning overflows under unbounded dynamic shapes (`mem_offset does not fit in 64 "
-            "bits`)."
-        ),
-        "DonutSwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "Mask2FormerModel": "Lowering exceeds the 10-minute test timeout under dynamic shapes.",
-        "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
-        "MaskFormerModel": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerForInstanceSegmentation": "Same `timeout` failure as `BigBirdModel`.",
-        "MaskFormerSwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MaskFormerSwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "MllamaForConditionalGeneration": "Same `overflow` failure as `DonutSwinModel`.",
-        "PvtModel": "Same `viewspec` failure as `DepthProModel`.",
-        "PvtForImageClassification": "Same `viewspec` failure as `DepthProModel`.",
-        "Sam2Model": "Delegation drops a referenced weight (`KeyError` on a state-dict key).",
-        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swin2SRModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swin2SRForImageSuperResolution": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinModel": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinBackbone": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForImageClassification": "Same `overflow` failure as `DonutSwinModel`.",
-        "SwinForMaskedImageModeling": "Same `overflow` failure as `DonutSwinModel`.",
-        "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
-        "VitDetModel": "Same `viewspec` failure as `DepthProModel`.",
-        "VitDetBackbone": "Same `viewspec` failure as `DepthProModel`.",
-        "Wav2Vec2BertForCTC": "`flatc` schema compilation fails when serializing the program.",
-        "Wav2Vec2BertModel": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForSequenceClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForAudioFrameClassification": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
-        "Wav2Vec2BertForXVector": "Same `flatc` failure as `Wav2Vec2BertForCTC`.",
         "GroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
+        "Swinv2Backbone": "Same `timeout` failure as `Mask2FormerModel`.",
         "TimesformerModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "TimesformerForVideoClassification": "Same `timeout` failure as `Mask2FormerModel`.",
     },
-    # ExecuTorch, static-shape only.
     "executorch.static": {
         "Wav2Vec2BertModel": (
-            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout under static "
-            "shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
+            "ExecuTorch *runtime* execution of the Conformer encoder exceeds the 15-min test timeout "
+            "under static shapes (~1350s in the runtime, not lowering). Dynamic shapes stay under budget."
         ),
         "Wav2Vec2BertForCTC": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
         "Wav2Vec2BertForSequenceClassification": "Same Conformer-encoder runtime `timeout` as `Wav2Vec2BertModel`.",
@@ -423,15 +289,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoModel": (
             "Static-shape export raises `KeyError: 'bbox_embed.1.layers.0.weight'`: the per-decoder-layer "
             "bbox-embed head is shared/tied, so the constant-dedup pass duplicates it and "
-            "`_unsafe_adjust_original_program` deletes the shared target once then KeyErrors on the next copy "
-            "(same shared-detection-head issue as `PPDocLayoutV3ForObjectDetection`). The dynamic variant is "
-            "skipped for `timeout` above."
+            "`_unsafe_adjust_original_program` deletes the shared target once then KeyErrors on the next "
+            "copy (same shared-detection-head issue as `PPDocLayoutV3ForObjectDetection`). The dynamic "
+            "variant is skipped for `timeout` above."
         ),
         "GroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
     },
-    # OpenVINO, every variant.
     "openvino": {
         "TapasModel": "OpenVINO has no conversion rule for `aten.scatter_reduce.two` (tapas segment reduction).",
         "TapasForMaskedLM": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
