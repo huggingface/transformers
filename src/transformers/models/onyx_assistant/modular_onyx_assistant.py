@@ -24,12 +24,25 @@ from ...masking_utils import (
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from ..exaone4.modeling_exaone4 import Exaone4DecoderLayer, Exaone4Model, Exaone4RMSNorm, apply_rotary_pos_emb
+from ..exaone4.modeling_exaone4 import (
+    Exaone4DecoderLayer,
+    Exaone4Model,
+    Exaone4RMSNorm,
+    Exaone4Attention,
+    apply_rotary_pos_emb,
+)
 from .configuration_onyx_assistant import OnyxAssistantConfig
 
 
 class OnyxAssistantRMSNorm(Exaone4RMSNorm):
     pass
+
+
+class OnyxAssistantAttention(Exaone4Attention):
+    def __init__(self, **super_kwargs):
+        super().__init__(**super_kwargs)
+        del self.sliding_window_patterns
+        self.is_causal = False
 
 
 class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):

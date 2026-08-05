@@ -114,9 +114,8 @@ class _IdentityOp(ConversionOps):
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks."""
 
-    def __init__(self, dim: int = 0, chunk_sizes: list[int] | None = None):
+    def __init__(self, dim: int = 0):
         self.dim = dim
-        self.chunk_sizes = chunk_sizes
 
     @torch.no_grad
     def convert(
@@ -125,15 +124,8 @@ class Chunk(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = target_patterns
-        one_chunk_size = tensor.shape[self.dim] // len(targets)
-        if int(one_chunk_size * len(targets)) != tensor.shape[self.dim]:
-            raise ValueError(
-                f"Failed to convert {kwargs.get('full_layer_name')}, tensor can't be chunked into {len(targets)} "
-                f"without losing information. Input tensor shape {tensor.shape} asked to chunk on dim={self.dim}"
-            )
-
-        sizes = [one_chunk_size] * len(targets) if self.chunk_sizes is None else self.chunk_sizes
-        chunks = tuple(chunk.contiguous() for chunk in torch.split(tensor, sizes, dim=self.dim))
+        sizes = len(targets)
+        chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, sizes, dim=self.dim))
         if len(input_dict) > 1 or len(target_patterns) == 1 or len(chunks) != len(target_patterns):
             raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
         return dict(zip(targets, chunks))
@@ -458,7 +450,7 @@ class PermuteForRope(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
-        outputs = []
+        output: dict[str, list[torch.Tensor]] = {}
         for key, tensors in input_dict.items():
             # Permute q and key weights back (skip biases) to match original RoPE implementation
             if not any(name in key for name in self.permute_layer_names):
