@@ -149,8 +149,6 @@ if TYPE_CHECKING:
     from ._typing import DeviceMeshLike
 
 
-_torch_distributed_available = torch.distributed.is_available()
-
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
@@ -1758,16 +1756,6 @@ class PreTrainedModel(
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
 
-        if (
-            torch.version.hip is not None
-            and torch.cuda.device_count() > 1
-            and version.parse(torch.__version__) < version.parse("2.4.1")
-        ):
-            logger.warning_once(
-                "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
-            )
-            torch.backends.cuda.enable_flash_sdp(False)
-
         return True
 
     def _grouped_mm_can_dispatch(self) -> bool:
@@ -2002,7 +1990,7 @@ class PreTrainedModel(
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. Inspects the module
         source as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_attn_implementation_cached_value", None)
@@ -2023,7 +2011,7 @@ class PreTrainedModel(
         # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
         else:
             can_set = True
-        # Succesful read of source code -> cache the result
+        # Successful read of source code -> cache the result
         cls._can_set_attn_implementation_cached_value = can_set
         return cls._can_set_attn_implementation_cached_value
 
@@ -2031,7 +2019,7 @@ class PreTrainedModel(
     def _can_set_experts_implementation(cls) -> bool:
         """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
         as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
@@ -3851,7 +3839,7 @@ class PreTrainedModel(
             if kernel_config is not None:
                 if not isinstance(kernel_config, KernelConfig):
                     raise ValueError(
-                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                        f"Expected `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
                     )
 
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
@@ -4037,13 +4025,6 @@ class PreTrainedModel(
                 `DistributedConfig(tp_size=N)` for tensor parallelism, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism

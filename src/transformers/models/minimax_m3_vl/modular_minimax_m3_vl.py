@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -59,6 +60,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
 )
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 
 
@@ -355,7 +357,7 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
 class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -713,6 +715,7 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
 class MiniMaxM3VLForCausalLM(MiniMaxM2ForCausalLM):
     config: MiniMaxM3VLTextConfig
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
@@ -1029,11 +1032,11 @@ class MiniMaxM3VLModel(LlavaModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1201,35 +1204,29 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- pixel inputs are merged into the cache on the first step, so we
-        # only forward them once (image and video alike).
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
+class MiniMaxM3VLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
+    pass
 
-        return model_inputs
+
+class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
+    size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 451584}
+
+    def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        size = kwargs.pop("size", None)
+        size = self.size if size is None else size
+        # The default size saved in offcial ckpt isn't correct and wasn't used prev!
+        # Override with the correct, new default value in that case
+        if size == [672, 672]:
+            size = self.size
+        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
+            size["shortest_edge"] = min_pixels
+            size.pop("min_pixels", None)
+        if (max_pixels := kwargs.pop("max_pixels", None)) is not None:
+            size["longest_edge"] = max_pixels
+            size.pop("max_pixels", None)
+        TorchvisionBackend.__init__(size=size, **kwargs)
 
 
 class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
@@ -1263,12 +1260,12 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
         self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
         self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = int(image_inputs["image_grid_thw"][image_idx].prod() // merge_length)
         return self.VISION_START_TOKEN + self.IMAGE_TOKEN * num_image_tokens + self.VISION_END_TOKEN
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         grid_thw = video_inputs["video_grid_thw"][video_idx]
         grid_t = int(grid_thw[0])
@@ -1302,4 +1299,5 @@ __all__ = [
     "MiniMaxM3VLProcessor",
     "MiniMaxM3VLTextModel",
     "MiniMaxM3VLVisionModel",
+    "MiniMaxM3VLImageProcessor",
 ]

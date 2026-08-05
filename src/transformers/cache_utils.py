@@ -860,7 +860,7 @@ class HQQQuantizedLayer(QuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compileable
+    # All shapes are static by essence in a LinearAttention layer, so it is compilable
     is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
@@ -1055,7 +1055,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
 
 class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
-    # The dynamic Attention part makes it non-compileable
+    # The dynamic Attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, number_of_states: int = 1, **kwargs):
@@ -1094,7 +1094,7 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
 
 
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
-    # The dynamic sliding attention part makes it non-compileable
+    # The dynamic sliding attention part makes it non-compilable
     is_compileable = False
 
     def __init__(self, sliding_window: int, number_of_states: int = 1, **kwargs):
@@ -1189,13 +1189,18 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
-    "moe": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
+    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
+    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
+    # we don't need
+    "moe": LinearAttentionLayer,
+    "mlp": LinearAttentionLayer,
 }
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
@@ -1205,13 +1210,18 @@ STATIC_LAYER_TYPE_MAPPING = {
     "chunked_attention": StaticSlidingWindowLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
-    "moe": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
+    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
+    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
+    # we don't need
+    "moe": LinearAttentionLayer,
+    "mlp": LinearAttentionLayer,
 }
 
 
@@ -1465,7 +1475,7 @@ class Cache:
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
         Returns the maximum length of the cache. If `layer_idx` is not provided (default), this returns the maximum
-        accross all layers. Otherwise, return the maximum supported value for the given layer.
+        across all layers. Otherwise, return the maximum supported value for the given layer.
         A value of `-1` means no maximum, or undefined maximum, e.g. for dynamic attention layers that can grow indefinitely,
         or linear attention layer that do not have a sequence length dimension.
         """

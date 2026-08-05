@@ -649,7 +649,7 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
             perplexity = self._compute_perplexity(codevector_soft_dist)
         else:
             # take argmax in non-differentiable way
-            # comptute hard codevector distribution (one hot)
+            # compute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
             codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0

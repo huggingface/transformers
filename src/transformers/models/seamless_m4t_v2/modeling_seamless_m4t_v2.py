@@ -786,7 +786,7 @@ class SeamlessM4Tv2SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -3905,7 +3905,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 If `False`, will only returns the text tokens and won't generate speech.
 
             kwargs (*optional*):
-                Remaining dictioy of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
                 arguments are of two types:
 
                     - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,

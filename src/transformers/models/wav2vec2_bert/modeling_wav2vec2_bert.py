@@ -49,7 +49,7 @@ class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
 
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         # Ignore copy
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
@@ -79,7 +79,7 @@ class Wav2Vec2BertRelPositionalEmbedding(nn.Module):
         super().__init__()
         self.max_len = config.max_source_positions
         self.d_model = config.hidden_size
-        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
+        self.pe = nn.Buffer(self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
     def extend_pe(self, x, pe=None):
         # Reset the positional encodings

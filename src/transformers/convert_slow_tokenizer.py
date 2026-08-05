@@ -18,6 +18,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import os
 import warnings
 from collections.abc import Collection
 
@@ -25,6 +26,7 @@ from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
+from .integrations.mistral.constants import is_tekken_vocab_filename
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -2056,12 +2058,14 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
-    elif transformer_tokenizer.vocab_file.endswith("tekken.json"):
+
+    vocab_file = transformer_tokenizer.vocab_file
+    if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and is_tekken_vocab_filename(vocab_file):
         from .integrations.mistral.tokenizer import MistralConverter
 
         transformer_tokenizer.original_tokenizer = transformer_tokenizer
         logger.info("Converting from Mistral tekken.json")
-        return MistralConverter(transformer_tokenizer.vocab_file).converted()
+        return MistralConverter(vocab_file).converted()
     else:
         try:
             logger.info("Converting from Tiktoken")

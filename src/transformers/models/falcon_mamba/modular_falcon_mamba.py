@@ -129,8 +129,8 @@ class FalconMambaMixer(MambaMixer):
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx)
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
-        self.register_buffer("b_c_rms", torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
-        self.register_buffer("dt_rms", torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
+        self.b_c_rms = nn.Buffer(torch.ones(self.ssm_state_size, requires_grad=False), persistent=False)
+        self.dt_rms = nn.Buffer(torch.ones(self.intermediate_size, requires_grad=False), persistent=False)
         self.rms_eps = config.mixer_rms_eps
 
     @torch.no_grad()
@@ -173,7 +173,7 @@ class FalconMambaMixer(MambaMixer):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            return falcon_mamba_inner_fn(
+            return mamba_inner_fn(  # noqa
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,

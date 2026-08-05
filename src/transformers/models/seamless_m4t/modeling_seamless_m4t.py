@@ -287,7 +287,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
         base = config.rotary_embedding_base
 
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
+        self.inv_freq = nn.Buffer(inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
@@ -318,7 +318,7 @@ class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
         super().__init__()
         self.max_len = config.max_source_positions
         self.d_model = config.hidden_size
-        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
+        self.pe = nn.Buffer(self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
     def extend_pe(self, x, pe=None):
         # Reset the positional encodings
@@ -902,7 +902,7 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
