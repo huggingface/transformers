@@ -170,11 +170,7 @@ class Gemma3nAudioRelativePositionEmbedding(nn.Module):
         num_timescales = self.channels // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
-        self.register_buffer(
-            "inv_timescales",
-            inv_timescales.float().unsqueeze(0).unsqueeze(0),
-            persistent=False,
-        )
+        self.inv_timescales = nn.Buffer(inv_timescales.float().unsqueeze(0).unsqueeze(0), persistent=False)
 
     def _get_timing_signal_1d_pos(self, position: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
         position = position.float().unsqueeze(-1)
@@ -346,16 +342,12 @@ class Gemma3nAudioAttention(nn.Module):
 
         q_scale = self.head_dim**-0.5
         r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
-        self.register_buffer("q_scale", (q_scale * r_softplus_0).clone().detach(), persistent=False)
+        self.q_scale = nn.Buffer((q_scale * r_softplus_0).clone().detach(), persistent=False)
 
         local_causal_valid_mask = self.create_local_causal_valid_mask()
-        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
+        self.local_causal_valid_mask = nn.Buffer(local_causal_valid_mask, persistent=False)
 
-        self.register_buffer(
-            "softcap",
-            torch.tensor(self.attention_logits_soft_cap).float(),
-            persistent=False,
-        )
+        self.softcap = nn.Buffer(torch.tensor(self.attention_logits_soft_cap).float(), persistent=False)
 
     def create_local_causal_valid_mask(self):
         lower_causal_mask = torch.tril(
@@ -806,7 +798,7 @@ class Gemma3nAudioConformerAttention(nn.Module):
         super().__init__()
         self.config = config
         self.post_in_features = self.config.hidden_size
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.pre_attn_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.attn = Gemma3nAudioAttention(config)
         self.post = nn.Linear(self.post_in_features, self.config.hidden_size, bias=False)
@@ -834,7 +826,7 @@ class Gemma3nAudioConformerFeedForward(nn.Module):
         super().__init__()
         self.config = config
 
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
 
         self.pre_layer_norm = Gemma3nRMSNorm(self.config.hidden_size)
         self.ffw_layer_1 = nn.Linear(self.config.hidden_size, self.config.hidden_size * 4, bias=False)
@@ -870,7 +862,7 @@ class Gemma3nAudioConformerLightConv1d(nn.Module):
             groups=self.config.hidden_size,  # Depthwise
             bias=False,
         )
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.conv_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.linear_end = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
 
@@ -906,7 +898,7 @@ class Gemma3nAudioConformerBlock(nn.Module):
         self.attention = Gemma3nAudioConformerAttention(self.config)
         self.lconv1d = Gemma3nAudioConformerLightConv1d(self.config)
         self.ffw_layer_end = Gemma3nAudioConformerFeedForward(self.config)
-        self.register_buffer("gradient_clipping", torch.tensor(self.config.gradient_clipping), persistent=False)
+        self.gradient_clipping = nn.Buffer(torch.tensor(self.config.gradient_clipping), persistent=False)
         self.norm = Gemma3nRMSNorm(self.config.hidden_size)
 
     def forward(self, audio_encodings: torch.Tensor, audio_mel_mask: torch.BoolTensor) -> torch.Tensor:
@@ -932,7 +924,7 @@ class Gemma3nTextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -1014,7 +1006,7 @@ class Gemma3nTextAltUp(nn.Module):
         self.prediction_coefs = nn.Linear(self.config.altup_num_inputs, self.config.altup_num_inputs**2, bias=False)
         self.modality_router = nn.Linear(self.config.hidden_size, self.config.altup_num_inputs, bias=False)
         self.router_norm = Gemma3nRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
-        self.register_buffer("router_input_scale", torch.tensor(self.config.hidden_size**-1.0), persistent=False)
+        self.router_input_scale = nn.Buffer(torch.tensor(self.config.hidden_size**-1.0), persistent=False)
 
     def compute_router_modalities(self, x: torch.Tensor) -> torch.Tensor:
         router_inputs = self.router_norm(x) * self.router_input_scale
@@ -1535,8 +1527,6 @@ class Gemma3nAudioEncoder(Gemma3nPreTrainedModel):
 
 
 class Gemma3nRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Gemma3nTextConfig, device=None):
         super().__init__()
@@ -1555,8 +1545,8 @@ class Gemma3nRotaryEmbedding(nn.Module):
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -1656,8 +1646,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             [nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)]
         )
 
-        self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
-        self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)
+        self.per_layer_projection_scale = nn.Buffer(torch.tensor(self.hidden_size**-0.5), persistent=False)
+        self.per_layer_input_scale = nn.Buffer(torch.rsqrt(torch.tensor(2.0)), persistent=False)
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
@@ -2191,9 +2181,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
         r"""
-        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(

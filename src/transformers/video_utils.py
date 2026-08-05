@@ -652,7 +652,7 @@ def load_video(
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
-            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            If not provided, simple uniform sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
             The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
             indices at which the video should be sampled. For example:
 

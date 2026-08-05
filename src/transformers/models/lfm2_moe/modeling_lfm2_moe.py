@@ -65,8 +65,6 @@ class Lfm2MoeRMSNorm(nn.Module):
 
 
 class Lfm2MoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Lfm2MoeConfig, device=None):
         super().__init__()
@@ -81,8 +79,8 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -207,7 +205,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         self.gate = Lfm2MoeTopKRouter(config)
         self.use_expert_bias = config.use_expert_bias
         if self.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
+            self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
