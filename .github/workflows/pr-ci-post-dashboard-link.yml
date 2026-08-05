@@ -40,24 +40,11 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download mlinter findings artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${{ github.event.workflow_run.id }}/artifacts" \
-            --jq '.artifacts[] | select(.name == "mlinter-findings") | .id' \
-            > artifact_id.txt
-          ARTIFACT_ID=$(cat artifact_id.txt)
-          if [ -z "$ARTIFACT_ID" ]; then
-            echo "No mlinter-findings artifact found, skipping."
-            exit 0
-          fi
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
-            > mlinter-findings.zip
-          unzip -o mlinter-findings.zip
+        uses: actions/download-artifact@v4
+        with:
+          name: mlinter-findings
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show mlinter findings
         run: |
