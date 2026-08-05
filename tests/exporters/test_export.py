@@ -731,9 +731,8 @@ class ExportTesterMixin:
         assert during tracing would otherwise poison the whole xdist worker's CUDA context).
 
         Returns:
-            `(config, components)`: the full model's init config, and a `{name: (model, inputs)}`
-            mapping (one entry per component). The config is returned separately because components
-            can be decomposed submodels carrying their own sub-configs, not the top-level one.
+            `{name: (model, inputs)}`: one entry per component (a whole model, or decomposed submodels
+            for a multimodal model), each paired with its forward inputs.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -749,8 +748,8 @@ class ExportTesterMixin:
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         if is_multimodal(model):
-            return model.config, decompose_multimodal(model, inputs_dict)
-        return model.config, {"model": (model, inputs_dict)}
+            return decompose_multimodal(model, inputs_dict)
+        return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
@@ -793,7 +792,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            model_config, components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -829,7 +828,7 @@ class ExportTesterMixin:
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            model_config, components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -857,14 +856,14 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
                 continue
 
-            model_config, components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
                     ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model_config
+                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model.config
                     )
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -894,7 +893,7 @@ class ExportTesterMixin:
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
-            model_config, components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -943,8 +942,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         single-token step — see :func:`decompose_for_generation`.
 
         Returns:
-            `(config, components)`: the full model's init config and the `{name: (model, inputs)}`
-            mapping (see `_prepare_export_model_and_inputs`).
+            `{name: (model, inputs)}`: the components mapping (see `_prepare_export_model_and_inputs`).
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -955,7 +953,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
-        return model.config, decompose_for_generation(
+        return decompose_for_generation(
             model, inputs_dict, generation_config=generation_config, multi_token_decode=multi_token_decode
         )
 
@@ -979,7 +977,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             ):
                 continue
-            model_config, components = self._prepare_export_generate_model_and_inputs(
+            components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
@@ -1019,7 +1017,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(
+            components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
@@ -1052,7 +1050,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(
+            components = self._prepare_export_generate_model_and_inputs(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
@@ -1061,7 +1059,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     ov_model = exporter.export(model, inputs, config=config)
                     ov_outputs = _run_openvino_model(
-                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model_config
+                        ov_model, inputs, model_class.__name__ if dynamic else None, name, model.config
                     )
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1088,7 +1086,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
 
-            model_config, components = self._prepare_export_generate_model_and_inputs(
+            components = self._prepare_export_generate_model_and_inputs(
                 model_class,
                 device="cpu",
                 generation_config=generation_config,
