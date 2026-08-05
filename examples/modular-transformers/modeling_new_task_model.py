@@ -166,7 +166,7 @@ def create_causal_mask_mapping(
 
     if is_first_iteration or not kwargs.get("use_cache", True):
         if token_type_ids is not None:
-            # The logic bellow was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
+            # The logic below was originally written for Gemma3, where `token_type_ids` is reversed. Let's reverse
             # it to then use exactly the same logic.
             token_type_ids = 1 - token_type_ids
         else:

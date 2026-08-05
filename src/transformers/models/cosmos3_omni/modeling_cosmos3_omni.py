@@ -315,11 +315,11 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -632,44 +632,6 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
             rope_deltas=outputs.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
@@ -733,19 +695,19 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
             vision_start_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             video_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:

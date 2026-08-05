@@ -37,7 +37,6 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
@@ -288,11 +287,11 @@ class Glm46VModel(Glm46VPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -366,7 +365,6 @@ class Glm46VModel(Glm46VPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -481,7 +479,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -566,44 +563,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             rope_deltas=outputs.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
@@ -664,19 +623,19 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:

@@ -140,7 +140,7 @@ class BaseVideoProcessor(TorchvisionBackend):
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:
@@ -589,7 +589,7 @@ class BaseVideoProcessor(TorchvisionBackend):
 
         # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
         # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
         video_processor_dict = None
         if resolved_processor_file is not None:
             processor_dict = safe_load_json_file(resolved_processor_file)

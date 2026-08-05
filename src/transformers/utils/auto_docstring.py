@@ -2546,7 +2546,7 @@ class ClassDocstring:
     """
 
     TextModel = r"""
-    The bare {model_name} Text Model outputting raw hidden-states without any specific head on to.
+    The bare {model_name} Text Model outputting raw hidden-states without any specific head on top.
     """
 
     ForSequenceClassification = r"""
@@ -3536,7 +3536,7 @@ def _is_processor_class(func, parent_class):
     filename = os.path.basename(source_file)
 
     # Multimodal processors are implemented in processing_*.py modules
-    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    # (single-modality processors use image_processing_*, video_processing_*, etc.).
     return filename.startswith("processing_") and filename.endswith(".py")
 
 
