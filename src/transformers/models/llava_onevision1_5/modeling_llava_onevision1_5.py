@@ -856,14 +856,11 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
@@ -1102,7 +1099,6 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
 
 __all__ = [
     "LlavaOnevision1_5PreTrainedModel",
-    "LlavaOnevision1_5TextPreTrainedModel",
     "LlavaOnevision1_5VisionModel",
     "LlavaOnevision1_5TextModel",
     "LlavaOnevision1_5Model",

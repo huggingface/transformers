@@ -24,10 +24,6 @@ from ...utils import auto_docstring
 @strict
 class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the RICE vision encoder used by
-    [`LlavaOnevision1_5ForConditionalGeneration`]. It is used to instantiate the vision tower according to the
-    specified arguments, defining the model architecture.
-
     depth (`int`, *optional*, defaults to 24):
         Number of transformer blocks in the vision encoder.
     hidden_size (`int`, *optional*, defaults to 1024):
@@ -50,8 +46,6 @@ class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
         The output hidden size of the vision encoder, matching the text model hidden size.
     layer_norm_eps (`float`, *optional*, defaults to 1e-05):
         The epsilon used by the vision encoder layer normalization layers.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "llava_onevision1_5_vision"
@@ -75,9 +69,6 @@ class LlavaOnevision1_5VisionConfig(PreTrainedConfig):
 @strict
 class LlavaOnevision1_5TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the Qwen3-based text backbone used by
-    [`LlavaOnevision1_5ForConditionalGeneration`].
-
     Example:
 
     ```python
@@ -138,10 +129,6 @@ class LlavaOnevision1_5TextConfig(PreTrainedConfig):
 @strict
 class LlavaOnevision1_5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaOnevision1_5ForConditionalGeneration`]. It is
-    used to instantiate a LLaVA-OneVision-1.5 model according to the specified arguments, defining the model
-    architecture.
-
     Example:
 
     ```python
