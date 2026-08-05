@@ -109,8 +109,8 @@ class DeepseekVLHybridModelTester:
 
     def get_config(self):
         return DeepseekVLHybridConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.copy(),
+            vision_config=self.vision_config.copy(),
             high_res_vision_config=self.high_res_vision_config,
             image_token_id=self.image_token_id,
         )
@@ -138,6 +138,7 @@ class DeepseekVLHybridModelTester:
             ]
         )
         # fill image_tokens
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values, high_res_pixel_values
