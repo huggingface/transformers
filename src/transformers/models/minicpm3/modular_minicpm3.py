@@ -118,6 +118,8 @@ class MiniCPM3Config(LlamaConfig):
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
+        # Also tells shared code this is an MLA config (key and value head dims differ)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # When explicitly set to `None`, these collapse to no-op scalings (e.g. for a randomly
         # initialised tiny model); the class defaults otherwise match `openbmb/MiniCPM3-4B`.
         if self.v_head_dim is None:
