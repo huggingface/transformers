@@ -253,8 +253,8 @@ def pytest_configure(config):
         # `snapshot_download` as a whole so the entire retry uses a writable cache_dir,
         # avoiding the mismatch where individual file downloads land in tmp but
         # snapshot_download resolves the snapshot folder from the original cache_dir.
-        import huggingface_hub.file_download as _file_download_mod
         import huggingface_hub._snapshot_download as _snapshot_download_mod
+        import huggingface_hub.file_download as _file_download_mod
 
         if getattr(_file_download_mod, "hf_hub_download", None) is _original_hf_hub_download:
             _file_download_mod.hf_hub_download = _wrapped_hf_hub_download
