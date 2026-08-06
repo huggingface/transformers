@@ -759,17 +759,18 @@ class OnyxTextDecoderLayer(Gemma2DecoderLayer):
 
 class OnyxPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": OnyxTextDecoderLayer,
-        "attentions": OnyxTextAttention,
-    }
+    _can_record_outputs = None  # set on children directly as they are different for text and vision
 
-    def _init_weights(self, module):
+    def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!
         raise NotImplementedError("No need to inherit, we can use the base one")
 
 
 class OnyxTextModel(Gemma2Model):
     config: OnyxTextConfig
+    _can_record_outputs = {
+        "hidden_states": OnyxTextDecoderLayer,
+        "attentions": OnyxTextAttention,
+    }
 
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)

@@ -432,15 +432,16 @@ class OnyxPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": OnyxTextDecoderLayer,
-        "attentions": OnyxTextAttention,
-    }
+    _can_record_outputs = None  # set on children directly as they are different for text and vision
 
 
 @auto_docstring
 class OnyxTextModel(OnyxPreTrainedModel):
     config: OnyxTextConfig
+    _can_record_outputs = {
+        "hidden_states": OnyxTextDecoderLayer,
+        "attentions": OnyxTextAttention,
+    }
 
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)
@@ -1207,14 +1208,14 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxCausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
