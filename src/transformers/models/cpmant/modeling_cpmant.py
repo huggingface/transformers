@@ -696,11 +696,11 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         )
         self.post_init()
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        # CpmAnt prepends the soft prompt to `input_ids` and rebuilds the attention mask and the
-        # position bias over the whole sequence on every forward, dropping the already cached prefix
-        # internally. It therefore always needs the full `input_ids`, never only the new tokens.
-        kwargs.pop("next_sequence_length", None)
+    def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
+        # `next_sequence_length` is intentionally ignored. CpmAnt prepends the soft prompt to
+        # `input_ids` and rebuilds the attention mask and the position bias over the whole sequence
+        # on every forward, discarding the already cached prefix itself. It therefore always needs
+        # the full `input_ids` and cannot be fed only the newly generated tokens.
         return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
