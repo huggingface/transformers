@@ -204,7 +204,7 @@ class AXK2Indexer(nn.Module):
     `past_key_values.update_indexer()`.
     """
 
-    def __init__(self, config: "AXK2Config", layer_idx: int):
+    def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
