@@ -1619,9 +1619,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
-        # The last -1 is to remove the added block_mask token that we append to current input_ids
-        self.cache.crop(1 - n_last_matches - 1)
-
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated token
