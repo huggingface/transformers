@@ -28,7 +28,7 @@ from ...utils import auto_docstring
     (`BlinkDL/RWKV-LM`) rather than a renamed variant, so converting a native
     `.pth` checkpoint is close to a rename-free copy.
     """,
-    checkpoint="Hakureirm/rwkv7-168m-pile-hf",
+    checkpoint="RWKV/RWKV7-1.5B-20260805",
 )
 @strict
 class Rwkv7Config(PreTrainedConfig):
