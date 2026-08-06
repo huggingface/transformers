@@ -139,8 +139,6 @@ _import_structure = {
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
-        "dequantize",
-        "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
@@ -169,7 +167,6 @@ else:
     ]
 
 _import_structure["tensor_parallel"] = [
-    "shard_and_distribute_module",
     "ALL_PARALLEL_STYLES",
     "translate_to_torch_parallel_style",
 ]
@@ -294,8 +291,6 @@ if TYPE_CHECKING:
     )
     from .mxfp4 import (
         Mxfp4GptOssExperts,
-        dequantize,
-        load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
@@ -318,7 +313,6 @@ if TYPE_CHECKING:
     from .flex_attention import make_flex_block_causal_mask
     from .tensor_parallel import (
         ALL_PARALLEL_STYLES,
-        shard_and_distribute_module,
         translate_to_torch_parallel_style,
     )
 else:
