@@ -785,7 +785,7 @@ class OnyxTextModel(Gemma2Model):
 
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)
-        self.embed_tokens = self.embed_tokens = OnyxTextNormedEmbedding(
+        self.embed_tokens = OnyxTextNormedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
         self.layers = nn.ModuleList(
