@@ -19,7 +19,7 @@ jobs:
   vllm:
     name: Test vLLM integration
     runs-on:
-      group: aws-m8i-l-cache
+      group: aws-m8i-2xl-cache
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
