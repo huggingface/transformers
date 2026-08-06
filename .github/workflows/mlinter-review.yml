@@ -1,0 +1,52 @@
+name: Post Model Lint Review
+
+on:
+  workflow_run:
+    workflows: ["Model Lint"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  post-review:
+    name: Post the linter's first pass
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Download findings from the lint run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name mlinter-findings --dir . || {
+            echo "No findings artifact; nothing to post."
+            exit 0
+          }
+          ls -la
+
+      # Fetched by ref rather than checked out, so no PR code is ever placed in this workspace.
+      - name: Download the review script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRIPT_REF: ${{ github.workflow_sha }}
+        run: |
+          gh api \
+            -H "Accept: application/vnd.github.raw" \
+            "/repos/${GITHUB_REPOSITORY}/contents/utils/post_mlinter_review.py?ref=${SCRIPT_REF}" \
+            > post_mlinter_review.py
+
+      - name: Post the review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f mlinter-findings.json ]; then
+            echo "No findings file; nothing to post."
+            exit 0
+          fi
+          PR_NUMBER="$(cat mlinter-pr-number.txt 2>/dev/null || true)"
+          export PR_NUMBER
+          python3 post_mlinter_review.py
