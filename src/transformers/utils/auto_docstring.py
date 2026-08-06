@@ -2172,6 +2172,115 @@ class ModelArgs:
     }
 
 
+class ModelForArgs:
+    """Task-specific overrides for `ModelArgs`."""
+
+    class ForSequenceClassification:
+        labels = {
+            "description": """
+    Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForTokenClassification:
+        labels = {
+            "description": """
+    Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMultipleChoice:
+        labels = {
+            "description": """
+    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+    `input_ids` above)
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMaskedLM:
+        labels = {
+            "description": """
+    Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForImageClassification:
+        labels = {
+            "description": """
+    Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    ForVideoClassification = ForImageClassification
+
+    class ForSemanticSegmentation:
+        labels = {
+            "description": """
+    Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForDepthEstimation:
+        labels = {
+            "description": """
+    Ground truth depth estimation maps for computing the loss.
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForObjectDetection:
+        labels = {
+            "description": """
+    Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+    following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+    respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+    in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+    """,
+            "shape": "of len `(batch_size,)`",
+            "type": "list[Dict]",
+        }
+
+    ForInstanceSegmentation = ForObjectDetection
+
+
+# Longest first, so that short suffixes don't mask longer ones.
+MODEL_FOR_ARGS_SUFFIXES = sorted(
+    (name for name in vars(ModelForArgs) if name.startswith("For")), key=len, reverse=True
+)
+
+
+class _EmptyArgs:
+    pass
+
+
+def get_model_for_args(class_name: str) -> type:
+    for suffix in MODEL_FOR_ARGS_SUFFIXES:
+        if class_name.endswith(suffix):
+            return getattr(ModelForArgs, suffix)
+    return _EmptyArgs
+
+
 class ModelOutputArgs:
     last_hidden_state = {
         "description": """
@@ -3280,7 +3389,8 @@ def _process_regular_parameters(
         if is_processor:
             source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
         else:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
+            model_for_args = get_model_for_args(class_name)
+            source_args_dict = get_args_doc_from_source([ModelArgs, model_for_args, ImageProcessorArgs])
 
     missing_args = {}
 
