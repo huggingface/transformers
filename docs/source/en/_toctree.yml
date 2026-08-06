@@ -126,6 +126,8 @@
       title: torch.compile
     - local: exporters
       title: Exporters
+    - local: exporters_extend
+      title: Extending the exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -587,8 +589,6 @@
         title: DeepSeek-V3.2
       - local: model_doc/deepseek_v4
         title: DeepSeek-V4
-      - local: model_doc/dialogpt
-        title: DialoGPT
       - local: model_doc/diffllama
         title: DiffLlama
       - local: model_doc/distilbert
@@ -685,6 +685,10 @@
         title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
+      - local: model_doc/granitemoe_swa
+        title: GraniteMoeSWA
+      - local: model_doc/granite_swa
+        title: GraniteSWA
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
@@ -749,8 +753,6 @@
         title: MBart and MBart-50
       - local: model_doc/megatron-bert
         title: MegatronBERT
-      - local: model_doc/megatron_gpt2
-        title: MegatronGPT2
       - local: model_doc/mellum
         title: Mellum
       - local: model_doc/mimo_v2_flash
@@ -973,8 +975,6 @@
         title: DINOv2 with Registers
       - local: model_doc/dinov3
         title: DINOv3
-      - local: model_doc/dit
-        title: DiT
       - local: model_doc/dpt
         title: DPT
       - local: model_doc/efficientloftr

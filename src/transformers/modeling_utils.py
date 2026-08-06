@@ -964,7 +964,7 @@ class ModuleUtilsMixin:
                     torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
                     causal_mask,
                 ],
-                axis=-1,
+                dim=-1,
             )
 
         extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
@@ -1756,16 +1756,6 @@ class PreTrainedModel(
                 ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
             )
 
-        if (
-            torch.version.hip is not None
-            and torch.cuda.device_count() > 1
-            and version.parse(torch.__version__) < version.parse("2.4.1")
-        ):
-            logger.warning_once(
-                "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
-            )
-            torch.backends.cuda.enable_flash_sdp(False)
-
         return True
 
     def _grouped_mm_can_dispatch(self) -> bool:
@@ -2000,7 +1990,7 @@ class PreTrainedModel(
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. Inspects the module
         source as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_attn_implementation_cached_value", None)
@@ -2021,7 +2011,7 @@ class PreTrainedModel(
         # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
         else:
             can_set = True
-        # Succesful read of source code -> cache the result
+        # Successful read of source code -> cache the result
         cls._can_set_attn_implementation_cached_value = can_set
         return cls._can_set_attn_implementation_cached_value
 
@@ -2029,7 +2019,7 @@ class PreTrainedModel(
     def _can_set_experts_implementation(cls) -> bool:
         """Detect whether the class supports setting its experts implementation dynamically. Inspects the module source
         as a heuristic, which avoids maintaining yet another property flag. Instead, the flag is set dynamically
-        on the first succesful call.
+        on the first successful call.
         """
         # Early return if there is a cached value
         cached_value = getattr(cls, "_can_set_experts_implementation_cached_value", None)
@@ -3849,7 +3839,7 @@ class PreTrainedModel(
             if kernel_config is not None:
                 if not isinstance(kernel_config, KernelConfig):
                     raise ValueError(
-                        f"Expeced `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
+                        f"Expected `kernel_config` to be of type `KernelConfig` but got {type(kernel_config)}"
                     )
 
                 # Since kernel_config is a correct value, set it as an attribute of the model so it can be used.
