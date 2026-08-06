@@ -146,7 +146,7 @@ class PagedAttentionCache:
             "num_key_value_heads": num_key_value_heads,
             "config": config,
             "cache_dtype": self.dtype,
-            "page_size": continuous_batching_config.fa_page_size,
+            "page_size": continuous_batching_config.page_size,
             "allow_block_sharing": continuous_batching_config.allow_block_sharing,
             # "is_tp_enabled": distributed_helper.tp_size > 1,
         }
@@ -168,7 +168,7 @@ class PagedAttentionCache:
         )
         # Bytes of one full-attention page, used to convert the num_pages config attribute to and from bytes
         bytes_per_fa_page = FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.fa_page_size
+            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
         )
 
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(

@@ -288,7 +288,7 @@ class ModelRunner:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = 1
-            max_kv_read = self.cb_config.fa_page_size
+            max_kv_read = self.cb_config.page_size
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
         else:
             num_requests = 1

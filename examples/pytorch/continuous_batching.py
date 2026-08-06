@@ -271,7 +271,7 @@ if __name__ == "__main__":
         num_return_sequences=args.num_return_sequences,
     )
     cb_config = ContinuousBatchingConfig(
-        fa_page_size=args.page_size,
+        page_size=args.page_size,
         num_pages=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         max_blocks_per_request=args.block_table,
