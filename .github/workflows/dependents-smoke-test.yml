@@ -75,6 +75,7 @@ jobs:
       - name: Patch vLLM gpu_memory_utilization for CPU
         run: |
           # Lower hardcoded value in test_initialization.py
+          # Needed by: test_initialization.py::test_can_initialize_small_subset[*]
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.5/g' vllm/tests/models/test_initialization.py
           # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.5/g' vllm/vllm/config/cache.py
