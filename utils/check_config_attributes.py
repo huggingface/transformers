@@ -58,7 +58,13 @@ SPECIAL_CASES_TO_ALLOW = {
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
-    "Step3p7TextConfig": ["n_routed_experts", "num_sliding_attention_heads"],
+    "Step3p7TextConfig": [
+        "n_routed_experts",
+        "num_sliding_attention_heads",
+        # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+        "mtp_layer_types",
+        "mtp_mlp_layer_types",
+    ],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
