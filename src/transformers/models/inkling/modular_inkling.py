@@ -26,7 +26,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -51,7 +51,7 @@ from ..gemma3.modeling_gemma3 import (
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..mixtral.modeling_mixtral import MixtralExperts
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 
 
 logger = logging.get_logger(__name__)
@@ -531,49 +531,6 @@ class InklingMoE(nn.Module):
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
-
-
-@use_kernel_forward_from_hub("causal_conv1d_update")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@use_kernel_forward_from_hub("causal_conv1d_fn")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
