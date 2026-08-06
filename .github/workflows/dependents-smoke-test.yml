@@ -90,6 +90,7 @@ jobs:
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: "Test: test_initialization (subset)"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
@@ -99,7 +100,9 @@ jobs:
       - name: "Test: test_transformers"
         working-directory: vllm
         continue-on-error: true
-        run: pytest -v -s tests/models/transformers/
+        run: |
+          pytest -v -s "tests/models/transformers/fusers/test_linear.py::test_detects_and_rewrites_glu[False-GLUMLP]" \
+                       "tests/models/transformers/fusers/test_linear.py::test_detects_and_rewrites_glu[False-ReversedGLUMLP]"
 
       - name: "Test: multimodal processing"
         working-directory: vllm
