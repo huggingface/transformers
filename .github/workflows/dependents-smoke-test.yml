@@ -68,7 +68,7 @@ jobs:
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
-          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib
 
       - name: Pip freeze
