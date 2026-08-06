@@ -214,8 +214,7 @@ class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class AXK2Indexer(DeepseekV32Indexer):
-    def __init__(self, config: AXK2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
+    pass
 
 
 class AXK2TopkRouter(DeepseekV32TopkRouter):
