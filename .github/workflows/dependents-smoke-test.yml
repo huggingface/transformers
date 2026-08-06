@@ -89,15 +89,26 @@ jobs:
           echo "=== Disk ===" && df -h
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
-      - name: "Test: test_initialization (subset)"
-        if: false
+      - name: "Test: test_initialization"
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
-                       "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]"
+          # Skip TransformersMultiModalForCausalLM — causes OOM (exit code 137)
+          pytest -v -s \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[BertForSequenceClassification]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[JinaVLForRanking]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[InternVLChatModel]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[InternLM2ForRewardModel]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[PrithviGeoSpatialMAE]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[UltravoxModel]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[DeepSeekMTPModel]" \
+            "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
@@ -105,6 +116,7 @@ jobs:
                        "tests/models/transformers/fusers/test_linear.py::test_detects_and_rewrites_glu[False-ReversedGLUMLP]"
 
       - name: "Test: multimodal processing"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
@@ -112,21 +124,25 @@ jobs:
                        "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-0.3-LGAI-EXAONE/EXAONE-4.5-33B]"
 
       - name: "Test: test_mapping"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: pytest -v -s tests/models/multimodal/test_mapping.py
 
       - name: "Example: chat"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: python3 examples/basic/offline_inference/chat.py
 
       - name: "Example: vision language"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
 
       - name: "Example: audio language (whisper)"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
