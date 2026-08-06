@@ -57,16 +57,12 @@ def get_vision_cu_seqlens(
     """
     if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
         return cu_seqlens
-    # Force CPU computation — cu_seqlens is tiny control-flow data, avoid D2H syncs
-    device = grid_thw.device
-    grid_thw = grid_thw.cpu()
     dtype = grid_thw.dtype if torch.jit.is_tracing() else torch.int32
     if merge_temporal:
         seqlens = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
     else:
         seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
-    cu_seqlens = F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
-    return cu_seqlens.to(device)
+    return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
 
 
 def get_vision_attention_seqlens(
@@ -109,14 +105,11 @@ def get_vision_position_ids(
         return position_ids
 
     device = grid_thw.device
-    # Move to CPU to avoid D2H syncs from .tolist()
-    grid_thw_cpu = grid_thw.cpu()
     if isinstance(spatial_merge_size, int):
-        spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw_cpu))
-    spatial_merge_size_cpu = spatial_merge_size.cpu() if isinstance(spatial_merge_size, torch.Tensor) else spatial_merge_size
+        spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     position_ids = []
-    for (t, h, w), merge_size in zip(grid_thw_cpu.tolist(), spatial_merge_size_cpu.tolist() if isinstance(spatial_merge_size_cpu, torch.Tensor) else [spatial_merge_size_cpu] * len(grid_thw_cpu)):
+    for (t, h, w), merge_size in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
         hpos_ids, wpos_ids = torch.meshgrid(
             torch.arange(h, device=device),
             torch.arange(w, device=device),

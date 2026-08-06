@@ -1179,6 +1179,12 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        if not is_flash_attention_requested(self.config):
+            # Non-flash attention splits the packed sequence with Python sizes derived from
+            # `cu_seqlens.tolist()` in every block. `cu_seqlens` is a tiny control-flow tensor
+            # computed from host-side `grid_thw` metadata; keeping it on CPU avoids per-layer
+            # device-to-host syncs. FlashAttention still gets the GPU tensor below.
+            cu_seqlens = cu_seqlens.cpu()
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)

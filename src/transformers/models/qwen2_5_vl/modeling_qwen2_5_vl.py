@@ -267,12 +267,9 @@ class Qwen2_5_VLVisionAttention(nn.Module):
             )
         else:
             # Other implementations: Process each chunk separately
-            # Move cu_seqlens to CPU to avoid D2H sync from .tolist()
-            cu_seqlens_cpu = cu_seqlens.cpu()
-            lengths = cu_seqlens_cpu[1:] - cu_seqlens_cpu[:-1]
-            split_sizes = lengths.tolist()
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
             splits = [
-                torch.split(tensor, split_sizes, dim=2) for tensor in (query_states, key_states, value_states)
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
 
             attn_outputs = [
@@ -435,6 +432,14 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
+        if not is_flash_attention_requested(self.config):
+            # Non-flash attention splits the packed sequence with Python sizes derived from
+            # `cu_seqlens.tolist()` in every block. These are tiny control-flow tensors; keep
+            # them on CPU so those conversions never trigger device-to-host syncs (grid_thw
+            # itself is host-side metadata from the processor). FlashAttention still gets the
+            # GPU tensors below.
+            cu_seqlens = cu_seqlens.cpu()
+            cu_window_seqlens = cu_window_seqlens.cpu()
 
         hidden_states = self.patch_embed(hidden_states)
 
@@ -933,11 +938,11 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 Positional indices for temporal, height, and width dimensions,
                 flattened into sequence form and offset by `start_position`.
         """
-        # Move to CPU to avoid D2H syncs from .item() on GPU tensors
-        grid_thw_cpu = grid_thw.cpu() if grid_thw.is_cuda else grid_thw
-        llm_grid_t = int(grid_thw_cpu[0]) // temp_merge_size
-        llm_grid_h = int(grid_thw_cpu[1]) // spatial_merge_size
-        llm_grid_w = int(grid_thw_cpu[2]) // spatial_merge_size
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
 
         position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
         position_height = torch.arange(llm_grid_h, device=device) + start_position
@@ -1002,23 +1007,24 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
         tokens_per_second = self.config.vision_config.tokens_per_second
-
-        # Move small control-flow tensors to CPU to avoid D2H syncs during Python loop
         device = input_ids.device
-        input_ids_cpu = input_ids.cpu()
-        mm_token_type_ids_cpu = mm_token_type_ids.cpu()
-        if image_grid_thw is not None:
-            image_grid_thw = image_grid_thw.cpu()
-        if video_grid_thw is not None:
-            video_grid_thw = video_grid_thw.cpu()
-        if second_per_grid_ts is not None:
-            second_per_grid_ts = second_per_grid_ts.cpu()
-        if attention_mask is not None:
-            attention_mask_cpu = attention_mask.cpu()
-        else:
-            attention_mask_cpu = None
-
         batch_size, seq_length = input_ids.shape
+
+        # These tensors are small control-flow data consumed by the Python loops below. Moving
+        # them to CPU once (they originate from the processor as host metadata) avoids per-batch
+        # device-to-host syncs from `.tolist()` / `.item()`. `input_ids` itself is never read —
+        # only its length is used — so it stays on device.
+        mm_token_type_ids = mm_token_type_ids.cpu()
+        attention_mask_cpu = attention_mask.cpu() if attention_mask is not None else None
+        image_grid_thw = image_grid_thw.cpu() if image_grid_thw is not None else None
+        video_grid_thw = video_grid_thw.cpu() if video_grid_thw is not None else None
+        if second_per_grid_ts is not None:
+            second_per_grid_ts = iter(
+                second_per_grid_ts.cpu() if isinstance(second_per_grid_ts, torch.Tensor) else second_per_grid_ts
+            )
+        else:
+            second_per_grid_ts = iter([1] * seq_length)
+
         position_ids = torch.zeros(3, batch_size, seq_length, dtype=input_ids.dtype, device=device)
         mrope_position_deltas = torch.zeros(batch_size, 1, dtype=input_ids.dtype, device=device)
 
@@ -1026,31 +1032,29 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             1: iter(image_grid_thw) if image_grid_thw is not None else None,
             2: iter(video_grid_thw) if video_grid_thw is not None else None,
         }
-        second_per_grid_ts_iter = (
-            iter(second_per_grid_ts) if second_per_grid_ts is not None else iter([1] * batch_size)
-        )
+
         for batch_idx in range(batch_size):
-            current_input_ids = input_ids_cpu[batch_idx]
-            input_token_type = mm_token_type_ids_cpu[batch_idx]
+            input_token_type = mm_token_type_ids[batch_idx]
             if attention_mask_cpu is not None:
                 mask = attention_mask_cpu[batch_idx].bool()
-                current_input_ids = current_input_ids[mask]
                 input_token_type = input_token_type[mask]
+                current_len = int(mask.sum())
+            else:
+                current_len = seq_length
 
             if len(input_token_type) == 0:
                 continue
 
-            # Tensor-based groupby: find boundaries where type changes
-            if len(input_token_type) > 1:
-                changes = torch.nonzero(input_token_type[1:] != input_token_type[:-1], as_tuple=False).squeeze(1) + 1
-                boundaries = torch.cat([torch.tensor([0], device=changes.device), changes, torch.tensor([len(input_token_type)], device=changes.device)])
-            else:
-                boundaries = torch.tensor([0, len(input_token_type)], device=input_token_type.device)
-            types = input_token_type[boundaries[:-1]]
+            input_type_group = []
+            for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+                group = list(group)
+                start_index = group[0][0]
+                end_index = group[-1][0] + 1
+                input_type_group.append((key, start_index, end_index))
 
             current_pos = 0
             llm_pos_ids_list = []
-            for modality_type, start_idx, end_idx in zip(types.tolist(), boundaries[:-1].tolist(), boundaries[1:].tolist()):
+            for modality_type, start_idx, end_idx in input_type_group:
                 # text == 0
                 if modality_type == 0:
                     text_len = end_idx - start_idx
@@ -1064,7 +1068,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                     # Only apply temporal scaling for videos; still images have no
                     # temporal dimension to space out (fixes #45325).
                     if modality_type == 2:
-                        time_interval = tokens_per_second * int(next(second_per_grid_ts_iter))
+                        time_interval = tokens_per_second * int(next(second_per_grid_ts))
                     else:
                         time_interval = 1
                     vision_position_ids = self.get_vision_position_ids(
@@ -1073,11 +1077,11 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                     llm_pos_ids_list.append(vision_position_ids)
                     current_pos += max(int(grid_thw[1]), int(grid_thw[2])) // spatial_merge_size
             llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-            if attention_mask_cpu is not None:
+            if attention_mask is not None:
                 position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions
             else:
                 position_ids[:, batch_idx] = llm_positions
-            mrope_position_deltas[batch_idx] = int(llm_positions.max()) + 1 - len(current_input_ids)
+            mrope_position_deltas[batch_idx] = llm_positions.max() + 1 - current_len
         return position_ids, mrope_position_deltas
 
     @accepts_precomputed_kwargs(modality="video")

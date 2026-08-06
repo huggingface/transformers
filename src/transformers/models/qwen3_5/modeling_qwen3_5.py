@@ -1340,25 +1340,37 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
         spatial_merge_size = self.config.vision_config.spatial_merge_size
+        device = input_ids.device
+        batch_size, seq_length = input_ids.shape
 
-        mrope_position_deltas = []
-        position_ids = torch.zeros(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
-        )
+        # These tensors are small control-flow data consumed by the Python loops below. Moving
+        # them to CPU once (they originate from the processor as host metadata) avoids per-batch
+        # device-to-host syncs from `.tolist()` / `.item()`. `input_ids` itself is never read —
+        # only its length is used — so it stays on device.
+        mm_token_type_ids = mm_token_type_ids.cpu()
+        attention_mask_cpu = attention_mask.cpu() if attention_mask is not None else None
+        image_grid_thw = image_grid_thw.cpu() if image_grid_thw is not None else None
+        video_grid_thw = video_grid_thw.cpu() if video_grid_thw is not None else None
+
+        position_ids = torch.zeros(3, batch_size, seq_length, dtype=input_ids.dtype, device=device)
+        mrope_position_deltas = torch.zeros(batch_size, 1, dtype=input_ids.dtype, device=device)
+
         grid_iters = {
             1: iter(image_grid_thw) if image_grid_thw is not None else None,
             2: iter(video_grid_thw) if video_grid_thw is not None else None,
         }
 
-        for batch_idx, current_input_ids in enumerate(input_ids):
+        for batch_idx in range(batch_size):
             input_token_type = mm_token_type_ids[batch_idx]
-            if attention_mask is not None:
-                current_input_ids = current_input_ids[attention_mask[batch_idx].bool()]
-                input_token_type = input_token_type[attention_mask[batch_idx].bool()]
+            if attention_mask_cpu is not None:
+                mask = attention_mask_cpu[batch_idx].bool()
+                input_token_type = input_token_type[mask]
+                current_len = int(mask.sum())
+            else:
+                current_len = seq_length
+
+            if len(input_token_type) == 0:
+                continue
 
             input_type_group = []
             for key, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
@@ -1374,24 +1386,23 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
                 if modality_type == 0:
                     text_len = end_idx - start_idx
                     llm_pos_ids_list.append(
-                        torch.arange(text_len, device=input_ids.device).view(1, -1).expand(3, -1) + current_pos
+                        torch.arange(text_len, device=device).view(1, -1).expand(3, -1) + current_pos
                     )
                     current_pos += text_len
                 # image == 1, video == 2
                 else:
                     grid_thw = next(grid_iters[modality_type])
                     vision_position_ids = self.get_vision_position_ids(
-                        current_pos, grid_thw, 1, spatial_merge_size, device=input_ids.device
+                        current_pos, grid_thw, 1, spatial_merge_size, device=device
                     )
                     llm_pos_ids_list.append(vision_position_ids)
-                    current_pos += max(grid_thw[1], grid_thw[2]) // spatial_merge_size
+                    current_pos += max(int(grid_thw[1]), int(grid_thw[2])) // spatial_merge_size
             llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
             if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions.to(position_ids.device)
+                position_ids[:, batch_idx, attention_mask[batch_idx].bool()] = llm_positions
             else:
-                position_ids[:, batch_idx] = llm_positions.to(position_ids.device)
-            mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
-        mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+                position_ids[:, batch_idx] = llm_positions
+            mrope_position_deltas[batch_idx] = llm_positions.max() + 1 - current_len
         return position_ids, mrope_position_deltas
 
     @accepts_precomputed_kwargs(modality="video")
