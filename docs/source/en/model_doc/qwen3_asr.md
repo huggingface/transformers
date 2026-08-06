@@ -337,13 +337,13 @@ from transformers import AutoModelForCTC, AutoProcessor, AutoModelForTokenClassi
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
-    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="cuda",
+    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto",
 )
 
 aligner_model_id = "Qwen/Qwen3-ForcedAligner-0.6B-hf"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
 aligner_model = AutoModelForTokenClassification.from_pretrained(
-    aligner_model_id, dtype=torch.bfloat16, device_map="cuda",
+    aligner_model_id, dtype=torch.bfloat16, device_map="auto",
 )
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -400,7 +400,7 @@ num_warmup = 5
 batch_size = 4
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTokenClassification.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
+model = AutoModelForTokenClassification.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 
 # Prepare a batch of 4 samples
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
@@ -411,7 +411,7 @@ aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
     transcript=[transcript] * batch_size,
     language=["English"] * batch_size,
 )
-aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
+aligner_inputs = aligner_inputs.to(model.device, torch.bfloat16)
 
 # Warm-up and apply model
 model = torch.compile(model)
@@ -437,12 +437,12 @@ num_warmup = 3
 max_new_tokens = 256
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda").eval()
+model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto").eval()
 
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
     audio=[audio_url] * 4,  # batch of 4
-).to("cuda", torch.bfloat16)
+).to(model.device, torch.bfloat16)
 
 compile_config = CompileConfig()
 
@@ -453,7 +453,7 @@ with torch.inference_mode():
             **inputs, max_new_tokens=max_new_tokens, do_sample=False,
             cache_implementation="static", compile_config=compile_config,
         )
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 # Apply model
 with torch.inference_mode():

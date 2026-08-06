@@ -209,15 +209,15 @@ class TimerContext:
         self.end_event = None
 
     def __enter__(self):
-        # Use CUDA events for more accurate GPU timing
-        self.start_event = torch.cuda.Event(enable_timing=True)
-        self.end_event = torch.cuda.Event(enable_timing=True)
+        # Use accelerator events for more accurate device timing
+        self.start_event = torch.Event(enable_timing=True)
+        self.end_event = torch.Event(enable_timing=True)
         self.start_event.record()
         return self
 
     def __exit__(self, *args):
         self.end_event.record()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         elapsed_time = self.start_event.elapsed_time(self.end_event) / 1000.0
         print(f"{self.name} time: {elapsed_time:.4f} seconds")
 

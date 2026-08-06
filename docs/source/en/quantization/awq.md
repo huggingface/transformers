@@ -76,7 +76,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
   attn_implementation="flash_attention_2",
-  device_map="cuda:0"
+  device_map="auto"
 )
 ```
 

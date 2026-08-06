@@ -54,7 +54,7 @@ from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    device_map="cuda:0"
+    device_map="auto"
 )
 processor = AutoProcessor.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/processor",
