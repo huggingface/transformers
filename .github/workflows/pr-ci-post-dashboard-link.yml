@@ -39,6 +39,9 @@ jobs:
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout repo (for post_mlinter_review.py and github_utils.py)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
       - name: Download mlinter findings artifact
         id: download
         continue-on-error: true
@@ -47,10 +50,6 @@ jobs:
           name: mlinter-findings
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Checkout repo (for post_mlinter_review.py and github_utils.py)
-        if: steps.download.outcome == 'success'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Post mlinter review
         if: steps.download.outcome == 'success'
