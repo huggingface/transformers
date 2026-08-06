@@ -194,7 +194,7 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         max_seqlen: int | None = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
@@ -206,14 +206,14 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+        attn_weights = None
 
         if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
+            attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
@@ -229,14 +229,14 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
                 **kwargs,
             )
         else:
-            # Other implementations: Process each chunk separately
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
             splits = [
                 torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
-
-            attn_outputs = [
-                attention_interface(
+            attn_outputs = []
+            attn_weights_chunks = []
+            for q, k, v in zip(*splits):
+                chunk_output, chunk_attn_weights = attention_interface(
                     self,
                     q,
                     k,
@@ -246,14 +246,17 @@ class LlavaOnevision1_5VisionAttention(nn.Module):
                     dropout=0.0 if not self.training else self.attention_dropout,
                     is_causal=False,
                     **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
+                )
+                attn_outputs.append(chunk_output)
+                if chunk_attn_weights is not None:
+                    attn_weights_chunks.append(chunk_attn_weights)
             attn_output = torch.cat(attn_outputs, dim=1)
+            if attn_weights_chunks:
+                attn_weights = torch.cat(attn_weights_chunks, dim=2)
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
-        return attn_output
+        return attn_output, attn_weights
 
 
 class LlavaOnevision1_5VisionBlock(nn.Module):
@@ -271,12 +274,13 @@ class LlavaOnevision1_5VisionBlock(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
+        attn_output, _ = self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        hidden_states = hidden_states + attn_output
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
 
@@ -315,6 +319,10 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
     input_modalities = ("image", "video")
     main_input_name = "pixel_values"
     _no_split_modules = ["LlavaOnevision1_5VisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": LlavaOnevision1_5VisionBlock,
+        "attentions": LlavaOnevision1_5VisionAttention,
+    }
 
     def __init__(self, config: LlavaOnevision1_5VisionConfig) -> None:
         super().__init__(config)
@@ -368,19 +376,51 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
+    ) -> BaseModelOutputWithPooling:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        img_feats = hidden_states.shape[0]
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        segment_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).to(torch.long)
+        expected_total_patches = int(segment_seqlens.sum().item())
+        actual_total_patches = hidden_states.shape[0]
+
+        compressed_inputs = expected_total_patches != actual_total_patches
+        if compressed_inputs:
+            if expected_total_patches % actual_total_patches != 0:
+                raise ValueError(
+                    "Image features and image tokens do not match after vision patch embedding, "
+                    f"expected {expected_total_patches} patches from image_grid_thw but got {actual_total_patches}."
+                )
+
+            compression_factor = expected_total_patches // actual_total_patches
+            if torch.any(segment_seqlens % compression_factor != 0):
+                raise ValueError(
+                    "image_grid_thw patch segments are incompatible with compressed vision features: "
+                    f"segment lengths {segment_seqlens.tolist()} cannot be divided by compression factor {compression_factor}."
+                )
+
+            compressed_seqlens = segment_seqlens // compression_factor
+            compressed_rotary_pos_emb = []
+            rotary_start = 0
+            for raw_seg_len, compressed_seg_len in zip(segment_seqlens.tolist(), compressed_seqlens.tolist()):
+                rotary_end = rotary_start + raw_seg_len
+                compressed_rotary_pos_emb.append(
+                    rotary_pos_emb[rotary_start:rotary_end:compression_factor][:compressed_seg_len]
+                )
+                rotary_start = rotary_end
+            rotary_pos_emb = torch.cat(compressed_rotary_pos_emb, dim=0)
+            segment_seqlens = compressed_seqlens
+
+        cu_seqlens = segment_seqlens.cumsum(
             dim=0,
             dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         )
@@ -390,6 +430,7 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         cls_token = self.class_embedding.to(hidden_states.dtype).unsqueeze(0)
 
         total_patches = cu[-1].item()
+        img_feats = hidden_states.shape[0]
         new_total = total_patches + num_segments
         embed_dim = hidden_states.size(-1)
         new_hidden = hidden_states.new_empty((new_total, embed_dim))
@@ -429,12 +470,19 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         for i in range(1, num_segments + 1):
             seg_start = cu[i - 1].item()
             seg_end = cu[i].item()
-            shifted_start = new_cu[i - 1] + 1
-            shifted_end = new_cu[i]
-            new_hidden[seg_start:seg_end] = hidden_states[shifted_start:shifted_end]
+            new_seg_start = new_cu[i - 1]
+            new_seg_end = new_cu[i]
+            new_hidden[seg_start:seg_end] = hidden_states[new_seg_start + 1 : new_seg_end]
         hidden_states = new_hidden
-
-        return self.merger(hidden_states)
+        merge_block = self.spatial_merge_size**2
+        if (not compressed_inputs) and hidden_states.shape[0] % merge_block == 0:
+            merged_hidden_states = self.merger(hidden_states)
+        else:
+            merged_hidden_states = hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=merged_hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @auto_docstring
@@ -693,6 +741,10 @@ class LlavaOnevision1_5TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class LlavaOnevision1_5TextModel(LlavaOnevision1_5TextPreTrainedModel):
     config: LlavaOnevision1_5TextConfig
+    _can_record_outputs = {
+        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
+        "attentions": LlavaOnevision1_5TextAttention,
+    }
 
     def __init__(self, config: LlavaOnevision1_5TextConfig):
         super().__init__(config)
@@ -859,8 +911,14 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        return BaseModelOutputWithPooling(last_hidden_state=image_embeds, pooler_output=image_embeds)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = vision_outputs.pooler_output
+        return BaseModelOutputWithPooling(
+            last_hidden_state=image_embeds,
+            pooler_output=image_embeds,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
 
     def get_placeholder_mask(
         self,
@@ -939,6 +997,12 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         if pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_grid_thw, **kwargs)
             image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            if input_ids is not None:
+                n_image_tokens = int((input_ids == self.config.image_token_id).sum().item())
+                if image_features.shape[0] != n_image_tokens and n_image_tokens % image_features.shape[0] == 0:
+                    image_features = image_features.repeat_interleave(n_image_tokens // image_features.shape[0], dim=0)
+
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -947,6 +1011,12 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         if pixel_values_videos is not None:
             video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
             video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            if input_ids is not None:
+                n_video_tokens = int((input_ids == self.config.video_token_id).sum().item())
+                if video_features.shape[0] != n_video_tokens and n_video_tokens % video_features.shape[0] == 0:
+                    video_features = video_features.repeat_interleave(n_video_tokens // video_features.shape[0], dim=0)
+
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -989,8 +1059,14 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
                 The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        return BaseModelOutputWithPooling(last_hidden_state=video_embeds, pooler_output=video_embeds)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
+        video_embeds = vision_outputs.pooler_output
+        return BaseModelOutputWithPooling(
+            last_hidden_state=video_embeds,
+            pooler_output=video_embeds,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
 
 
 @auto_docstring(
