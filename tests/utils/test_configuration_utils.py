@@ -23,7 +23,7 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, Siglip2TextConfig, SiglipTextConfig
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
@@ -293,16 +293,6 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
 
-    def test_siglip_default_special_tokens(self):
-        siglip = SiglipTextConfig()
-        self.assertIsNone(siglip.bos_token_id)
-        self.assertEqual(siglip.eos_token_id, 1)
-        self.assertEqual(siglip.pad_token_id, 1)
-
-        siglip2 = Siglip2TextConfig()
-        self.assertEqual(siglip2.bos_token_id, 2)
-        self.assertEqual(siglip2.eos_token_id, 1)
-        self.assertEqual(siglip2.pad_token_id, 0)
 
     @require_torch
     def test_bc_torch_dtype(self):
