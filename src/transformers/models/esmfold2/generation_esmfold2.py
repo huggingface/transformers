@@ -100,6 +100,7 @@ def _weighted_rigid_align(coords: Tensor, target_coords: Tensor, weights: Tensor
 class EsmFold2FoldingMixin:
     """Diffusion sampling loop and the ``infer_protein`` entry points for ESMFold2."""
 
+    @torch.no_grad()
     def fold(
         self,
         token_attention_mask: Tensor,
@@ -162,9 +163,9 @@ class EsmFold2FoldingMixin:
         )
 
         confidence_output = self.confidence_head(
-            single_inputs=trunk.single_inputs.detach(),
-            pair_states=trunk.pair_states.detach(),
-            predicted_coords=sample_coords.detach(),
+            single_inputs=trunk.single_inputs,
+            pair_states=trunk.pair_states,
+            predicted_coords=sample_coords,
             distogram_atom_idx=distogram_atom_idx,
             token_attention_mask=token_attention_mask,
             # From the trunk's featurized copy, as that is the one zeroed at padding.
@@ -173,8 +174,8 @@ class EsmFold2FoldingMixin:
             asym_id=asym_id,
             mol_type=mol_type,
             num_diffusion_samples=num_samples,
-            relative_position_encoding=trunk.relative_position_encoding.detach(),
-            token_bonds_encoding=trunk.token_bonds_encoding.detach(),
+            relative_position_encoding=trunk.relative_position_encoding,
+            token_bonds_encoding=trunk.token_bonds_encoding,
         )
 
         return EsmFold2Output(
