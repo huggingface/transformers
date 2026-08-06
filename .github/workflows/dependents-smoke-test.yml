@@ -117,6 +117,10 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
+        if: false
+        # We constantly hit memory issues after the first 2 tests. The CPU memory doesn't seem to be
+        # released by the OS. A larger runner may work but it's unclear if the memory not being
+        # released issue would persist.
         working-directory: vllm
         continue-on-error: true
         run: |
@@ -131,6 +135,7 @@ jobs:
 
       - name: "Test: multimodal processing"
         if: false
+        # TODO: re-enable this step by reworking the workflow to use matrix job.
         working-directory: vllm
         continue-on-error: true
         run: |
