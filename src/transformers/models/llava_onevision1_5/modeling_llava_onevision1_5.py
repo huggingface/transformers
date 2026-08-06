@@ -33,7 +33,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -437,6 +437,20 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         return self.merger(hidden_states)
 
 
+@auto_docstring
+class LlavaOnevision1_5TextPreTrainedModel(PreTrainedModel):
+    config: LlavaOnevision1_5TextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
+
 @use_kernel_forward_from_hub("RMSNorm")
 class LlavaOnevision1_5TextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -677,25 +691,6 @@ class LlavaOnevision1_5TextDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class LlavaOnevision1_5TextPreTrainedModel(PreTrainedModel):
-    config: LlavaOnevision1_5TextConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaOnevision1_5TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
-        "attentions": LlavaOnevision1_5TextAttention,
-    }
-
-
-@auto_docstring
 class LlavaOnevision1_5TextModel(LlavaOnevision1_5TextPreTrainedModel):
     config: LlavaOnevision1_5TextConfig
 
@@ -856,7 +851,7 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
             The tensors corresponding to the input images.
@@ -865,7 +860,7 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        return image_embeds
+        return BaseModelOutputWithPooling(last_hidden_state=image_embeds, pooler_output=image_embeds)
 
     def get_placeholder_mask(
         self,
@@ -942,16 +937,16 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         video_features = None
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_grid_thw, **kwargs)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_outputs = self.get_image_features(pixel_values, image_grid_thw, **kwargs)
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -973,12 +968,17 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
             image_hidden_states=image_features,
         )
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
 
@@ -990,7 +990,7 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        return video_embeds
+        return BaseModelOutputWithPooling(last_hidden_state=video_embeds, pooler_output=video_embeds)
 
 
 @auto_docstring(
@@ -1016,7 +1016,7 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
@@ -1088,7 +1088,7 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
             The temporal, height and width of feature shape of each video in LLM.
@@ -1100,6 +1100,7 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaOnevision1_5PreTrainedModel
 
 __all__ = [
     "LlavaOnevision1_5PreTrainedModel",
+    "LlavaOnevision1_5TextPreTrainedModel",
     "LlavaOnevision1_5VisionModel",
     "LlavaOnevision1_5TextModel",
     "LlavaOnevision1_5Model",

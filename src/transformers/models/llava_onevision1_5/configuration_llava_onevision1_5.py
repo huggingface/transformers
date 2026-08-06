@@ -104,6 +104,8 @@ class LlavaOnevision1_5TextConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
     use_sliding_window: bool = False
     sliding_window: int | None = 4096
     max_window_layers: int = 28
