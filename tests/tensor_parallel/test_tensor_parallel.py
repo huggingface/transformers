@@ -26,6 +26,7 @@ from transformers.integrations.tensor_parallel import (
     PackedRowwiseParallel,
     ReplicateKVHeadsParallel,
     RowwiseParallel,
+    _maybe_enable_kv_head_replication,
     add_tensor_parallel_hooks_to_module,
     get_kv_replication_factor,
     get_packed_weights,
@@ -310,7 +311,7 @@ class TestTensorParallelLayer(TestCasePlus):
         for rank in range(world_size):
             device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
             layer = ReplicateKVHeadsParallel(device_mesh=device_mesh, rank=rank, empty_param=weight)
-            layer.config = SimpleNamespace(num_key_value_heads=num_key_value_heads)
+            layer.num_key_value_heads = num_key_value_heads
 
             self.assertEqual(layer.get_expected_sharded_shape(weight.shape), (head_dim, 32))
             head_idx = rank // (world_size // num_key_value_heads)
@@ -325,7 +326,7 @@ class TestTensorParallelLayer(TestCasePlus):
         for rank in range(world_size):
             device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
             layer = ReplicateKVHeadsParallel(device_mesh=device_mesh, rank=rank, empty_param=weight)
-            layer.config = SimpleNamespace(num_key_value_heads=num_key_value_heads)
+            layer.num_key_value_heads = num_key_value_heads
 
             self.assertEqual(layer.get_expected_sharded_shape(weight.shape), (2 * head_dim, 32))
             torch.testing.assert_close(layer.shard_tensor(weight), weight.chunk(world_size)[rank])
@@ -338,12 +339,44 @@ class TestTensorParallelLayer(TestCasePlus):
         with self.assertRaises(ValueError):
             get_kv_replication_factor(3, 4)
 
+    def test_kv_replication_only_updates_planned_attention_modules(self):
+        class Attention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.head_dim = 8
+                self.num_key_value_groups = 8
+                self.q_proj = torch.nn.Linear(32, 32, bias=False)
+                self.k_proj = torch.nn.Linear(32, 16, bias=False)
+                self.v_proj = torch.nn.Linear(32, 16, bias=False)
+
+        model = torch.nn.Module()
+        model.layers = torch.nn.ModuleList([torch.nn.Module()])
+        model.layers[0].self_attn = Attention()
+        model.vision = torch.nn.Module()
+        model.vision.attn = Attention()
+        model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(num_key_value_heads=2))
+        tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+        }
+
+        updated_plan = _maybe_enable_kv_head_replication(model, tp_plan, tp_size=4)
+
+        self.assertEqual(updated_plan["layers.*.self_attn.k_proj"], "colwise_replicate_kv")
+        self.assertEqual(updated_plan["layers.*.self_attn.v_proj"], "colwise_replicate_kv")
+        self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
+        self.assertEqual(model.vision.attn.num_key_value_groups, 8)
+        self.assertEqual(model.layers[0].self_attn.k_proj._hf_num_key_value_heads, 2)
+
     def test_colwise_update_module_attributes(self):
         device_mesh = self.MockDeviceMesh(world_size=4, rank=0)
 
         # gather_output=False (default): out_features is updated
         module = torch.nn.Linear(32, 16)
         layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.out_features, 4)
         layer.update_module_attributes(module)
         self.assertEqual(module.out_features, 4)
 
@@ -358,6 +391,8 @@ class TestTensorParallelLayer(TestCasePlus):
 
         module = torch.nn.Linear(32, 16)
         layer = RowwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
+        layer.update_module_attributes(module)
+        self.assertEqual(module.in_features, 8)
         layer.update_module_attributes(module)
         self.assertEqual(module.in_features, 8)
 

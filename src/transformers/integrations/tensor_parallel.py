@@ -652,6 +652,10 @@ class TensorParallelLayer:
             self._prepare_output_fn,
         )
 
+    def configure_for_module(self, module: nn.Module):
+        """Configure this per-parameter sharding operation from its owning module."""
+        pass
+
     def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
         """
         Compute the expected shape after TP sharding for a given full shape.
@@ -735,7 +739,9 @@ class ColwiseParallel(TensorParallelLayer):
         # If we gather the output, the output dimension of the module is not sharded, so no need to update out_features.
         # Otherwise, we need to update out_features to reflect the sharded dimension.
         if not self.gather_output and hasattr(module, "out_features"):
-            module.out_features = self.get_expected_sharded_shape((module.out_features,))[0]
+            full_out_features = getattr(module, "_hf_tp_full_out_features", module.out_features)
+            module._hf_tp_full_out_features = full_out_features
+            module.out_features = self.get_expected_sharded_shape((full_out_features,))[0]
 
 
 def get_kv_replication_factor(num_key_value_heads: int | None, tp_size: int) -> int:
@@ -769,21 +775,16 @@ class ReplicateKVHeadsParallel(ColwiseParallel):
     sharded normally, so the only cost is a duplicated KV cache.
     """
 
-    config = None
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh, config=None, **kwargs) -> nn.Module:
-        if config is not None:
-            self.config = config.get_text_config()
-        super().prepare_module_tp(module, device_mesh, **kwargs)
-
     def _replication_factor(self) -> int:
-        num_key_value_heads = getattr(self.config, "num_key_value_heads", None)
-        return get_kv_replication_factor(num_key_value_heads, self.device_mesh.size())
+        return get_kv_replication_factor(self.num_key_value_heads, self.device_mesh.size())
+
+    def configure_for_module(self, module: nn.Module):
+        self.num_key_value_heads = module._hf_num_key_value_heads
 
     def _head_slice(self, shape) -> tuple:
         """Slice selecting the single KV head owned by this rank, given the full parameter `shape`."""
         n_rep = self._replication_factor()
-        num_key_value_heads = self.device_mesh.size() // n_rep
+        num_key_value_heads = self.num_key_value_heads
         dim = -1 if len(shape) == 1 else -2
         head_size = shape[dim] // num_key_value_heads
         head_idx = self.rank // n_rep
@@ -968,7 +969,9 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(module, "in_features"):
             # To fall in the 2D case in get_expected_sharded_shape,
             # otherwise it will be treated as 1D and not sharded
-            shape = (1, module.in_features)
+            full_in_features = getattr(module, "_hf_tp_full_in_features", module.in_features)
+            module._hf_tp_full_in_features = full_in_features
+            shape = (1, full_in_features)
             module.in_features = self.get_expected_sharded_shape(shape)[1]
 
 
@@ -1624,6 +1627,7 @@ def shard_and_distribute_module(
             tp_layer.empty_param = empty_param
             tp_layer.device_mesh = device_mesh
             tp_layer.rank = rank
+            tp_layer.configure_for_module(module_to_tp)
             param = tp_layer.shard_tensor(param, tensor_idx=None, dtype=param_casting_dtype, device=rank)
             if is_contiguous:
                 param = param.contiguous()
@@ -1678,25 +1682,53 @@ def _maybe_enable_kv_head_replication(model, tp_plan: dict[str, str], tp_size: i
     Switch the `k_proj`/`v_proj` entries of `tp_plan` to KV head replication when the model has fewer KV heads
     than TP ranks, so that GQA/MQA models can be sharded over more GPUs than they have KV heads.
     """
-    text_config = model.config.get_text_config()
-    num_key_value_heads = getattr(text_config, "num_key_value_heads", None)
-    num_attention_heads = getattr(text_config, "num_attention_heads", None)
-    n_rep = get_kv_replication_factor(num_key_value_heads, tp_size)
-    if n_rep == 1 or num_attention_heads is None:
+    configured_num_key_value_heads = getattr(model.config.get_text_config(), "num_key_value_heads", None)
+    replicated_modules = []
+    for module_name, module in model.named_modules():
+        if not all(hasattr(module, attribute) for attribute in ("q_proj", "k_proj", "v_proj", "head_dim")):
+            continue
+        k_proj_plan = _get_parameter_tp_plan(f"{module_name}.k_proj", tp_plan, is_weight=False)
+        v_proj_plan = _get_parameter_tp_plan(f"{module_name}.v_proj", tp_plan, is_weight=False)
+        if k_proj_plan != "colwise" or v_proj_plan != "colwise":
+            continue
+
+        head_dim = module.head_dim
+        if module.k_proj.out_features != module.v_proj.out_features or module.k_proj.out_features % head_dim != 0:
+            raise ValueError(
+                f"Cannot replicate KV heads for `{module_name}`: its key/value projection shapes are incompatible."
+            )
+        num_key_value_heads = module.k_proj.out_features // head_dim
+        n_rep = get_kv_replication_factor(num_key_value_heads, tp_size)
+        if n_rep == 1:
+            continue
+
+        if configured_num_key_value_heads != num_key_value_heads:
+            raise ValueError(
+                f"Cannot replicate KV heads for `{module_name}`: its {num_key_value_heads} KV heads differ from the "
+                f"text configuration ({configured_num_key_value_heads}). Per-layer KV head replication is not supported."
+            )
+
+        if module.q_proj.out_features % head_dim != 0 or (module.q_proj.out_features // head_dim) % tp_size != 0:
+            raise ValueError(
+                f"Cannot replicate KV heads for `{module_name}`: its number of query heads must be divisible by "
+                f"tp_size={tp_size}."
+            )
+        module.k_proj._hf_num_key_value_heads = num_key_value_heads
+        module.v_proj._hf_num_key_value_heads = num_key_value_heads
+        # Each rank owns a complete KV head, while Q heads remain normally sharded.
+        module.num_key_value_groups = module.q_proj.out_features // head_dim // tp_size
+        replicated_modules.append((module_name, num_key_value_heads, n_rep))
+
+    if not replicated_modules:
         return tp_plan
 
     tp_plan = {
         key: ("colwise_replicate_kv" if style == "colwise" and key.endswith(("k_proj", "v_proj")) else style)
         for key, style in tp_plan.items()
     }
-    # Each rank now owns a single KV head while query heads are still sharded, so the local number of query
-    # heads per KV head (used by `repeat_kv`) differs from the one derived from the config.
-    for module in model.modules():
-        if hasattr(module, "num_key_value_groups"):
-            module.num_key_value_groups = num_attention_heads // tp_size
     logger.warning_once(
-        f"The model has fewer key/value heads ({num_key_value_heads}) than tensor parallel ranks ({tp_size}); "
-        f"each KV head will be replicated {n_rep} times across ranks, which duplicates the KV cache."
+        f"Replicating KV heads for {', '.join(name for name, _, _ in replicated_modules)} because there are fewer "
+        f"KV heads than tensor parallel ranks ({tp_size}); this duplicates the KV cache."
     )
     return tp_plan
 
