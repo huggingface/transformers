@@ -27,7 +27,6 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -211,39 +210,6 @@ class OnyxTextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -320,7 +286,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class OnyxTextAttention(nn.Module):
     """
     Multi-headed attention module with optional sliding window and gating.
@@ -556,6 +521,13 @@ class OnyxTextModel(OnyxPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
@@ -1235,14 +1207,14 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxCausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 

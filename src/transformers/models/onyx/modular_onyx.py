@@ -38,6 +38,7 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
+    no_inherit_decorator,
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
@@ -688,6 +689,7 @@ class OnyxTextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class OnyxTextAttention(AfmoeAttention):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
