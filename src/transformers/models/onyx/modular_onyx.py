@@ -765,6 +765,17 @@ class OnyxPreTrainedModel(Gemma2PreTrainedModel):
         raise NotImplementedError("No need to inherit, we can use the base one")
 
 
+class OnyxTextNormedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_norm: float = 1e-05):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        # Weight-less norm applied on top of the embeddings - cannot be merged to the embedding matrix, as Dflash implem needs
+        # to embed without the norm
+        self.embed_norm = OnyxRMSNorm(eps=embed_norm, with_scale=False)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
+
+
 class OnyxTextModel(Gemma2Model):
     config: OnyxTextConfig
     _can_record_outputs = {
@@ -774,11 +785,9 @@ class OnyxTextModel(Gemma2Model):
 
     def __init__(self, config: OnyxTextConfig):
         super().__init__(config)
-        # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
-        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
-        # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
-        # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = self.embed_tokens = OnyxTextNormedEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
