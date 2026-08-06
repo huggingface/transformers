@@ -113,7 +113,7 @@ def batch_generate(
         print("--- Finished CB Generation Example ---\n")
         print(f"CB generation took: {gen_time:.2f} seconds for {token_count} tokens. {tok_per_sec:.2f}tok/s")
     stats = {
-        "num_pages": cb_config.num_pages,
+        "num_pages": cb_config.num_blocks,
         "max_batch_tokens": cb_config.max_batch_tokens,
         "max_blocks_per_request": cb_config.max_blocks_per_request,
         "use_cuda_graph": cb_config.use_cuda_graph,
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     )
     cb_config = ContinuousBatchingConfig(
         page_size=args.page_size,
-        num_pages=args.num_blocks,
+        num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
         max_blocks_per_request=args.block_table,
         use_cuda_graph=use_cuda_graph,

@@ -166,8 +166,9 @@ class PagedAttentionCache:
         self.tokens_per_sector = max(
             (self.bytes_per_sector // ca.bytes_per_block) * ca.tokens_per_page for ca in self.cache_allocators.values()
         )
-        # Bytes of one full-attention page, used to convert the num_pages config attribute to and from bytes
-        bytes_per_fa_page = FullAttentionCacheAllocator.get_bytes_per_page(
+        # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
+        # config attribute to and from bytes
+        bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
             num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
         )
 
@@ -177,7 +178,7 @@ class PagedAttentionCache:
             dtype=self.dtype,
             bytes_per_sector=self.bytes_per_sector,
             tokens_per_sector=self.tokens_per_sector,
-            bytes_per_fa_page=bytes_per_fa_page,
+            bytes_per_block=bytes_per_block,
             attn_types=list(self.cache_allocators.keys()),
             model_supports_logits_to_keep=model_supports_logits_to_keep,
         ).infer_max_batch_tokens_and_num_sectors()
@@ -211,8 +212,8 @@ class PagedAttentionCache:
         # For block table support, we lazy init the name of the block table key
         self._block_table_key = None
 
-        # Helper attribute: the cache capacity expressed in full-attention pages
-        self.num_pages = non_trash_bytes // bytes_per_fa_page
+        # Helper attribute: the cache capacity expressed in whole-model blocks
+        self.num_blocks = non_trash_bytes // bytes_per_block
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
@@ -558,7 +559,7 @@ class PagedAttentionMemoryHandler:
         dtype: torch.dtype,
         bytes_per_sector: int,
         tokens_per_sector: int,
-        bytes_per_fa_page: int,
+        bytes_per_block: int,
         attn_types: list[str],
         model_supports_logits_to_keep: bool = False,
     ) -> None:
@@ -572,7 +573,7 @@ class PagedAttentionMemoryHandler:
 
         self.bytes_per_sector = bytes_per_sector
         self.tokens_per_sector = tokens_per_sector
-        self.bytes_per_fa_page = bytes_per_fa_page
+        self.bytes_per_block = bytes_per_block
         self.trash_bytes = 2 * bytes_per_sector  # the two trash sectors at the start of the cache tensor
         self.num_groups = len(attn_types)
 
@@ -664,11 +665,11 @@ class PagedAttentionMemoryHandler:
         return available_memory
 
     def num_sectors_from_config(self) -> int | None:
-        """Converts the `num_pages` config attribute into a number of sectors. `num_pages` is a capacity target:
-        the number of full-attention pages the cache should be able to hold."""
-        if self.cb_config.num_pages is None:
+        """Converts the `num_blocks` config attribute into a number of sectors. `num_blocks` is a capacity target:
+        the number of whole-model blocks of `page_size` tokens the cache should be able to hold."""
+        if self.cb_config.num_blocks is None:
             return None
-        target_bytes = self.cb_config.num_pages * self.bytes_per_fa_page
+        target_bytes = self.cb_config.num_blocks * self.bytes_per_block
         return max(1, ceil(target_bytes / self.bytes_per_sector))
 
     def infer_max_batch_tokens_and_num_sectors(self) -> tuple[int, int]:

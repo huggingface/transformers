@@ -999,7 +999,7 @@ class ContinuousBatchingManager:
         # And update continuous batching config now that we have concrete values
         update_cb_config_after_cache_creation(
             cb_config=self.continuous_batching_config,
-            num_pages=paged_attention_cache.num_pages,
+            num_blocks=paged_attention_cache.num_blocks,
             max_batch_tokens=paged_attention_cache.max_batch_tokens,
         )
 

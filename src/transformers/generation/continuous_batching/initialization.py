@@ -295,12 +295,12 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_pr
 
 def update_cb_config_after_cache_creation(
     cb_config: ContinuousBatchingConfig,
-    num_pages: int,
+    num_blocks: int,
     max_batch_tokens: int,
 ) -> None:
     """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
     # Memoize concrete values
-    cb_config.num_pages = num_pages
+    cb_config.num_blocks = num_blocks
     cb_config.max_batch_tokens = max_batch_tokens
     # Cap the number of max requests per batch to the max tokens per batch
     cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
