@@ -82,10 +82,18 @@ jobs:
           echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
+          echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: Run tests
         working-directory: vllm
         run: |
+          # Start background memory monitor (prints every 5s with timestamp)
+          while true; do
+            echo "[$(date '+%H:%M:%S')] $(free -h | awk '/Mem:/{printf "total=%-6s used=%-6s free=%-6s available=%-6s", $2, $3, $4, $7}') | top-procs: $(ps aux --sort=-%mem | awk 'NR>1 && NR<=4 {printf "%s(%.0f%%) ", $11, $4}')"
+            sleep 5
+          done &
+          MONITOR_PID=$!
+
           pytest -v -s tests/models/test_initialization.py
           pytest -v -s tests/models/test_transformers.py
           pytest -v -s tests/models/multimodal/processing/
@@ -94,3 +102,5 @@ jobs:
           python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
           # Whisper needs spawn method to avoid deadlock
           VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
+
+          kill $MONITOR_PID 2>/dev/null || true
