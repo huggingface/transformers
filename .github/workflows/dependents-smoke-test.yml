@@ -93,12 +93,11 @@ jobs:
         working-directory: vllm
         continue-on-error: true
         run: |
-          # Skip TransformersMultiModalForCausalLM — causes OOM (exit code 137)
+          # Skip TransformersMultiModalForCausalLM and Gemma3nForCausalLM — cause OOM (exit code 137)
           pytest -v -s \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[BertForSequenceClassification]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[JinaVLForRanking]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[InternVLChatModel]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[InternLM2ForRewardModel]" \
