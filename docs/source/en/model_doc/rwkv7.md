@@ -35,9 +35,18 @@ them, so converting a native `.pth` checkpoint needs no per-tensor mapping table
 
 ## Checkpoints
 
-No checkpoint on the Hub loads into this implementation as-is, and it is worth being
-explicit about why rather than letting a `from_pretrained` line imply otherwise. The
-RWKV-7 weights published today come in two layouts, neither of which is this one:
+The RWKV organisation publishes checkpoints that load into this implementation
+directly, with no conversion and no `trust_remote_code`:
+
+- [`RWKV/RWKV7-1.5B-20260805`](https://huggingface.co/RWKV/RWKV7-1.5B-20260805)
+- [`RWKV/RWKV7-2.9B-20260805`](https://huggingface.co/RWKV/RWKV7-2.9B-20260805)
+- [`RWKV/RWKV7-7.2B-20260805`](https://huggingface.co/RWKV/RWKV7-7.2B-20260805)
+- [`RWKV/RWKV7-13.3B-20260805`](https://huggingface.co/RWKV/RWKV7-13.3B-20260805)
+
+They are plain `safetensors` directories with a `tokenizer.json`, and their
+`config.json` maps onto [`Rwkv7Config`] key for key.
+
+Two other layouts exist and do need a step first:
 
 - **native**: the reference `.pth` from [`BlinkDL/rwkv-7-world`](https://huggingface.co/BlinkDL/rwkv-7-world)
   and [`BlinkDL/rwkv7-g1`](https://huggingface.co/BlinkDL/rwkv7-g1). Same parameter
@@ -65,24 +74,24 @@ you to point at one.
 ## Usage
 
 ```python
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("Hakureirm/rwkv7-168m-pile-hf")
-model = AutoModelForCausalLM.from_pretrained("Hakureirm/rwkv7-168m-pile-hf")
+tokenizer = AutoTokenizer.from_pretrained("RWKV/RWKV7-1.5B-20260805")
+model = AutoModelForCausalLM.from_pretrained("RWKV/RWKV7-1.5B-20260805", dtype=torch.bfloat16)
 
-inputs = tokenizer("The capital of France is", return_tensors="pt")
+inputs = tokenizer("\nThe Eiffel Tower is located in the city of", return_tensors="pt")
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=20)[0]))
-# The capital of France is the city of Paris.
+# The Eiffel Tower is located in the city of Paris, France.
 ```
 
-That one is a Pile checkpoint, so its tokenizer is the GPT-NeoX-20B one and loads as an
-ordinary fast tokenizer. The World checkpoints are the ones worth using — far more
-training data, multilingual — but their vocabulary is RWKV's own, whose tokenizer is
-greedy longest-match over raw bytes with no pre-tokenisation and ships as remote code,
-so it has to be loaded from a repo that carries it:
+The World vocabulary these use is RWKV's own — greedy longest-match over raw bytes
+with no pre-tokenisation — but the official repos ship it as a `tokenizer.json`, so
+`AutoTokenizer` loads it as an ordinary fast tokenizer with no remote code. A `.pth`
+you convert yourself carries no tokenizer, so point at one of the repos above for it:
 
 ```python
-tokenizer = AutoTokenizer.from_pretrained("Hakureirm/rwkv7-0.1b-hf", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("RWKV/RWKV7-1.5B-20260805")
 model = AutoModelForCausalLM.from_pretrained("./rwkv7-0.1b-hf")   # converted above
 ```
 
