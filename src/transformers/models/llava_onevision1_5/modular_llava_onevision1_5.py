@@ -36,10 +36,10 @@ from ..llava.modeling_llava import (
     LlavaModelOutputWithPast,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
-    apply_rotary_pos_emb_vision,
-    eager_attention_forward,
     VisionAttention,
     VisionRotaryEmbedding,
+    apply_rotary_pos_emb_vision,
+    eager_attention_forward,
 )
 from ..qwen3.modeling_qwen3 import Qwen3Model
 from .configuration_llava_onevision1_5 import (
@@ -431,8 +431,8 @@ class LlavaOnevision1_5TextPreTrainedModel(PreTrainedModel):
 class LlavaOnevision1_5TextModel(Qwen3Model):
     config: LlavaOnevision1_5TextConfig
     _can_record_outputs = {
-        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
-        "attentions": LlavaOnevision1_5TextAttention,
+        "hidden_states": "LlavaOnevision1_5TextDecoderLayer",
+        "attentions": "LlavaOnevision1_5TextAttention",
     }
 
 

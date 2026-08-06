@@ -742,8 +742,8 @@ class LlavaOnevision1_5TextDecoderLayer(GradientCheckpointingLayer):
 class LlavaOnevision1_5TextModel(LlavaOnevision1_5TextPreTrainedModel):
     config: LlavaOnevision1_5TextConfig
     _can_record_outputs = {
-        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
-        "attentions": LlavaOnevision1_5TextAttention,
+        "hidden_states": "LlavaOnevision1_5TextDecoderLayer",
+        "attentions": "LlavaOnevision1_5TextAttention",
     }
 
     def __init__(self, config: LlavaOnevision1_5TextConfig):
