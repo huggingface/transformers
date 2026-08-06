@@ -166,7 +166,7 @@ class PagedAttentionCache:
         self.tokens_per_sector = max(
             (self.bytes_per_sector // ca.bytes_per_block) * ca.tokens_per_page for ca in self.cache_allocators.values()
         )
-        # Bytes of one full-attention page, used to convert the num_fa_pages config attribute to and from bytes
+        # Bytes of one full-attention page, used to convert the num_pages config attribute to and from bytes
         bytes_per_fa_page = FullAttentionCacheAllocator.get_bytes_per_page(
             num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.fa_page_size
         )
@@ -212,7 +212,7 @@ class PagedAttentionCache:
         self._block_table_key = None
 
         # Helper attribute: the cache capacity expressed in full-attention pages
-        self.num_fa_pages = non_trash_bytes // bytes_per_fa_page
+        self.num_pages = non_trash_bytes // bytes_per_fa_page
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
@@ -664,11 +664,11 @@ class PagedAttentionMemoryHandler:
         return available_memory
 
     def num_sectors_from_config(self) -> int | None:
-        """Converts the `num_fa_pages` config attribute into a number of sectors. `num_fa_pages` is a capacity target:
+        """Converts the `num_pages` config attribute into a number of sectors. `num_pages` is a capacity target:
         the number of full-attention pages the cache should be able to hold."""
-        if self.cb_config.num_fa_pages is None:
+        if self.cb_config.num_pages is None:
             return None
-        target_bytes = self.cb_config.num_fa_pages * self.bytes_per_fa_page
+        target_bytes = self.cb_config.num_pages * self.bytes_per_fa_page
         return max(1, ceil(target_bytes / self.bytes_per_sector))
 
     def infer_max_batch_tokens_and_num_sectors(self) -> tuple[int, int]:

@@ -461,7 +461,7 @@ if __name__ == "__main__":
         results.add_benchmark(
             data=get_random_data(batch_size=20, num_tokens=256),
             max_new_tokens=256,
-            cb_config=ContinuousBatchingConfig(num_fa_pages=512),
+            cb_config=ContinuousBatchingConfig(num_pages=512),
             gen_config=GenerationConfig(eos_token_id=-1),
             label="few_blocks",
         )

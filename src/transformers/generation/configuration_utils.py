@@ -1656,7 +1656,7 @@ class ContinuousBatchingConfig:
     Args:
         fa_page_size (`int`, *optional*, defaults to 256):
             Size of a full attention KV cache page in tokens.
-        num_fa_pages (`int`, *optional*):
+        num_pages (`int`, *optional*):
             Number of full attention pages in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
@@ -1729,9 +1729,9 @@ class ContinuousBatchingConfig:
     # Size of a full attention KV cache page. Must be at least 4 (for an efficient cache, it should be well above that)
     fa_page_size: int = 256
 
-    # Number of full attention pages the cache contains. Since the page size varies between attention types, we use this
-    # as a standart reference. Better to leave it as None and be auto inferred.
-    num_fa_pages: int | None = None
+    # Number of pages the cache contains. Since the page size varies between attention types, we use this as a number of
+    # full attention pages, a standart reference. Usually better to leave it as None and be auto inferred.
+    num_pages: int | None = None
 
     # The maximum number of tokens in a batch. Once the page size is set, this can be auto inferred using GPU size.
     max_batch_tokens: int | None = None
@@ -1865,10 +1865,10 @@ class ContinuousBatchingConfig:
             self.fa_page_size = self.block_size
         if self.num_blocks is not None:  # Deprecated in 5.14
             logger.warning(
-                "num_blocks is deprecated: please use num_fa_pages instead. For backwards compatibility, num_blocks "
+                "num_blocks is deprecated: please use num_pages instead. For backwards compatibility, num_blocks "
                 "will be used as the number of full attention pages."
             )
-            self.num_fa_pages = self.num_blocks
+            self.num_pages = self.num_blocks
 
     @property
     def cuda_graph_booleans(self) -> tuple[bool, bool]:
