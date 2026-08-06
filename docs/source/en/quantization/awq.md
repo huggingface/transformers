@@ -72,11 +72,12 @@ Use `attn_implementation` to enable [FlashAttention2](../perf_infer_gpu_one#flas
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
   attn_implementation="flash_attention_2",
-  device_map="auto"
+  device_map=Accelerator().device
 )
 ```
 
