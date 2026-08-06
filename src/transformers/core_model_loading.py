@@ -1809,9 +1809,6 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
-            if isinstance(mapping, WeightConverter):
-                # Bring converter outputs from converter namespace into checkpoint namespace.
-                target_name, _ = rename_source_key(target_name, inverted_renamings, [])
             new_state_dict[target_name] = param
 
     return new_state_dict
