@@ -123,12 +123,10 @@ jobs:
           pytest -v -s tests/models/transformers/
 
       - name: "Test: multimodal processing"
-        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s "tests/models/multimodal/processing/test_audio_in_video.py::test_audio_in_video_cache_correctness[1-Qwen/Qwen2.5-Omni-3B]" \
-                       "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-0.3-LGAI-EXAONE/EXAONE-4.5-33B]"
+          pytest -v -n 8 tests/models/multimodal/processing/
 
       - name: "Test: test_mapping"
         if: false
