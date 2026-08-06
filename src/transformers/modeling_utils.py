@@ -42,6 +42,8 @@ from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
+from transformers.distributed.utils import is_dtensor
+
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
@@ -163,9 +165,8 @@ SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreT
 _is_quantized = False
 _is_ds_init_called = False
 
-# TODO(3outeille): remove this after rebasing on https://github.com/huggingface/transformers/pull/47619
 if torch.distributed.is_available():
-    from torch.distributed.tensor import DTensor
+    pass
 
 
 @dataclass(frozen=True)
@@ -4760,7 +4761,7 @@ class PreTrainedModel(
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
             # TODO(3outeille): remove the distributed guard after rebasing
-            if torch.distributed.is_available() and isinstance(param, DTensor):
+            if is_dtensor(param):
                 local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
                 value = torch.nn.Parameter(
                     _dtensor_from_local_like(local, param),
