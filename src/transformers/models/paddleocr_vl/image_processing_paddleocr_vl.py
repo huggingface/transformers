@@ -174,20 +174,17 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         patches = images.reshape(
             batch_size,
             channel,
-            grid_h // merge_size,
-            merge_size,
+            grid_h,
             patch_size,
-            grid_w // merge_size,
-            merge_size,
+            grid_w,
             patch_size,
         )
         # Reorder dimensions to group grid and patch information for subsequent flattening.
-        # [batch, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
-        patches = patches.permute(0, 2, 5, 3, 6, 1, 4, 7)
-
+        # [batch, grid_h, grid_w, channel, patch, patch]
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(4)
+            .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
             .reshape(
                 batch_size,
                 grid_h * grid_w,
@@ -255,7 +252,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -272,6 +269,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        images_kwargs = images_kwargs or {}
         min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
         max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
