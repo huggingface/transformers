@@ -84,14 +84,6 @@ jobs:
           echo "=== Disk ===" && df -h
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
-      - name: Start memory monitor
-        run: |
-          while true; do
-            echo "[$(date '+%H:%M:%S')] $(free -h | awk '/Mem:/{printf "total=%-6s used=%-6s free=%-6s available=%-6s", $2, $3, $4, $7}') | top-procs: $(ps aux --sort=-%mem | awk 'NR>1 && NR<=4 {printf "%s(%.0f%%) ", $11, $4}')"
-            sleep 5
-          done &
-          echo "MONITOR_PID=$!" >> $GITHUB_ENV
-
       - name: "Test: test_initialization (subset)"
         working-directory: vllm
         continue-on-error: true
@@ -129,6 +121,3 @@ jobs:
         continue-on-error: true
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
-      - name: Stop memory monitor
-        if: always()
-        run: kill $MONITOR_PID 2>/dev/null || true
