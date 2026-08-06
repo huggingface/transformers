@@ -673,7 +673,7 @@ class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
     def context_around_forward(self, module, mesh):
         return _use_local_dtensor_params(module)
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, source=None):
         return output
 
 
