@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from torch import nn
@@ -36,14 +36,14 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dbrx import DbrxConfig
 
 
 class DbrxRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DbrxConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -57,24 +57,17 @@ class DbrxRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: DbrxConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: DbrxConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -83,22 +76,22 @@ class DbrxRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        # Disable any outside autocast context if any, to really force fp32
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -278,11 +271,11 @@ class DbrxExpertGLU(nn.Module):
     def forward(
         self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
     ) -> torch.Tensor:
-        gate_proj = x.matmul(expert_w1)
-        up_proj = x.matmul(expert_v1)
+        gate_proj = x.matmul(expert_w1.T)
+        up_proj = x.matmul(expert_v1.T)
         gate_proj = self.activation_fn(gate_proj)
         intermediate_states = gate_proj * up_proj
-        down_proj = intermediate_states.matmul(expert_w2.t())
+        down_proj = intermediate_states.matmul(expert_w2)
         return down_proj
 
 
@@ -301,7 +294,7 @@ class DbrxExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
@@ -318,17 +311,17 @@ class DbrxExperts(nn.Module):
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
             states = self.mlp(hidden_states[token_idx], w1, v1, w2)
-            states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
+            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, idx, None]
             next_states.index_add_(0, token_idx, states)
 
-        next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
+        next_states = next_states.view(batch_size, -1, self.hidden_size)
         return next_states
 
 
 class DbrxRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.ffn_hidden_size
+        self.hidden_size = config.hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
 

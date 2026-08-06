@@ -35,7 +35,7 @@ from ...utils import TensorType, auto_docstring
 class Kimi_K25ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to `16384`):
-        The max limit to resize resize the image.
+        The max limit to resize the image.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):
@@ -48,31 +48,31 @@ class Kimi_K25ImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 def navit_resize(
-    width: int,
     height: int,
+    width: int,
     patch_size: int,
     merge_kernel_size: int,
     max_patches: int,
     max_size_per_side: int,
-):
-    num_patches_w = max(1.0, width // patch_size)
+) -> tuple[tuple[int, int], tuple[int, int]]:
     num_patches_h = max(1.0, height // patch_size)
-    current_patch_count = num_patches_w * num_patches_h
+    num_patches_w = max(1.0, width // patch_size)
+    current_patch_count = num_patches_h * num_patches_w
 
     # Scale to satisfy total patch budget (affects both dims, hence sqrt)
     scale_for_total_patches = math.sqrt(max_patches / current_patch_count)
 
     # Scale to satisfy per-side patch budget
-    scale_for_width_patches = (max_size_per_side * patch_size) / width
     scale_for_height_patches = (max_size_per_side * patch_size) / height
+    scale_for_width_patches = (max_size_per_side * patch_size) / width
 
     # Use the most restrictive scale, never upscale
-    scale = min(1.0, scale_for_total_patches, scale_for_width_patches, scale_for_height_patches)
+    scale = min(1.0, scale_for_total_patches, scale_for_height_patches, scale_for_width_patches)
 
     # Make sure the resized size doesn't go beyond predefined `max`
-    new_width, new_height = max(1, int(width * scale)), max(1, int(height * scale))
-    new_width = min(new_width, max_size_per_side * patch_size)
+    new_height, new_width = max(1, int(height * scale)), max(1, int(width * scale))
     new_height = min(new_height, max_size_per_side * patch_size)
+    new_width = min(new_width, max_size_per_side * patch_size)
 
     # Calculate the padding to make the height and width divisible by the merge kernel size and patch size.
     factor = merge_kernel_size * patch_size
@@ -121,6 +121,34 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
+    def patchify(
+        self,
+        images: "torch.Tensor",
+        patch_size: int,
+    ) -> tuple["torch.Tensor", int, int]:
+        """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
+        # Override: final layout is a 4D image instead of flattened 2D seq
+        batch_size, channel, resized_height, resized_width = images.shape
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        patches = images.reshape(
+            batch_size,
+            channel,
+            grid_h,
+            patch_size,
+            grid_w,
+            patch_size,
+        )
+        # [batch, grid_h, grid_w, channel, patch, patch]
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
+        flatten_patches = patches.reshape(
+            batch_size,
+            grid_h * grid_w,
+            channel,
+            patch_size,
+            patch_size,
+        )
+        return flatten_patches, grid_h, grid_w
+
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -145,15 +173,15 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
             height, width = stacked_images.shape[-2:]
             if do_resize:
                 (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
-                    height,
-                    width,
+                    height=height,
+                    width=width,
                     patch_size=patch_size,
                     merge_kernel_size=merge_size,
                     max_patches=max_patches,
                     max_size_per_side=size.max_height,
                 )
                 stacked_images = self.resize(
-                    image=stacked_images,
+                    stacked_images,
                     size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
                 )
@@ -170,13 +198,13 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
-            batch_size, channels, height, width = stacked_images.shape
-            grid_h, grid_w = height // patch_size, width // patch_size
-            patches = stacked_images.reshape(batch_size, channels, grid_h, patch_size, grid_w, patch_size)
-            patches = patches.permute(0, 2, 4, 1, 3, 5)
+            patches, grid_h, grid_w = self.patchify(
+                stacked_images,
+                patch_size=patch_size,
+            )
 
-            processed_images_grouped[shape] = patches.reshape(batch_size, -1, channels, patch_size, patch_size)
-            processed_grids[shape] = [[1, grid_h, grid_w]] * batch_size
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
@@ -187,7 +215,7 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -204,6 +232,7 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        images_kwargs = images_kwargs or {}
         max_size_per_side = images_kwargs["size"]["max_height"] if "size" in images_kwargs else self.size["max_height"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)

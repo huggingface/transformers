@@ -147,7 +147,7 @@ def compute_module_sizes(
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
-    Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
+    Returns a tuple of 2 dicts, the first one containing a mapping of all the modules and the corresponding size
     in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
     the model graph) and the corresponding sizes.
     If `only_modules` is set to False, the first mapping will not only contain the size of all modules, but also
@@ -920,31 +920,38 @@ def check_tied_parameters_on_same_device(tied_params, device_map):
             )
 
 
-def force_accelerate_hooks(child_module_name: str) -> Callable:
+def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
     """
-    Decorator to forcefully fire the accelerate hooks of `child_module_name`, before entering the forward of the parent itself.
-    Indeed, the hooks of the child are only fired through the `forward` child's method, so if the child weights are used directly,
+    Decorator to forcefully fire the accelerate hooks of `child_module_names`, before entering the forward of the parent itself.
+    Indeed, the hooks of a child are only fired through the `forward` child's method, so if the child weights are used directly,
     as is the case inside `causal_conv1d_fn` and `causal_conv1d_update` for example, they will not be fired. This may cause device
     issues, especially in the case of offloading, that this decorator will correct.
     """
 
+    if isinstance(child_module_names, str):
+        child_module_names = [child_module_names]
+
     def decorator(forward_func: Callable) -> Callable:
         def wrapped(self, *args, **kwargs):
-            hooked_module = getattr(self, child_module_name)
-            hook = getattr(hooked_module, "_hf_hook", None)
-            if hook is not None:
-                # Note that here we only call the hook with the module, not `*args` not `**kwargs`, as we assume the `forward`
-                # on which this decorator is applied is responsible to move the args and kwargs with its own hook if any. This makes
-                # sense as the module decorated with this should have all internal modules on the same device
-                hook.pre_forward(hooked_module)
+            hooked_modules = []
+            for child_module_name in child_module_names:
+                hooked_module = getattr(self, child_module_name)
+                hook = getattr(hooked_module, "_hf_hook", None)
+                hooked_modules.append((hooked_module, hook))
+                if hook is not None:
+                    # Note that here we only call the hook with the module, not `*args` not `**kwargs`, as we assume the `forward`
+                    # on which this decorator is applied is responsible to move the args and kwargs with its own hook if any. This makes
+                    # sense as the module decorated with this should have all internal modules on the same device
+                    hook.pre_forward(hooked_module)
 
             output = forward_func(self, *args, **kwargs)
 
-            if hook is not None:
-                # Note that here we only call the hook with the module, not `output`, as we assume the `forward` on which
-                # this decorator is applied is responsible to move the output with its own hook if any. This makes sense
-                # as the module decorated with this should have all internal modules on the same device
-                hook.post_forward(hooked_module, ())
+            for hooked_module, hook in reversed(hooked_modules):
+                if hook is not None:
+                    # Note that here we only call the hook with the module, not `output`, as we assume the `forward` on which
+                    # this decorator is applied is responsible to move the output with its own hook if any. This makes sense
+                    # as the module decorated with this should have all internal modules on the same device
+                    hook.post_forward(hooked_module, ())
 
             return output
 
