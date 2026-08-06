@@ -756,12 +756,12 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         return self
 
-    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
+    def to(self, device: str | torch.device | int, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
+            device (`str` or `torch.device` or `int`): The device to put the tensors on.
             non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
@@ -1210,7 +1210,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self, new_tokens: str | AddedToken | Sequence[str | AddedToken], special_tokens: bool = False
     ) -> int:
         """
-        #TODO remove this from here! PreTrainedTOkeniuzerBase should be agnostic of AddedToken.
+        #TODO remove this from here! PreTrainedTokenizerBase should be agnostic of AddedToken.
 
         Add a list of new tokens. If the new tokens are not in the vocabulary, they are added to the end. Added tokens and
         tokens from the vocabulary of the tokenization algorithm are therefore not treated in the same way.
