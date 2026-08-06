@@ -30,7 +30,6 @@ from transformers.models.esmc.convert_esmc_checkpoint import build_esmc_config_d
 # in ``_LEGACY_RENAMES`` below.
 _LEGACY_FIELDS = (
     "num_loops",
-    "num_diffusion_samples",
     "structure_head.diffusion_module.sigma_data",
     "structure_head.diffusion_module.fourier_dim",
     "structure_head.gamma_0",
@@ -73,6 +72,7 @@ _LEGACY_RENAMES = {
     "structure_head.diffusion_module.num_hidden_layers": "structure_head.diffusion_module.token_num_blocks",
     "structure_head.diffusion_module.num_attention_heads": "structure_head.diffusion_module.token_num_heads",
     "structure_head.num_distogram_bins": "structure_head.distogram_bins",
+    "structure_head.num_diffusion_samples": "num_diffusion_samples",
     "structure_head.inference_sigma_max_ratio": "structure_head.inference_s_max",
     "structure_head.inference_sigma_min_ratio": "structure_head.inference_s_min",
     "structure_head.inference_exponent": "structure_head.inference_p",

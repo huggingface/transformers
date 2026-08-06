@@ -35,7 +35,7 @@ from ..llama.modeling_llama import eager_attention_forward, rotate_half
 from ..nanochat.modeling_nanochat import NanoChatRMSNorm
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config, EsmFold2DiffusionModuleConfig
-from .generation_esmfold2 import EsmFold2GenerationMixin
+from .generation_esmfold2 import EsmFold2FoldingMixin
 
 
 @dataclass
@@ -1791,7 +1791,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
     "parcae").
     """
 )
-class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
+class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__(config)
 
@@ -1810,7 +1810,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         self.parcae = EsmFold2Parcae(config)
 
         # Heads --------------------------------------------------------------
-        # The denoiser itself; the sampling loop that drives it lives in ``EsmFold2GenerationMixin``.
+        # The denoiser itself; the sampling loop that drives it lives in ``EsmFold2FoldingMixin``.
         self.structure_head = EsmFold2DiffusionModule(config)
         self.distogram_head = nn.Linear(
             config.pairwise_hidden_size, config.structure_head.num_distogram_bins, bias=True
@@ -2084,7 +2084,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2GenerationMixin):
         Run the folding trunk: featurize the inputs, embed them into a pair representation, refine it over
         `num_loops` recycling iterations, and read off the distogram. This is the deterministic half of a
         structure prediction; the diffusion sampler that turns the returned pair representation into 3D
-        coordinates lives in `EsmFold2GenerationMixin` — call [`~EsmFold2Model.fold`] or
+        coordinates lives in `EsmFold2FoldingMixin` — call [`~EsmFold2Model.fold`] or
         [`~EsmFold2Model.infer_protein`] for an end-to-end prediction.
         """
     )

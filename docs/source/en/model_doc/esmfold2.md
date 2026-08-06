@@ -47,7 +47,7 @@ print(pdb_string)
 slightly different predictions if you run the same sequence multiple times. Set a manual seed if you want exactly
 reproducible structures.
 
-ESMFold2 draws `config.num_diffusion_samples` structures per fold. `infer_protein_as_pdb` renders the best-ranked
+ESMFold2 draws `config.structure_head.num_diffusion_samples` structures per fold. `infer_protein_as_pdb` renders the best-ranked
 one (highest pTM); pass `sample_idx` to pick a specific sample instead. The PDB carries per-residue pLDDT in the
 b-factor column, on the same 0-1 scale as the `plddt` output.
 
@@ -57,7 +57,7 @@ A structure prediction has two halves. `EsmFold2Model.forward` is the first: it 
 featurized inputs and returns the refined pair representation plus the distogram, as an
 [`~models.esmfold2.modeling_esmfold2.EsmFold2TrunkOutput`]. It does not produce 3D coordinates — ESMFold2 gets those
 by iterative denoising, and that sampling loop (the noise schedule, Kabsch alignment and the ODE/SDE update) lives in
-`EsmFold2GenerationMixin` along with the confidence head call:
+`EsmFold2FoldingMixin` along with the confidence head call:
 
 | Method | Use it for |
 | --- | --- |

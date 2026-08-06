@@ -97,7 +97,7 @@ def _weighted_rigid_align(coords: Tensor, target_coords: Tensor, weights: Tensor
     return centered_coords @ rotation.transpose(-1, -2) + target_centroid
 
 
-class EsmFold2GenerationMixin:
+class EsmFold2FoldingMixin:
     """Diffusion sampling loop and the ``infer_protein`` entry points for ESMFold2."""
 
     def fold(
@@ -129,7 +129,7 @@ class EsmFold2GenerationMixin:
             confidence head; the trunk does not need it.
         num_diffusion_samples (`int`, *optional*):
             Number of parallel structure samples to draw; the confidence head re-runs once per sample.
-            Defaults to `config.num_diffusion_samples`.
+            Defaults to `config.structure_head.num_diffusion_samples`.
         num_sampling_steps (`int`, *optional*):
             Number of diffusion sampling steps. Defaults to `config.structure_head.inference_num_steps`.
         trunk_kwargs:
@@ -139,7 +139,9 @@ class EsmFold2GenerationMixin:
         from .modeling_esmfold2 import EsmFold2Output
 
         num_samples: int = (
-            num_diffusion_samples if num_diffusion_samples is not None else self.config.num_diffusion_samples
+            num_diffusion_samples
+            if num_diffusion_samples is not None
+            else self.config.structure_head.num_diffusion_samples
         )
 
         trunk = self(
