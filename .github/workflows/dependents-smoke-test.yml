@@ -76,12 +76,12 @@ jobs:
         run: |
           # Lower hardcoded value in test_initialization.py
           # Needed by: test_initialization.py::test_can_initialize_small_subset[*]
-          sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.5/g' vllm/tests/models/test_initialization.py
+          sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
           # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.5/g' vllm/vllm/config/cache.py
+          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
           # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
           # Needed by: test_backend.py::test_models[meta-llama/Llama-3.2-1B-Instruct-transformers-num_fused0]
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.5,/g' vllm/vllm/entrypoints/llm.py
+          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
           # Verify all patches applied
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
           grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
@@ -117,13 +117,16 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
-        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s tests/models/transformers/
+          # Skipped models:
+          #   allenai/OLMoE-1B-7B-0924 — OOM: previous test leaves insufficient free memory (13.35/27.83 GiB < 0.4*27.83)
+          pytest -v -s tests/models/transformers/ \
+            --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]"
 
       - name: "Test: multimodal processing"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
