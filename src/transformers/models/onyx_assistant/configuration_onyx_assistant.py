@@ -26,15 +26,12 @@ logger = logging.get_logger(__name__)
 @strict
 class OnyxAssistantConfig(PreTrainedConfig):
     r"""
-    backbone_hidden_size (`int`, defaults to 1536):
-        Hidden size of the target model this assistant was trained with.
-    use_ordered_embeddings (`bool`, defaults to False):
-        If True, uses an embedding table ordered for optimal assistant model performance that needs to be re-ordered to
-        align with the main model.
-    num_centroids (`int`, defaults to 2048):
-        The total numer of centroids.
-    centroid_intermediate_top_k (`int`, defaults to 32):
-        The number of active centroids.
+    block_size (<fill_type>):
+        <fill_docstring>
+    mask_token_id (<fill_type>):
+        <fill_docstring>
+    target_layer_ids (<fill_type>):
+        <fill_docstring>
 
     Example:
 

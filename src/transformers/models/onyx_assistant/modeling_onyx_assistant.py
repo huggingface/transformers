@@ -68,32 +68,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -131,6 +105,16 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    # Due to the added context from the main model, k/v and q do not have the same seq_len, so we have to slice here
+    q_len = q.size(-2)
+    q_embed = (q * cos[..., -q_len:, :]) + (rotate_half(q) * sin[..., -q_len:, :])
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 class OnyxAssistantAttention(nn.Module):
     def __init__(self, config: OnyxAssistantConfig, layer_idx: int):
         super().__init__()
@@ -159,7 +143,7 @@ class OnyxAssistantAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        target_states: torch.Tensor,
+        context_hidden_states: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -168,36 +152,26 @@ class OnyxAssistantAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # QKV proj current noise inputs first
+        # The total k/v states in Dflash are the concatenation of the previous `context_hidden_states` (same for every layer)
+        # and the actual projections on the diffusion window (the actual `hidden_states` input). Everything gets appended to the
+        # `past_key_values`, and then the diffusion window will be evicted from it so that the cache is effectively only the context
+        # from the main model
+        if context_hidden_states is not None:
+            kv_hidden_states = torch.cat([context_hidden_states, hidden_states], dim=1)
+
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(kv_hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(kv_hidden_states).view(hidden_shape).transpose(1, 2)
+
+        # We use QK-norm
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        # Project new clean target states for KV cache
-        target_shape = (*target_states.shape[:-1], -1, self.head_dim)
-        tgt_key_states = self.k_proj(target_states).view(target_shape).transpose(1, 2)
-        tgt_value_states = self.v_proj(target_states).view(target_shape).transpose(1, 2)
-        tgt_key_states = self.k_norm(tgt_key_states)
-
-        # The positions are of `target+noise` length while the Q states are only `noise` length!
-        # We either crop `position_embeddings` here or we need to pass two different `position_embeddings`
-        # Cropping is easier since the positions are consecutive blocks!
-        # This is needed since we can't and don't want to update cache by manually accessing KV proj, and
-        # instead delegate the heavy work to attn module
         cos, sin = position_embeddings
-        noise_cos, noise_sin = cos[:, -input_shape[-1] :], sin[:, -input_shape[-1] :]
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, noise_cos, noise_sin)
-        tgt_cos, tgt_sin = cos[:, : -input_shape[-1]], sin[:, : -input_shape[-1]]
-        tgt_key_states, _ = apply_rotary_pos_emb(tgt_key_states, tgt_key_states, tgt_cos, tgt_sin)
+        # We use global NoPE for hybrid attention model
+        if self.sliding_window is None or self.is_sliding:
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # Concatenate `target+noise` after applying positions on the whole input and update cache
-        key_states = torch.cat([tgt_key_states, key_states], dim=-2)
-        value_states = torch.cat([tgt_value_states, value_states], dim=-2)
-
-        # Cache after update holds N prev clean targets, current clean targets and noise input. The noise
-        # will be cropped out in `generation` and swapped with clean states for accepted tokens!
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -251,7 +225,7 @@ class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        target_states: torch.Tensor,
+        context_hidden_states: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -263,7 +237,7 @@ class OnyxAssistantDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            target_states=target_states,
+            context_hidden_states=context_hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -394,8 +368,8 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        noise_embeds: torch.FloatTensor | None = None,
-        target_embeds: torch.FloatTensor | None = None,
+        noise_embeds: torch.FloatTensor,
+        context_hidden_states: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -406,7 +380,7 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         # project targets to the same hidden dim as the model
-        target_states = self.encoder(target_embeds)
+        context_hidden_states = self.encoder(context_hidden_states)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -433,7 +407,7 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
             layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
-                target_states=target_states,
+                context_hidden_states=context_hidden_states,
                 attention_mask=mask_mapping[layer_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -446,7 +420,7 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
 

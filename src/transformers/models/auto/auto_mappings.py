@@ -435,6 +435,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
         ("onyx", "OnyxConfig"),
+        ("onyx_assistant", "OnyxAssistantConfig"),
         ("onyx_text", "OnyxTextConfig"),
         ("onyx_vision", "OnyxVisionConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
