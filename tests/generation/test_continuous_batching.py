@@ -453,13 +453,16 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         query_length: int,
     ) -> None:
         """Test FullAttentionCacheAllocator.get_read_indices and get_write_indices return correct physical indices."""
+        allocator = _make_allocator(FullAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=block_size)
+        allocator.block_table["req"] = block_table
 
         def reference_indices(start: int, end: int) -> list[int]:
-            """Reference implementation: converts logical indices to physical indices."""
-            return [block_table[i // block_size] * block_size + i % block_size for i in range(start, end)]
-
-        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
-        allocator.block_table["req"] = block_table
+            """Reference implementation: converts logical indices to physical row indices. The token slot t of block b
+            lives at row b * rows_per_block + t."""
+            return [
+                block_table[i // block_size] * allocator.block_physical_stride + i % block_size
+                for i in range(start, end)
+            ]
 
         # Test read indices (from 0 to past_length + query_length)
         expected_read = reference_indices(0, past_length + query_length)
@@ -726,8 +729,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
         if continuous_batching_config.default_compile_level > 0:
-            fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-            compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
+            # Paged attention is wrapped in @torch.compiler.disable so fullgraph is not possible
+            compile_config = CompileConfig(mode="default", fullgraph=False, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
@@ -1067,8 +1070,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
         sharing."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 88 full-attention pages of 32 tokens = 4 blocks for TinyLlama's 22 full-attention layers
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_pages=88, fa_page_size=32
         )
 
         # Patch offload_requests to verify it's called at least once
