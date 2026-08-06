@@ -356,7 +356,8 @@ def torch_chunk_gated_delta_rule(
             row = ut_system[..., i, :i].clone()
             sub = ut_system[..., :i, :i].clone()
             ut_system[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
-        ut_system.diagonal(dim1=-2, dim2=-1).add_(1)
+        # Adding the identity in place would be cheaper, but exporters cannot functionalize a mutated view
+        ut_system = ut_system + torch.eye(chunk_size, dtype=ut_system.dtype, device=ut_system.device)
         new_values, k_cumdecay = ut_system @ v_beta, ut_system @ decayed_k_beta
     del ut_system, decayed_k_beta, v_beta
 
