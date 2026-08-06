@@ -65,7 +65,7 @@ UNROLL_KWARGS_CLASSES = {
     "BaseImageProcessor",
     "ProcessorMixin",
 }
-BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]
 
 # Short indicator added to unrolled kwargs to distinguish them from regular args
 KWARGS_INDICATOR = ", *kwargs*"
@@ -3626,6 +3626,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     """
     docstring = ""
     kwargs_summary = ""
+    needs_kwarg_summary = True
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs and parent_class is not None:
@@ -3669,6 +3670,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
 
         kwargs_type = _get_base_kwargs_class(kwarg_param.annotation.__args__[0])
         if kwargs_type.__name__ in BASIC_KWARGS_TYPES:
+            needs_kwarg_summary = False
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
@@ -3802,7 +3804,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     undocumented_parameters.append(
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
-        else:
+        if needs_kwarg_summary or is_processor:
             # Build **kwargs summary line if we couldn't unpack them
             kwargs_info = source_args_dict.get("__kwargs__", {})
             kwargs_description = kwargs_info.get(
