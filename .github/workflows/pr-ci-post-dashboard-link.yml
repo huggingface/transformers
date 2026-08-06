@@ -48,10 +48,12 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Show mlinter findings
+      - name: Checkout repo (for post_mlinter_review.py and github_utils.py)
         if: steps.download.outcome == 'success'
-        run: |
-          echo "=== mlinter-pr-number.txt ==="
-          cat mlinter-pr-number.txt
-          echo "=== mlinter-findings.json ==="
-          cat mlinter-findings.json
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Post mlinter review
+        if: steps.download.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 utils/post_mlinter_review.py
