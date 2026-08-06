@@ -1698,9 +1698,7 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_compiling()
-        return False
+        return torch.compiler.is_compiling()
     except Exception:
         return False
 
@@ -1709,9 +1707,7 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        if hasattr(torch, "compiler"):
-            return torch.compiler.is_exporting()
-        return False
+        return torch.compiler.is_exporting()
     except Exception:
         return False
 

@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_exporting,
     resolve_internal_import,
 )
 from .flash_attention import flash_attention_forward
@@ -789,10 +790,16 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             implementation = torch_function if implementation is None else implementation
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
+        torch_params = tuple(inspect.signature(torch_function).parameters)
         applicable_params = tuple(inspect.signature(implementation).parameters)
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
+            # kernels are incompatible with torch.export, so we always use the torch path
+            if implementation is not torch_function and is_torchdynamo_exporting():
+                kwargs = {k: v for k, v in kwargs.items() if k in torch_params}
+                return torch_function(*args, **kwargs)
+
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 
