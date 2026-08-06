@@ -80,12 +80,13 @@ class TestBatchGeneration(unittest.TestCase):
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
+
     @require_deterministic_for_xpu
-    def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
+    def test_generate_batch_consistency(self, attn_impl, num_fa_pages, block_size, max_batch_tokens):
         self.model.config.attn_implementation = attn_impl
 
         cb_config = ContinuousBatchingConfig(
-            num_blocks=num_blocks,
+            num_fa_pages=num_fa_pages,
             block_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
@@ -125,12 +126,12 @@ class TestBatchGeneration(unittest.TestCase):
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
-    def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
+    def test_generate_batch_with_sampling(self, attn_impl, num_fa_pages, block_size, max_batch_tokens):
         """Test batch generation with do_sampling=True to verify sampling works correctly."""
         self.model.config.attn_implementation = attn_impl
 
         cb_config = ContinuousBatchingConfig(
-            num_blocks=num_blocks,
+            num_fa_pages=num_fa_pages,
             block_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
@@ -156,7 +157,7 @@ class TestBatchGeneration(unittest.TestCase):
         )
         end = time.time()
         print(
-            f"\n[{attn_impl}] Sampling batch took {end - start:.2f}s with config: blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
+            f"\n[{attn_impl}] Sampling batch took {end - start:.2f}s with config: blocks={num_fa_pages}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
         )
 
         # With sampling enabled, we can't check exact outputs, but we should verify:
