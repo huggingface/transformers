@@ -31,6 +31,7 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4DecoderLayer,
     Exaone4Model,
+    Exaone4PreTrainedModel,
     Exaone4RMSNorm,
     eager_attention_forward,
     rotate_half,
@@ -172,7 +173,11 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         return hidden_states
 
 
-class OnyxContextProjection(nn.Module):
+class OnyxAssistantPreTrainedModel(Exaone4PreTrainedModel):
+    main_input_name = "noise_embeds"
+
+
+class OnyxAssistantContextProjection(nn.Module):
     def __init__(self, config: OnyxAssistantConfig):
         super().__init__()
         # Project concatenated context hidden states -> hidden_size
@@ -197,7 +202,7 @@ class OnyxAssistantModel(Exaone4Model):
         del self.embed_tokens
         del self.padding_idx
         del self.vocab_size
-        self.encoder = OnyxContextProjection(config)
+        self.encoder = OnyxAssistantContextProjection(config)
         self.layers = nn.ModuleList(
             [OnyxAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -226,7 +231,10 @@ class OnyxAssistantModel(Exaone4Model):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(noise_embeds.shape[1], device=noise_embeds.device) + past_seen_tokens
+            position_ids = (
+                torch.arange(noise_embeds.shape[1] + context_hidden_states.shape[1], device=noise_embeds.device)
+                + past_seen_tokens
+            )
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(mask_mapping := attention_mask, dict):
@@ -237,7 +245,7 @@ class OnyxAssistantModel(Exaone4Model):
                 "decoder_attention_mask": attention_mask,
                 "past_key_values": past_key_values,
             }
-            mask_mapping = self.create_diffusion_decoder_attention_mask(**mask_kwargs)
+            mask_mapping = self.create_bidirectional_decoder_attention_mask(**mask_kwargs)
 
         hidden_states = noise_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -263,7 +271,7 @@ class OnyxAssistantModel(Exaone4Model):
         )
 
     @staticmethod
-    def create_diffusion_decoder_attention_mask(
+    def create_bidirectional_decoder_attention_mask(
         config: OnyxAssistantConfig,
         inputs_embeds: torch.Tensor,
         context_hidden_states: torch.Tensor,
@@ -290,16 +298,9 @@ class OnyxAssistantModel(Exaone4Model):
             decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length+canvas_length)` or `dict`, *optional*):
                 Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         """
-
-        if past_key_values is None:
-            raise ValueError(
-                "The diffusion mask requires `past_key_values` to construct the next attention mask correctly"
-            )
-
         # Shortcut: not compiling for sure AND no padding -> delegate mask creation to the inner functions by returning None
         if (
             decoder_attention_mask is None
-            or (not past_key_values.is_compileable and decoder_attention_mask.all())
             or config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping
         ):
             return {"full_attention": None, "sliding_attention": None}
@@ -316,7 +317,7 @@ class OnyxAssistantModel(Exaone4Model):
             decoder_attention_mask = decoder_attention_mask.bool()
 
         q_length = inputs_embeds.shape[1]
-        q_offset = past_key_values.get_seq_length()
+        q_offset = past_key_values.get_seq_length() if past_key_values is not None else 0
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
         additional_kv_length = context_hidden_states.shape[1]
 
@@ -325,12 +326,15 @@ class OnyxAssistantModel(Exaone4Model):
         # `create_bidirectional_sliding_window_mask` to get correct the mask shape and offsets
         mask_mapping = {}
         for layer_pattern in set(config.layer_types):
-            if layer_pattern == "sliding_attention":
-                layer_idx = past_key_values.is_sliding.index(True)
+            if past_key_values is None:
+                kv_length, kv_offset = q_length, 0
             else:
-                layer_idx = past_key_values.is_sliding.index(False)
+                if layer_pattern == "sliding_attention":
+                    layer_idx = past_key_values.is_sliding.index(True)
+                else:
+                    layer_idx = past_key_values.is_sliding.index(False)
 
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
+                kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
             kv_length += additional_kv_length  # 'to-be-but-not-yet-not-cached' KV length
 
             mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]

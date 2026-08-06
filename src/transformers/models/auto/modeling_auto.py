@@ -367,6 +367,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("oneformer", "OneFormerModel"),
         ("onyx", "OnyxModel"),
+        ("onyx_assistant", "OnyxAssistantModel"),
         ("onyx_text", "OnyxTextModel"),
         ("onyx_vision", "OnyxVisionModel"),
         ("openai-gpt", "OpenAIGPTModel"),
