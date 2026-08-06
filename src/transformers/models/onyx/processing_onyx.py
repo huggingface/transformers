@@ -63,7 +63,7 @@ class OnyxProcessor(ProcessorMixin):
             vision_data.update(num_image_tokens=num_image_tokens, num_image_patches=num_image_patches)
         return MultiModalData(**vision_data)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Reference format is [bos] + <|patch|>*n + text (no image start/end wrappers), matched here.
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
