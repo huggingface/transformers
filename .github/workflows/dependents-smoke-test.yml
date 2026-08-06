@@ -118,7 +118,7 @@ jobs:
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s "tests/models/transformers/test_backend.py::test_models[meta-llama/Llama-3.2-1B-Instruct-transformers-num_fused0]"
+          pytest -v -s tests/models/transformers/test_backend.py
 
       - name: "Test: multimodal processing"
         if: false
