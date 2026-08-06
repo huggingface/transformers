@@ -79,6 +79,7 @@ jobs:
           # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.5/g' vllm/vllm/config/cache.py
           # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
+          # Needed by: test_backend.py::test_models[meta-llama/Llama-3.2-1B-Instruct-transformers-num_fused0]
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.5,/g' vllm/vllm/entrypoints/llm.py
           # Verify all patches applied
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
