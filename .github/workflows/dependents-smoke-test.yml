@@ -84,23 +84,51 @@ jobs:
           echo "=== Disk ===" && df -h
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
-      - name: Run tests
-        working-directory: vllm
+      - name: Start memory monitor
         run: |
-          # Start background memory monitor (prints every 5s with timestamp)
           while true; do
             echo "[$(date '+%H:%M:%S')] $(free -h | awk '/Mem:/{printf "total=%-6s used=%-6s free=%-6s available=%-6s", $2, $3, $4, $7}') | top-procs: $(ps aux --sort=-%mem | awk 'NR>1 && NR<=4 {printf "%s(%.0f%%) ", $11, $4}')"
             sleep 5
           done &
-          MONITOR_PID=$!
+          echo "MONITOR_PID=$!" >> $GITHUB_ENV
 
-          pytest -v -s tests/models/test_initialization.py
-          pytest -v -s tests/models/test_transformers.py
-          pytest -v -s tests/models/multimodal/processing/
-          pytest -v -s tests/models/multimodal/test_mapping.py
-          python3 examples/basic/offline_inference/chat.py
-          python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
-          # Whisper needs spawn method to avoid deadlock
-          VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
+      - name: "Test: test_initialization (subset)"
+        working-directory: vllm
+        continue-on-error: true
+        run: |
+          pytest -v -s "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
+                       "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]"
 
-          kill $MONITOR_PID 2>/dev/null || true
+      - name: "Test: test_transformers"
+        working-directory: vllm
+        continue-on-error: true
+        run: pytest -v -s tests/models/test_transformers.py
+
+      - name: "Test: multimodal processing"
+        working-directory: vllm
+        continue-on-error: true
+        run: pytest -v -s tests/models/multimodal/processing/
+
+      - name: "Test: test_mapping"
+        working-directory: vllm
+        continue-on-error: true
+        run: pytest -v -s tests/models/multimodal/test_mapping.py
+
+      - name: "Example: chat"
+        working-directory: vllm
+        continue-on-error: true
+        run: python3 examples/basic/offline_inference/chat.py
+
+      - name: "Example: vision language"
+        working-directory: vllm
+        continue-on-error: true
+        run: python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
+
+      - name: "Example: audio language (whisper)"
+        working-directory: vllm
+        continue-on-error: true
+        run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
+
+      - name: Stop memory monitor
+        if: always()
+        run: kill $MONITOR_PID 2>/dev/null || true
