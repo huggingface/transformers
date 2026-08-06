@@ -1635,7 +1635,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             attention_mask = model_kwargs["attention_mask"][:, :num_last_main_model_tokens]
 
         input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
-        # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
+        # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
         mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
 
         # Append positions and mask for the noise tokens, we can't just crop off from `model_kwargs`!
@@ -1648,7 +1648,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Get assistant model outputs
         outputs = self.assistant_model(
             noise_embeds=mask_token_embedding,
-            target_embeds=target_hidden_states,
+            context_hidden_states=target_hidden_states,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=self.cache,

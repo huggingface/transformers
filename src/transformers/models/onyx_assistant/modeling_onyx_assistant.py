@@ -151,6 +151,7 @@ class OnyxAssistantAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+        kv_hidden_shape = hidden_shape
 
         # The total k/v states in Dflash are the concatenation of the previous `context_hidden_states` (same for every layer)
         # and the actual projections on the diffusion window (the actual `hidden_states` input). Everything gets appended to the
@@ -158,19 +159,18 @@ class OnyxAssistantAttention(nn.Module):
         # from the main model
         if context_hidden_states is not None:
             kv_hidden_states = torch.cat([context_hidden_states, hidden_states], dim=1)
+            kv_hidden_shape = (*kv_hidden_states.shape[:-1], -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(kv_hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(kv_hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(kv_hidden_states).view(kv_hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(kv_hidden_states).view(kv_hidden_shape).transpose(1, 2)
 
         # We use QK-norm
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-        # We use global NoPE for hybrid attention model
-        if self.sliding_window is None or self.is_sliding:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -376,6 +376,12 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        noise_embeds (`torch.FloatTensor` of shape `[batch_size, config.block_size, dim]`):
+            Input embedding for the last generated anchor token and mask tokens to be denoised.
+        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
+            Context hidden states from target model's selected layer ids concatenated in the last dim.
+        """
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 

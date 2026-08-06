@@ -27,11 +27,11 @@ logger = logging.get_logger(__name__)
 class OnyxAssistantConfig(PreTrainedConfig):
     r"""
     block_size (<fill_type>):
-        <fill_docstring>
+        The block size of noise inputs that will be denoised.
     mask_token_id (<fill_type>):
-        <fill_docstring>
+        Mask token ids used as noisey input to model.
     target_layer_ids (<fill_type>):
-        <fill_docstring>
+       Zero indexed layer ids whose hidden states are concatenated as context for the model.
 
     Example:
 
