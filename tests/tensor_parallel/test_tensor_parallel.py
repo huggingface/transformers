@@ -163,11 +163,12 @@ class TestTensorParallelLayer(TestCasePlus):
 
     def _get_parameter_placements(self, module, style, mesh=None):
         placements = {}
+        mesh = object() if mesh is None else mesh
         with patch.object(
             tensor_parallel, "distribute_tensor", side_effect=lambda tensor, *args, **kwargs: tensor
         ) as distribute:
             for parameter_name in list(module._parameters):
-                style.shard_param(module, parameter_name, mesh or object())
+                style.shard_param(module, parameter_name, mesh)
                 placements[parameter_name] = distribute.call_args.args[2][0]
 
         return placements
@@ -245,6 +246,49 @@ class TestTensorParallelLayer(TestCasePlus):
 
             self.assertEqual(rowwise_shape, (expected_size, 10))
             self.assertEqual(colwise_shape, (10, expected_size))
+
+    def test_shard_tensor_shape_consistency(self):
+        world_size = 4
+        cases = {
+            "colwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ColwiseParallel(),
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "colwise_gather_output": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ALL_PARALLEL_STYLES["colwise_gather_output"],
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "rowwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": RowwiseParallel(),
+                "expected_shapes": {"weight": (16, 8), "bias": (16,)},
+            },
+            "embedding_rowwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ALL_PARALLEL_STYLES["embedding_rowwise"],
+                "expected_shapes": {"weight": (8, 16)},
+            },
+            "embedding_colwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ColwiseParallel(),
+                "expected_shapes": {"weight": (32, 4)},
+            },
+        }
+
+        for case_name, case in cases.items():
+            module = case["module"]
+            placements = self._get_parameter_placements(module, case["style"])
+
+            for parameter_name, expected_shape in case["expected_shapes"].items():
+                global_shape = module._parameters[parameter_name].shape
+                placement = placements[parameter_name]
+
+                for rank in range(world_size):
+                    with self.subTest(case=case_name, parameter=parameter_name, rank=rank):
+                        local_shape = self._get_local_shape(global_shape, placement, world_size, rank)
+                        self.assertEqual(local_shape, expected_shape)
 
     def test_packed_colwise_packed_and_unpacked_shapes(self):
         module = torch.nn.Module()
