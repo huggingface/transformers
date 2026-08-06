@@ -1027,7 +1027,9 @@ class OnyxModel(OnyxPreTrainedModel):
         )
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
         vision_features = self.vision_projection(vision_features)
-        vision_outputs.pooler_output = self.perception_emb_norm(vision_features)
+        vision_features = self.perception_emb_norm(vision_features)
+        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs
 
     def get_video_features(
@@ -1208,10 +1210,6 @@ class OnyxForConditionalGeneration(OnyxPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | OnyxCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
