@@ -5779,6 +5779,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
     @require_kernels
     @require_torch_accelerator
+    @run_test_using_subprocess  # kernelize mutates module-level functions, so next tests in the same process would fail, and there is no "unkernelize"
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
