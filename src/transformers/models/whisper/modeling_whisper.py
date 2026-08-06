@@ -615,6 +615,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
+        # Auto-cast input_features to the encoder weight dtype so checkpoints
+        # that declare float16 (e.g. whisper-large-v3) work with the default
+        # WhisperFeatureExtractor output (float32) on the manual path.
+        # Mirrors what the pipeline does via `self.dtype`.
+        if input_features.dtype != self.conv1.weight.dtype:
+            input_features = input_features.to(dtype=self.conv1.weight.dtype)
+
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
