@@ -26,30 +26,23 @@ logger = logging.get_logger(__name__)
 @strict
 class OnyxAssistantConfig(PreTrainedConfig):
     r"""
-    block_size (<fill_type>):
+    block_size (`int`, *optional*):
         The block size of noise inputs that will be denoised.
-    mask_token_id (<fill_type>):
+    mask_token_id (`int`, *optional*):
         Mask token ids used as noisey input to model.
-    target_layer_ids (<fill_type>):
+    target_layer_ids (`list[int]`, *optional*):
        Zero indexed layer ids whose hidden states are concatenated as context for the model.
 
     Example:
 
     ```python
-    >>> from transformers import (
-    >>>     OnyxAssistantConfig,
-    >>>     OnyxAssistantForCausalLM,
-    >>>     OnyxTextConfig,
-    >>> )
+    >>> from transformers import OnyxAssistantConfig, OnyxAssistantModel
 
-    >>> # Initializing a Onyx Text config similar to TODO.
-    >>> text_config = OnyxTextConfig(...)
-
-    >>> # Initializing a Onyx Assistant config similar to TODO.
+    >>> # Initializing an Onyx Assistant config similar to TODO.
     >>> configuration = OnyxAssistantConfig(text_config)
 
     >>> # Initializing a model from the TODO configuration.
-    >>> model = OnyxAssistantForCausalLM(configuration)
+    >>> model = OnyxAssistantModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

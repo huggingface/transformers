@@ -1601,7 +1601,7 @@ class GenerationMixin(ContinuousMixin):
                 "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
             )
             if generation_config.speculation_type == "dflash":
-                pass  # the draft has no input/output embedding of its own
+                pass  # draft has no input/output embedding of its own an thus no `config.vocan_size`
             elif self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
                 if "assistant_tokenizer" in generation_mode_kwargs:
                     raise ValueError(

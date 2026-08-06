@@ -43,6 +43,25 @@ class OnyxAssistantRMSNorm(Exaone4RMSNorm):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """
+    Applies Rotary Position Embedding to the query and key tensors where keys have concatenated context
+    from main model
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     # Due to the added context from the main model, k/v and q do not have the same seq_len, so we have to slice here
@@ -153,23 +172,23 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         return hidden_states
 
 
-class OnyxTargetEncoder(nn.Module):
+class OnyxContextProjection(nn.Module):
     def __init__(self, config: OnyxAssistantConfig):
         super().__init__()
-        # fuse concatenated target hidden states -> hidden_size
+        # Project concatenated context hidden states -> hidden_size
         self.target_layer_ids = config.target_layer_ids
         encoder_input_size = len(config.target_layer_ids) * config.hidden_size
         self.fc = nn.Linear(encoder_input_size, config.hidden_size, bias=False)
         self.output_norm_enc = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, target_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, context_hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        target_hidden_states (`torch.Tensor` of shape `[batch, seq_len, target_hidden_size]`):
-            concatenated list of tensors, one per `config.target_layer_ids` entry in that order
+        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
+            Context hidden states from target model's selected layer ids concatenated in the last dim.
         """
-        target_hidden_states = self.fc(target_hidden_states)
-        target_hidden_states = self.output_norm_enc(target_hidden_states)
-        return target_hidden_states
+        context_hidden_states = self.fc(context_hidden_states)
+        context_hidden_states = self.output_norm_enc(context_hidden_states)
+        return context_hidden_states
 
 
 class OnyxAssistantModel(Exaone4Model):
@@ -178,7 +197,7 @@ class OnyxAssistantModel(Exaone4Model):
         del self.embed_tokens
         del self.padding_idx
         del self.vocab_size
-        self.encoder = OnyxTargetEncoder(config)
+        self.encoder = OnyxContextProjection(config)
         self.layers = nn.ModuleList(
             [OnyxAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
