@@ -187,7 +187,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Identical to Llama's, but deliberately *not* inherited from it: Llama's carries
-    ``@use_kernel_func_from_hub("rotary_pos_emb")``, and the fused kernel is CUDA-only while the atom
+    ``@use_kernel_forward_from_hub("rotary_pos_emb")``, and the fused kernel is CUDA-only while the atom
     stack's rope runs on CPU in the tests. Swapping in a kernel here would also break the bit-exact
     bf16 reference comparison.
 
