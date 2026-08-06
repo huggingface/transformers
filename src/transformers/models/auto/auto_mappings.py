@@ -637,6 +637,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerConfig"),
         ("timm_backbone", "TimmBackboneConfig"),
         ("timm_wrapper", "TimmWrapperConfig"),
+        ("tiny_model", "TinyModelConfig"),
         ("tipsv2", "Tipsv2Config"),
         ("tipsv2_dpt", "Tipsv2DptConfig"),
         ("tipsv2_text_model", "Tipsv2TextConfig"),
