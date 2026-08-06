@@ -1622,37 +1622,34 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated token
+        # NOTE: slice off the last N tokens which is the newly unprocessed part, not yet in cache
         target_hidden_states: torch.Tensor = torch.cat(
             [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
         )
 
-        # We need to cache the full target hidden states from the main model to be able to correct the cache based on validated tokens
-        if self.is_main_model_prefill:
-            self.full_target_hidden_states = target_hidden_states
-        else:
-            self.full_target_hidden_states = torch.cat([self.full_target_hidden_states, target_hidden_states], dim=1)
-
-        # We need to invalidate the cache on all previous block_size window, and use the actual valid tokens to re-feed it
         if not self.is_main_model_prefill:
-            self.cache.crop(-self.block_size + 1)
-
-            input_ids = input_ids[:, -num_last_main_model_tokens - self.block_size + 1:]
-            position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.block_size + 1:]
-            attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.block_size + 1:]
-            target_hidden_states = self.full_target_hidden_states[:, -num_last_main_model_tokens - self.block_size + 1:, :]
-        # No need to crop the cache or slice right after the prefill, as the assistant cache is still empty
-        else:
-            input_ids = input_ids[:, -num_last_main_model_tokens:]
+            self.cache.crop(-self.block_size)
             position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
-            attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
+            attention_mask = model_kwargs["attention_mask"][:, -input_ids.shape[1] - 1 :]
+        else:
+            position_ids = model_kwargs["position_ids"][:, :num_last_main_model_tokens]
+            attention_mask = model_kwargs["attention_mask"][:, :num_last_main_model_tokens]
 
         input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
         # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
         mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
 
+        # Append positions and mask for the noise tokens, we can't just crop off from `model_kwargs`!
+        # NOTE: noise position go beyond what came from model kwargs
+        noise_position_ids = torch.arange(self.block_size, device=position_ids.device) + position_ids[..., -1:] + 1
+        position_ids = torch.cat([position_ids, noise_position_ids], dim=-1)
+        noise_attention_mask = torch.ones(1, self.block_size, device=attention_mask.device, dtype=attention_mask.dtype)
+        attention_mask = torch.cat([attention_mask, noise_attention_mask], dim=-1)
+
         # Get assistant model outputs
         outputs = self.assistant_model(
-            inputs_embeds=mask_token_embedding,
+            noise_embeds=mask_token_embedding,
+            target_embeds=target_hidden_states,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=self.cache,

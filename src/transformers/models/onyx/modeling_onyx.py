@@ -458,7 +458,7 @@ class OnyxTextModel(OnyxPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = self.embed_tokens = OnyxTextNormedEmbedding(
+        self.embed_tokens = OnyxTextNormedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
         self.layers = nn.ModuleList(
