@@ -79,7 +79,8 @@ class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
     draw_on_frames (`bool`, *optional*, defaults to `True`):
         Whether to draw timestamps on each video frame.
     font (`str`, *optional*, defaults to `True`):
-        The fint used to draw timestamps when `draw_on_frames` is set.
+        The font used to draw timestamps when `draw_on_frames` is set.
+        Note that `torch.compile` is not compatible with drawing on frames.
     """
 
     patch_size: int

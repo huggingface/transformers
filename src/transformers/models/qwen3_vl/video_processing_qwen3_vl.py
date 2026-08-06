@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 16):
-        The spacial patch size of the vision encoder.
+        The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 2):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
