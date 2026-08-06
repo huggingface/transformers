@@ -1439,9 +1439,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     requires_model_outputs: bool = True
     # We always need to pass the hidden states at `draft_config.target_layer_ids` from the main model
-    model_kwargs_overrides: dict[str, Any] = {
-        "output_hidden_states": True,
-    }
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
         self,
@@ -1453,6 +1451,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         model_kwargs: dict,
         **kwargs,
     ):
+        from ..cache_utils import DynamicCache
+
         self.assistant_model = assistant_model
         self.main_model_max_length = generation_config.max_length
 
@@ -1461,34 +1461,11 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.target_layer_ids = assistant_model.config.target_layer_ids
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
+        self.block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+        self.cache = DynamicCache(config=self.assistant_model.config)
+        self.cache.activate_past_recording()
 
-        # Prepare the kwargs for the assistant model
-        self.assistant_kwargs = {}
-        for key, value in model_kwargs.items():
-            if key not in ("encoder_outputs", "past_key_values", "logits_to_keep"):
-                self.assistant_kwargs[key] = (
-                    value.detach().to(assistant_model.device)
-                    if isinstance(value, torch.Tensor)
-                    else copy.deepcopy(value)
-                )
-
-    def _update_past_and_masks(
-        self,
-        input_ids: torch.LongTensor,
-        num_added_tokens: int = 1,
-    ) -> bool:
-        """Update past key values and attention masks for subsequent generation rounds."""
-        has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
-        if has_past_key_values:
-            # same as other drafters and extra `-1` for newly generated anchor token
-            self.assistant_kwargs["past_key_values"].crop(input_ids.shape[-1] - 2 - num_added_tokens)
-            self.assistant_kwargs = _prepare_position_ids(
-                self.assistant_kwargs, input_ids.shape[-1] - 1, self.assistant_model.config.is_encoder_decoder
-            )
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, input_ids.shape[-1] - 1, self.assistant_model.config.is_encoder_decoder
-            )
-        return has_past_key_values
+        self.is_main_model_prefill = True
 
     def get_candidates(
         self,
@@ -1515,41 +1492,43 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
-        # This is actually cache so we need the new matches only after prefill and concatenate to cache
-        self._update_past_and_masks(input_ids, num_added_tokens=n_last_matches)
-        tgt_length = (
-            model_outputs.hidden_states[0].shape[1]
-            if self.assistant_kwargs.get("past_key_values") is None
-            else n_last_matches + 1
-        )
-        target_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i + 1][:, :tgt_length] for i in self.target_layer_ids], dim=-1
-        )
+        # The last -1 is to remove the added block_mask token that we append to current input_ids
+        self.cache.crop(1 - n_last_matches - 1)
 
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
         # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
         # last hidden states of only the last validated token
-        block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1), device=input_ids.device)[None, ...]
-        input_mask_ids = torch.cat([input_ids[:, -1:], block_mask], dim=-1)
+        target_hidden_states: torch.Tensor = torch.cat(
+            [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
+        )
 
+        input_ids = input_ids[:, -num_last_main_model_tokens:]
+        position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+        attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
+
+        input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
         # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
         mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
 
         # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
         # The slicing is there to strip off alreay cached values, keeping only the new unprocessed tokens
-        self.assistant_kwargs["past_key_values"] = self.assistant_model.update_cache_with_target_states(
+        self.cache = self.assistant_model.update_cache_with_target_states(
             target_hidden_states,
-            position_ids=self.assistant_kwargs["position_ids"][:, -tgt_length:],
-            attention_mask=self.assistant_kwargs["attention_mask"][:, -tgt_length:],
-            past_key_values=self.assistant_kwargs.get("past_key_values"),
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=self.cache,
         )
 
-        with torch.no_grad():
-            outputs = self.assistant_model(
-                inputs_embeds=mask_token_embedding,
-                attention_mask=model_kwargs.get("attention_mask"),
-                use_cache=True,
-                past_key_values=self.assistant_kwargs["past_key_values"],
-            )
+        # Get assistant model outputs
+        outputs = self.assistant_model(
+            inputs_embeds=mask_token_embedding,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=self.cache,
+        )
+
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
 
         candidate_logits = self.target_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
         candidate_ids = candidate_logits.argmax(dim=-1)

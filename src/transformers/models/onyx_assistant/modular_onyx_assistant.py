@@ -25,10 +25,10 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ..exaone4.modeling_exaone4 import (
+    Exaone4Attention,
     Exaone4DecoderLayer,
     Exaone4Model,
     Exaone4RMSNorm,
-    Exaone4Attention,
     apply_rotary_pos_emb,
 )
 from .configuration_onyx_assistant import OnyxAssistantConfig
