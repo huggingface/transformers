@@ -117,16 +117,18 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
-        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
           # Skipped models:
           #   allenai/OLMoE-1B-7B-0924 — OOM: previous test leaves insufficient free memory (13.35/27.83 GiB < 0.4*27.83)
+          #   test_hybrid_attention     — OOM: only 10.1/27.83 GiB free after 2 prior tests (needs 0.4*27.83=11.13 GiB)
           pytest -v -s tests/models/transformers/ \
-            --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]"
+            --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]" \
+            --deselect "tests/models/transformers/test_backend.py::test_hybrid_attention"
 
       - name: "Test: multimodal processing"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
