@@ -423,11 +423,9 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16)
         model.to(torch_device)
-        input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
-            torch_device
-        )
+        inputs = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt").to(torch_device)
 
-        out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)
+        out = model.generate(**inputs, do_sample=False, use_cache=True, max_new_tokens=30)
         output_sentence = tokenizer.decode(out[0])
         ground_truth_sentences = Expectations(
             {

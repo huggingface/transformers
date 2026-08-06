@@ -187,10 +187,7 @@ class OnyxConfig(PreTrainedConfig):
     ```"""
 
     model_type = "onyx"
-    sub_configs = {
-        "text_config": OnyxTextConfig,
-        "vision_config": OnyxVisionConfig,
-    }
+    sub_configs = {"text_config": OnyxTextConfig, "vision_config": OnyxVisionConfig}
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
