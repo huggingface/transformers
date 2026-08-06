@@ -227,13 +227,12 @@ class ColwiseParallel(TensorParallelLayer):
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local forward produced this rank's shard of the output features (last dim).
-        if (
-            self.should_use_local_tensors(module)
-            and self.use_local_output
-            and not isinstance(output, DTensor)
+        output_is_local_shard = (
+            not isinstance(output, DTensor)
             and isinstance(self.output_layouts, Shard)
             and self.output_layouts.dim in (-1, output.dim() - 1)
-        ):
+        )
+        if self.should_use_local_tensors(module) and self.use_local_output and output_is_local_shard:
             return output
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
