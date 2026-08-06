@@ -99,7 +99,7 @@ class CircleCIJob:
     parallelism: int | None = 0
     pytest_num_workers: int = 8
     pytest_options: dict[str, Any] = None
-    resource_class: str | None = "large"
+    resource_class: str | None = "xlarge"
     tests_to_run: list[str] | None = None
     num_test_files_per_worker: int | None = 10
     # This should be only used for doctest job!
@@ -175,7 +175,7 @@ class CircleCIJob:
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
-        parallel = f"<< pipeline.parameters.{self.job_name}_parallelism >>"
+        parallel = f" << pipeline.parameters.{self.job_name}_parallelism >> "
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -247,7 +247,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {max(1, self.pytest_num_workers // 2)} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
             {
@@ -495,8 +495,8 @@ def create_circleci_config(folder=None):
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)
-            .replace("'<< pipeline", "<< pipeline")
-            .replace(">>'", ">>")
+            .replace("' << pipeline", " << pipeline")
+            .replace(">> '", " >>")
         )
 
 
