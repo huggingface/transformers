@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -112,10 +113,19 @@ class GemmaIntegrationTest(unittest.TestCase):
     def test_model_2b_bf16(self):
         model_id = "google/gemma-2b"
 
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
-        ]
+        expectations = Expectations(
+            {
+                (None, None): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
+                ],
+                ("xpu", 5): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music",
+                    "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+                ],
+            }
+        )
+        EXPECTED_TEXTS = expectations.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
 
@@ -170,6 +180,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_model_2b_4bit(self):
         model_id = "google/gemma-2b"
         EXPECTED_TEXTS = [
@@ -212,10 +223,19 @@ class GemmaIntegrationTest(unittest.TestCase):
             self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU (OOM).")
 
         model_id = "google/gemma-7b"
-        EXPECTED_TEXTS = [
-            """Hello I am doing a project on a 1999 4.0L 4x4. I""",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
-        ]
+        expectations = Expectations(
+            {
+                (None, None): [
+                    """Hello I am doing a project on a 1999 4.0L 4x4. I""",
+                    "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
+                ],
+                ("xpu", 5): [
+                    "Hello I am doing a project on the 1960's and I am doing a report on the ",
+                    "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
+                ],
+            }
+        )
+        EXPECTED_TEXTS = expectations.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16).to(torch_device)
 
@@ -243,6 +263,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ("cuda", 7): ["""Hello I am doing a project on a 1991 240sx and I am trying to find""", "Hi today I am going to show you how to make a very simple and easy to make a very simple and",],
                 ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a game in which you have to get a', 'Hi today I am going to show you how to make a very simple and easy to make a very simple and'],
                 ("rocm", 9): ["Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees", "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",],
+                ("xpu", 5): ["Hello I am doing a project for my school and I am trying to make a game in which you have to get a", "Hi today I am going to show you how to make a very simple and easy to make a paper plane.",],
             }
         )
         # fmt: on
@@ -257,6 +278,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, expected_text)
 
+    @require_deterministic_for_xpu
     def test_model_7b_fp16_static_cache(self):
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest("This test is failing (`torch.compile` fails) on Nvidia T4 GPU (OOM).")
@@ -288,6 +310,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_model_7b_4bit(self):
         model_id = "google/gemma-7b"
 
@@ -300,6 +323,10 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
                     'Hi today I am going to talk about the new update for the game called "The new update!:)!:)!:)',
+                ],
+                ("xpu", 5): [
+                    "Hello I am doing a project for my school and I am using a 12 paletm and 12 v",
+                    'Hi today I am going to talk about a new app that I have found. It is called a "The',
                 ],
             }
         )
@@ -321,10 +348,19 @@ class GemmaIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
-            "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
-        ]
+        expectations = Expectations(
+            {
+                (None, None): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                    "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
+                ],
+                ("xpu", 5): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                    "Hi today\nI have a problem with my 2007 1.9 tdi 110bhp.\nI have a problem with the engine management light coming on and the car running rough",
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
 
         prompts = ["Hello I am doing", "Hi today"]
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b", pad_token="</s>", padding_side="right")
