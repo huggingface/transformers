@@ -155,6 +155,38 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
+    def test_packed_colwise_packed_and_unpacked_shapes(self):
+        packed = torch.randn(2, 16, 64)
+        unpacked_expert = torch.randn(16, 64)
+
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh,
+                [_StridedShard(dim=1, split_factor=2)],
+                param_shape=(2, 16, 64),
+                local_shape=(2, 8, 64),
+            )
+
+            self.assertEqual(op.shard_tensor(packed).shape, (2, 8, 64))
+            self.assertEqual(op.shard_tensor(unpacked_expert, tensor_idx=0).shape, (8, 64))
+
+    def test_packed_rowwise_packed_and_unpacked_shapes(self):
+        packed = torch.randn(16, 64)
+        unpacked = torch.randn(16, 32)
+
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh,
+                [_StridedShard(dim=-1, split_factor=2)],
+                param_shape=(16, 64),
+                local_shape=(16, 32),
+            )
+
+            self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
+            self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
+
     def test_2D_shard_different_dims(self):
         tensor = torch.arange(64).reshape(8, 8).float()
         expected = {

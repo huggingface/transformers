@@ -341,9 +341,9 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
         problematic_keys = {
-            "layers.*.mlp.router_gate": "colwise_rep",
-            "layers.*.mlp.down_embed": "rowwise_rep",
-            "layers.*.mlp.up_embed": "rowwise_rep",
+            "layers.*.mlp.router_gate": "colwise_gather_output",
+            "layers.*.mlp.down_embed": "rowwise_split_input",
+            "layers.*.mlp.up_embed": "rowwise_split_input",
         }
         if not config.is_moe:
             for key in problematic_keys:

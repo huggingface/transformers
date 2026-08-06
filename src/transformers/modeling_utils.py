@@ -4484,7 +4484,6 @@ class PreTrainedModel(
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 

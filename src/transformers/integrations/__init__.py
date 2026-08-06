@@ -167,10 +167,6 @@ else:
         "convert_and_export_with_cache",
     ]
 
-_import_structure["tensor_parallel"] = [
-    "ALL_PARALLEL_STYLES",
-    "translate_to_torch_parallel_style",
-]
 _import_structure["flex_attention"] = [
     "make_flex_block_causal_mask",
 ]
@@ -313,10 +309,6 @@ if TYPE_CHECKING:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
     from .flex_attention import make_flex_block_causal_mask
-    from .tensor_parallel import (
-        ALL_PARALLEL_STYLES,
-        translate_to_torch_parallel_style,
-    )
 else:
     import sys
 

@@ -39,7 +39,6 @@ from .utils.logging import get_logger, tqdm
 
 
 if TYPE_CHECKING:
-    from .distributed.tensor_parallel import TensorParallelLayer
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
@@ -757,7 +756,6 @@ class WeightTransform:
         "source_patterns",
         "target_patterns",
         "compiled_sources",
-        "distributed_operation",
         "quantization_operation",
         "collected_tensors",
         "layer_targets",
@@ -776,7 +774,6 @@ class WeightTransform:
         self._original_target_patterns = self.target_patterns.copy()
 
         # Init fields that will be used during conversion
-        self.distributed_operation: Any = None
         self.quantization_operation: ConversionOps | None = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
@@ -1231,9 +1228,9 @@ def spawn_materialize(
 ) -> Future | Callable:
     """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
 
-    When ``sharding_op`` is given the tensor is sharded (DTensor placement or legacy TP plan);
-    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred
-    callable is returned instead of a Future.
+    When ``sharding_op`` is given the tensor is sharded according to its DTensor placements;
+    otherwise it is simply copied to *device*/*dtype*. Without a thread pool a deferred callable
+    is returned instead of a Future.
     """
 
     def _job():
@@ -1318,7 +1315,6 @@ def set_param_for_module(
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -1340,13 +1336,8 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP/Dtensor, use sharded shape; otherwise, use full shape
-        if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
-        elif is_dtensor(ref):
-            expected_shape = ref._local_tensor.shape
-        else:
-            expected_shape = ref.shape
+        # For DTensor parameters, compare against the local shard loaded on this rank.
+        expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
@@ -1360,8 +1351,6 @@ def set_param_for_module(
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
             setattr(module_obj, param_name, param_value)
-            if distributed_operation is not None:
-                distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1467,7 +1456,6 @@ def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
     load_config: LoadStateDictConfig,
-    tp_plan: dict[str, str] | None,
     disk_offload_index: dict | None = None,
 ):
     r"""
@@ -1557,11 +1545,9 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
-    device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1596,10 +1582,6 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1674,25 +1656,13 @@ def convert_and_load_state_dict_in_model(
                 else None
             )
 
-            # 4. Handle TP/Dtensor sharding or device_map placement
+            # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             materialize_device = param_device
 
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
-            elif device_mesh and tp_plan:
-                if matched_tp_pattern := tp_plan_alt.search(renamed_key):
-                    from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-
-                    matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
-                    if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
-                        mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                        )
-                    sharding_op = mapping.distributed_operation
-                    materialize_device = device_map[""]
 
             future_or_tensor = spawn_materialize(
                 thread_pool,
@@ -1735,7 +1705,6 @@ def convert_and_load_state_dict_in_model(
                             target_name,
                             param,
                             loading_info,
-                            mapping.distributed_operation,
                             hf_quantizer,
                         )
 

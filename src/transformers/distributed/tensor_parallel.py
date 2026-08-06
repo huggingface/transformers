@@ -125,6 +125,10 @@ class TensorParallelLayer:
         """Whether this module's forward requires local inputs and parameters."""
         return False
 
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        """Validate a parameter before applying this TP style."""
+        pass
+
     def shard_param(self, module, param, mesh):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
@@ -167,11 +171,28 @@ class ColwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        meta = module._parameters.get(param)
+        gathers_output = isinstance(self.output_layouts, Replicate)
+        if meta is None or not gathers_output:
+            return
+
+        shard_dim = 1 if isinstance(module, torch.nn.Embedding) else meta.ndim - 2
+        output_size = meta.shape[shard_dim]
+        tp_size = mesh.size()
+        if output_size % tp_size != 0:
+            parameter_name = parameter_name or param
+            layer_name = parameter_name.rsplit(".", 1)[0]
+            raise ValueError(
+                f"The output size of `{layer_name}` ({output_size}) must be divisible by the tensor parallel size "
+                f"({tp_size}) when gathering a colwise output."
+            )
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(0)
+        placement = Shard(1) if isinstance(module, torch.nn.Embedding) else Shard(meta.ndim - 2)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -454,6 +475,23 @@ class PackedColwiseParallel(TensorParallelLayer):
         )
 
 
+class PackedRowwiseParallel(TensorParallelLayer):
+    """Parameter style for fused weights packed along the final dimension."""
+
+    def __init__(self, *, split_factor: int = 2):
+        self.split_factor = split_factor
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, [placement], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+
+
 class MoEParamShard(TensorParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
@@ -469,7 +507,7 @@ class MoEParamShard(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        if self.shards_expert_dim:
+        if self.shards_expert_dim and hasattr(module, "num_experts"):
             module.num_experts = meta.shape[0] // mesh.size()
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
@@ -518,18 +556,21 @@ class MoEExpertsParallel(TensorParallelLayer):
         return True
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, top_k_index, top_k_weights = args
+        hidden_states, *remaining_args = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
             hidden_states = hidden_states.to_local()
         hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
 
-        if isinstance(top_k_weights, DTensor):
-            top_k_weights = top_k_weights.to_local()
-        if not is_expert_parallel:
-            top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+        if len(remaining_args) >= 2:
+            top_k_weights = remaining_args[1]
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            if not is_expert_parallel:
+                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+            remaining_args[1] = top_k_weights
 
-        return (hidden_states, top_k_index, top_k_weights), kwargs
+        return (hidden_states, *remaining_args), kwargs
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
@@ -642,22 +683,23 @@ class ParallelInterface(GeneralInterface):
 
     _global_mapping = (
         {
-            "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "packed_colwise": PackedColwiseParallel(),
-            "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
-            "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
-            "all_reduce": AllReduceParallel(),
-            "mla_kv_a_proj": MlaKvAProjParallel(),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-            "moe_tp_experts": MoEExpertsParallel(),
-            "moe_identity_expert": MoeIdentityParallel(),
             "ep_router": EpRouterParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
+            "moe_tp_experts": MoEExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
+            "moe_identity_expert": MoeIdentityParallel(),
+            "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "mla_kv_a_proj": MlaKvAProjParallel(),
+            "all_reduce": AllReduceParallel(),
         }
         if is_torch_distributed_available()
         else {}
@@ -675,7 +717,9 @@ def apply_tensor_parallelism(model, tp_mesh):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
-                ALL_PARALLEL_STYLES[style_name].shard_param(module, p_name, tp_mesh)
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":

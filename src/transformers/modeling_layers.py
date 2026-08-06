@@ -635,7 +635,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:
