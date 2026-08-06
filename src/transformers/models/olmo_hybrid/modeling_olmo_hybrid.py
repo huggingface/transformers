@@ -865,8 +865,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
     _is_stateful = True
-    # Uses a custom ``OlmoHybridDynamicCache``; StaticCache compatibility hasn't been wired up here.
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -202,7 +202,7 @@ class AriaImageProcessor(TorchvisionBackend):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -217,6 +217,7 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
+        images_kwargs = images_kwargs or {}
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
