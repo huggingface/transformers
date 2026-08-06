@@ -436,11 +436,11 @@ class OnyxPreTrainedModel(PreTrainedModel):
 
 
 class OnyxTextNormedEmbedding(nn.Embedding):
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_norm: float = 1e-05):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         # Weight-less norm applied on top of the embeddings - cannot be merged to the embedding matrix, as Dflash implem needs
         # to embed without the norm
-        self.embed_norm = OnyxRMSNorm(eps=embed_norm, with_scale=False)
+        self.embed_norm = OnyxRMSNorm(eps=norm_eps, with_scale=False)
 
     def forward(self, input_ids: torch.Tensor):
         return self.embed_norm(super().forward(input_ids))
