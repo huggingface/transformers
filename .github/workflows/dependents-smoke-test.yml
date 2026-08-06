@@ -120,7 +120,7 @@ jobs:
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s tests/models/transformers/test_backend.py
+          pytest -v -s tests/models/transformers/
 
       - name: "Test: multimodal processing"
         if: false
