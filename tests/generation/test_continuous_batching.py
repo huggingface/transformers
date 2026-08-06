@@ -422,8 +422,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
             continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
-            tp_plan={},
-            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300),
+            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={}),
         )
 
         # Overload cache parameters to match test scenario
@@ -642,7 +641,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_no_dist(self) -> None:
         """Test that DistributedHelper falls back to a single-rank, TP-driver setup when distributed is not on."""
-        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={})
         self.assertFalse(helper.dist_on)
         self.assertEqual(helper.global_rank, 0)
         self.assertEqual(helper.world_size, 1)
@@ -667,7 +666,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
-        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300)
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={})
 
         # Explicit seed: torch RNG state must be reproducible across calls
         helper.set_tp_seed(seed=42, model_device=torch.device("cpu"))
@@ -1813,7 +1812,7 @@ def _tp_continuous_batching_worker(
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
-    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300)
+    helper = DistributedHelper(device_mesh=model._device_mesh, cpu_group_timeout=300, tp_plan=model._tp_plan)
 
     received_obj = helper.tp_broadcast_object_from_rank_0({"src_rank": rank})
     assert received_obj == {"src_rank": 0}, f"tp_broadcast_object: rank {rank} got {received_obj}"

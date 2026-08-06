@@ -605,6 +605,7 @@ class ContinuousBatchingManager:
         self.distributed_helper = DistributedHelper(
             device_mesh=getattr(self.model, "_device_mesh", None),
             cpu_group_timeout=continuous_batching_config.cpu_group_timeout,
+            tp_plan=getattr(self.model, "tp_plan", {}),
         )
         self.is_tp_driver = self.distributed_helper.is_tp_driver
         # If TP is on, check if NCCL graph mixing is disabled (helps with performance)
@@ -1003,7 +1004,6 @@ class ContinuousBatchingManager:
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
-            tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
         )
         # Update the approximation now that we know if there is prefix sharing
