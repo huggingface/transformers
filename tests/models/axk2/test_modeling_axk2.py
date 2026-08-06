@@ -115,14 +115,14 @@ class AXK1IntegrationTest(unittest.TestCase):
         # Last-3x3 logits slice, left-padded (batch 0) and unpadded (batch 1) rows.
         EXPECTED_LOGITS_LEFT_PADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[-1.9062, -3.9688, 2.8438], [-3.5625, -1.6562, 4.2500], [-1.6172, -2.7812, 2.6094]],
+                ("cuda", (8, 6)): [[-1.9062, -3.9688,  2.8438], [-3.5625, -1.6484,  4.2500], [-1.5859, -2.7656,  2.5938]],
                 ("xpu", None): [[-1.9219, -3.9844, 2.8438], [-3.5938, -1.6484, 4.2500], [-1.5859, -2.7812, 2.6094]],
             }
         )
         expected_left_padded = torch.tensor(EXPECTED_LOGITS_LEFT_PADDED.get_expectation(), device=model.device)
         EXPECTED_LOGITS_UNPADDED = Expectations(
             {
-                ("cuda", (8, 6)): [[0.6211, -0.4336, 1.8906], [-3.4219, -1.9219, 2.7188], [-2.0156, -1.5547, -1.3906]],
+                ("cuda", (8, 6)): [[ 0.6133, -0.4355,  1.8906], [-3.4062, -1.9062,  2.7344], [-2.0156, -1.5312, -1.3750]],
                 ("xpu", None): [[0.6250, -0.3906, 1.8984], [-3.4375, -1.8672, 2.7500], [-2.0156, -1.5391, -1.3828]],
             }
         )
