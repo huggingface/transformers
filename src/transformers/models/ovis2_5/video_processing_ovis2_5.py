@@ -14,6 +14,7 @@
 """Video processor class for Ovis2.5."""
 
 import math
+from collections.abc import Iterable
 
 import torch
 import torchvision.transforms.v2.functional as tvF
@@ -24,12 +25,47 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .image_processing_ovis2_5 import (
-    _resolve_size,
-    _validate_patch_grid,
-    _validate_temporal_patch_size,
-    smart_resize,
-)
+from .image_processing_ovis2_5 import smart_resize
+
+
+def _resolve_size(
+    size: int | Iterable[int] | dict[str, int] | SizeDict | None,
+    default_size: dict[str, int] | SizeDict,
+    min_pixels: int | None,
+    max_pixels: int | None,
+) -> SizeDict:
+    if size is None:
+        size = default_size
+    if isinstance(size, SizeDict):
+        shortest_edge = size.shortest_edge
+        longest_edge = size.longest_edge
+    elif isinstance(size, dict):
+        shortest_edge = size.get("shortest_edge")
+        longest_edge = size.get("longest_edge")
+    else:
+        raise ValueError("`size` must be a dictionary or `SizeDict` with `shortest_edge` and `longest_edge`.")
+
+    shortest_edge = min_pixels if min_pixels is not None else shortest_edge
+    longest_edge = max_pixels if max_pixels is not None else longest_edge
+    if shortest_edge is None or longest_edge is None:
+        raise ValueError("`size` must contain `shortest_edge` and `longest_edge`.")
+    return SizeDict(shortest_edge=shortest_edge, longest_edge=longest_edge)
+
+
+def _validate_patch_grid(height: int, width: int, patch_size: int, merge_size: int) -> None:
+    factor = patch_size * merge_size
+    if height % factor != 0 or width % factor != 0:
+        raise ValueError(
+            "Ovis2.5 images must have height and width divisible by "
+            f"`patch_size * merge_size` ({factor}), got ({height}, {width})."
+        )
+
+
+def _validate_temporal_patch_size(temporal_patch_size: int) -> None:
+    if temporal_patch_size != 1:
+        raise ValueError(
+            f"The released Ovis2.5 checkpoints require `temporal_patch_size=1`, got {temporal_patch_size}."
+        )
 
 
 class Ovis2_5VideoProcessorKwargs(VideosKwargs, total=False):

@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Ovis2.5 model."""
 
+import math
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -24,6 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_utils import PILImageResampling
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,8 +39,81 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention, VideoLlama3VisionMLP
+
+
+class Ovis2_5ImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `448 * 448`):
+        The minimum number of pixels in the resized image.
+    max_pixels (`int`, *optional*, defaults to `1344 * 1792`):
+        The maximum number of pixels in the resized image.
+    patch_size (`int`, *optional*, defaults to 16):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The spatial merge size used by the visual tokenizer.
+    """
+
+
+def smart_resize(
+    height: int,
+    width: int,
+    factor: int = 32,
+    min_pixels: int = 448 * 448,
+    max_pixels: int = 1344 * 1792,
+) -> tuple[int, int]:
+    """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    if height < factor or width < factor:
+        if height < width:
+            width = round(factor / height * width)
+            height = factor
+        else:
+            height = round(factor / width * height)
+            width = factor
+    elif max(height, width) / min(height, width) > 200:
+        if height > width:
+            height = 200 * width
+        else:
+            width = 200 * height
+
+    resized_height = round(height / factor) * factor
+    resized_width = round(width / factor) * factor
+    if resized_height * resized_width > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        resized_height = math.floor(height / beta / factor) * factor
+        resized_width = math.floor(width / beta / factor) * factor
+    elif resized_height * resized_width < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        resized_height = math.ceil(height * beta / factor) * factor
+        resized_width = math.ceil(width * beta / factor) * factor
+    return resized_height, resized_width
+
+
+class Ovis2_5ImageProcessor(Qwen2VLImageProcessor):
+    resample = PILImageResampling.BILINEAR
+    size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    patch_size = 16
+    temporal_patch_size = 1
+    merge_size = 2
+    valid_kwargs = Ovis2_5ImageProcessorKwargs
+
+
+class Ovis2_5ImageProcessorPil(Qwen2VLImageProcessorPil):
+    resample = PILImageResampling.BILINEAR
+    size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    patch_size = 16
+    temporal_patch_size = 1
+    merge_size = 2
+    valid_kwargs = Ovis2_5ImageProcessorKwargs
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
@@ -1055,6 +1130,8 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
 
 __all__ = [
     "Ovis2_5Config",
+    "Ovis2_5ImageProcessor",
+    "Ovis2_5ImageProcessorPil",
     "Ovis2_5VisionConfig",
     "Ovis2_5VisionModel",
     "Ovis2_5PreTrainedModel",

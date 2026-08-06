@@ -18,8 +18,8 @@ import numpy as np
 
 from transformers import Ovis2_5ImageProcessorPil
 from transformers.models.ovis2_5.image_processing_pil_ovis2_5 import smart_resize
-from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -29,10 +29,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_torchvision_available():
-    from transformers import Ovis2_5ImageProcessor
 
 
 class Ovis2_5ImageProcessingTester:
@@ -95,7 +91,7 @@ class Ovis2_5ImageProcessingTester:
             torchify=torchify,
         )
 
-    def expected_output(self, images, num_channels=3):
+    def expected_output(self, images):
         grids = []
         for image in images:
             if isinstance(image, Image.Image):
@@ -114,7 +110,7 @@ class Ovis2_5ImageProcessingTester:
             grids.append([1, height // self.patch_size, width // self.patch_size])
 
         num_patches = sum(np.prod(grid) for grid in grids)
-        patch_dim = num_channels * self.temporal_patch_size * self.patch_size**2
+        patch_dim = self.num_channels * self.temporal_patch_size * self.patch_size**2
         return (num_patches, patch_dim), grids
 
 
@@ -160,14 +156,6 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_backends_equivalence_batched(self):
         self._check_backends_equivalence(self.image_processor_tester.prepare_image_inputs(equal_resolution=False))
 
-    @require_torchvision
-    def test_image_processor_save_load_with_autoimageprocessor(self):
-        super().test_image_processor_save_load_with_autoimageprocessor()
-
-    @require_torchvision
-    def test_save_load_backends_auto(self):
-        super().test_save_load_backends_auto()
-
     def test_call_pil(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         self.assertTrue(all(isinstance(image, Image.Image) for image in image_inputs))
@@ -198,13 +186,28 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (1792, 1792),
         )
 
-    def test_pil_processor_exact_default_grid_and_packing(self):
-        image = np.zeros((448, 448, 3), dtype=np.uint8)
-        output = Ovis2_5ImageProcessorPil()(image, return_tensors="np")
+    def test_patch_order_matches_native_ovis(self):
+        rows, columns = np.indices((32, 32))
+        image = np.stack((rows * 7 % 256, columns * 5 % 256, (rows * 11 + columns * 13) % 256), axis=-1).astype(
+            np.uint8
+        )
+        normalized = image.astype(np.float32) / 127.5 - 1.0
+        expected = np.stack(
+            (
+                normalized[:16, :16],
+                normalized[:16, 16:],
+                normalized[16:, :16],
+                normalized[16:, 16:],
+            )
+        )
+        expected = expected.transpose(0, 3, 1, 2).reshape(4, 768)
 
-        self.assertEqual(output.pixel_values.shape, (784, 768))
-        np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 28, 28]]))
-        np.testing.assert_array_equal(output.pixel_values, -np.ones((784, 768), dtype=np.float32))
+        for image_processing_class in self.image_processing_classes.values():
+            with self.subTest(image_processing_class=image_processing_class.__name__):
+                processor = image_processing_class(size={"shortest_edge": 32 * 32, "longest_edge": 32 * 32})
+                output = processor(image, return_tensors="np")
+                np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 2, 2]]))
+                np.testing.assert_allclose(output.pixel_values, expected, atol=1e-6, rtol=0)
 
     def test_pil_processor_exact_non_square_resize_and_grid(self):
         image = np.zeros((333, 527, 3), dtype=np.uint8)
@@ -213,41 +216,7 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         self.assertEqual(output.pixel_values.shape, (864, 768))
         np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 24, 36]]))
-        self.assertEqual(processor.get_number_of_image_patches(333, 527), 864)
-
-    def test_pil_processor_rejects_an_invalid_unresized_grid(self):
-        image = np.zeros((48, 64, 3), dtype=np.uint8)
-
-        with self.assertRaisesRegex(ValueError, "patch_size \\* merge_size"):
-            Ovis2_5ImageProcessorPil()(image, do_resize=False)
-
-    def test_pil_processor_rejects_incompatible_temporal_patches(self):
-        image = np.zeros((64, 96, 3), dtype=np.uint8)
-        processor = Ovis2_5ImageProcessorPil()
-
-        with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
-            processor(image, temporal_patch_size=2)
-        with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
-            processor.get_number_of_image_patches(
-                64,
-                96,
-                {"temporal_patch_size": 2},
-            )
-
-    @require_torch
-    @require_torchvision
-    def test_fast_processor_exact_grid(self):
-        image = np.zeros((64, 96, 3), dtype=np.uint8)
-        processor = Ovis2_5ImageProcessor(
-            size={"shortest_edge": 64 * 96, "longest_edge": 64 * 96},
-        )
-        output = processor(image, return_tensors="pt")
-
-        self.assertEqual(tuple(output.pixel_values.shape), (24, 768))
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 4, 6]])
-
-        with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
-            processor(image, temporal_patch_size=2)
+        self.assertEqual(processor.get_number_of_image_patches(333, 527, {}), 864)
 
 
 if __name__ == "__main__":
