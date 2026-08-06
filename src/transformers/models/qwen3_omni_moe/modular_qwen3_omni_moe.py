@@ -49,6 +49,7 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
+    drop_inherited_flash_attention_kwargs,
     get_max_seqlen,
     merge_with_config_defaults,
 )
@@ -1036,6 +1037,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
         max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1).to(dtype=self.conv2d1.weight.dtype)

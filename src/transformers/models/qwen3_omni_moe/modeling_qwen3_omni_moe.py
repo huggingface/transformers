@@ -53,6 +53,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
+    drop_inherited_flash_attention_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
@@ -819,6 +820,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
             chunk_lengths, feature_lens, self.n_window_infer, self.n_window, kwargs=kwargs
         )
         max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1).to(dtype=self.conv2d1.weight.dtype)
@@ -1177,6 +1179,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)

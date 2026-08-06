@@ -330,6 +330,24 @@ def get_max_seqlen(
     return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
 
+def drop_inherited_flash_attention_kwargs(kwargs: dict) -> None:
+    """Remove the text model's sequence-packing kwargs from an encoder's `kwargs`, in place.
+
+    Multimodal models forward the language model's `**kwargs` into their audio/vision towers, so packing
+    metadata describing the *text* batch (as produced by `DataCollatorWithFlattening`) reaches encoders
+    that derive their own boundaries from the modality inputs (e.g. `feature_lens` / `grid_thw`). Those
+    inherited values describe a different tensor and would otherwise collide with the `cu_seq_lens_q`
+    /`max_length_q` values each encoder passes to the attention interface, raising
+    ``TypeError: got multiple values for keyword argument 'cu_seq_lens_q'``. Encoder-side precomputed
+    values use their own names (e.g. `cu_seqlens`, `max_seqlen`), so they are left untouched.
+
+    Args:
+        kwargs: encoder caller kwargs, mutated in place.
+    """
+    for key in ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k"):
+        kwargs.pop(key, None)
+
+
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
     """
     Split the optional `paged|` prefix from an attention implementation string.
