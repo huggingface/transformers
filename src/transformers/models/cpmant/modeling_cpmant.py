@@ -683,32 +683,25 @@ class CpmAntModel(CpmAntPreTrainedModel):
     The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """
 )
-class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):  # trf-ignore: TRF004
-    # The head ties to the vocab slice of `input_embedding` (different shapes), so it can't be a
-    # plain whole-tensor key and is handled in `tie_weights`.
-    _tied_weights_keys = {}
+class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
         self.cpmant = CpmAntModel(config)
 
-        # Published checkpoints store `lm_head.weight` as `input_embedding.weight[:vocab_size]`; the
-        # extra `prompt_types * prompt_length` soft-prompt rows are never decoding targets.
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # lm_head.weight is tied to cpmant.input_embedding.weight
+        self.lm_head = nn.Linear(
+            config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
+        )
         self.post_init()
 
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        # Only derive the head when the checkpoint omits `lm_head.weight`; a whole-tensor tie is
-        # impossible since the embedding has extra prompt rows, so copy its first `vocab_size` rows.
-        lm_head_missing = missing_keys is not None and "lm_head.weight" in missing_keys
-        input_embeddings = self.get_input_embeddings()
-        if (
-            lm_head_missing
-            and input_embeddings is not None
-            and input_embeddings.weight.device.type != "meta"
-            and self.lm_head.weight.device.type != "meta"
-        ):
-            self.lm_head.weight.data = input_embeddings.weight.data[: self.config.vocab_size].clone()
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # CpmAnt prepends the soft prompt to `input_ids` and rebuilds the attention mask and the
+        # position bias over the whole sequence on every forward, dropping the already cached prefix
+        # internally. It therefore always needs the full `input_ids`, never only the new tokens.
+        kwargs.pop("next_sequence_length", None)
+        return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
     def forward(
@@ -764,7 +757,10 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):  # trf-ignore: 
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
         # Only compute necessary logits
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # `input_embedding` (and therefore the tied `lm_head`) holds `prompt_types * prompt_length` extra
+        # soft-prompt rows on top of the vocabulary. Those are never decoding targets, so they are dropped
+        # to keep the logits `config.vocab_size` wide, as the rest of the library expects.
+        logits = self.lm_head(hidden_states[:, slice_indices, :])[..., : self.config.vocab_size]
 
         loss = None
         if labels is not None:
