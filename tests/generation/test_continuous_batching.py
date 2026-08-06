@@ -219,6 +219,42 @@ def regular_generate(
     return all_generated_tokens, per_prompt_logprobs
 
 
+def _setup_cache_pool(allocators: list[CacheAllocator], num_sectors: int) -> CachePool:
+    """Computes the sector geometry the same way as PagedAttentionCache, then builds the cache tensor and the pool
+    and registers both on the given allocators."""
+    bytes_per_sector = math.lcm(*(allocator.bytes_per_block for allocator in allocators), 128)
+    non_trash_bytes = num_sectors * bytes_per_sector
+    cache_tensor = torch.zeros(non_trash_bytes + 2 * bytes_per_sector, dtype=torch.uint8)
+    pool = CachePool(num_sectors=num_sectors, num_allocators=len(allocators))
+    for allocator in allocators:
+        allocator.register_cache_tensor(bytes_per_sector, non_trash_bytes, cache_tensor, pool)
+    return pool
+
+
+def _make_allocator(
+    cls: type[FullAttentionCacheAllocator | SlidingAttentionCacheAllocator],
+    head_dim: int,
+    num_kv_heads: int,
+    page_size: int,
+    layer_indices: list[int] | None = None,
+    index: int = 0,
+    sliding_window: int | None = None,
+    allow_block_sharing: bool = True,
+) -> FullAttentionCacheAllocator | SlidingAttentionCacheAllocator:
+    """Builds an allocator on a minimal namespace config: allocators only read head_dim, num_key_value_heads and
+    sliding_window from the model config, so tests do not need a full PreTrainedConfig."""
+    config = SimpleNamespace(head_dim=head_dim, num_key_value_heads=num_kv_heads, sliding_window=sliding_window)
+    return cls(
+        index=index,
+        config=config,  # type: ignore
+        num_key_value_heads=num_kv_heads,
+        cache_dtype=torch.float16,
+        page_size=page_size,
+        layer_indices=layer_indices if layer_indices is not None else [0],
+        allow_block_sharing=allow_block_sharing,
+    )
+
+
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     def test_generation_outputs_are_snapshots(self):
@@ -271,16 +307,16 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("f", None, {"s": [0]}),
-            ("ffff", None, {"s": [0, 1, 2, 3]}),
-            ("sssss", 4096, {"f": [0, 1, 2, 3, 4]}),
+            ("f", None, {"f": [0]}),
+            ("ffff", None, {"f": [0, 1, 2, 3]}),
+            ("sssss", 4096, {"s": [0, 1, 2, 3, 4]}),
             ("fs", 4096, {"f": [0], "s": [1]}),
             ("ssfssf", 4096, {"f": [2, 5], "s": [0, 1, 3, 4]}),
             ("ssssf", 4096, {"f": [4], "s": [0, 1, 2, 3]}),
             ("fffsffs", 4096, {"f": [0, 1, 2, 4, 5], "s": [3, 6]}),
             # No layer_types attribute: falls back on the presence of a sliding window
-            (None, None, {"s": [0, 1, 2, 3]}),
-            (None, 4096, {"f": [0, 1, 2, 3]}),
+            (None, None, {"f": [0, 1, 2, 3]}),
+            (None, 4096, {"s": [0, 1, 2, 3]}),
         ]
     )
     def test_group_layers(
@@ -352,82 +388,47 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
-    @parameterized.expand(
-        [
-            # Case 1: Only full attention groups, allocation succeeds
-            # needed_blocks = 2 * 1 = 2, free_blocks = 10 -> 2 <= 10 = True
-            (2, 0, 1, 0, 0, 10, True),
-            # Case 2: Only full attention groups, allocation fails
-            # needed_blocks = 5 * 2 = 10, free_blocks = 5 -> 10 <= 5 = False
-            (5, 0, 2, 0, 0, 5, False),
-            # Case 3: Mixed attention, sliding window not yet full
-            # needed_blocks = 2 * 1 + min(4 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 10 -> 4 <= 10 = True
-            (2, 0, 1, 1, 4, 10, True),
-            # Case 4: Mixed attention, sliding window partially filled
-            # needed_blocks = 3 * 1 + min(4 - 2, 3) * 1 = 3 + 2 = 5, free_blocks = 5 -> 5 <= 5 = True
-            (3, 2, 1, 1, 4, 5, True),
-            # Case 5: Mixed attention, sliding window already full (allocated_blocks >= max_sliding)
-            # blocks_left = max(4 - 5, 0) = 0, needed_blocks = 3 * 1 + 0 = 3, free_blocks = 5 -> 3 <= 5 = True
-            (3, 5, 1, 1, 4, 5, True),
-            # Case 6: Mixed attention, sliding window full, allocation fails due to full attention
-            # blocks_left = max(4 - 4, 0) = 0, needed_blocks = 6 * 1 + 0 = 6, free_blocks = 5 -> 6 <= 5 = False
-            (6, 4, 1, 1, 4, 5, False),
-            # Case 7: Multiple full attention groups
-            # needed_blocks = 3 * 2 = 6, free_blocks = 6 -> 6 <= 6 = True
-            (3, 0, 2, 0, 0, 6, True),
-            # Case 8: Multiple sliding attention groups, not full
-            # needed_blocks = 2 * 1 + min(4 - 1, 2) * 2 = 2 + 4 = 6, free_blocks = 6 -> 6 <= 6 = True
-            (2, 1, 1, 2, 4, 6, True),
-            # Case 9: Edge case - requesting 0 blocks always succeeds
-            # needed_blocks = 0, free_blocks = 0 -> 0 <= 0 = True
-            (0, 0, 1, 1, 4, 0, True),
-            # Case 10: Edge case - exactly enough blocks
-            # needed_blocks = 2 * 1 + min(3 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 4 -> 4 <= 4 = True
-            (2, 0, 1, 1, 3, 4, True),
-        ]
-    )
-    def test_continuous_batching_will_allocation_be_successful(
-        self,
-        num_requested_blocks: int,
-        allocated_blocks: int,
-        num_full_attention_groups: int,
-        num_sliding_attention_groups: int,
-        max_sliding_window_blocks_per_request: int,
-        num_free_blocks: int,
-        expected_result: bool,
-    ) -> None:
-        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the relevant attributes of
-        a dummy cache."""
+    def test_continuous_batching_can_store_request_tokens(self) -> None:
+        """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
+        window, zero new tokens always fit, and a dry run leaves the pool untouched while a real allocation
+        consumes it."""
+        def make_cache(num_sectors: int) -> PagedAttentionCache:
+            common: dict[str, Any] = {"head_dim": 2, "num_kv_heads": 1, "page_size": 4, "allow_block_sharing": False}
+            full = _make_allocator(FullAttentionCacheAllocator, **common)
+            sliding = _make_allocator(
+                SlidingAttentionCacheAllocator, layer_indices=[1], index=1, sliding_window=8, **common
+            )
+            # bytes_per_block = 32 for both allocators, so each sector of lcm(32, 128) = 128 bytes holds 4 blocks
+            pool = _setup_cache_pool([full, sliding], num_sectors)
+            cache = PagedAttentionCache.__new__(PagedAttentionCache)
+            cache.pool = pool
+            cache.cache_allocators = {"full_attention": full, "sliding_attention": sliding}
+            return cache
 
-        if torch_device is None:  # this check which should always pass and helps with type checking
-            raise ValueError(f"This requires a torch accelerator, yet {torch_device = } and the test was not skipped.")
+        state = RequestState(request_id="req_0", initial_tokens=[0])
 
-        # Create the cache
-        cache = PagedAttentionCache(
-            config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
-            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
-            device=torch_device,
-            distributed_helper=DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={}),
-        )
+        # Each sector holds 4 pages of 4 tokens. 32 new tokens need 2 full-attention sectors but only 1 sliding
+        # sector, since the sliding need is capped at the window (8 tokens = 2 pages): 3 sectors in total
+        cache = make_cache(num_sectors=3)
+        self.assertTrue(cache.can_store_request_tokens(state, 32, dry_run=True))
+        self.assertEqual(cache.pool.num_free_sectors, 3)  # a dry run does not allocate
+        self.assertFalse(make_cache(num_sectors=2).can_store_request_tokens(state, 32, dry_run=True))
 
-        # Overload cache parameters to match test scenario
-        cache.num_full_attention_groups = num_full_attention_groups
-        cache.num_sliding_attention_groups = num_sliding_attention_groups
-        cache.max_sliding_window_blocks_per_request = max_sliding_window_blocks_per_request
+        # Zero new tokens always fit, even with no free sectors
+        empty_cache = make_cache(num_sectors=3)
+        for _ in range(3):
+            empty_cache.pool.allocate_sector(0)
+        self.assertEqual(empty_cache.pool.num_free_sectors, 0)
+        self.assertTrue(empty_cache.can_store_request_tokens(state, 0, dry_run=True))
 
-        # Overload the cache get_num_free_blocks method
-        cache.get_num_free_blocks = lambda: num_free_blocks
+        # A real allocation consumes the sectors
+        cache = make_cache(num_sectors=3)
+        self.assertTrue(cache.can_store_request_tokens(state, 32))
+        self.assertEqual(cache.pool.num_free_sectors, 0)
 
-        # Test the method
-        result = cache.will_allocation_be_successful(num_requested_blocks, allocated_blocks)
-
-        self.assertEqual(
-            result,
-            expected_result,
-            f"Failed for: {num_requested_blocks=}, {allocated_blocks=}, {num_full_attention_groups=}, "
-            f"{num_sliding_attention_groups=}, {max_sliding_window_blocks_per_request=}, {num_free_blocks=}. "
-            f"Expected {expected_result}, got {result}",
-        )
+        # Growing the now window-full request only costs full-attention blocks (1 fresh sector the pool cannot serve)
+        state.position_offset = 32
+        self.assertFalse(cache.can_store_request_tokens(state, 16, dry_run=True))
 
     @parameterized.expand(
         [
@@ -504,31 +505,28 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     ) -> None:
         """Test SlidingAttentionCacheAllocator.get_read_indices and get_write_indices place the cache, sentinel and
         write trash indices correctly, including for small block sizes and rolling-buffer wrap-around."""
-        # The special indices live in the padding zone above the allocatable blocks (see PagedAttentionCache). We pick a
-        # num_blocks larger than any block id used here so they never collide with real cache positions.
-        num_blocks = 64
-        self.assertTrue(all(b < num_blocks for b in block_table))
-        sentinel_index = num_blocks * block_size + 1
-        write_trash_index = (num_blocks + 1) * block_size
-
-        def to_physical(i: int) -> int:
-            """Reference logical-to-physical mapping inside the rolling buffer."""
-            i %= sliding_window
-            return block_table[i // block_size] * block_size + i % block_size
-
-        allocator = SlidingAttentionCacheAllocator(
-            index=0,
-            block_size=block_size,
-            sliding_window=sliding_window,
-            sentinel_index=sentinel_index,
-            write_trash_index=write_trash_index,
+        allocator = _make_allocator(
+            SlidingAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=block_size, sliding_window=sliding_window
         )
         allocator.block_table["req"] = block_table
 
-        # Read indices: cache positions followed by one sentinel per query token
-        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        # The special indices live in the trash zone above the allocatable blocks (see PagedAttentionCache). We pick a
+        # num_blocks larger than any block id used here so they never collide with real cache positions.
+        num_blocks = 64
+        self.assertTrue(all(b < num_blocks for b in block_table))
+        allocator.read_trash_index = num_blocks * allocator.block_physical_stride
+        allocator.sentinel_index = sentinel_index = num_blocks * allocator.block_physical_stride + 1
+        allocator.write_trash_index = write_trash_index = (num_blocks + 1) * allocator.block_physical_stride
+
+        def to_physical(position: int) -> int:
+            """Reference position-to-physical-row mapping inside the rolling buffer."""
+            slot = position % sliding_window
+            return block_table[slot // block_size] * allocator.block_physical_stride + slot % block_size
+
+        # Read indices: the last min(past_length, sliding_window - 1) positions, then one sentinel per query token
         read_cache_length = min(past_length, sliding_window - 1)
-        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        read_start = past_length - read_cache_length
+        expected_read = [to_physical(p) for p in range(read_start, read_start + read_cache_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
 
@@ -538,15 +536,15 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(sentinel_index, read[:read_cache_length])
         # Cache reads land in allocated blocks
         for idx in read[:read_cache_length]:
-            self.assertIn(idx // block_size, block_table)
+            self.assertIn(idx // allocator.block_physical_stride, block_table)
 
-        # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
-        # window
-        write_start = past_length % sliding_window
+        # Write indices: the last min(query_length, sliding_window) positions are stored in their slots, left-padded
+        # with the write trash index when the query overflows the window
         write_cache_length = min(query_length, sliding_window)
         padding_length = query_length - write_cache_length
+        read_start = past_length + padding_length
         expected_write = [write_trash_index] * padding_length
-        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        expected_write += [to_physical(p) for p in range(read_start, read_start + write_cache_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
 
         # Main check
@@ -555,7 +553,170 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(write_trash_index, write[padding_length:])
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
-            self.assertIn(idx // block_size, block_table)
+            self.assertIn(idx // allocator.block_physical_stride, block_table)
+
+    def test_fork_blocks_sharing_and_copy(self) -> None:
+        """Tests forking at the allocator level: fully-written blocks are shared through a reference count, the others
+        are backed by fresh blocks and copied, and a shared block returns to the pool only when its last owner frees."""
+        ca_kwargs: dict[str, Any] = {"head_dim": 8, "num_kv_heads": 2, "page_size": 4}
+        full = _make_allocator(FullAttentionCacheAllocator, layer_indices=[0, 1], **ca_kwargs)
+        sliding = _make_allocator(
+            SlidingAttentionCacheAllocator, layer_indices=[2], index=1, sliding_window=8, **ca_kwargs
+        )
+
+        num_sectors = 6
+        pool = _setup_cache_pool([full, sliding], num_sectors)
+
+        # Allocate a source request with 10 cached tokens: 3 full-attention blocks, 2 sliding ones (window of 8)
+        past_length = 10
+        for allocator in (full, sliding):
+            for _ in range(allocator.needs_new_sectors("src", 0, past_length)):
+                pool.allocate_sector(allocator.index)
+            allocator.allocate_cache_to_request("src", 0, past_length)
+        self.assertEqual(len(full.block_table["src"]), 3)
+        self.assertEqual(len(sliding.block_table["src"]), 2)
+
+        # Only the 2 fully-written full-attention blocks are shareable, and only when sharing is in use: the sliding
+        # allocator never shares (use_block_sharing resolves to False despite allow_block_sharing=True)
+        self.assertEqual(full.count_non_shareable_blocks("src", past_length), 1)
+        self.assertEqual(sliding.count_non_shareable_blocks("src", past_length), 2)
+        full.use_block_sharing = False
+        self.assertEqual(full.count_non_shareable_blocks("src", past_length), 3)
+        full.use_block_sharing = True
+
+        # Stamp each source block with a distinct byte pattern, then fork a child request
+        for allocator in (full, sliding):
+            for block_id in allocator.block_table["src"]:
+                allocator._copy_view[block_id] = (allocator.index * 100 + block_id) % 256
+        for allocator, num_copied in ((full, 1), (sliding, 2)):
+            missing_blocks = num_copied - pool.count_free_blocks(allocator.index)
+            for _ in range((missing_blocks + allocator.blocks_per_sector - 1) // allocator.blocks_per_sector):
+                pool.allocate_sector(allocator.index)
+            src_blocks, dst_blocks = allocator.fork_blocks("src", "child", past_length)
+            self.assertEqual(len(src_blocks), num_copied)
+            allocator.copy_blocks(src_blocks, dst_blocks)
+            # The child's table starts with the shared blocks, and the copied content matches the source
+            num_shared = len(allocator.block_table["src"]) - num_copied
+            self.assertEqual(allocator.block_table["child"][:num_shared], allocator.block_table["src"][:num_shared])
+            for src_block, dst_block in zip(src_blocks, dst_blocks):
+                self.assertTrue(torch.equal(allocator._copy_view[dst_block], allocator._copy_view[src_block]))
+
+        # Shared blocks are ref-counted: freeing the source keeps them alive for the child
+        shared_blocks = full.block_table["src"][:2]
+        self.assertEqual(full.ledger.ref_counts, dict.fromkeys(shared_blocks, 2))
+        self.assertEqual(sliding.ledger.ref_counts, {})
+        full.free_blocks("src")
+        sliding.free_blocks("src")
+        self.assertEqual(full.ledger.ref_counts, {})  # counts of 1 are implicit
+        self.assertEqual(full.block_table["child"][:2], shared_blocks)
+        self.assertEqual(pool.count_free_blocks(full.index), 1)  # only the copied-from block was freed
+        self.assertEqual(pool.count_free_blocks(sliding.index), 2)
+        # Freeing the child releases everything: after reclaim, the pool is whole again
+        full.free_blocks("child")
+        sliding.free_blocks("child")
+        pool.try_to_free_sectors()
+        self.assertEqual(pool.num_free_sectors, num_sectors)
+
+    def test_prefix_match_and_dedup(self) -> None:
+        """Tests block de-duplication at the allocator level: completed blocks are hashed, later requests match them
+        as a prefix, unreferenced hashed blocks are kept cached instead of freed, and eviction returns them to the
+        pool."""
+        allocator = _make_allocator(FullAttentionCacheAllocator, head_dim=8, num_kv_heads=2, page_size=4)
+        num_sectors = 8
+        pool = _setup_cache_pool([allocator], num_sectors)
+        ledger = allocator.ledger
+
+        def allocate(request_id: str, num_tokens: int) -> None:
+            for _ in range(allocator.needs_new_sectors(request_id, 0, num_tokens)):
+                pool.allocate_sector(0)
+            allocator.allocate_cache_to_request(request_id, 0, num_tokens)
+
+        # "src" caches 10 tokens over 3 blocks, of which the first 2 are complete (page_size = 4)
+        tokens = list(range(100, 110))
+        allocate("src", 10)
+        src_table = allocator.block_table["src"][:]
+        allocator.mark_complete_blocks("src", tokens, new_new_blocks=2)
+        self.assertEqual(len(ledger.hash_to_block), 2)
+        self.assertEqual(set(ledger.block_to_hash), set(src_table[:2]))
+
+        # A request computing the same content is de-duplicated on the spot: it adopts the existing blocks, its
+        # duplicates are freed immediately, and no new hash is registered
+        allocate("dup", 10)
+        allocator.mark_complete_blocks("dup", tokens, new_new_blocks=2)
+        self.assertEqual(len(ledger.hash_to_block), 2)
+        self.assertEqual(allocator.block_table["dup"][:2], src_table[:2])
+        self.assertEqual(pool.count_free_blocks(0), 2)  # the two duplicate blocks were freed by the swap
+        self.assertEqual(ledger.ref_counts, dict.fromkeys(src_table[:2], 2))
+        allocator.free_blocks("dup")  # releases the adopted blocks and frees its own incomplete one
+        self.assertEqual(pool.count_free_blocks(0), 3)
+
+        def match_and_acquire(request_id: str, prompt: list[int]) -> int:
+            """Mirrors PagedAttentionCache.search_prefix_match at the single-allocator level."""
+            matched_blocks = allocator.match_prefix_blocks(prompt)
+            prefix_len = len(matched_blocks) * allocator.tokens_per_page
+            allocator.acquire_prefix_blocks(request_id, prefix_len, matched_blocks)
+            return prefix_len
+
+        # Prefix matching: same 8 first tokens match 2 blocks, 5 matching tokens only cover 1 complete block, and a
+        # prompt that is an exact multiple of the page size never matches its own last block
+        self.assertEqual(match_and_acquire("same", tokens[:8] + [1, 2, 3]), 8)
+        self.assertEqual(allocator.block_table["same"], src_table[:2])
+        self.assertEqual(match_and_acquire("partial", tokens[:5] + [9, 9, 9]), 4)
+        self.assertEqual(match_and_acquire("exact", tokens[:8]), 4)
+        self.assertEqual(ledger.ref_counts, {src_table[0]: 4, src_table[1]: 2})
+
+        # Freeing every request moves the hashed blocks to the cached set, not to the pool
+        for request_id in ("src", "same", "partial", "exact"):
+            allocator.free_blocks(request_id)
+        self.assertEqual(set(ledger.cached_blocks), set(src_table[:2]))
+        self.assertEqual(pool.count_free_blocks(0), 4)  # only the incomplete block of "src" was freed
+
+        # A new match claims the cached blocks back, and freeing it caches them again
+        self.assertEqual(match_and_acquire("revive", tokens[:8] + [7]), 8)
+        self.assertEqual(ledger.cached_blocks, {})
+        self.assertEqual(ledger.ref_counts, {})  # single owner stays implicit
+        allocator.free_blocks("revive")
+
+        # Eviction drops the hashes and releases the blocks: the pool ends up whole again
+        evicted_blocks = ledger.evict_cached_blocks()
+        self.assertEqual(set(evicted_blocks), set(src_table[:2]))
+        self.assertEqual(ledger.hash_to_block, {})
+        pool.free_blocks(0, evicted_blocks)
+        pool.try_to_free_sectors()
+        self.assertEqual(pool.num_free_sectors, num_sectors)
+
+    def test_count_storable_requests(self) -> None:
+        """Tests the cumulative fit simulation: when a request opens a fresh sector, the sector's unused blocks must
+        be credited to the following requests, which a per-request or global-sum check would miss."""
+        allocator = _make_allocator(
+            FullAttentionCacheAllocator, head_dim=2, num_kv_heads=1, page_size=4, allow_block_sharing=False
+        )
+        # bytes_per_block = 32 and bytes_per_sector = lcm(32, 128) = 128, so each sector holds 4 blocks
+        pool = _setup_cache_pool([allocator], num_sectors=2)
+        self.assertEqual(allocator.blocks_per_sector, 4)
+
+        # Build a bare cache exposing only what the simulation reads
+        cache = PagedAttentionCache.__new__(PagedAttentionCache)
+        cache.pool = pool
+        cache.cache_allocators = {"full_attention": allocator}
+
+        def blocks_needed(num_blocks: int) -> dict[str, int]:
+            return {"full_attention": num_blocks}
+
+        # 8 free blocks in 2 sectors: four 2-block requests fit thanks to the leftover blocks of opened sectors
+        # (a per-request ceil would claim 1 sector each and only admit 2), and a fifth request does not fit
+        requests = [blocks_needed(2) for _ in range(5)]
+        self.assertEqual(cache.count_storable_requests(requests[:4]), 4)
+        self.assertEqual(cache.count_storable_requests(requests), 4)
+
+        # 3-block requests: r1 opens a sector (1 block left), r2 takes it and opens the last sector (2 blocks left),
+        # r3 needs a third sector that does not exist
+        requests = [blocks_needed(3) for _ in range(3)]
+        self.assertEqual(cache.count_storable_requests(requests), 2)
+
+        # Blocks already free in the allocator's bucket count towards the fit
+        pool.allocate_sector(0)
+        self.assertEqual(cache.count_storable_requests([blocks_needed(4), blocks_needed(4)]), 2)
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
@@ -921,6 +1082,55 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
         )
 
+    @slow
+    @require_torch_accelerator
+    def test_hybrid_sliding_window_crossing_parity(self) -> None:
+        """Tests that a hybrid full+sliding model matches generate() token-for-token on prompts that cross the
+        sliding window, both during decode (prompt just under the window) and during prefill (prompt over the
+        window). This exercises the rolling-buffer read and write indices past the window boundary."""
+        model_id = "google/gemma-3-1b-it"
+        max_new_tokens = 30
+        # Use float32 so any mismatch is a real indexing bug and not a numerical tie-flip
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+        sliding_window = model.config.sliding_window
+
+        # Build prompts around the sliding window size
+        base_text = "The mitochondria is the powerhouse of the cell. " * 200
+        long_ids = tokenizer(base_text).input_ids
+        prompts = [
+            tokenizer("The capital of France is").input_ids,
+            long_ids[: sliding_window - 10],  # crosses the window during decode
+            long_ids[: sliding_window + 100],  # crosses the window during prefill
+        ]
+
+        # Reference: plain generate, one prompt at a time to avoid any padding effect
+        references = []
+        for ids in prompts:
+            with torch.no_grad():
+                out = model.generate(
+                    torch.tensor([ids], device=torch_device),
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    use_cache=True,
+                )
+            references.append(out[0, len(ids) :].tolist())
+
+        # Continuous batching, all prompts at once
+        gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=None)
+        results = model.generate_batch(
+            inputs=prompts,
+            generation_config=gen_config,
+            continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False),
+            progress_bar=False,
+        )
+        ordered_keys = sorted(results.keys(), key=lambda x: int(x.split("_")[1]))
+        for i, (key, reference) in enumerate(zip(ordered_keys, references)):
+            self.assertEqual(
+                results[key].generated_tokens,
+                reference,
+                f"CB output diverges from generate() for prompt {i} (length {len(prompts[i])}, {sliding_window = })",
+            )
+
     @parameterized.expand([(True, False), (False, True)])
     @require_flash_attn_3
     @slow
@@ -1070,9 +1280,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
         sharing."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        # 88 full-attention pages of 32 tokens = 4 blocks for TinyLlama's 22 full-attention layers
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_pages=88, fa_page_size=32
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, page_size=32
         )
 
         # Patch offload_requests to verify it's called at least once
@@ -1179,9 +1389,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
-        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test). Load plain
-        # sdpa (regular_generate runs on this model) and disable flash so the CB switch stays on paged|sdpa.
+    def _test_block_sharing(self, model_id: str, expected_attn_types: set[str], input_msg: str) -> None:
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
         model._supports_flash_attn = False
 
@@ -1193,81 +1402,65 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Get expected output from regular generate for parity check
         expected_output_tokens, _ = regular_generate(model, tokenizer, [input_msg])
 
+        # Prefix sharing only activates when every allocator can share, i.e. on full-attention-only models
+        prefix_sharing_expected = expected_attn_types == {"full_attention"}
+
+        # Spy on prefix matching to observe how many prompt tokens get matched
+        matched_tokens: list[int] = []
+        original_search = PagedAttentionCache.search_prefix_match
+
+        def spy_search(cache_self, request_id, prompt_ids):
+            matched = original_search(cache_self, request_id, prompt_ids)
+            matched_tokens.append(matched)
+            return matched
+
         cb_context_manager = model.continuous_batching_context_manager(
             generation_config=model.generation_config,
-            continuous_batching_config=ContinuousBatchingConfig(block_size=32),
+            continuous_batching_config=ContinuousBatchingConfig(page_size=32),
         )
-        with cb_context_manager as manager:
-            # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
+        with (
+            patch.object(PagedAttentionCache, "search_prefix_match", autospec=True, side_effect=spy_search),
+            cb_context_manager as manager,
+        ):
+            # The prompt must span 2 blocks (>= 33 tokens so decode completes the 2nd block: the prompt plus 31
+            # written decode tokens must reach 64) and its 2nd block must not be complete at prefill (< 64 tokens)
             inputs = get_generation_inputs([input_msg], tokenizer, for_continuous_batching=True)[0]
-            self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
+            self.assertGreaterEqual(len(inputs), 33, f"Input length is {len(inputs)} instead of at least 33")
             self.assertLess(len(inputs), 64, f"Input length is {len(inputs)} instead of less than 64")
 
-            # First request, which populates the cache w/ 2 complete blocks for each full attention layer group
+            # First request, which populates the cache with 2 complete blocks (1 by prefill, 1 during decode)
             request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_no_reuse = next(manager.request_id_iter(request_id))
 
-            num_fa = expected_layer_types["full_attention"]
-            num_sw = expected_layer_types["sliding_window"]
-
             if manager.batch_processor is None:
                 raise RuntimeError("Batch processor is None even after a request was added.")
+            cache = manager.batch_processor.cache
 
-            hash_table = manager.batch_processor.cache._block_manager._hash_to_id
-            self.assertEqual(
-                len(hash_table),
-                2 * num_fa,  # 2 = 1 for prefill + 1 for decode
-                f"There should be {2 * num_fa} blocks, 2 for each full attention layer group, but {len(hash_table) = }",
-            )
-            total_prefix_length = manager.batch_processor.cache._total_prefix_length
-            self.assertEqual(
-                total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}"
-            )
+            # Assert there is one allocator per expected attention type, and prefix sharing is on when possible
+            self.assertEqual(set(cache.cache_allocators.keys()), expected_attn_types)
+            self.assertEqual(cache.use_prefix_sharing, prefix_sharing_expected)
 
-            # Assert the number of layer groups and their types are the expected ones
-            layer_groups = manager.batch_processor.cache.group_cache_managers
-            self.assertEqual(
-                len(layer_groups),
-                num_fa + num_sw,
-                f"There should be {num_fa + num_sw} layer groups, but {len(layer_groups) = }",
-            )
+            # On a full-attention-only model, the first request leaves 2 hashed blocks; on a hybrid model, prefix
+            # sharing is off so no block is ever hashed
+            num_hashed_blocks = sum(len(ca.ledger.hash_to_block) for ca in cache.cache_allocators.values())
+            expected_hashes = 2 if prefix_sharing_expected else 0
+            self.assertEqual(num_hashed_blocks, expected_hashes, f"{num_hashed_blocks = }, {expected_hashes = }")
+            self.assertEqual(sum(matched_tokens), 0)
 
-            layer_group_types = {"full_attention": 0, "sliding_window": 0}
-            for cm in layer_groups:
-                if isinstance(cm, FullAttentionCacheAllocator):
-                    layer_group_types["full_attention"] += 1
-                elif isinstance(cm, SlidingAttentionCacheAllocator):
-                    layer_group_types["sliding_window"] += 1
-                else:
-                    raise ValueError(f"Invalid layer group type: {type(cm)}")
-
-            self.assertEqual(
-                layer_group_types,
-                expected_layer_types,
-                f"The expected layer group types are\n{expected_layer_types}\nbut got\n{layer_group_types}",
-            )
-
-            # Second request, which should reuse the same blocks for the full attention layer groups
+            # Second request, which should match the first complete block of the first request as a prefix
             request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_with_reuse = next(manager.request_id_iter(request_id))
 
-            # There should only still be two blocks in the hash table because of block reuse
-            self.assertEqual(
-                len(hash_table),
-                2 * num_fa,
-                f"Because of block reuse, there should still be two blocks in the hash table, but {len(hash_table) = }",
-            )
+            # De-duplication: the second request computes identical content, so no new hash is registered
+            num_hashed_blocks = sum(len(ca.ledger.hash_to_block) for ca in cache.cache_allocators.values())
+            self.assertEqual(num_hashed_blocks, expected_hashes, f"{num_hashed_blocks = }, {expected_hashes = }")
 
-            # Check that the whole prefill was matched if there are only full attention layers
-            if expected_layer_types["sliding_window"] == 0:
-                expected_total_prefix_length = 32
-            else:
-                expected_total_prefix_length = 0
-            total_prefix_length = manager.batch_processor.cache._total_prefix_length
+            # The prompt has less than 64 tokens, so only its first block can be matched (32 tokens)
+            expected_total_prefix_length = 32 if prefix_sharing_expected else 0
             self.assertEqual(
-                total_prefix_length,
+                sum(matched_tokens),
                 expected_total_prefix_length,
-                f"Expected total prefix length to be {expected_total_prefix_length}, but got {total_prefix_length = }",
+                f"Expected {expected_total_prefix_length} matched prefix tokens, got {sum(matched_tokens)}",
             )
 
         # Check the outputs were the same (block sharing should produce identical results)
@@ -1278,15 +1471,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
+        return self._test_block_sharing(model_id, {"full_attention"}, input_msg)
 
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
-        num_layer_groups = {"full_attention": 2, "sliding_window": 11}
         input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
+        return self._test_block_sharing(model_id, {"full_attention", "sliding_attention"}, input_msg)
 
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
@@ -1363,7 +1554,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @require_kernels
     def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
         """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
-
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer, model = get_tokenizer_and_model(
             model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
@@ -1373,7 +1563,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
         continuous_batching_config = ContinuousBatchingConfig(
-            block_size=256,
+            page_size=256,
             num_blocks=64,
             max_batch_tokens=16,
             use_cuda_graph=use_cuda_graph,
@@ -1417,7 +1607,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES * 4, tokenizer, for_continuous_batching=True)
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
         # CUDA graphs enable input padding, which is where the truncation happened
-        cb_config = ContinuousBatchingConfig(block_size=256, num_blocks=64, use_cuda_graph=True)
+        cb_config = ContinuousBatchingConfig(page_size=256, num_blocks=64, use_cuda_graph=True)
 
         cb_config.max_blocks_per_request = 0  # varlen reference
         outputs_varlen = model.generate_batch(
@@ -1541,12 +1731,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test that CPU offloading produces the same results as the legacy soft-reset path, and that it is actually
         called at least once. Uses a very small cache (few blocks) to force offloading."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=False,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=1.0,
         )
 
@@ -1568,12 +1759,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
         in flight in the previous batch, exercising the rollback-on-restore path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=True,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=1.0,
         )
 
@@ -1581,12 +1773,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         original_offload = OffloadingManager._offload_to_cpu
         in_flight_victim_seen = False
 
-        def spy_offload(manager, victims):
+        def spy_offload(manager, victims, victim_block_tables):
             nonlocal in_flight_victim_seen
             in_flight_victim_seen |= any(
                 state.position_offset == len(state.initial_tokens) + len(state.generated_tokens) for state in victims
             )
-            return original_offload(manager, victims)
+            return original_offload(manager, victims, victim_block_tables)
 
         with patch.object(OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=spy_offload) as mock:
             self._test_continuous_batching_parity(
@@ -1603,12 +1795,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_cpu_offloading_disabled_when_zero(self) -> None:
         """Test that cpu_offload_space=0 produces the same output as the legacy path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        # 4 blocks of 32 tokens: small enough to force offloading
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=True,
             allow_block_sharing=True,
             use_async_batching=False,
             num_blocks=4,
-            block_size=32,
+            page_size=32,
             cpu_offload_space=0.0,
         )
         # Should work identically to the existing test_continuous_batching_few_blocks
@@ -1626,15 +1819,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
-    dtypes, no alignment padding or extra blocks) and compare the accelerator memory delta to the handler's prediction. The
-    handler derives the page size and the two activation peaks (LM head and attention) from the model config, so we
-    allocate the tensors of whichever peak dominates -- that is the one ``compute_memory_footprint`` reports.
+    dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
+    the largest of the two M-proportional activation peaks (LM head and attention) and always accounts for the cache
+    reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
     """
 
     NUM_BLOCKS = 4
     MAX_BATCH_TOKENS = 64
 
-    # Each tuple fully specifies a synthetic model config plus the CB knobs; page_size = head_dim * num_kv_heads.
+    # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
     # fmt: off
     # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
     CONFIGS = [
@@ -1672,30 +1865,45 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             _attn_implementation=attn_impl,
         )
         cb_config = ContinuousBatchingConfig(
-            block_size=block_size,
+            page_size=block_size,
+            num_blocks=self.NUM_BLOCKS,
             max_blocks_per_request=max_bpr,
             return_logprobs=logprobs,
             use_async_batching=use_async,
             max_memory_percent=0.9,
         )
+        # Compute the sector geometry the same way PagedAttentionCache does, with the layers evenly split across the
+        # attention types
+        layers_per_group = group_size // len(group_types)
+        bytes_per_token = 2 * num_kv_heads * head_dim * dtype.itemsize
+        bytes_per_block = bytes_per_token * block_size * layers_per_group
+        bytes_per_sector = math.lcm(bytes_per_block, 128)
+        tokens_per_sector = bytes_per_sector // bytes_per_block * block_size
+        bytes_per_model_block = bytes_per_token * block_size * group_size
         handler = PagedAttentionMemoryHandler(
             config=config,
-            continuous_batching_config=cb_config,
+            cb_config=cb_config,
             dtype=dtype,
-            group_types=group_types,
-            group_size=group_size,
+            bytes_per_sector=bytes_per_sector,
+            tokens_per_sector=tokens_per_sector,
+            bytes_per_block=bytes_per_model_block,
+            attn_types=group_types,
         )
 
         num_groups = len(group_types)
         num_attn_masks = handler.num_attention_masks
         num_output_rows = 2 if logprobs else 1
-        page_size = head_dim * num_kv_heads
+        elems_per_kv_token = head_dim * num_kv_heads
         q_dim = num_attention_heads * head_dim
 
-        N = self.NUM_BLOCKS * block_size  # num_pages
+        # NUM_BLOCKS converts to a number of sectors, and reads are sized by the readable tokens those sectors hold
+        num_sectors = handler.num_sectors_from_config()
+        if num_sectors is None:
+            raise ValueError("handler could not find num_sector, which should be impossible in this test.")
+        N = num_sectors * tokens_per_sector  # max number of readable cache tokens
         M = self.MAX_BATCH_TOKENS
         k = handler.io_multiplier  # 1 sync, 2 async -- scales IO tensors only
-        predicted = handler.compute_memory_footprint(M, self.NUM_BLOCKS)
+        predicted = handler.compute_memory_footprint(M, num_sectors)
 
         # -- Allocate tensors at the exact idealized sizes the handler models --
         device = torch_device
@@ -1704,10 +1912,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
         # Tensors present regardless of which activation peak is live
         fixed = []
-        # kv_cache: 2 * group_size tensors of [N, page_size] (not scaled by k)
-        for _ in range(group_size):
-            fixed.append(torch.empty((N, page_size), dtype=dtype, device=device))
-            fixed.append(torch.empty((N, page_size), dtype=dtype, device=device))
+        # kv_cache: a single flat byte tensor holding the data sectors plus the two trash sectors (not scaled by k)
+        fixed.append(torch.empty((num_sectors + 2) * bytes_per_sector, dtype=torch.uint8, device=device))
         # IO tensors below are allocated k times (once per IO instance)
         for _ in range(k):
             fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
@@ -1719,21 +1925,23 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             fixed.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))  # write_index
             fixed.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))  # read_index
 
-        # Activation peaks: only one is live at a time, so the footprint uses whichever is larger
+        # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
+        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
+        fixed.append(torch.empty((N, elems_per_kv_token), dtype=dtype, device=device))
+
+        # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
         peaks = {
             # LM head: hidden states [M, hidden] turned into logits [M, vocab] (always fp32)
             "lm_head": [
                 torch.empty((M, hidden_size), dtype=dtype, device=device),
                 torch.empty((M, vocab_size), dtype=torch.float32, device=device),
             ],
-            # Attention: hidden + Q + new K/V over M, plus old K/V read from the whole cache over N
+            # Attention: hidden + Q + new K/V over M
             "attention": [
                 torch.empty((M, hidden_size), dtype=dtype, device=device),
                 torch.empty((M, q_dim), dtype=dtype, device=device),
-                torch.empty((M, page_size), dtype=dtype, device=device),
-                torch.empty((M, page_size), dtype=dtype, device=device),
-                torch.empty((N, page_size), dtype=dtype, device=device),
-                torch.empty((N, page_size), dtype=dtype, device=device),
+                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
+                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
             ],
         }
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
@@ -1745,11 +1953,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         actual_accelerator = backend_memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
         num_allocations = len(fixed) + len(peaks[dominant])
+        # The CUDA caching allocator rounds allocations larger than 10MB up to a multiple of 2MB
+        large_alloc_rounding = sum(
+            -t.nbytes % (2 * 1024**2) for t in fixed + peaks[dominant] if t.nbytes > 10 * 1024**2
+        )
 
         del fixed, peaks
         backend_empty_cache(device)
 
-        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
+        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the handler's cost
         #    coefficients against the tensor shapes, with zero tolerance.
         self.assertEqual(
             predicted,
@@ -1757,9 +1969,10 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
         )
 
-        # 2) Accelerator memory check: caching allocators round each allocation up (typically to 512 bytes).
-        #    We allow up to 512 bytes of overhead per allocation.
-        max_accelerator_overhead = num_allocations * 512
+        # 2) GPU memory check, which accounts for the CUDA caching allocator's rounding up of allocations.
+        if baseline > 0:
+            self.skipTest(f"CUDA allocator already holds {baseline} bytes: the memory delta check would be polluted")
+        max_cuda_overhead = num_allocations * 512 + large_alloc_rounding
         self.assertLessEqual(
             abs(actual_accelerator - predicted),
             max_accelerator_overhead,

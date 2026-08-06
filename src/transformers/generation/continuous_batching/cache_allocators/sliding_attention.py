@@ -151,7 +151,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         Returns the complete KV states (cached + new) for attention computation.
         """
         # Select the shifted views of this layer's keys and values
-        k_cache, v_cache = self._kv_views[layer_idx]
+        k_cache, v_cache = self._kv_token_views[layer_idx]
         # Transpose the KV states to match the cache shape, after which shape is [seqlen_q, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
