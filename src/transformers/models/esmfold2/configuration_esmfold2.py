@@ -155,6 +155,8 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         Configuration for the denoiser this head samples from.
     num_distogram_bins (`int`, *optional*, defaults to 128):
         Number of distance bins predicted by the distogram head.
+    num_diffusion_samples (`int`, *optional*, defaults to 8):
+        Number of parallel structure samples drawn by the diffusion sampler.
     gamma_0 (`float`, *optional*, defaults to 0.605):
         Churn factor applied at noise levels above `gamma_min` (extra noise re-injected before a step).
     gamma_min (`float`, *optional*, defaults to 1.107):
@@ -185,6 +187,7 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
 
     diffusion_module: dict | EsmFold2DiffusionModuleConfig | None = None
     num_distogram_bins: int | None = 128
+    num_diffusion_samples: int | None = 8
     gamma_0: float | None = 0.605
     gamma_min: float | None = 1.107
     noise_scale: float | None = 0.0
@@ -321,8 +324,6 @@ class EsmFold2Config(PreTrainedConfig):
         Number of relative chain-index bins in the relative-position encoding.
     num_loops (`int`, *optional*, defaults to 10):
         Number of trunk refinement loops.
-    num_diffusion_samples (`int`, *optional*, defaults to 8):
-        Number of parallel structure samples drawn by the diffusion sampler.
     num_res_types (`int`, *optional*, defaults to 33):
         Number of residue types.
     max_atomic_number (`int`, *optional*, defaults to 128):
@@ -373,7 +374,6 @@ class EsmFold2Config(PreTrainedConfig):
     num_relative_residx_bins: int | None = 32
     num_relative_chain_bins: int | None = 2
     num_loops: int | None = 10
-    num_diffusion_samples: int | None = 8
     num_res_types: int | None = 33
     max_atomic_number: int | None = 128
     char_vocab_size: int | None = 64

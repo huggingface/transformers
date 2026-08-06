@@ -56,7 +56,6 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         "single_inputs_size": 83,
         "pair_transition_intermediate_size": 64,
         "num_loops": 1,
-        "num_diffusion_samples": 1,
         "esmc_config": {"hidden_size": 32, "num_attention_heads": 2, "num_hidden_layers": 1, "vocab_size": 64},
         "folding_trunk_num_hidden_layers": 1,
         "sliding_window": 8,
@@ -72,6 +71,7 @@ def get_tiny_config(**overrides) -> "EsmFold2Config":
         },
         "structure_head": {
             "num_distogram_bins": 8,
+            "num_diffusion_samples": 1,
             "diffusion_module": {
                 "hidden_size": 32,
                 "intermediate_size": 64,
