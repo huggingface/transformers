@@ -790,14 +790,14 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             implementation = torch_function if implementation is None else implementation
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
-        torch_params = tuple(inspect.signature(torch_function).parameters)
         applicable_params = tuple(inspect.signature(implementation).parameters)
+        # A boolean to track if the implementation is new, i.e. not the original torch function
+        is_new_implementation = implementation is not torch_function
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
-            # kernels are incompatible with torch.export, so we always use the torch path
-            if implementation is not torch_function and is_torchdynamo_exporting():
-                kwargs = {k: v for k, v in kwargs.items() if k in torch_params}
+            # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
+            if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
