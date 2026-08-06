@@ -48,6 +48,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    drop_inherited_flash_attention_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
@@ -701,6 +702,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)

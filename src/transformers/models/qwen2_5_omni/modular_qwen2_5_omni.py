@@ -46,6 +46,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    drop_inherited_flash_attention_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
@@ -1372,6 +1373,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         pool_indices = get_pool_indices(feature_lens, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, kwargs=kwargs)
         max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1621,6 +1623,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
+        drop_inherited_flash_attention_kwargs(kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
 
