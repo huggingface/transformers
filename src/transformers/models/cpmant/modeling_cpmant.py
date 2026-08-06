@@ -697,8 +697,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         self.post_init()
 
     def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
-        # `next_sequence_length` is ignored: CpmAnt rebuilds the mask and position bias over the whole
-        # sequence and drops the cached prefix itself, so it always needs the full `input_ids`.
+        # `next_sequence_length` is ignored: CpmAnt prepends its soft prompt and rebuilds the mask and
+        # position bias from the whole sequence, dropping the cached prefix itself, so it can only be
+        # fed the full `input_ids`. Slicing down to the new tokens makes the position bias mismatch.
         return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
