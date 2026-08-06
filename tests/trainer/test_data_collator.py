@@ -48,6 +48,8 @@ from transformers.utils import PaddingStrategy
 if is_torch_available():
     import torch
 
+    from transformers.modeling_flash_attention_utils import _is_packed_sequence, prepare_fa_kwargs_from_position_ids
+
 
 class DataCollatorTestMixin:
     """Mixin providing common setup and utility methods for data collator tests."""
@@ -345,6 +347,31 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         # Should not include attention_mask or flash attn kwargs by default
         for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
+
+    def test_position_ids_start(self):
+        """Test position_ids for models numbering positions from padding_idx + 1, like RoBERTa."""
+        for return_tensors in ["pt", "np"]:
+            collator = DataCollatorWithFlattening(return_tensors=return_tensors, position_ids_start=2)
+            batch = collator(self._get_features())
+
+            self.assertEqual(batch["position_ids"][0].tolist(), [2, 3, 4, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_position_ids_flash_attn_boundary_inference(self):
+        """Test FlashAttention sequence boundary inference from collator position_ids, 0-based or not."""
+        for position_ids_start in [0, 2]:
+            collator = DataCollatorWithFlattening(return_tensors="pt", position_ids_start=position_ids_start)
+            batch = collator(self._get_features())
+
+            self.assertTrue(_is_packed_sequence(batch["position_ids"], batch_size=1))
+            cu_seq_lens, max_lengths = prepare_fa_kwargs_from_position_ids(batch["position_ids"])
+            self.assertEqual(cu_seq_lens[0].tolist(), [0, 3, 9, 16])
+            self.assertEqual(cu_seq_lens[1].tolist(), [0, 3, 9, 16])
+            self.assertEqual(int(max_lengths[0]), 7)
+            self.assertEqual(int(max_lengths[1]), 7)
+
+            # A batch with a single sequence stays on the regular FA path
+            single = collator([self._get_features()[0]])
+            self.assertFalse(_is_packed_sequence(single["position_ids"], batch_size=1))
 
     def test_flash_attn_kwargs(self):
         """Test flattening with Flash Attention kwargs."""

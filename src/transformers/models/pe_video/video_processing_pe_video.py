@@ -46,7 +46,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         # Always set `return_tensors` to `None` since it won't pad variable length videos
-        # We'll handle this after we call the parent' method
+        # We'll handle this after we call the parent's method
         return_tensors = kwargs.pop("return_tensors", None)
         result = super()._preprocess(videos, **kwargs)
         pixels = result.pixel_values_videos

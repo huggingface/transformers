@@ -25,8 +25,33 @@ jobs:
             -H "Accept: application/vnd.github.raw" \
             "/repos/${GITHUB_REPOSITORY}/contents/utils/update_pr_ci_dashboard_recap.py?ref=${SCRIPT_REF}" \
             > update_pr_ci_dashboard_recap.py
+          gh api \
+            -H "Accept: application/vnd.github.raw" \
+            "/repos/${GITHUB_REPOSITORY}/contents/utils/github_utils.py?ref=${SCRIPT_REF}" \
+            > github_utils.py
 
       - name: Update PR CI recap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 update_pr_ci_dashboard_recap.py
+
+  post-mlinter-review:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download mlinter findings artifact
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: mlinter-findings
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show mlinter findings
+        if: steps.download.outcome == 'success'
+        run: |
+          echo "=== mlinter-pr-number.txt ==="
+          cat mlinter-pr-number.txt
+          echo "=== mlinter-findings.json ==="
+          cat mlinter-findings.json
