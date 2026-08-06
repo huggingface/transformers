@@ -93,7 +93,10 @@ jobs:
         working-directory: vllm
         continue-on-error: true
         run: |
-          # Skip TransformersMultiModalForCausalLM and Gemma3nForCausalLM — cause OOM (exit code 137)
+          # Skipped models:
+          #   TransformersMultiModalForCausalLM — OOM (exit code 137)
+          #   Gemma3nForCausalLM               — OOM (exit code 137)
+          #   DeepSeekMTPModel                 — MLA not supported on CPU (vLLM-side issue, NotImplementedError)
           pytest -v -s \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]" \
@@ -103,7 +106,6 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[InternLM2ForRewardModel]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[PrithviGeoSpatialMAE]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[UltravoxModel]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[DeepSeekMTPModel]" \
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
