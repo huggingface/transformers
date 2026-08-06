@@ -1209,6 +1209,15 @@ def _patch_sdpa(original):
             reps = q_heads // k_heads
             key = key.repeat_interleave(reps, dim=-3)
             value = value.repeat_interleave(reps, dim=-3)
+        # OV's SDPA op takes no `scale` from the traced graph (the aten node's scalar `scale` isn't
+        # surfaced as a frontend input), so it always applies its own default ``head_dim**-0.5``. Models
+        # with a non-default scale (T5-family fold ``1/sqrt(d)`` into init and pass ``scale=1.0``) would be
+        # silently mis-scaled. Fold the intended scale into the query so OV's default gives the right total.
+        scale = kwargs.pop("scale", None)
+        if scale is not None:
+            default_scale = query.shape[-1] ** -0.5
+            if scale != default_scale:
+                query = query * (scale / default_scale)
         return original(query, key, value, *args, **kwargs)
 
     return patch
@@ -2092,10 +2101,9 @@ def _convert_sdpa(context):
     ``aten.expand`` promotes bool masks to ``i64`` during OV translation, so we insert a
     ``Convert(→ boolean)`` on the mask input before instantiating the op.
 
-    The ``scale`` arg (FX input 6) is threaded through when present: it defaults to
-    ``head_dim**-0.5`` in both aten and OV, but models like Gemma2/Gemma3 pass an explicit
-    ``query_pre_attn_scalar**-0.5`` that differs — dropping it would silently change the attention
-    temperature. Q/K/V pass through unchanged."""
+    The aten node's scalar ``scale`` is not surfaced as a frontend input here, so OV always applies its
+    own ``head_dim**-0.5`` default; a non-default scale is instead folded into the query up in
+    ``_patch_sdpa``. Q/K/V pass through unchanged."""
     q, k, v = context.get_input(0), context.get_input(1), context.get_input(2)
     # A ``None`` FX arg reaches the extension as an unconverted ``PtFrameworkNode``.
     mask = None
@@ -2111,13 +2119,9 @@ def _convert_sdpa(context):
         # ``is_causal`` is a positional FX input (arg 5), not a node attribute.
         if context.get_input(5).get_node().get_type_name() == "Constant":
             is_causal = bool(context.get_values_from_const_input(5))
-    # ``scale`` is FX input 6; a ``None`` (default) arrives as a non-``Constant`` and is skipped so
-    # OV falls back to its own ``head_dim**-0.5`` default (identical to aten's).
     kwargs = {"causal": is_causal}
     if mask is not None:
         kwargs["attention_mask"] = mask
-    if context.get_input_size() > 6 and context.get_input(6).get_node().get_type_name() == "Constant":
-        kwargs["scale"] = context.get_input(6)
     return [ov_ops.scaled_dot_product_attention(q, k, v, **kwargs).output(0)]
 
 
