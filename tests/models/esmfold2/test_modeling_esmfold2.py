@@ -195,7 +195,7 @@ class EsmFold2ModelTest(unittest.TestCase):
 
         The zero fill also clears the ``*_attention_mask`` entries, marking the added positions as padding.
         """
-        src_tokens = features["token_attention_mask"].shape[1]
+        src_tokens = features["attention_mask"].shape[1]
         src_atoms = features["atom_attention_mask"].shape[1]
         padded = {}
         for key, value in features.items():
@@ -230,7 +230,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         model = self._build()
         _res, _profile, _deletion, ref_element_oh, ref_chars_oh, atom_to_token = model._prepare_features(
             res_type=features["res_type"],
-            token_mask=features["token_attention_mask"],
+            token_mask=features["attention_mask"],
             msa=None,
             msa_attention_mask=None,
             deletion_mean=None,
@@ -273,8 +273,8 @@ class EsmFold2ModelTest(unittest.TestCase):
         from unittest.mock import patch
 
         batch, short_features = self._build_padded_batch()
-        short_length = short_features["token_attention_mask"].shape[1]
-        self.assertLess(short_length, batch["token_attention_mask"].shape[1])  # something to pad
+        short_length = short_features["attention_mask"].shape[1]
+        self.assertLess(short_length, batch["attention_mask"].shape[1])  # something to pad
 
         model = self._build()
         # The trunk is stochastic and batch size perturbs the draws, so pin both sources of randomness.
@@ -303,7 +303,7 @@ class EsmFold2ModelTest(unittest.TestCase):
 
         long_features = prepare_protein_features("MKLVAAGKLQ")
         short_features = prepare_protein_features(self.seq)
-        num_tokens = long_features["token_attention_mask"].shape[1]
+        num_tokens = long_features["attention_mask"].shape[1]
         num_atoms = long_features["atom_attention_mask"].shape[1]
         padded_short = self._pad_features(short_features, num_tokens, num_atoms)
         batch = {key: torch.cat([long_features[key], padded_short[key]], dim=0) for key in long_features}
@@ -331,7 +331,7 @@ class EsmFold2ModelTest(unittest.TestCase):
                     pair_trunk=trunk.pair_states,
                     relative_position_encoding=trunk.relative_position_encoding,
                     single_inputs=trunk.single_inputs,
-                    token_attention_mask=features["token_attention_mask"],
+                    attention_mask=features["attention_mask"],
                     num_diffusion_samples=samples,
                 )
 

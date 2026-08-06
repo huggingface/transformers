@@ -17,12 +17,13 @@ import argparse
 import glob
 import json
 import os
+import re
 
 import torch
 from huggingface_hub import HfApi, save_torch_state_dict, snapshot_download
 from safetensors.torch import load_file
 
-from transformers import EsmcTokenizer, EsmFold2Config
+from transformers import EsmcTokenizer, EsmFold2Config, EsmFold2Model
 from transformers.models.esmc.convert_esmc_checkpoint import build_esmc_config_dict, convert_esmc_state_dict
 
 
@@ -136,10 +137,6 @@ _WEIGHT_KEY_RENAMES = (
     (".atom_transformer.", "."),
     ("._engine.", "."),
     (".blocks.", ".layers."),
-    # ``blocks`` -> ``layers`` for the two parallel diffusion-transformer stacks, which the rule above
-    # does not reach (their keys read ``.attn_blocks.``/``.transition_blocks.``, not ``.blocks.``).
-    (".attn_blocks.", ".attention_layers."),
-    (".transition_blocks.", ".transition_layers."),
     (".attn.", ".self_attn."),
     (".w_up.", ".gate_up_proj."),
     (".w_down.", ".down_proj."),
@@ -339,26 +336,50 @@ def rename_trunk_keys(trunk: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]
             renamed.update({base + "q_proj.weight": q, base + "k_proj.weight": k, base + "v_proj.weight": v})
         else:
             renamed[key] = tensor
-    return _standardize_attention_keys(_fuse_transition_swiglu(renamed))
+    return _standardize_attention_keys(_fuse_transition_swiglu(_nest_diffusion_layers(renamed)))
+
+
+def _nest_diffusion_layers(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Merge the two parallel upstream diffusion stacks into one ``EsmFold2DiffusionLayer`` list.
+
+    Upstream keeps ``attn_blocks``/``transition_blocks`` side by side; here a single layer owns the
+    adaLN pre-norm, the attention, the output gate and the transition. Runs after
+    _WEIGHT_KEY_RENAMES so the inserted ``.attn.`` is not caught by its ``.attn.`` -> ``.self_attn.``
+    rule, which has already rewritten the (unrelated) atom-stack attention.
+    """
+    # adaLN and the output gate belong to the layer; everything else in attn_blocks to its attention.
+    substitutions = (
+        (r"\.attn_blocks\.(\d+)\.(adaln|out_gate)\.", r".layers.\1.\2."),
+        (r"\.attn_blocks\.(\d+)\.", r".layers.\1.attn."),
+        (r"\.transition_blocks\.(\d+)\.", r".layers.\1.transition."),
+    )
+    out: dict[str, torch.Tensor] = {}
+    for key, tensor in renamed.items():
+        for pattern, replacement in substitutions:
+            key, count = re.subn(pattern, replacement, key)
+            if count:
+                break
+        out[key] = tensor
+    return out
 
 
 def _standardize_attention_keys(renamed: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Bring the two multi-head attention modules onto the standard transformers layout: split the
     pair-bias attention's fused ``kv_proj`` into ``k_proj``/``v_proj`` (k first, matching the model's
     ``chunk`` order) and rename the attention output projection ``out_proj`` -> ``o_proj``. Scoped to
-    the atom ``.self_attn.`` modules and the token ``attention_layers`` so the (non-MHA)
+    the atom ``.self_attn.`` modules and the token ``token_transformer.layers`` so the (non-MHA)
     row-attention-pooling ``out_proj`` is left untouched. Both names are the post-rename spellings,
-    since _WEIGHT_KEY_RENAMES has already run."""
+    since _WEIGHT_KEY_RENAMES and _nest_diffusion_layers have already run."""
     out: dict[str, torch.Tensor] = {}
     for key, tensor in renamed.items():
-        if "attention_layers." in key and key.endswith(".kv_proj.weight"):
+        if "token_transformer.layers." in key and key.endswith(".kv_proj.weight"):
             base = key[: -len("kv_proj.weight")]
             k, v = (chunk.clone() for chunk in torch.chunk(tensor, 2, dim=0))
             out[base + "k_proj.weight"] = k
             out[base + "v_proj.weight"] = v
             continue
         if key.endswith(".self_attn.out_proj.weight") or (
-            "attention_layers." in key and key.endswith(".out_proj.weight")
+            "token_transformer.layers." in key and key.endswith(".out_proj.weight")
         ):
             key = key.replace(".out_proj.weight", ".o_proj.weight")
         out[key] = tensor
@@ -399,6 +420,29 @@ def merge_state_dict(esmfold2_dir: str, esmc_dir: str) -> dict[str, torch.Tensor
     return {**trunk, **convert_esmc_state_dict(kept)}
 
 
+def check_against_model(state_dict: dict[str, torch.Tensor], config: EsmFold2Config) -> None:
+    """Fail if the produced keys and shapes do not match the model the config describes.
+
+    Without this a rename that misses a submodule writes a checkpoint that still *loads* --
+    ``from_pretrained`` only warns about missing keys -- leaving that submodule randomly initialised
+    and the predictions quietly wrong.
+    """
+    with torch.device("meta"):
+        expected = {k: tuple(v.shape) for k, v in EsmFold2Model(config).state_dict().items()}
+
+    missing = sorted(set(expected) - set(state_dict))
+    unexpected = sorted(set(state_dict) - set(expected))
+    mismatched = sorted(k for k in set(state_dict) & set(expected) if tuple(state_dict[k].shape) != expected[k])
+    if missing or unexpected or mismatched:
+        raise ValueError(
+            "converted state dict does not match EsmFold2Model:\n"
+            f"  missing ({len(missing)}): {missing[:10]}\n"
+            f"  unexpected ({len(unexpected)}): {unexpected[:10]}\n"
+            f"  shape mismatch ({len(mismatched)}): "
+            + str([(k, tuple(state_dict[k].shape), expected[k]) for k in mismatched[:10]])
+        )
+
+
 def save_tokenizer(output_dir: str) -> None:
     """Write a fresh ESMC tokenizer next to the bundled weights.
 
@@ -422,6 +466,7 @@ def main() -> None:
     esmfold2_dir, esmc_dir = _resolve_dir(args.esmfold2), _resolve_dir(args.esmc)
     config = build_config(esmfold2_dir, esmc_dir)
     state_dict = merge_state_dict(esmfold2_dir, esmc_dir)
+    check_against_model(state_dict, config)
 
     os.makedirs(args.output_dir, exist_ok=True)
     config.save_pretrained(args.output_dir)

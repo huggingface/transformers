@@ -435,7 +435,7 @@ def prepare_protein_features(sequence: str, device: torch.device | str | None = 
     res_type = torch.tensor(res_type_vals, dtype=torch.int64)
     input_ids = torch.tensor(input_id_vals, dtype=torch.int64)
     token_bonds = torch.zeros(L, L, 1, dtype=torch.float32)
-    token_attention_mask = torch.ones(L, dtype=torch.bool)
+    attention_mask = torch.ones(L, dtype=torch.bool)
     distogram_atom_idx = torch.tensor(distogram_rep_atom_idx, dtype=torch.int64)
 
     # Single-sequence MSA: depth 1, row 0 is the sequence itself.
@@ -455,7 +455,7 @@ def prepare_protein_features(sequence: str, device: torch.device | str | None = 
         "res_type": res_type,
         "input_ids": input_ids,
         "token_bonds": token_bonds,
-        "token_attention_mask": token_attention_mask,
+        "attention_mask": attention_mask,
         "ref_pos": ref_pos,
         "ref_element": ref_element,
         "ref_charge": ref_charge,
@@ -552,7 +552,7 @@ def output_to_pdb(output, features: dict, sample_idx: int | None = None) -> str:
     atom_to_token = features["atom_to_token"].cpu().numpy()
     ref_chars = features["ref_atom_name_chars"].cpu().numpy()
     res_type = features["res_type"].cpu().numpy()
-    token_mask = features["token_attention_mask"].cpu().numpy().astype(bool)
+    token_mask = features["attention_mask"].cpu().numpy().astype(bool)
     atom_mask_in = features["atom_attention_mask"].cpu().numpy().astype(bool)
     residue_index_arr = features["residue_index"].cpu().numpy()
     # Per-token chain id; a single-chain fold may omit it, in which case everything is chain A.
