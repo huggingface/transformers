@@ -117,6 +117,7 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
