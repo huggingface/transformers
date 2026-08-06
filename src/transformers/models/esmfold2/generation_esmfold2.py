@@ -103,7 +103,7 @@ class EsmFold2FoldingMixin:
     @torch.no_grad()
     def fold(
         self,
-        token_attention_mask: Tensor,
+        attention_mask: Tensor,
         asym_id: Tensor,
         mol_type: Tensor,
         distogram_atom_idx: Tensor,
@@ -119,7 +119,7 @@ class EsmFold2FoldingMixin:
         Only the arguments the sampler and the confidence head need are named here; the rest are
         forwarded to the trunk untouched, so ``fold(**features)`` takes the same dict as ``forward``.
 
-        token_attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Mask marking valid tokens (``1``) versus padding (``0``). Also forwarded to the trunk.
         asym_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Asymmetric-unit (chain) ID for each token. Also forwarded to the trunk.
@@ -146,7 +146,7 @@ class EsmFold2FoldingMixin:
         )
 
         trunk = self(
-            token_attention_mask=token_attention_mask,
+            attention_mask=attention_mask,
             asym_id=asym_id,
             mol_type=mol_type,
             **trunk_kwargs,
@@ -157,7 +157,7 @@ class EsmFold2FoldingMixin:
             single_inputs=trunk.single_inputs,
             relative_position_encoding=trunk.relative_position_encoding,
             atom_inputs=trunk.atom_inputs,
-            token_attention_mask=token_attention_mask,
+            attention_mask=attention_mask,
             num_diffusion_samples=num_samples,
             num_sampling_steps=num_sampling_steps,
         )
@@ -167,7 +167,7 @@ class EsmFold2FoldingMixin:
             pair_states=trunk.pair_states,
             predicted_coords=sample_coords,
             distogram_atom_idx=distogram_atom_idx,
-            token_attention_mask=token_attention_mask,
+            attention_mask=attention_mask,
             # From the trunk's featurized copy, as that is the one zeroed at padding.
             atom_to_token=trunk.atom_inputs.atom_to_token,
             atom_attention_mask=trunk.atom_inputs.atom_attention_mask,
@@ -229,7 +229,7 @@ class EsmFold2FoldingMixin:
         single_inputs: Tensor,
         relative_position_encoding: Tensor,
         atom_inputs: EsmFold2AtomInputs,
-        token_attention_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
         num_sampling_steps: int | None = None,
     ) -> Tensor:
@@ -249,7 +249,7 @@ class EsmFold2FoldingMixin:
             pair_trunk=pair_trunk,
             relative_position_encoding=relative_position_encoding,
             single_inputs=single_inputs,
-            token_attention_mask=token_attention_mask,
+            attention_mask=attention_mask,
             num_diffusion_samples=num_diffusion_samples,
         )
 

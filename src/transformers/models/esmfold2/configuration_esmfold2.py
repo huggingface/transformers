@@ -315,7 +315,8 @@ class EsmFold2Config(PreTrainedConfig):
     pair_transition_intermediate_size (`int`, *optional*, defaults to 1024):
         SwiGLU width of the pair-stream transitions.
     sliding_window (`int`, *optional*, defaults to 128):
-        Sliding-window size (token-index distance) for the atom-stack attention.
+        Sliding-window size (token-index distance) for the atom-stack attention, as the total window
+        width rather than the radius.
     chunk_size (`int`, *optional*, defaults to 64):
         Chunk size for the memory-heavy pair-/MSA-stream ops. `None` disables chunking.
     num_relative_residx_bins (`int`, *optional*, defaults to 32):

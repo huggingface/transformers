@@ -119,23 +119,14 @@ class EsmcTokenizer(TokenizersBackend):
         **kwargs,
     ):
         token_to_id = {tok: ind for ind, tok in enumerate(SEQUENCE_VOCAB)}
-
-        # ESMC uses <cls> as the sequence-start token, so `bos_token` defaults to it.
-        if bos_token is None:
-            bos_token = cls_token
-        cls_str, eos_str = self._ensure_str(cls_token), self._ensure_str(eos_token)
-
+        # Has to precede the super call: `TokenizersBackend` raises unless it finds either an existing
+        # `_tokenizer` or a serialized tokenizer/vocab to build one from, and we have neither.
         self._tokenizer = Tokenizer(BPE(token_to_id, merges=[], unk_token=self._ensure_str(unk_token)))
-        # Wrap every encoded sequence with <cls> … <eos>; TokenizersBackend registers the special
-        # tokens themselves from the kwargs below.
-        self._tokenizer.post_processor = TemplateProcessing(
-            single=f"{cls_str} $A {eos_str}",
-            special_tokens=[(cls_str, token_to_id[cls_str]), (eos_str, token_to_id[eos_str])],
-        )
 
         super().__init__(
             unk_token=unk_token,
-            bos_token=bos_token,
+            # ESMC uses <cls> as its sequence-start token.
+            bos_token=cls_token if bos_token is None else bos_token,
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
@@ -143,6 +134,13 @@ class EsmcTokenizer(TokenizersBackend):
             chain_break_token=chain_break_token,
             extra_special_tokens=extra_special_tokens,
             **kwargs,
+        )
+
+        # Wrap every encoded sequence with <cls> … <eos>, using the tokens the super call registered.
+        cls_str, eos_str = self._ensure_str(self.cls_token), self._ensure_str(self.eos_token)
+        self._tokenizer.post_processor = TemplateProcessing(
+            single=f"{cls_str} $A {eos_str}",
+            special_tokens=[(cls_str, token_to_id[cls_str]), (eos_str, token_to_id[eos_str])],
         )
 
     @staticmethod

@@ -562,9 +562,6 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.num_key_value_groups = 1
         self.is_causal = False
 
-        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config)
-        self.out_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
-
         self.q_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
         self.k_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
         self.v_proj = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=False)
@@ -594,12 +591,10 @@ class EsmFold2AttentionPairBias(nn.Module):
 
     def forward(
         self,
-        token_hidden_states: Tensor,
-        single_states: Tensor,
+        hidden_states: Tensor,
         attention_bias: Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[Tensor, Tensor | None]:
-        hidden_states = self.adaln(token_hidden_states, single_states)
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -625,8 +620,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         )
 
         attn_output = gate * attn_output
-        attn_output = self.o_proj(attn_output.reshape(*input_shape, -1))
-        return torch.sigmoid(self.out_gate(single_states)) * attn_output, attn_weights
+        return self.o_proj(attn_output.reshape(*input_shape, -1)), attn_weights
 
 
 class EsmFold2ConditionedTransition(nn.Module):
@@ -644,32 +638,53 @@ class EsmFold2ConditionedTransition(nn.Module):
         return torch.sigmoid(self.output_gate(single_states)) * hidden_states
 
 
-class EsmFold2DiffusionTransformer(nn.Module):
-    """Diffusion denoising transformer with attention pair bias."""
+class EsmFold2DiffusionLayer(nn.Module):
+    """Pair-bias attention and transition, each adaLN-conditioned and gated on the single stream.
+
+    The adaLN pre-norm and the output gate live here rather than inside the attention, so that
+    ``EsmFold2AttentionPairBias`` sees only normed states and returns an ungated result.
+    """
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
         # The pair-bias attention also needs trunk-level widths, so it keeps the full config; the
         # transition is entirely described by the diffusion sub-config and takes only that.
         diffusion_config = config.structure_head.diffusion_module
-        self.attention_layers = nn.ModuleList(
-            [EsmFold2AttentionPairBias(config) for _ in range(diffusion_config.num_hidden_layers)]
-        )
-        self.transition_layers = nn.ModuleList(
-            [EsmFold2ConditionedTransition(diffusion_config) for _ in range(diffusion_config.num_hidden_layers)]
+        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config)
+        self.attn = EsmFold2AttentionPairBias(config)
+        self.out_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
+        self.transition = EsmFold2ConditionedTransition(diffusion_config)
+
+    def forward(
+        self,
+        hidden_states: Tensor,
+        single_states: Tensor,
+        attention_bias: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Tensor:
+        attn_output, _ = self.attn(self.adaln(hidden_states, single_states), attention_bias, **kwargs)
+        hidden_states = hidden_states + torch.sigmoid(self.out_gate(single_states)) * attn_output
+        return hidden_states + self.transition(hidden_states, single_states)
+
+
+class EsmFold2DiffusionTransformer(nn.Module):
+    """Diffusion denoising transformer with attention pair bias."""
+
+    def __init__(self, config: EsmFold2Config) -> None:
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [EsmFold2DiffusionLayer(config) for _ in range(config.structure_head.diffusion_module.num_hidden_layers)]
         )
 
     def compute_pair_biases(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
-        """Per-block additive attention biases, built once per fold outside the sampling loop; see
+        """Per-layer additive attention biases, built once per fold outside the sampling loop; see
         ``EsmFold2AttentionPairBias.compute_pair_bias``."""
-        return [attn.compute_pair_bias(pair_states, attention_mask) for attn in self.attention_layers]
+        return [layer.attn.compute_pair_bias(pair_states, attention_mask) for layer in self.layers]
 
     def forward(self, token_hidden_states: Tensor, single_states: Tensor, attention_biases: list[Tensor]) -> Tensor:
         hidden_states = token_hidden_states
-        for attn, transition, attention_bias in zip(self.attention_layers, self.transition_layers, attention_biases):
-            attn_output, _ = attn(hidden_states, single_states, attention_bias)
-            hidden_states = hidden_states + attn_output
-            hidden_states = hidden_states + transition(hidden_states, single_states)
+        for layer, attention_bias in zip(self.layers, attention_biases):
+            hidden_states = layer(hidden_states, single_states, attention_bias)
         return hidden_states
 
 
@@ -765,7 +780,7 @@ class EsmFold2DiffusionModule(nn.Module):
         pair_trunk: Tensor,
         relative_position_encoding: Tensor,
         single_inputs: Tensor,
-        token_attention_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
         num_diffusion_samples: int = 1,
     ) -> EsmFold2DenoiserConditioning:
         """Precompute the conditioning that every denoising step reuses.
@@ -789,11 +804,11 @@ class EsmFold2DiffusionModule(nn.Module):
 
         # --- precomputed at batch_size ---
         atom_embeds, position_embeddings = self.atom_encoder.embed_atoms(atom_inputs)
-        attention_mask = self.atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds)
+        atom_window_mask = self.atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds)
         pair_states = self.conditioning.compute_pair_repr(pair_trunk, relative_position_encoding)
-        token_attention_bias = self.token_transformer.compute_pair_biases(pair_states, token_attention_mask)
+        token_attention_bias = self.token_transformer.compute_pair_biases(pair_states, attention_mask)
         if not masks_broadcastable:
-            attention_mask, *token_attention_bias = _expand_samples(samples, attention_mask, *token_attention_bias)
+            atom_window_mask, *token_attention_bias = _expand_samples(samples, atom_window_mask, *token_attention_bias)
 
         # --- everything else: batch_size -> batch_size * num_diffusion_samples ---
         cos, sin = position_embeddings
@@ -808,7 +823,7 @@ class EsmFold2DiffusionModule(nn.Module):
         )
         return EsmFold2DenoiserConditioning(
             atom_embeds=atom_embeds,
-            attention_mask=attention_mask,
+            attention_mask=atom_window_mask,
             position_embeddings=(cos, sin),
             atom_mask=atom_mask,
             atom_to_token=atom_to_token,
@@ -1377,7 +1392,7 @@ class EsmFold2ConfidenceHead(nn.Module):
         pair_states: Tensor,
         predicted_coords: Tensor,
         distogram_atom_idx: Tensor,
-        token_attention_mask: Tensor,
+        attention_mask: Tensor,
         atom_to_token: Tensor,
         atom_attention_mask: Tensor,
         num_diffusion_samples: int,
@@ -1398,7 +1413,7 @@ class EsmFold2ConfidenceHead(nn.Module):
             atom_to_token,
             atom_attention_mask,
             distogram_atom_idx,
-            token_attention_mask,
+            attention_mask,
         )
         flat_predicted_coords = (
             predicted_coords.reshape(-1, *predicted_coords.shape[-2:])
@@ -1549,7 +1564,7 @@ class EsmFold2ConfidenceHead(nn.Module):
         pair_states: Tensor,
         predicted_coords: Tensor,
         distogram_atom_idx: Tensor,
-        token_attention_mask: Tensor,
+        attention_mask: Tensor,
         atom_to_token: Tensor,
         atom_attention_mask: Tensor,
         asym_id: Tensor,
@@ -1572,7 +1587,7 @@ class EsmFold2ConfidenceHead(nn.Module):
             pair_states=pair_states,
             predicted_coords=predicted_coords,
             distogram_atom_idx=distogram_atom_idx,
-            token_attention_mask=token_attention_mask,
+            attention_mask=attention_mask,
             atom_to_token=atom_to_token,
             atom_attention_mask=atom_attention_mask,
             num_diffusion_samples=num_diffusion_samples,
@@ -1619,8 +1634,10 @@ def _inverse_softplus(value: float) -> float:
     return value + math.log(-math.expm1(-value))
 
 
-class EsmFold2MSAEncoderLayer(nn.Module):
-    """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, triangle update.
+class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
+    """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, then the pair update.
+
+    The pair half is exactly an `EsmFold2PairUpdateLayer`, so it is inherited rather than repeated.
 
     The final block updates only the pair stream, so it does not build the two MSA-stream submodules:
     the released checkpoints carry no weights for them (the MSA representation it would produce is
@@ -1629,7 +1646,7 @@ class EsmFold2MSAEncoderLayer(nn.Module):
     """
 
     def __init__(self, config: EsmFold2Config, is_final_layer: bool = False) -> None:
-        super().__init__()
+        super().__init__(config)
         self.is_final_layer = is_final_layer
         self.outer_product_mean = EsmFold2OuterProductMean(config)
         if not is_final_layer:
@@ -1637,11 +1654,6 @@ class EsmFold2MSAEncoderLayer(nn.Module):
             self.msa_transition = EsmFold2Transition(
                 config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
             )
-        self.tri_mul_out = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=True)
-        self.tri_mul_in = EsmFold2TriangleMultiplicativeUpdate(config, outgoing=False)
-        self.pair_transition = EsmFold2Transition(
-            config.pairwise_hidden_size, config.pair_transition_intermediate_size, config.chunk_size
-        )
 
     def forward(
         self,
@@ -1654,10 +1666,7 @@ class EsmFold2MSAEncoderLayer(nn.Module):
         if not self.is_final_layer:
             msa_states = msa_states + self.msa_pair_weighted_averaging(msa_states, pair_states, pair_attention_mask)
             msa_states = self.msa_transition(msa_states)
-        pair_states = pair_states + self.tri_mul_out(pair_states, visibility=pair_attention_mask)
-        pair_states = pair_states + self.tri_mul_in(pair_states, visibility=pair_attention_mask)
-        pair_states = self.pair_transition(pair_states)
-        return msa_states, pair_states
+        return msa_states, super().forward(pair_states, pair_attention_mask)
 
 
 class EsmFold2MSAEncoder(nn.Module):
@@ -1770,7 +1779,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.resolved_weight)
         elif isinstance(module, EsmFold2AtomLayer):
             init.zeros_(module.adaln_linear.weight)
-        elif isinstance(module, EsmFold2AttentionPairBias):
+        elif isinstance(module, EsmFold2DiffusionLayer):
             if getattr(module, "out_gate", None) is not None:
                 init.zeros_(module.out_gate.weight)
                 init.constant_(module.out_gate.bias, -2.0)
@@ -2098,7 +2107,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         mol_type: Tensor,
         res_type: Tensor,
         token_bonds: Tensor,
-        token_attention_mask: Tensor,
+        attention_mask: Tensor,
         ref_pos: Tensor,
         ref_element: Tensor,
         ref_charge: Tensor,
@@ -2133,7 +2142,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
             Residue-type (amino-acid identity) index for each token.
         token_bonds (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, 1)`):
             Pairwise inter-token covalent-bond feature.
-        token_attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Mask marking valid tokens (``1``) versus padding (``0``). Inputs must be right-padded.
         ref_pos (`torch.Tensor` of shape `(batch_size, num_atoms, 3)`):
             Reference-conformer Cartesian coordinates for each atom.
@@ -2168,7 +2177,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         num_loops (`int`, *optional*):
             Number of trunk refinement loops. Defaults to `config.num_loops`.
         """
-        token_mask = token_attention_mask
+        token_mask = attention_mask
         num_loops = num_loops if num_loops is not None else self.config.num_loops
         total_steps = max(1, num_loops + 1)
 
