@@ -1903,7 +1903,6 @@ class GenerationMixin(ContinuousMixin):
             "reformer",
             "minimax",
             "xlnet",
-            "olmohybrid",  # olmo_hybrid cannot use linear attention cache for now as it uses split k,q,v conv states
             "rwkv",
             "xlstm",
         )
