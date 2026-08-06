@@ -377,8 +377,6 @@ class TestTensorParallelLayer(TestCasePlus):
         layer = ColwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
         layer.update_module_attributes(module)
         self.assertEqual(module.out_features, 4)
-        layer.update_module_attributes(module)
-        self.assertEqual(module.out_features, 4)
 
         # gather_output=True: out_features is NOT updated
         module = torch.nn.Linear(32, 16)
@@ -391,8 +389,6 @@ class TestTensorParallelLayer(TestCasePlus):
 
         module = torch.nn.Linear(32, 16)
         layer = RowwiseParallel(device_mesh=device_mesh, rank=0, empty_param=torch.empty(16, 32))
-        layer.update_module_attributes(module)
-        self.assertEqual(module.in_features, 8)
         layer.update_module_attributes(module)
         self.assertEqual(module.in_features, 8)
 

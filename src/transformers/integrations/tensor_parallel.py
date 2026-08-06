@@ -739,9 +739,7 @@ class ColwiseParallel(TensorParallelLayer):
         # If we gather the output, the output dimension of the module is not sharded, so no need to update out_features.
         # Otherwise, we need to update out_features to reflect the sharded dimension.
         if not self.gather_output and hasattr(module, "out_features"):
-            full_out_features = getattr(module, "_hf_tp_full_out_features", module.out_features)
-            module._hf_tp_full_out_features = full_out_features
-            module.out_features = self.get_expected_sharded_shape((full_out_features,))[0]
+            module.out_features = self.get_expected_sharded_shape((module.out_features,))[0]
 
 
 def get_kv_replication_factor(num_key_value_heads: int | None, tp_size: int) -> int:
@@ -969,9 +967,7 @@ class RowwiseParallel(TensorParallelLayer):
         if hasattr(module, "in_features"):
             # To fall in the 2D case in get_expected_sharded_shape,
             # otherwise it will be treated as 1D and not sharded
-            full_in_features = getattr(module, "_hf_tp_full_in_features", module.in_features)
-            module._hf_tp_full_in_features = full_in_features
-            shape = (1, full_in_features)
+            shape = (1, module.in_features)
             module.in_features = self.get_expected_sharded_shape(shape)[1]
 
 
