@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -645,10 +645,7 @@ class OnyxConfig(PreTrainedConfig):
     ```"""
 
     model_type = "onyx"
-    sub_configs = {
-        "text_config": OnyxTextConfig,
-        "vision_config": OnyxVisionConfig,
-    }
+    sub_configs = {"text_config": OnyxTextConfig, "vision_config": OnyxVisionConfig}
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -837,11 +834,13 @@ class OnyxTextDecoderLayer(Gemma2DecoderLayer):
 class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
         # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
+        )
         w_ids = position_ids[:, :, 0][:, None, :].float()
         h_ids = position_ids[:, :, 1][:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
             freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)

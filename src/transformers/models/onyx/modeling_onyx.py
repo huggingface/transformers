@@ -501,11 +501,13 @@ class OnyxVisionRotaryEmbedding(nn.Module):
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
+        )
         w_ids = position_ids[:, :, 0][:, None, :].float()
         h_ids = position_ids[:, :, 1][:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
             freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
             freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
