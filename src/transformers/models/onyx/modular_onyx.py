@@ -671,82 +671,6 @@ class OnyxConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-# override the fn from `vision_utils.py` since onyx uses `F.grid_sample` in ref
-# and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
-# export-friendly code used in onyx, thus kept in model file
-def get_vision_bilinear_indices_and_weights(
-    grid_thw: torch.Tensor,
-    num_grid_per_side: int,
-    spatial_merge_size: int,
-    kwargs: dict | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """The fn is equivalent with F.grid_sample(inputs, align_coreners=False, padding="zeros")"""
-    if kwargs is not None:
-        bilinear_indices = kwargs.pop("bilinear_indices", None)
-        bilinear_weights = kwargs.pop("bilinear_weights", None)
-        if bilinear_indices is not None and bilinear_weights is not None:
-            return bilinear_indices, bilinear_weights
-    side = num_grid_per_side
-    merge_size = spatial_merge_size
-    device = grid_thw.device
-
-    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-
-    for t, h, w in grid_thw.tolist():
-        t, h, w = int(t), int(h), int(w)
-
-        h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
-        w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
-
-        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
-        h_floor = torch.floor(h_grid).long()
-        w_floor = torch.floor(w_grid).long()
-        h_ceil = h_floor + 1
-        w_ceil = w_floor + 1
-        h_frac = h_grid - h_floor.float()
-        w_frac = w_grid - w_floor.float()
-
-        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
-        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
-        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
-        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
-        h_floor = h_floor.clamp(0, side - 1)
-        h_ceil = h_ceil.clamp(0, side - 1)
-        w_floor = w_floor.clamp(0, side - 1)
-        w_ceil = w_ceil.clamp(0, side - 1)
-
-        h_floor_offset = h_floor * side
-        h_ceil_offset = h_ceil * side
-
-        corner_indices = [
-            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
-        ]
-        corner_weights = [
-            (
-                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
-            ).flatten(),
-            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
-            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-        ]
-
-        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
-        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
-        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
-
-        for i in range(4):
-            idx_parts[i].append(corner_indices[i][reorder])
-            weight_parts[i].append(corner_weights[i][reorder])
-
-    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
-    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
-    return bilinear_indices, bilinear_weights
-
-
 class OnyxRMSNorm(Gemma4RMSNorm):
     def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
@@ -831,24 +755,94 @@ class OnyxTextDecoderLayer(Gemma2DecoderLayer):
         self.post_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
 
-class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
+class OnyxPreTrainedModel(Gemma2PreTrainedModel):
+    _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": OnyxTextDecoderLayer,
+        "attentions": OnyxTextAttention,
+    }
+
+    def _init_weights(self, module):
+        raise NotImplementedError("No need to inherit, we can use the base one")
+
+
+class OnyxTextModel(Gemma2Model):
+    config: OnyxTextConfig
+
+    def __init__(self, config: OnyxTextConfig):
+        super().__init__(config)
+        # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
+        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
+        # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
+        # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        w_ids = position_ids[:, :, 0][:, None, :].float()
-        h_ids = position_ids[:, :, 1][:, None, :].float()
+        self.rotary_emb = OnyxTextRotaryEmbedding(config)
+        self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_init()
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
-            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
-            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
-            cos = freq.cos() * self.attention_scaling
-            sin = freq.sin() * self.attention_scaling
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                # NoPE layers (layer_rope_theta == 0) get no position embeddings.
+                position_embeddings=position_embeddings if self.config.layer_rope_theta[i] else None,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class OnyxVisionAttention(Kimi_K25VisionAttention):
@@ -861,6 +855,82 @@ class OnyxVisionMLP(Kimi_K25VisionMLP):
 
 class OnyxVisionEncoderLayer(Kimi_K25VisionEncoderLayer):
     pass
+
+
+# override the fn from `vision_utils.py` since onyx uses `F.grid_sample` in ref
+# and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
+# export-friendly code used in onyx, thus kept in model file
+def get_vision_bilinear_indices_and_weights(
+    grid_thw: torch.Tensor,
+    num_grid_per_side: int,
+    spatial_merge_size: int,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The fn is equivalent with F.grid_sample(inputs, align_coreners=False, padding="zeros")"""
+    if kwargs is not None:
+        bilinear_indices = kwargs.pop("bilinear_indices", None)
+        bilinear_weights = kwargs.pop("bilinear_weights", None)
+        if bilinear_indices is not None and bilinear_weights is not None:
+            return bilinear_indices, bilinear_weights
+    side = num_grid_per_side
+    merge_size = spatial_merge_size
+    device = grid_thw.device
+
+    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+
+    for t, h, w in grid_thw.tolist():
+        t, h, w = int(t), int(h), int(w)
+
+        h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
+        w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
+
+        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
+        h_floor = torch.floor(h_grid).long()
+        w_floor = torch.floor(w_grid).long()
+        h_ceil = h_floor + 1
+        w_ceil = w_floor + 1
+        h_frac = h_grid - h_floor.float()
+        w_frac = w_grid - w_floor.float()
+
+        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
+        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
+        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
+        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
+        h_floor = h_floor.clamp(0, side - 1)
+        h_ceil = h_ceil.clamp(0, side - 1)
+        w_floor = w_floor.clamp(0, side - 1)
+        w_ceil = w_ceil.clamp(0, side - 1)
+
+        h_floor_offset = h_floor * side
+        h_ceil_offset = h_ceil * side
+
+        corner_indices = [
+            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
+            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
+        ]
+        corner_weights = [
+            (
+                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
+            ).flatten(),
+            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
+            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
+        ]
+
+        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
+        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
+        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
+
+        for i in range(4):
+            idx_parts[i].append(corner_indices[i][reorder])
+            weight_parts[i].append(corner_weights[i][reorder])
+
+    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
+    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
+    return bilinear_indices, bilinear_weights
 
 
 class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
@@ -909,15 +979,24 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         return embeddings
 
 
-class OnyxPreTrainedModel(Gemma2PreTrainedModel):
-    _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": OnyxTextDecoderLayer,
-        "attentions": OnyxTextAttention,
-    }
+class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+    def forward(self, x, position_ids):
+        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
+        )
+        w_ids = position_ids[:, :, 0][:, None, :].float()
+        h_ids = position_ids[:, :, 1][:, None, :].float()
 
-    def _init_weights(self, module):
-        raise NotImplementedError("No need to inherit, we can use the base one")
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
+            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
+            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
+            cos = freq.cos() * self.attention_scaling
+            sin = freq.sin() * self.attention_scaling
+
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 
 class OnyxVisionModel(OnyxPreTrainedModel):
@@ -1020,85 +1099,6 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         hidden_states = self.ln_post(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states, grid_thw)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-
-class OnyxTextModel(Gemma2Model):
-    config: OnyxTextConfig
-
-    def __init__(self, config: OnyxTextConfig):
-        super().__init__(config)
-        # Onyx normalizes token embeddings with a scaleless (parameter-free) RMSNorm instead of Gemma2's
-        # sqrt(hidden_size) scaling. That norm is a fixed function of the embedding table, so it is merged
-        # into embed_tokens.weight at conversion time and a plain nn.Embedding is used here. This keeps the
-        # embedding compatible with inference backends that swap the embedding module (e.g. vLLM).
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.rotary_emb = OnyxTextRotaryEmbedding(config)
-        self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                # NoPE layers (layer_rope_theta == 0) get no position embeddings.
-                position_embeddings=position_embeddings if self.config.layer_rope_theta[i] else None,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
 
 
 class OnyxVisionAdapter(nn.Module):
