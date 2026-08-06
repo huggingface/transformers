@@ -985,12 +985,14 @@ class ContinuousBatchingManager:
             return batch_processor
 
         # Create the PagedAttentionCache
+        supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config,
             continuous_batching_config=self.continuous_batching_config,
             device=self.model.device,
             distributed_helper=self.distributed_helper,
             dtype=self.model.dtype,
+            model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
@@ -1282,15 +1284,17 @@ class ContinuousMixin:
             except Exception as e:
                 logger.error(f"Error during batch generation: {e}", exc_info=True)
 
-        # Re-order requests to match the order of the inputs
+        # Re-order requests to match the order of the inputs, forked children right after their parent
         reordered_results = {}
         missing_keys = []
         for req_id in request_ids:
-            result = results.get(req_id)
-            if result is not None:
-                reordered_results[req_id] = result
-            else:
-                missing_keys.append(req_id)
+            child_ids = [f"{req_id}__child#{i}" for i in range(num_return_sequences - 1)]
+            for rid in (req_id, *child_ids):
+                result = results.get(rid)
+                if result is not None:
+                    reordered_results[rid] = result
+                else:
+                    missing_keys.append(rid)
         if missing_keys:
             logger.error(f"Requests {missing_keys} not found in results.")
         return reordered_results

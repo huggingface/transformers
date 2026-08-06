@@ -456,11 +456,12 @@ if __name__ == "__main__":
 
         # Raw benchmarks (various options)
 
-        ## Few blocks — tight cache pressure
+        ## Few blocks — tight cache pressure. A page is one layer's K+V slice, so 512 pages = 16 whole-model blocks
+        ## of 256 tokens for a 32-layer model
         results.add_benchmark(
             data=get_random_data(batch_size=20, num_tokens=256),
             max_new_tokens=256,
-            cb_config=ContinuousBatchingConfig(num_fa_pages=16),
+            cb_config=ContinuousBatchingConfig(num_fa_pages=512),
             gen_config=GenerationConfig(eos_token_id=-1),
             label="few_blocks",
         )

@@ -282,11 +282,18 @@ class CacheAllocator(ABC):
             parent_hash = block_hash
 
     def copy_blocks(self, source_block_ids: list[int], dest_block_ids: list[int]) -> None:
-        """Copies whole blocks (keys and values of every layer of the group) inside the cache tensor."""
+        """Copies whole blocks (keys and values of every layer of the group) inside the cache tensor. The copy is
+        chunked to bound the size of the transient index_select, which can grow too large for the free memory."""
         device = self._copy_view.device
+        chunk_size = 1024 << 20  # 1 GB
+
         source = torch.tensor(source_block_ids, device=device, dtype=torch.long)
         dest = torch.tensor(dest_block_ids, device=device, dtype=torch.long)
-        self._copy_view.index_copy_(0, dest, self._copy_view.index_select(0, source))
+        blocks_per_chunk = max(1, chunk_size // self.bytes_per_block)
+
+        for i in range(0, len(source_block_ids), blocks_per_chunk):
+            src, dst = source[i : i + blocks_per_chunk], dest[i : i + blocks_per_chunk]
+            self._copy_view.index_copy_(0, dst, self._copy_view.index_select(0, src))
 
     def free_all_requests(self) -> None:
         """Mark all blocks owned by all requests as free."""

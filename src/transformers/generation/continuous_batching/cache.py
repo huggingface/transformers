@@ -111,6 +111,7 @@ class PagedAttentionCache:
         device: torch.device | str,
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
+        model_supports_logits_to_keep: bool = False,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -121,6 +122,8 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             dtype: Data type of the activation and the cache (for now, these are the same)
+            model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
+                per batch token, since the model slices hidden states before the LM head
         """
         self.config = config
         self.dtype = dtype
@@ -176,6 +179,7 @@ class PagedAttentionCache:
             tokens_per_sector=self.tokens_per_sector,
             bytes_per_fa_page=bytes_per_fa_page,
             attn_types=list(self.cache_allocators.keys()),
+            model_supports_logits_to_keep=model_supports_logits_to_keep,
         ).infer_max_batch_tokens_and_num_sectors()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -556,6 +560,7 @@ class PagedAttentionMemoryHandler:
         tokens_per_sector: int,
         bytes_per_fa_page: int,
         attn_types: list[str],
+        model_supports_logits_to_keep: bool = False,
     ) -> None:
         """Initialize the memory handler with the model configuration, the continuous batching configuration, the data
         type of the activation and the cache, and the sector geometry computed by the PagedAttentionCache."""
@@ -563,6 +568,7 @@ class PagedAttentionMemoryHandler:
         self.cb_config = cb_config
         self.cache_dtype = dtype
         self.activation_dtype = dtype
+        self.model_supports_logits_to_keep = model_supports_logits_to_keep
 
         self.bytes_per_sector = bytes_per_sector
         self.tokens_per_sector = tokens_per_sector
@@ -597,7 +603,10 @@ class PagedAttentionMemoryHandler:
         head_dim = find_head_dim(self.config)
 
         # Only one activation peak is live at a time, so we reserve for the largest
-        lm_head_peak = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
+        if self.model_supports_logits_to_keep:  # turns the memory cost constant thanks to slicing
+            lm_head_peak = 0
+        else:
+            lm_head_peak = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
         attention_peak = a * (
             self.config.hidden_size  # hidden states, shape [M, hidden_size]
             + self.config.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
@@ -625,6 +634,19 @@ class PagedAttentionMemoryHandler:
     def bytes_per_cache_sector(self) -> int:
         """The total memory cost of one cache sector: the sector itself plus the per-cache-token tensors it entails."""
         return self.bytes_per_sector + self.tokens_per_sector * self.bytes_per_cache_token
+
+    @property
+    def fixed_overhead_bytes(self) -> int:
+        """Reservations that scale with neither batch tokens nor cache size: the trash sectors and, when the model
+        slices hidden states with logits_to_keep, the LM head peak of the per-request logit rows."""
+        overhead = self.trash_bytes
+        if self.model_supports_logits_to_keep:
+            a = self.activation_dtype.itemsize
+            # 1024 mirrors FALLBACK_DEFAULTS["max_requests_per_batch"] in initialization.py (import would be circular)
+            max_logit_rows = self.cb_config.max_requests_per_batch or 1024
+            lm_head_row = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
+            overhead += max_logit_rows * lm_head_row
+        return overhead
 
     def attention_mask_bytes(self, max_batch_tokens: int, num_sectors: int) -> int:
         """The memory cost of the attention masks, of shape [1, 1, M, N + M], for given M and number of sectors."""
@@ -660,8 +682,9 @@ class PagedAttentionMemoryHandler:
 
         num_sectors = self.num_sectors_from_config()
         if num_sectors is None:
-            # Memory left for the cache once the M-proportional tensors and the trash sectors are paid for
-            cache_memory = self.available_memory - self.trash_bytes - max_batch_tokens * self.bytes_per_batch_token
+            # Memory left for the cache once the M-proportional tensors and the fixed overhead are paid for
+            cache_memory = self.available_memory - self.fixed_overhead_bytes
+            cache_memory -= max_batch_tokens * self.bytes_per_batch_token
             num_sectors = cache_memory // self.bytes_per_cache_sector
             # Plan for the attention masks by removing sectors: each removed sector frees its own cost and also
             # shrinks the masks, so the removal denominator includes both and the sizing stays one-shot.
@@ -686,7 +709,7 @@ class PagedAttentionMemoryHandler:
         """Computes the memory footprint of the cache and every tensor that scales with it, as the exact inverse of
         the sizing performed in infer_max_batch_tokens_and_num_sectors."""
         return (
-            self.trash_bytes
+            self.fixed_overhead_bytes
             + max_batch_tokens * self.bytes_per_batch_token
             + num_sectors * self.bytes_per_cache_sector
             + self.attention_mask_bytes(max_batch_tokens, num_sectors)
