@@ -944,10 +944,12 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
         # We only scatter non-padding patches into the placeholder token positions.
-        padding_mask = (image_position_ids == -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
+        valid_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.device)  # (batch, num_patches)
+        split_sizes = valid_mask.sum(-1).tolist()
 
         # Flatten valid patches: keep only non-padding patches across the batch
-        vision_outputs = vision_outputs[~padding_mask]  # (total_valid_patches, text_hidden_size)
+        vision_outputs = vision_outputs[valid_mask]  # (total_valid_patches, text_hidden_size)
+        vision_outputs = torch.split(vision_outputs, split_sizes)
 
         return Gemma4UnifiedVisionModelOutput(
             pooler_output=vision_outputs,
@@ -1045,7 +1047,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()

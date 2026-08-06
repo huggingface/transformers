@@ -20,6 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
@@ -147,6 +148,7 @@ GENERATION_MODES_MAPPING = {
 }
 
 MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
+    "mm_encoder_outputs",  # pre-encoded multimodal `ModelOutput`
     "pixel_values",
     "pixel_mask",
     "input_features",
@@ -805,7 +807,30 @@ class GenerationMixin(ContinuousMixin):
         )
         return attention_mask
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
+        self: "GenerativePreTrainedModel",
+        inputs_tensor: torch.Tensor,
+        model_kwargs,
+        model_input_name: str | None,
+        generation_config: GenerationConfig,
+    ) -> dict[str, Any]:
+        """
+        Optionally encoder any inputs if required by model architecture, and passes `encoder_output`/`mm_encoder_output`
+        down the line to model's `forward`. For decoder-only models this is a no-op
+        # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
+        `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
+        """
+        if self.config.is_encoder_decoder:
+            return self._prepare_text_encoder_decoder_kwargs_for_generation(
+                inputs_tensor=inputs_tensor,
+                model_kwargs=model_kwargs,
+                model_input_name=model_input_name,
+                generation_config=generation_config,
+            )
+        else:
+            return self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+
+    def _prepare_text_encoder_decoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel",
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -843,6 +868,35 @@ class GenerationMixin(ContinuousMixin):
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
+
+        return model_kwargs
+
+    def _prepare_multimodal_encoder_kwargs_for_generation(
+        self: "GenerativePreTrainedModel",
+        model_kwargs,
+    ) -> torch.FloatTensor:
+        """Prepares image/video hidden states if model support this modality"""
+        if not any(key in self.input_modalities for key in ["image", "video"]):
+            return model_kwargs
+
+        model_kwargs.setdefault("mm_encoder_outputs", {})
+        for modality in ["image", "video"]:
+            if (
+                modality in self.input_modalities
+                and model_kwargs["mm_encoder_outputs"].get(f"{modality}") is None
+                and hasattr(self.base_model, f"get_{modality}_features")
+            ):
+                encoder_fn = getattr(self.base_model, f"get_{modality}_features")
+                fn_signature = {k: v for k, v in inspect.signature(encoder_fn).parameters.items() if k != "kwargs"}
+                required_args = [
+                    name for name, param in fn_signature.items() if param.default is inspect.Parameter.empty
+                ]
+                # Dont drop encoder-args after using them for now, some models explicitly define `output_hidden_states`
+                # in signature which we cannpt simply drop. Fix those models and allow remote code to adapt first
+                if all(model_kwargs.get(n) is not None for n in required_args):
+                    encoder_kwargs = {argument: model_kwargs.get(argument, None) for argument in set(fn_signature)}
+                    encoder_kwargs["return_dict"] = True
+                    model_kwargs["mm_encoder_outputs"][f"{modality}"] = encoder_fn(**encoder_kwargs)
 
         return model_kwargs
 
@@ -905,8 +959,65 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
-    @staticmethod
+    def _expand_multimodal_outputs(
+        self: "GenerativePreTrainedModel",
+        input_ids: torch.LongTensor,
+        mm_encoder_output: ModelOutput | None,
+        expand_size: int = 1,
+        inputs_embeds: torch.LongTensor | None = None,
+    ):
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                return inputs * repeat_times
+
+        # Early exit is mm outputs aren't found
+        if mm_encoder_output is None:
+            return mm_encoder_output
+
+        for modality in ["image", "video"]:
+            modalily_outputs = mm_encoder_output.get(modality)
+            if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
+                continue
+
+            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+            token_id_key = f"{modality}_token_id"
+            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(
+                        getattr(self.config, token_id_key),
+                        dtype=torch.long,
+                        device=inputs_embeds.device,
+                    )
+                )
+                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+            else:
+                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
+            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
+            num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
+            num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
+
+            # 2. Find offsets to split encoder output into separate groups per text. In a single batch
+            # we might get a text with single image and another with two images, so the most reliable
+            # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
+            offsets = [0] + [
+                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
+            ]
+            is_output_tensor = isinstance(modalily_outputs.pooler_output, torch.Tensor)
+            modalily_outputs.pooler_output = [
+                out
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
+            ]
+
+            # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
+            if is_output_tensor:
+                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+        return mm_encoder_output
+
     def _expand_inputs_for_generation(
+        self: "GenerativePreTrainedModel",
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: torch.LongTensor | None = None,
@@ -917,6 +1028,14 @@ class GenerationMixin(ContinuousMixin):
         # the input tensor and thus requires more memory although no change is applied
         if expand_size == 1:
             return input_ids, model_kwargs
+
+        # IMPORTANT - expand before input ids becaus ethe hlper counts placeholders within encoded text!
+        self._expand_multimodal_outputs(
+            input_ids,
+            model_kwargs.get("mm_encoder_outputs"),
+            expand_size=expand_size,
+            inputs_embeds=model_kwargs.get("inputs_embeds"),
+        )
 
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
@@ -1645,7 +1764,7 @@ class GenerationMixin(ContinuousMixin):
                 value is not None
                 and key not in model_args
                 and key not in TransformersKwargs.__optional_keys__
-                and key != "debug_io"
+                and key not in ["debug_io", "mm_encoder_outputs"]
             ):
                 unused_model_args.append(key)
 
@@ -2535,7 +2654,7 @@ class GenerationMixin(ContinuousMixin):
                         "generation results, please set `padding_side='left'` when initializing the tokenizer."
                     )
 
-        # 4. Define other model kwargs
+        # 4. Define other model kwargs (encoder-decoder kwargs / multimodal kwargs / kwargs for consistency)
         # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
         # generating the first new token or not, and we only want to use the embeddings for the first new token)
         if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
@@ -2555,9 +2674,9 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
-        if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+        if not (model_kwargs.get("encoder_outputs") or model_kwargs.get("mm_encoder_outputs")):
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+            model_kwargs = self._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 

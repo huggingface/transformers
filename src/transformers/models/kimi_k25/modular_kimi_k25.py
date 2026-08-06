@@ -731,9 +731,6 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def _prepare_position_ids_for_generation(self, **kwargs):
         raise AttributeError("Kimi doesn't use m-rope!")
 
-    def _get_image_nums_and_video_nums(self, **super_kwargs):
-        raise AttributeError()
-
     def _expand_inputs_for_generation(self, **super_kwargs):
         raise AttributeError("Uses normal super call")
 

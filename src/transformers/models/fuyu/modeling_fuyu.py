@@ -155,6 +155,7 @@ class FuyuModel(FuyuPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -180,9 +181,14 @@ class FuyuModel(FuyuPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
-        if image_patches is not None:
-            patch_embeddings = self.get_image_features(image_patches, return_dict=True).last_hidden_state
-            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        if mm_encoder_outputs.get("image") is None and image_patches is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(image_patches, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
@@ -228,6 +234,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | None = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -276,6 +283,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
