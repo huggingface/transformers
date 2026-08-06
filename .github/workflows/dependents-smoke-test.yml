@@ -123,9 +123,11 @@ jobs:
           # Skipped models:
           #   allenai/OLMoE-1B-7B-0924 — OOM: previous test leaves insufficient free memory (13.35/27.83 GiB < 0.4*27.83)
           #   test_hybrid_attention     — OOM: only 10.1/27.83 GiB free after 2 prior tests (needs 0.4*27.83=11.13 GiB)
+          #   test_mla                  — OOM + model too large: DeepSeek-V2-Lite-Chat (15.7B) exceeds 32 GiB runner
           pytest -v -s tests/models/transformers/ \
             --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]" \
-            --deselect "tests/models/transformers/test_backend.py::test_hybrid_attention"
+            --deselect "tests/models/transformers/test_backend.py::test_hybrid_attention" \
+            --deselect "tests/models/transformers/test_backend.py::test_mla"
 
       - name: "Test: multimodal processing"
         if: false
