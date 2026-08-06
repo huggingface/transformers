@@ -76,8 +76,13 @@ jobs:
         run: |
           # Lower hardcoded value in test_initialization.py
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.5/g' vllm/tests/models/test_initialization.py
-          # Lower the global default in CacheConfig (covers example scripts and anything else using the default)
+          # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.5/g' vllm/vllm/config/cache.py
+          # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
+          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.5,/g' vllm/vllm/entrypoints/llm.py
+          # Verify all patches applied
+          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
+          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
 
       - name: Pip freeze
         run: pip freeze
