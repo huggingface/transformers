@@ -26,6 +26,8 @@ from ..quantizers.quantizers_utils import get_module_from_name, on_device, shoul
 
 logger = logging.get_logger(__name__)
 
+triton_kernels_hub = None
+
 FP4_VALUES = [
     +0.0,
     +0.5,
@@ -232,6 +234,16 @@ def quantize_to_mxfp4(w, triton_kernels_hub):
     downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
     w, w_scale = downcast_to_mxfp_torch(w.to(torch.bfloat16), torch.uint8, axis=1)
     return w, w_scale
+
+
+def get_triton_kernels_hub():
+    """Fetch the hub package holding the mxfp4 triton kernels, caching it in the module global."""
+    global triton_kernels_hub
+    if triton_kernels_hub is None:
+        from .hub_kernels import get_kernel
+
+        triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
+    return triton_kernels_hub
 
 
 def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
@@ -649,6 +661,125 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     )
 
 
+def attach_packed_mxfp4_proj(module, proj: str, packed: torch.Tensor, scales: torch.Tensor) -> None:
+    """Attach one mxfp4-packed expert projection to `module` in the layout the triton kernels expect.
+
+    `packed` is a stack of `weight_packed` tensors, `(num_experts, out_dim, in_dim // 2)` uint8, and `scales`
+    the matching e8m0 stack, `(num_experts, out_dim, in_dim // 32)`. Both keep the two-e2m1-values-per-byte
+    encoding they have on disk; only their layout changes. The kernels read the weights column-major as
+    `(num_experts, in_dim, out_dim)`, hence the transpose before the swizzle.
+    """
+    hub = get_triton_kernels_hub()
+    PrecisionConfig, FlexCtx, InFlexData = (
+        hub.matmul_ogs.PrecisionConfig,
+        hub.matmul_ogs.FlexCtx,
+        hub.matmul_ogs.InFlexData,
+    )
+
+    device = packed.device
+    if device.type == "cpu" and hasattr(torch, "accelerator") and torch.accelerator.current_accelerator() is not None:
+        device = torch.device(torch.accelerator.current_accelerator().type)
+    packed = packed.to(device).contiguous()
+    scales = scales.to(device).contiguous()
+
+    num_experts, out_dim, packed_in_dim = packed.shape
+    with on_device(device):
+        weight, weight_scale = swizzle_mxfp4(packed.transpose(-2, -1), scales.transpose(-2, -1), hub)
+    # The swizzled storage is opaque, so the logical shape the kernels index with is set explicitly.
+    weight.shape = torch.Size([num_experts, packed_in_dim * 2, out_dim])
+
+    # A triton tensor is not an `nn.Parameter`, so the dense placeholder has to be de-registered first.
+    module._parameters.pop(proj, None)
+    setattr(module, proj, weight)
+    setattr(
+        module,
+        f"{proj}_precision_config",
+        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+    )
+
+
+def _routing_data_from_top_k(top_k_index: torch.Tensor, top_k_weights: torch.Tensor, num_experts: int):
+    """Build the triton-kernels routing structures from a router's already-computed top-k selection.
+
+    `triton_kernels.routing.routing` derives the selection from raw logits with its own top-k and softmax,
+    which would discard whatever the model's router does (sigmoid scoring, normalisation, correction bias).
+    This sorts the `(token, expert)` pairs by expert id so each expert's rows are contiguous for the matmul,
+    and keeps the routing weights the model computed.
+    """
+    routing = get_triton_kernels_hub().routing
+
+    num_gates = top_k_index.numel()
+    expert_index = top_k_index.reshape(-1).to(torch.int32)
+    gate_scale = top_k_weights.reshape(-1)
+
+    sorted_index = torch.argsort(expert_index, stable=True).to(torch.int32)
+    gate_index = torch.argsort(sorted_index, stable=True).to(torch.int32)
+    # `torch.histc` takes integers on CUDA but only floats on CPU/MPS.
+    histc_input = expert_index.float() if expert_index.device.type in ("cpu", "mps") else expert_index
+    histogram = torch.histc(histc_input, bins=num_experts, min=0, max=num_experts - 1).int()
+
+    routing_data = routing.RoutingData(
+        gate_scale[sorted_index],
+        histogram,
+        num_experts,
+        top_k_index.shape[-1],
+        routing.compute_expt_data(histogram, num_experts, num_gates),
+    )
+    gather_index = routing.GatherIndx(src_indx=sorted_index, dst_indx=gate_index)
+    scatter_index = routing.ScatterIndx(src_indx=gate_index, dst_indx=sorted_index)
+    return routing_data, gather_index, scatter_index
+
+
+def mxfp4_experts_forward(
+    self: nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    """Run fused MoE experts whose weights stayed packed in mxfp4, through the triton `matmul_ogs` kernels.
+
+    The gate/up projection runs without a fused activation epilogue so that the module's own gating
+    (`_apply_gate`) or activation keeps defining the numerics — only the weight format is special here.
+    `Mxfp4GptOssExperts` keeps its fused swiglu epilogue instead, where the alpha/limit semantics are known.
+    """
+    matmul_ogs = get_triton_kernels_hub().matmul_ogs.matmul_ogs
+
+    has_gate = getattr(self, "has_gate", True)
+    proj = "gate_up_proj" if has_gate else "up_proj"
+    precision_config = getattr(self, f"{proj}_precision_config", None)
+    if precision_config is None:
+        raise ValueError(
+            f"`experts_implementation='mxfp4'` needs mxfp4-packed expert weights, which {type(self).__name__} "
+            "does not hold. It is selected automatically when loading an mxfp4-packed checkpoint and cannot be "
+            "requested for a model that was not loaded from one."
+        )
+
+    routing_data, gather_index, scatter_index = _routing_data_from_top_k(top_k_index, top_k_weights, self.num_experts)
+    proj_bias = getattr(self, f"{proj}_bias", None)
+    down_bias = getattr(self, "down_proj_bias", None)
+
+    with on_device(hidden_states.device):
+        proj_out = matmul_ogs(
+            hidden_states,
+            getattr(self, proj),
+            None if proj_bias is None else proj_bias.to(torch.float32),
+            routing_data,
+            gather_indx=gather_index,
+            precision_config=precision_config,
+        )
+        proj_out = self._apply_gate(proj_out) if has_gate else self.act_fn(proj_out)
+        out = matmul_ogs(
+            proj_out,
+            self.down_proj,
+            None if down_bias is None else down_bias.to(torch.float32),
+            routing_data,
+            scatter_indx=scatter_index,
+            precision_config=self.down_proj_precision_config,
+            gammas=routing_data.gate_scal,
+        )
+    return out.to(hidden_states.dtype)
+
+
 def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_convert: list[str] | None = None):
     """
     Public method that replaces the expert layers of the given model with mxfp4 quantized layers.
@@ -665,10 +796,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     if quantization_config.dequantize:
         return model
 
-    from .hub_kernels import get_kernel
-
-    global triton_kernels_hub
-    triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
+    get_triton_kernels_hub()
 
     has_been_replaced = False
     for module_name, module in model.named_modules():

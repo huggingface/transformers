@@ -42,6 +42,101 @@ def get_experts_scheme(quantization_config):
     return groups[0]
 
 
+PACKED_EXPERTS_FORMATS = ("mxfp4-pack-quantized",)
+
+
+def get_packed_experts_format(quantization_config) -> str | None:
+    """The packed-fp4 format the MoE experts can run in, or `None` for every other scheme.
+
+    Only the formats in `PACKED_EXPERTS_FORMATS` can be executed straight from their packed bytes; anything
+    else (FP8, int4 `pack-quantized`, …) still has to be decompressed at load time.
+    """
+    scheme = get_experts_scheme(quantization_config)
+    weights = getattr(scheme, "weights", None)
+    # `weight_zero_point` has no place in the packed layout the kernels read.
+    if weights is None or not getattr(weights, "symmetric", True):
+        return None
+    # Published checkpoints often leave the per-group `format` out and only set the checkpoint-level one.
+    format = scheme.format or quantization_config.format
+    format = getattr(format, "value", format)
+    return format if format in PACKED_EXPERTS_FORMATS else None
+
+
+def is_packed_experts_module(module) -> bool:
+    """Whether `module` is a fused-experts module whose weights can be swapped for packed ones.
+
+    The projections are read off the module itself rather than from config fields, so latent MoEs whose
+    experts do not run in `config.hidden_size` work too. `has_gate` is set by the `use_experts_implementation`
+    decorator, and its absence means the module has no dispatch hook to route to the packed runtime.
+    """
+    return (
+        hasattr(module, "gate_up_proj")
+        and hasattr(module, "down_proj")
+        and hasattr(module, "has_gate")
+        and hasattr(module, "num_experts")
+        and not getattr(module, "is_transposed", False)
+    )
+
+
+class LoadPackedExperts(ConversionOps):
+    """Load packed-fp4 MoE expert weights without decompressing them.
+
+    The checkpoint holds one `weight_packed` / `weight_scale` pair per expert projection. Those go through
+    the model's own expert-merging operations — once for the weights and once for the scales, so that a
+    `Concatenate` fusing the gate and up projections does not also try to fuse weights with scales — and
+    the merged stacks are then attached to the experts module in the layout its kernels read.
+
+    Nothing is handed back to the loader: like the GPT-OSS mxfp4 path, the module is updated in place,
+    because a kernel-ready weight is not an `nn.Parameter`.
+    """
+
+    def __init__(self, hf_quantizer, scheme, operations: list[ConversionOps]):
+        self.hf_quantizer = hf_quantizer
+        self.scheme = scheme
+        # The model's own converter ops (e.g. `MergeModulelist` + `Concatenate`), replayed per component.
+        self.operations = operations
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        model=None,
+        full_layer_name: str | None = None,
+        missing_keys: set[str] | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        from ..integrations.mxfp4 import attach_packed_mxfp4_proj
+        from ..quantizers.quantizers_utils import get_module_from_name
+
+        merged = {}
+        for component in ("weight_packed", "weight_scale"):
+            component_sources = [p for p in source_patterns if p.rstrip("$").endswith(component)]
+            component_dict = {p: input_dict[p] for p in component_sources if p in input_dict}
+            for operation in self.operations:
+                component_dict = operation.convert(
+                    component_dict,
+                    source_patterns=component_sources,
+                    target_patterns=target_patterns,
+                    full_layer_name=full_layer_name,
+                    model=model,
+                    **kwargs,
+                )
+            merged[component] = next(iter(component_dict.values()))
+
+        module, proj = get_module_from_name(model, full_layer_name)
+        attach_packed_mxfp4_proj(module, proj, merged["weight_packed"], merged["weight_scale"])
+
+        if missing_keys is not None:
+            missing_keys.discard(full_layer_name)
+        module._is_hf_initialized = True
+        return {}
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()
+
+
 class DecompressExperts(ConversionOps):
     """
     Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!

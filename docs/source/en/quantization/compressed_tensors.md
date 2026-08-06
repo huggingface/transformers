@@ -72,6 +72,22 @@ A compressed-tensors checkpoint stores its weights compressed (fp8, or packed in
 | `dequantize=True` | dequantized to the model dtype (e.g. BF16) | regular dense matmuls, and the model can be fine-tuned or saved in that dtype |
 | `use_optimized_inference=True` | kept quantized | layers whose scheme has a kernel run through it, currently W8A8 fp8; inference only |
 
+MoE experts quantized to a packed FP4 format are the exception to the first row: they stay packed in memory
+and run through FP4 kernels, see [Packed FP4 MoE experts](#packed-fp4-moe-experts).
+
+## Packed FP4 MoE experts
+
+Checkpoints whose `format` is `mxfp4-pack-quantized` store their MoE expert weights as 4-bit values, two per
+byte, next to a scale per group of 32. Those experts keep that packed form in memory and their matmuls run
+through the mxfp4 Triton kernels, so a mixture-of-experts model needs roughly as much memory as its
+checkpoint takes on disk instead of the four-or-more times that dequantizing to BF16 costs.
+
+This is the default. It needs a CUDA GPU with compute capability 7.5 or higher (or an XPU), Triton 3.4.0 or
+newer and the [`kernels`](https://github.com/huggingface/kernels) package; without any of those the experts
+are decompressed to the model dtype at load time instead, and a warning says so. `dequantize=True` asks for
+that decompressed path explicitly, which is what fine-tuning or saving the model needs — packed experts are
+inference only and a model holding them cannot be saved.
+
 ## FP8 kernel acceleration
 
 Pass `use_optimized_inference=True` to keep an FP8 compressed-tensors model in FP8 and run its matmuls through hardware-accelerated FP8 kernels ([torch.nn.functional.scaled_mm](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_mm.html), which dispatches to `torch._scaled_mm_v2`; older torch versions fall back to `torch._scaled_mm`), instead of dequantizing the weights back to BF16. Keeping weights in FP8 throughout inference lowers memory usage and speeds up computation. This is inference only, so leave it off to fine-tune.
