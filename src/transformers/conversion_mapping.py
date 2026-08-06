@@ -856,11 +856,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
             # Unfuse qkv and apply rope permutation.
             WeightConverter(
-                source_patterns=r"self_attn.in_proj_weight",
+                source_patterns=r"attn\.in_proj_weight",
                 target_patterns=[
-                    r"self_attn.q_proj.weight",
-                    r"self_attn.k_proj.weight",
-                    r"self_attn.v_proj.weight",
+                    r"attn.q_proj.weight",
+                    r"attn.k_proj.weight",
+                    r"attn.v_proj.weight",
                 ],
                 operations=[
                     Chunk(dim=0),
@@ -868,11 +868,11 @@ def _build_checkpoint_conversion_mapping():
                 ],
             ),
             WeightConverter(
-                source_patterns=r"self_attn.in_proj_bias",
+                source_patterns=r"attn\.in_proj_bias",
                 target_patterns=[
-                    r"self_attn.q_proj.bias",
-                    r"self_attn.k_proj.bias",
-                    r"self_attn.v_proj.bias",
+                    r"attn.q_proj.bias",
+                    r"attn.k_proj.bias",
+                    r"attn.v_proj.bias",
                 ],
                 operations=[
                     Chunk(dim=0),
