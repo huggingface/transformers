@@ -165,9 +165,6 @@ SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreT
 _is_quantized = False
 _is_ds_init_called = False
 
-if torch.distributed.is_available():
-    pass
-
 
 @dataclass(frozen=True)
 class LoadStateDictConfig:
@@ -4760,7 +4757,6 @@ class PreTrainedModel(
             param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
-            # TODO(3outeille): remove the distributed guard after rebasing
             if is_dtensor(param):
                 local = torch.empty(param._local_tensor.shape, dtype=param.dtype, device=param_device)
                 value = torch.nn.Parameter(
