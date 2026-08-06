@@ -90,6 +90,7 @@ jobs:
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: "Test: test_initialization"
+        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
@@ -109,12 +110,10 @@ jobs:
             "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
 
       - name: "Test: test_transformers"
-        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s "tests/models/transformers/fusers/test_linear.py::test_detects_and_rewrites_glu[False-GLUMLP]" \
-                       "tests/models/transformers/fusers/test_linear.py::test_detects_and_rewrites_glu[False-ReversedGLUMLP]"
+          pytest -v -s "tests/models/transformers/test_backend.py::test_models[meta-llama/Llama-3.2-1B-Instruct-transformers-num_fused0]"
 
       - name: "Test: multimodal processing"
         if: false
