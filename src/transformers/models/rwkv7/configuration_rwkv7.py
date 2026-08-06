@@ -78,13 +78,6 @@ class Rwkv7Config(PreTrainedConfig):
         the whole sequence, so a narrow state drifts; `"float32"` with fp16
         activations is the combination the reference implementation uses.
         `"float16"`/`"bfloat16"` trade that for a smaller state.
-    wkv_implementation (`str`, *optional*, defaults to `"eager"`):
-        Which WKV recurrence to use, by name, from
-        `models.rwkv7.modeling_rwkv7.RWKV7_WKV_FUNCTIONS`. `"eager"` is the
-        portable PyTorch path: the sequential step when decoding, the
-        chunk-parallel form otherwise, and per-segment when a packed batch is
-        passed. Register an entry in that mapping to plug in a fused or varlen
-        kernel without forking the model.
     bos_token_id (`int`, *optional*, defaults to 0):
         Beginning-of-sequence id. The RWKV world tokenizer has no dedicated BOS
         token and the reference implementation prepends nothing, so this exists to
@@ -105,7 +98,7 @@ class Rwkv7Config(PreTrainedConfig):
     ```"""
 
     model_type = "rwkv7"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["state"]
 
     vocab_size: int = 65536
     hidden_size: int = 768
@@ -129,7 +122,6 @@ class Rwkv7Config(PreTrainedConfig):
     use_cache: bool = True
     use_deep_embed: bool = False
     wkv_state_dtype: str = "float32"
-    wkv_implementation: str = "eager"
     bos_token_id: int | None = 0
     eos_token_id: int | None = 0
     pad_token_id: int | None = 0

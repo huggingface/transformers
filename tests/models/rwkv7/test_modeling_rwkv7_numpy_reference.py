@@ -23,9 +23,14 @@ since the two coincide at hidden_size 4096, every measurement taken on the 7.2B
 checkpoint agreed with every other one.
 
 So this file re-derives the forward pass from the RWKV-7 reference definition, in
-numpy, sharing no code with the model. It is written per token over a batch of one,
-because the reference is a recurrence and the clearest statement of a recurrence is
-a loop; the point is to be obviously right rather than fast.
+numpy, sharing no code with the model. The reference is the RWKV-7 paper's update
+rule (arXiv:2503.14456, "RWKV-7 Goose with Expressive Dynamic State Evolution",
+eqs. for the decay/in-context-learning-rate/state update) cross-read against
+BlinkDL's own numpy statement of it, `RWKV-v7/rwkv_v7_numpy.py` in
+github.com/BlinkDL/RWKV-LM -- named here so a reviewer can diff this derivation
+against something that is not this repository. It is written per token over a
+batch of one, because the reference is a recurrence and the clearest statement of
+a recurrence is a loop; the point is to be obviously right rather than fast.
 
 The configuration is deliberately non-square -- more heads than head_dim -- so that
 a quantity indexed by the wrong one of those does not silently agree.
@@ -234,6 +239,22 @@ class Rwkv7NumpyReferenceTest(unittest.TestCase):
         numpy_logits = NumpyRwkv7(model)(token_ids)
         # The WKV accumulates in fp32 whatever the activation dtype, by design, so
         # this is the width the comparison is really at -- not float64's.
+        np.testing.assert_allclose(torch_logits.detach().cpu().numpy(), numpy_logits, rtol=2e-5, atol=2e-5)
+
+    def test_multi_chunk_prefill_matches_the_numpy_forward(self):
+        """Three chunks, not one: the chunk-to-chunk state carry is the one piece of
+        `rwkv7_chunked` the ten-token case never exercises (chunk_size is 64), so
+        until this test the oracle had only ever seen a single chunk and the carry
+        was covered solely by the internal chunked-vs-recurrent comparison.
+        """
+        config = _non_square_config()
+        model = self._model(config)
+        token_ids = [(7 * i + 3) % config.vocab_size for i in range(130)]  # 64+64+2
+
+        with torch.no_grad():
+            torch_logits = model(input_ids=torch.tensor([token_ids], device=torch_device)).logits[0]
+
+        numpy_logits = NumpyRwkv7(model)(token_ids)
         np.testing.assert_allclose(torch_logits.detach().cpu().numpy(), numpy_logits, rtol=2e-5, atol=2e-5)
 
     def test_sequential_decode_matches_the_same_numpy_forward(self):

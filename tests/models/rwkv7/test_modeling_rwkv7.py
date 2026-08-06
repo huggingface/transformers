@@ -124,47 +124,20 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_pruning = False
     test_head_masking = False
-    test_missing_keys = False
     # There is no attention here to report: the mixing is a recurrence, not a score
     # matrix, so there is no [batch, heads, q, k] tensor for the shared suite to
     # inspect. This is the flag those tests read, rather than a row of skips.
     has_attentions = False
-
     # Layer 0 *produces* `v_first` rather than mixing towards it, so its
     # value-residual LoRA (`att.v0/v1/v2`) is never read and never receives a
-    # gradient. The shared check requires every `requires_grad` parameter to come back
-    # with one, and it re-enables `requires_grad` on everything first, so freezing
-    # those three does not satisfy it either.
-    #
-    # They are kept rather than not created, deliberately: a native `.pth` carries
-    # them at layer 0, and dropping them would mean this port can read that file but
-    # not write it back. `test_layer_zero_value_residual_lora_is_unused` pins the
-    # property this skip rests on, so it is checked somewhere rather than asserted
-    # here in prose.
-    #
-    # Skipping the three below does not leave gradient checkpointing uncovered, but
-    # neither do the tests it is tempting to point at: `test_gradient_checkpointing_
-    # enable_disable` only toggles flags and asserts the attributes moved, and
-    # `test_training` never enables checkpointing, so neither runs a checkpointed
-    # backward. `test_checkpointed_backward_matches_the_plain_one` does, and is written
-    # here rather than inherited so it can sidestep the v-LoRA property these three
-    # trip over.
-    _V_LORA_SKIP = (
-        "layer 0's value-residual LoRA is structurally unreachable, so it has no "
-        "gradient; see test_layer_zero_value_residual_lora_is_unused"
-    )
-
-    @unittest.skip(_V_LORA_SKIP)
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(_V_LORA_SKIP)
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(_V_LORA_SKIP)
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+    # gradient. The parameters are kept anyway: a native `.pth` carries them at
+    # layer 0, and dropping them would mean this port can read that file but not
+    # write it back. `test_layer_zero_value_residual_lora_is_unused` pins the
+    # property; this is the flag models with structurally-unreachable parameters
+    # set so the gradient-checkpointing trainings still run rather than being
+    # skipped wholesale. `test_checkpointed_backward_matches_the_plain_one` then
+    # compares the checkpointed gradients against the plain ones by value.
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = Rwkv7ModelTester(self)
@@ -566,6 +539,40 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         torch.testing.assert_close(eager, compiled, rtol=1e-4, atol=1e-4)
 
+    def test_compiled_decode_step_with_state_matches_eager(self):
+        """The decode step, compiled, against eager -- with the pre-allocated cache.
+
+        The performance story rests on compiling the single-token step over a
+        state from `allocate_state` (the modeling docstring's contract), yet the
+        compile test above only covers the cache-less prefill. This is the path a
+        user actually compiles, and the one where a cudagraph-replay bug would
+        produce fast wrong outputs: on CUDA, handing the *prefill* to the
+        compiled model builds a lazy unpinned cache inside the traced region and
+        trips the output-buffer protection, which is exactly why the prefill
+        below stays eager.
+        """
+        config = _tiny_config()
+        model = _sharpened(Rwkv7ForCausalLM(config)).to(torch_device).eval()
+        prompt = torch.randint(0, config.vocab_size, (1, 8), device=torch_device)
+
+        def decode(step_model):
+            state = model.rwkv7.allocate_state(1, device=torch_device)
+            with torch.no_grad():
+                out = model(input_ids=prompt, state=state, use_cache=True)  # prefill: eager
+                logits, state = [out.logits[0, -1]], out.state
+                token = out.logits[0, -1].argmax()[None, None]
+                for _ in range(3):
+                    out = step_model(input_ids=token, state=state, use_cache=True)
+                    logits.append(out.logits[0, -1])
+                    state = out.state
+                    token = out.logits[0, -1].argmax()[None, None]
+            return torch.stack(logits)
+
+        torch._dynamo.reset()
+        eager = decode(model)
+        compiled = decode(torch.compile(model))
+        torch.testing.assert_close(eager, compiled, rtol=1e-4, atol=1e-4)
+
     def test_batch_rows_are_independent(self):
         """A row's output must not depend on what shares its batch.
 
@@ -615,6 +622,34 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         torch.testing.assert_close(masked, alone, rtol=1e-5, atol=1e-5)
         self.assertGreater(untreated, 100 * max(treated, 1e-9))
 
+    def test_left_padded_batch_generate_matches_each_row_alone(self):
+        """End-to-end greedy `generate` on a left-padded batch, row for row.
+
+        The single-forward version above pins the logits of one padded row; this
+        one runs the whole generate loop -- prefill with pads, then step-by-step
+        decode where the full-length mask is sliced and passed every step -- and
+        requires each row's continuation to equal the row generated on its own.
+        The shared `test_left_padding_compatibility` is swallowed by
+        `has_attentions=False`, so without this the chain it exercises has no
+        token-level coverage at all.
+        """
+        config = _tiny_config()
+        model = _randomised(Rwkv7ForCausalLM(config)).to(torch_device).eval()
+        short = torch.randint(1, config.vocab_size, (1, 4), device=torch_device)
+        long = torch.randint(1, config.vocab_size, (1, 7), device=torch_device)
+
+        pads = torch.zeros(1, 3, dtype=short.dtype, device=torch_device)
+        batch = torch.cat([torch.cat([pads, short], dim=1), long], dim=0)
+        mask = torch.tensor([[0, 0, 0, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1]], device=torch_device)
+
+        with torch.no_grad():
+            together = model.generate(batch, attention_mask=mask, max_new_tokens=6, do_sample=False, pad_token_id=0)
+            row_short = model.generate(short, max_new_tokens=6, do_sample=False, pad_token_id=0)
+            row_long = model.generate(long, max_new_tokens=6, do_sample=False, pad_token_id=0)
+
+        self.assertEqual(together[0, 7:].tolist(), row_short[0, 4:].tolist())
+        self.assertEqual(together[1, 7:].tolist(), row_long[0, 7:].tolist())
+
     def test_packed_batch_matches_each_sequence_run_alone(self):
         """A varlen (packed) row must decode exactly like its sequences separately.
 
@@ -630,10 +665,10 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         lengths = [4, 3, 5]
         segments = [torch.randint(1, config.vocab_size, (1, n), device=torch_device) for n in lengths]
         packed = torch.cat(segments, dim=1)
-        cu_seq_lens = torch.tensor([0, 4, 7, 12], device=torch_device)
+        cu_seq_lens_q = torch.tensor([0, 4, 7, 12], device=torch_device)
 
         with torch.no_grad():
-            together = model(input_ids=packed, cu_seq_lens=cu_seq_lens).logits[0]
+            together = model(input_ids=packed, cu_seq_lens_q=cu_seq_lens_q).logits[0]
             naive = model(input_ids=packed).logits[0]
 
         start, treated = 0, 0.0
@@ -653,7 +688,7 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertGreater(untreated, 100 * max(treated, 1e-9))
 
     def test_packed_batch_rejects_a_malformed_boundary_list(self):
-        """A wrong `cu_seq_lens` must raise, not split the recurrence somewhere else.
+        """A wrong `cu_seq_lens_q` must raise, not split the recurrence somewhere else.
 
         Nothing downstream can notice a bad boundary list: the model still returns
         fluent logits, just computed from states that restarted in the wrong places.
@@ -668,12 +703,12 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # back as eight.
         for bad in ([1, 3, 6], [0, 3, 5], [0, 3, 8], [0, 4, 2, 6], [0, 3, 3, 6]):
             with self.assertRaises(ValueError):
-                model(input_ids=ids, cu_seq_lens=torch.tensor(bad, device=torch_device))
+                model(input_ids=ids, cu_seq_lens_q=torch.tensor(bad, device=torch_device))
 
         with self.assertRaises(ValueError):  # packing describes one row, not a batch
             model(
                 input_ids=ids.repeat(2, 1),
-                cu_seq_lens=torch.tensor([0, 3, 6], device=torch_device),
+                cu_seq_lens_q=torch.tensor([0, 3, 6], device=torch_device),
             )
 
     def test_packed_batch_ignores_a_carried_state_and_says_so(self):
@@ -698,42 +733,70 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             ).state
             self.assertGreater(max(s.abs().max().item() for s in self._every_state(warmed)), 0.0)
 
-            cold = model(input_ids=ids, cu_seq_lens=bounds).logits
-            carried = model(input_ids=ids, cu_seq_lens=bounds, state=warmed).logits
+            cold = model(input_ids=ids, cu_seq_lens_q=bounds).logits
+            carried = model(input_ids=ids, cu_seq_lens_q=bounds, state=warmed).logits
 
         torch.testing.assert_close(carried, cold, rtol=1e-5, atol=1e-5)
 
-    def test_wkv_implementation_is_selectable(self):
-        """The recurrence is looked up by name, so a kernel can be dropped in.
+    def test_generate_accepts_a_preallocated_or_warm_state(self):
+        """`generate` with a caller-supplied state must consume the whole prompt.
 
-        Registering a wrapper and selecting it must route every call through it and
-        leave the output identical -- that is what makes the registry a seam rather
-        than a second code path.
+        `allocate_state` exists so the decode can be compiled (the cache must be
+        pinned before tracing), and a warm state is how a chat turn resumes. The
+        old input-truncation gate keyed on the state's *existence*, so both of
+        those calls silently dropped every prompt token but the last one and
+        generated from a one-token prompt without raising. The gate now keys on
+        `cache_position`, and these two equalities are what that fixes.
         """
-        from transformers.models.rwkv7.modeling_rwkv7 import RWKV7_WKV_FUNCTIONS, rwkv7_eager
+        config = _tiny_config()
+        model = _sharpened(Rwkv7ForCausalLM(config)).to(torch_device).eval()
+        prompt = torch.randint(0, config.vocab_size, (1, 6), device=torch_device)
 
-        calls = []
+        with torch.no_grad():
+            plain = model.generate(prompt, max_new_tokens=5, do_sample=False, pad_token_id=0)
+            fresh = model.rwkv7.allocate_state(1, device=torch_device)
+            preallocated = model.generate(prompt, state=fresh, max_new_tokens=5, do_sample=False, pad_token_id=0)
+        self.assertEqual(preallocated[0].tolist(), plain[0].tolist())
 
-        def counting_wkv(*args, **kwargs):
-            calls.append(1)
-            return rwkv7_eager(*args, **kwargs)
+        history = torch.randint(0, config.vocab_size, (1, 7), device=torch_device)
+        with torch.no_grad():
+            warm = model(input_ids=history, use_cache=True).state
+            resumed = model.generate(prompt, state=warm, max_new_tokens=5, do_sample=False, pad_token_id=0)
+            # The same continuation by hand: history, then the whole prompt, then greedy.
+            state = model(input_ids=history, use_cache=True).state
+            out = model(input_ids=prompt, state=state, use_cache=True)
+            state, manual = out.state, []
+            token = out.logits[0, -1].argmax()[None, None]
+            for _ in range(5):
+                manual.append(int(token))
+                out = model(input_ids=token, state=state, use_cache=True)
+                state = out.state
+                token = out.logits[0, -1].argmax()[None, None]
+        self.assertEqual(resumed[0, 6:].tolist(), manual)
 
+    def test_prefix_chunk_with_sliced_mask_matches_the_whole_padded_forward(self):
+        """The chunked-prefill mask contract, exercised instead of only documented.
+
+        The forward's docstring tells a caller feeding a prefix chunk to slice the
+        mask to the chunk's own span "or it silently reads the wrong positions".
+        The shared test for this (#47086-style) skips itself because the config
+        declares no recurrent layer_types, so the contract had no coverage: this
+        runs a left-padded batch whole, then as prefix-chunk-plus-continuation
+        with per-chunk mask slices, and the logits of the continuation must match.
+        """
         config = _tiny_config()
         model = _randomised(Rwkv7ForCausalLM(config)).to(torch_device)
-        ids = torch.randint(0, config.vocab_size, (1, 5), device=torch_device)
+        real = torch.randint(1, config.vocab_size, (1, 5), device=torch_device)
+        pads = torch.zeros(1, 2, dtype=real.dtype, device=torch_device)
+        ids = torch.cat([pads, real], dim=1)  # [1, 7], left-padded
+        mask = torch.tensor([[0, 0, 1, 1, 1, 1, 1]], device=torch_device)
+
         with torch.no_grad():
-            expected = model(input_ids=ids).logits
+            whole = model(input_ids=ids, attention_mask=mask).logits
+            first = model(input_ids=ids[:, :4], attention_mask=mask[:, :4], use_cache=True)
+            rest = model(input_ids=ids[:, 4:], attention_mask=mask, state=first.state, use_cache=True).logits
 
-        RWKV7_WKV_FUNCTIONS["counting"] = counting_wkv
-        try:
-            model.config.wkv_implementation = "counting"
-            with torch.no_grad():
-                got = model(input_ids=ids).logits
-        finally:
-            del RWKV7_WKV_FUNCTIONS["counting"]
-
-        self.assertEqual(len(calls), config.num_hidden_layers)
-        self.assertTrue(torch.equal(expected, got))
+        torch.testing.assert_close(rest, whole[:, 4:], rtol=1e-4, atol=1e-4)
 
     def test_heavily_padded_fp16_batch_is_finite(self):
         """Padding in fp16, at a realistic pad fraction, must not produce NaN.
@@ -1192,9 +1255,16 @@ class Rwkv7IntegrationTests(unittest.TestCase):
     zeroed 249 of a converted checkpoint's 402 tensors passed the entire suite and was
     caught only by loading real weights and reading the output.
 
-    The expected values below come from BlinkDL's own runtime -- the `rwkv` package at
-    `cpu fp32` with `RWKV_V7_ON=1` -- and not from this implementation, which would make
-    them self-certifying. They are deliberately not taken from `fla`, whose RWKV layer
+    The expected values below come from BlinkDL's own runtime -- the `rwkv` package
+    (0.8.32 at the time of generation) at `cpu fp32` with `RWKV_V7_ON=1` -- and not
+    from this implementation, which would make them self-certifying. To regenerate:
+
+        RWKV_V7_ON=1 python -c "
+        from rwkv.model import RWKV
+        m = RWKV(model='<CHECKPOINT_FILE minus .pth>', strategy='cpu fp32')
+        logits, state = m.forward(PROMPT_IDS, None)
+        # greedy-extend 20 tokens for EXPECTED_IDS; top-5 of the first logits
+        # gives EXPECTED_TOP5 / EXPECTED_TOP5_LOGITS" They are deliberately not taken from `fla`, whose RWKV layer
     prints a warning on import saying it is potentially buggy and that results should be
     cross-checked against the official repo.
 

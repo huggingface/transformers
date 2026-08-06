@@ -1,4 +1,4 @@
-<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The RWKV team and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -121,12 +121,12 @@ for several commits after the code stopped doing it.
 When the lengths in a batch vary a lot, padding is expensive twice over for a
 recurrent model: the pads cost time as well as memory, because every one of them
 is a step of the recurrence. Pack the sequences into a single row instead and pass
-`cu_seq_lens`, the cumulative boundaries starting at 0 and ending at `seq_len`:
+`cu_seq_lens_q`, the cumulative boundaries starting at 0 and ending at `seq_len`:
 
 ```python
 packed = torch.cat([a, b, c], dim=1)                     # [1, len(a)+len(b)+len(c)]
-cu_seq_lens = torch.tensor([0, a.shape[1], a.shape[1] + b.shape[1], packed.shape[1]])
-out = model(input_ids=packed, cu_seq_lens=cu_seq_lens)
+cu_seq_lens_q = torch.tensor([0, a.shape[1], a.shape[1] + b.shape[1], packed.shape[1]])
+out = model(input_ids=packed, cu_seq_lens_q=cu_seq_lens_q)
 ```
 
 Each segment then decodes exactly as if it had been run on its own: the recurrent
@@ -135,99 +135,29 @@ otherwise hand a segment's first token the previous sequence's last hidden state
 A malformed boundary list raises rather than quietly restarting the recurrence in
 the wrong places.
 
-### Swapping the WKV kernel
-
-The recurrence is the one part worth replacing (everything around it is ordinary
-linear algebra), so it is looked up by name instead of hard-coded:
-
-```python
-from transformers.models.rwkv7.modeling_rwkv7 import RWKV7_WKV_FUNCTIONS
-
-RWKV7_WKV_FUNCTIONS["my_kernel"] = my_wkv
-model = Rwkv7ForCausalLM.from_pretrained(checkpoint, wkv_implementation="my_kernel")
-```
-
-An entry receives `[batch, seq_len, num_heads, head_dim]` tensors for `r, w_log, k,
-v, kk, a`, the `[batch, num_heads, head_dim, head_dim]` state, and `cu_seq_lens` as
-a keyword, and returns `(output, new_state)`. The contract is to reproduce
-`rwkv7_recurrent`, which is also what the test suite checks against, so a fused or
-varlen kernel drops in without forking the model.
-
-A worked example, against `vllm-rwkv`'s varlen WKV. Its calling convention is not
-guessable from the signature and was read off that project's own call site, then
-checked against `rwkv7_recurrent` before being relied on: `w` is the LoRA output
-*before* the decay transform (the kernel applies that itself), the rank-one pair is
-`(-kk, kk * a)`, activations are fp16 while the state is fp32, and `head_dim` must be
-64. Single-token decode is a different entry point, `wkv_one`, whose state is fp16.
-
-```python
-import torch
-from transformers.models.rwkv7.modeling_rwkv7 import RWKV7_WKV_FUNCTIONS
-
-torch.ops.load_library("<vllm-rwkv>/vllm/rwkv7_ops.abi3.so")
-_INV_SQRT_E = 0.6065306597126334
-
-
-def vllm_varlen_wkv(r, w_log, k, v, kk, a, state, cu_seq_lens=None, **kwargs):
-    batch, seq_len, heads, head_dim = r.shape
-    channels = heads * head_dim
-    # This model carries `w_log = -INV_SQRT_E * sigmoid(w_raw)`; the kernel wants
-    # `w_raw` and applies the transform itself, so invert it here.
-    sigmoid = (-w_log / _INV_SQRT_E).clamp(1e-6, 1 - 1e-6)
-    w_raw = torch.log(sigmoid / (1 - sigmoid))
-    flat = lambda t: t.reshape(batch * seq_len, channels).to(torch.float16).contiguous()
-
-    # Without `cu_seq_lens` every row of the batch is its own segment.
-    cu = cu_seq_lens if cu_seq_lens is not None else torch.arange(
-        0, batch * seq_len + 1, seq_len, device=r.device)
-    n_seq = cu.numel() - 1
-    lengths = (cu[1:] - cu[:-1]).tolist()
-    slot_state = torch.zeros(n_seq, heads, head_dim, head_dim, device=r.device, dtype=torch.float32)
-    y = torch.empty(batch * seq_len, channels, device=r.device, dtype=torch.float16)
-    torch.ops.rwkv7_wkv_fp32_v2.forward_varlen(
-        n_seq, batch * seq_len, max(lengths), channels, heads, cu.to(torch.int32),
-        torch.arange(n_seq, device=r.device, dtype=torch.int32), slot_state,
-        flat(r), flat(w_raw), flat(k), flat(v), flat(-kk), flat(kk * a), y)
-    # Packed, the contract is the last segment's state, one row. Unpacked, every row
-    # of the batch is its own sequence and every row's state has to come back: this
-    # returned `slot_state[-1:]` in both cases, and since the caller copies into a
-    # `[batch, ...]` cache slot, one row broadcast silently over all of them and rows
-    # 0 and 1 continued from row 2's history with no error.
-    new_state = slot_state[-1:] if cu_seq_lens is not None else slot_state
-    return y.view(batch, seq_len, heads, head_dim).to(r.dtype), new_state.to(state.dtype)
-
-
-RWKV7_WKV_FUNCTIONS["vllm_varlen"] = vllm_varlen_wkv
-```
-
-Checked against `rwkv7_recurrent` on three shapes, a packed row of uneven segments
-(5 + 7), an unpacked `batch=1`, and an unpacked `batch=3`, at relative errors of
-2.6e-04 to 5.2e-04, which is fp16 against an fp32 reference. That check compared the
-returned activations on all three, and the returned *state* on none of them, which is
-how the `batch>1` state truncation above survived it: an adapter can be right about
-every value it emits and wrong about what it carries forward. A replacement kernel
-should be checked on both. It speeds up prefill and leaves single-token decode
-unchanged, because that step is bound by streaming the weights rather than by the
-recurrence.
-
 ### Getting good decode throughput
 
 Single-stream decode is dominated by per-kernel launch overhead, so the compile mode
-matters more than anything in the model itself. Eager is by far the slowest, plain
-`torch.compile()` helps, and `mode="max-autotune"` is the fastest here.
+matters more than anything in the model itself: profiled on an RTX 3090 at 1.5B, the
+GPU is busy for ~16ms of an ~83ms eager decode step -- the rest is the interpreter
+feeding it. `mode="reduce-overhead"` removes that layer and captures the step into
+CUDA graphs, for an order-of-magnitude decode speedup (measured 16x on that setup;
+`"max-autotune"` came out *slower* than `"reduce-overhead"` here, its extra fusions
+not paying for themselves on this chain of small kernels).
 
 Two things have to line up, and neither is the default:
 
 ```python
-model = Rwkv7ForCausalLM.from_pretrained(checkpoint, dtype=torch.float16)
+model = Rwkv7ForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16)
 model = model.eval().cuda()
 state = model.rwkv7.allocate_state(1)                 # BEFORE compiling, not state=None
-compiled = torch.compile(model, mode="max-autotune", dynamic=False)
+compiled = torch.compile(model, mode="reduce-overhead")
 ```
 
-1. **`mode="max-autotune"`.** Plain `torch.compile()` and `"reduce-overhead"` both
-   help less; the decode is a long chain of small kernels, which is what autotuning
-   has the most to work with.
+1. **Compile the decode step, not the prefill.** Run the prompt through the *eager*
+   model into the pre-allocated state, then loop the compiled model one token at a
+   time. Handing the prefill to the compiled model builds a lazy, unpinned cache
+   inside the traced region and trips the cudagraph output-buffer protection.
 2. **Call `allocate_state` before compiling.** Anything first allocated *inside* the
    compiled region cannot have its address pinned (`mark_static_address` does not run
    during tracing), and inductor then declines CUDA graphs for a region that mutates
