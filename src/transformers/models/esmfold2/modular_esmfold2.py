@@ -716,8 +716,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         # ``pair_trunk`` is fp32, so the concat and the norm stay fp32; z_proj downcasts.
         pair_states = torch.cat([pair_trunk, relative_position_encoding], dim=-1)
         pair_states = self.pair_proj(self.pair_input_norm(pair_states).to(self.pair_proj.weight.dtype))
-        for block in self.pair_transitions:
-            pair_states = block(pair_states)
+        for layer in self.pair_transitions:
+            pair_states = layer(pair_states)
         return pair_states
 
     def compute_single_repr(self, single_inputs: Tensor) -> Tensor:
@@ -736,8 +736,8 @@ class EsmFold2DiffusionConditioning(nn.Module):
         noise_embeds = self.noise_proj(self.noise_norm(noise_embeds).to(self.noise_proj.weight.dtype))
         single_states = single_states + noise_embeds.unsqueeze(1)
 
-        for block in self.single_transitions:
-            single_states = block(single_states)
+        for layer in self.single_transitions:
+            single_states = layer(single_states)
 
         return single_states
 
@@ -1628,11 +1628,11 @@ class EsmFold2MSAEncoderLayer(nn.Module):
     double the stream rather than leave it alone.
     """
 
-    def __init__(self, config: EsmFold2Config, is_final_block: bool = False) -> None:
+    def __init__(self, config: EsmFold2Config, is_final_layer: bool = False) -> None:
         super().__init__()
-        self.is_final_block = is_final_block
+        self.is_final_layer = is_final_layer
         self.outer_product_mean = EsmFold2OuterProductMean(config)
-        if not is_final_block:
+        if not is_final_layer:
             self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
             self.msa_transition = EsmFold2Transition(
                 config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
@@ -1651,7 +1651,7 @@ class EsmFold2MSAEncoderLayer(nn.Module):
         pair_attention_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         pair_states = pair_states + self.outer_product_mean(msa_states, msa_attention_mask)
-        if not self.is_final_block:
+        if not self.is_final_layer:
             msa_states = msa_states + self.msa_pair_weighted_averaging(msa_states, pair_states, pair_attention_mask)
             msa_states = self.msa_transition(msa_states)
         pair_states = pair_states + self.tri_mul_out(pair_states, visibility=pair_attention_mask)
@@ -1670,7 +1670,7 @@ class EsmFold2MSAEncoder(nn.Module):
         self.project_inputs = nn.Linear(config.single_inputs_size, config.msa_encoder.hidden_size, bias=False)
         self.layers = nn.ModuleList(
             [
-                EsmFold2MSAEncoderLayer(config, is_final_block=(i == config.msa_encoder.num_hidden_layers - 1))
+                EsmFold2MSAEncoderLayer(config, is_final_layer=(i == config.msa_encoder.num_hidden_layers - 1))
                 for i in range(config.msa_encoder.num_hidden_layers)
             ]
         )
