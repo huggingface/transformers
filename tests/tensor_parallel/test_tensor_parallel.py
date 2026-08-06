@@ -18,6 +18,7 @@ import torch
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
+from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
@@ -152,6 +153,7 @@ class TestTensorParallelLayer(TestCasePlus):
             self.world_size = world_size
             self.rank = rank
             self.shape = (world_size,)
+            self.ndim = 1
 
         def size(self):
             return self.world_size
@@ -179,6 +181,15 @@ class TestTensorParallelLayer(TestCasePlus):
         local_shape = list(global_shape)
         local_shape[shard_dim] = local_size
         return tuple(local_shape)
+
+    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
+        op = object.__new__(DtensorShardOperation)
+        op.device_mesh = mesh
+        op.placements = (placement,)
+        op.param_ndim = len(param_shape)
+        op._axis0_offset = 0
+        op._axis0_local_size = local_shape[0]
+        return op
 
     def test_colwise_gather_output_rejects_indivisible_out_features(self):
         model = torch.nn.Module()
@@ -235,27 +246,37 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(rowwise_shape, (expected_size, 10))
             self.assertEqual(colwise_shape, (10, expected_size))
 
-    def test_packed_colwise_local_shapes(self):
+    def test_packed_colwise_packed_and_unpacked_shapes(self):
         module = torch.nn.Module()
         module.register_parameter("weight", torch.nn.Parameter(torch.empty(2, 16, 64)))
         placement = self._get_parameter_placements(module, PackedColwiseParallel())["weight"]
+        packed = torch.randn(2, 16, 64)
+        unpacked_expert = torch.randn(16, 64)
 
         self.assertEqual(placement.dim, 1)
         self.assertEqual(placement.split_factor, 2)
         for rank in range(2):
-            local_shape = self._get_local_shape((2, 16, 64), placement, world_size=2, rank=rank)
-            self.assertEqual(local_shape, (2, 8, 64))
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(2, 16, 64), local_shape=(2, 8, 64))
 
-    def test_packed_rowwise_local_shapes(self):
+            self.assertEqual(op.shard_tensor(packed).shape, (2, 8, 64))
+            self.assertEqual(op.shard_tensor(unpacked_expert, tensor_idx=0).shape, (8, 64))
+
+    def test_packed_rowwise_packed_and_unpacked_shapes(self):
         module = torch.nn.Module()
         module.register_parameter("weight", torch.nn.Parameter(torch.empty(16, 64)))
         placement = self._get_parameter_placements(module, PackedRowwiseParallel())["weight"]
+        packed = torch.randn(16, 64)
+        unpacked = torch.randn(16, 32)
 
         self.assertEqual(placement.dim, -1)
         self.assertEqual(placement.split_factor, 2)
         for rank in range(2):
-            local_shape = self._get_local_shape((16, 64), placement, world_size=2, rank=rank)
-            self.assertEqual(local_shape, (16, 32))
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(16, 64), local_shape=(16, 32))
+
+            self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
+            self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
 
     def test_grouped_gemm_updates_local_expert_count(self):
         module = torch.nn.Module()
