@@ -34,6 +34,9 @@ FALLBACK_DEFAULTS = {
     "q_padding_interval_size": 64,
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
 }
+BOUNDS = {
+    "block_size": (4, 2**32),
+}
 
 
 def resolve_continuous_batching_config(
@@ -78,6 +81,8 @@ def resolve_continuous_batching_config(
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
     resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors)
+    # Check bounds on some of the config values
+    check_cb_values_bounds(cb_config)
     return cb_config
 
 
@@ -268,6 +273,8 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
 
 
 def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
+    """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
+    0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
     if cb_config.max_memory_percent is None:
         cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
 
@@ -288,3 +295,9 @@ def update_cb_config_after_cache_creation(
     if not use_prefix_sharing:
         cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, num_blocks)
     # TODO: should we align the max number of request per batch to a multiple of 32 ?
+
+
+def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:
+    """Checks the bounds on some values of the continuous batching config."""
+    if cb_config.block_size < BOUNDS["block_size"][0]:
+        raise ValueError(f"block_size must be at least {BOUNDS['block_size'][0]} but got {cb_config.block_size = }")

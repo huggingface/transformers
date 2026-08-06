@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git reflog:*)",
+      "Bash(git grep:*)",
+      "Bash(git merge-base:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(xargs:*)",
+      "Bash(source:*)",
+      "Bash(CUDA_LAUNCH_BLOCKING=1 RUN_SLOW=1 pytest:*)",
+      "Bash(RUN_SLOW=1 pytest:*)",
+      "Bash(python3:*)",
+      "Bash(git log:*)",
+      "Bash(git ls-tree:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.pytorch.org)",
+      "Bash(python:*)",
+      "Bash(TORCHINDUCTOR_CACHE_DIR=/tmp/inductor_cache_test python3:*)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.flashinfer.ai)",
+      "Bash(TRANSFORMERS_USE_FLASHINFER_DECODE=1 python:*)",
+      "Bash(RUN_SLOW=1 TRANSFORMERS_USE_FLASHINFER_DECODE=1 python -m pytest:*)",
+      "mcp__plugin_compound-engineering_context7__query-docs",
+      "Bash(timeout 300 python:*)",
+      "Bash(timeout 300 TRANSFORMERS_USE_FLASHINFER_DECODE=1 python:*)",
+      "Bash(TRANSFORMERS_USE_FLASHINFER_DECODE=1 timeout 300 python:*)",
+      "Bash(CUDA_LAUNCH_BLOCKING=1 TRANSFORMERS_USE_FLASHINFER_DECODE=1 timeout 300 python:*)",
+      "Bash(TRANSFORMERS_USE_FLASHINFER_DECODE=1 timeout 60 python:*)",
+      "Bash(CUDA_LAUNCH_BLOCKING=1 TRANSFORMERS_USE_FLASHINFER_DECODE=1 timeout 120 python:*)",
+      "Bash(TRANSFORMERS_USE_FLASHINFER_DECODE=1 timeout 120 python:*)",
+      "Bash(nvidia-smi --query-compute-apps=pid --format=csv,noheader)",
+      "Bash(python -c \":*)",
+      "Bash(git stash:*)",
+      "Bash(git show:*)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(nvidia-smi *)",
+      "Bash(env)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"=== Current kv_cache_manim.py (auto-injected each prompt) ===\"; cat /fsx/remi_ouazan/transformers.worktrees/left/kv_cache_manim.py 2>/dev/null"
+          }
+        ]
+      }
+    ]
+  }
+}

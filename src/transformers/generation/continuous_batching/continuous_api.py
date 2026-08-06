@@ -34,6 +34,7 @@ from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_ava
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
+from .cache_allocators import SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
 from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
@@ -375,7 +376,7 @@ class ContinuousBatchProcessor:
 
         # Schedule the next batch of requests
         requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
-            self.max_batch_tokens, self.cache.num_pages
+            self.max_batch_tokens, self.cache.max_tokens_read
         )
 
         # If requests_in_batch is None, it means the cache is full and no requests can be scheduled. We loop over active
@@ -387,7 +388,7 @@ class ContinuousBatchProcessor:
                 raise RuntimeError("No requests can be scheduled and no requests can be offloaded.")
             # Otherwise, the loop has offloaded at least one request, and we try scheduling again.
             requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read = self.scheduler.schedule_batch(
-                self.max_batch_tokens, self.cache.num_pages
+                self.max_batch_tokens, self.cache.max_tokens_read
             )
 
         # If requests_in_batch is an empty list, it means we have no requests to process anymore
@@ -399,14 +400,6 @@ class ContinuousBatchProcessor:
 
         # Restore any CPU-offloaded requests that were just scheduled
         self.offloading_manager.restore_scheduled_requests(requests_in_batch)
-
-        # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                f"Scheduled: {len(requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, "
-                f"Active: {len(self.scheduler.active_requests)}. cum Q: {num_q_tokens}. "
-                f"cum KV: {max_kv_read}, free blocks: {self.cache.get_num_free_blocks()}"
-            )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
@@ -449,54 +442,54 @@ class ContinuousBatchProcessor:
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token, logprob)
                 # We mark the completed blocks as such
-                self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+                # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
                 if is_finished:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
                     pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
-            elif state.status == RequestStatus.PREFILLING:
-                self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+            # elif state.status == RequestStatus.PREFILLING:
+                # self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
 
         if pending_outputs:
             self.output_router.deliver_batch(pending_outputs)
 
         # If some requests need to be forked, we do it now
-        copy_source, copy_destination = [], []
-        while self.scheduler._requests_to_fork:
-            # Get the number of children and reset it so it's not forked again
-            state_to_fork = self.scheduler._requests_to_fork.pop()
-            num_children = state_to_fork.num_children
-            state_to_fork.num_children = 0
-            new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
-            # If there are not enough free blocks, some children are created as new pending requests rather than forked
-            num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
-            num_to_schedule = num_children - num_to_fork
-            for _ in range(num_to_schedule):
-                new_request_id = new_request_ids.pop()
-                child_state = state_to_fork.create_equivalent_initial_request()
-                child_state.request_id = new_request_id
-                self.scheduler.add_waiting_request(child_state)
-            # Early stop if no forks can be done
-            if num_to_fork == 0:
-                continue
-            # Create the new request and add them to the scheduler
-            for new_request_id in new_request_ids:
-                self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
-            # Fork the cache
-            copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
-            copy_source.extend(copy_src)
-            copy_destination.extend(copy_dst)
+        # copy_source, copy_destination = [], []
+        # while self.scheduler._requests_to_fork:
+        #     # Get the number of children and reset it so it's not forked again
+        #     state_to_fork = self.scheduler._requests_to_fork.pop()
+        #     num_children = state_to_fork.num_children
+        #     state_to_fork.num_children = 0
+        #     new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
+        #     # If there are not enough free blocks, some children are created as new pending requests rather than forked
+        #     num_to_fork = min(num_children, self.cache.compute_max_num_forks(state_to_fork.request_id))
+        #     num_to_schedule = num_children - num_to_fork
+        #     for _ in range(num_to_schedule):
+        #         new_request_id = new_request_ids.pop()
+        #         child_state = state_to_fork.create_equivalent_initial_request()
+        #         child_state.request_id = new_request_id
+        #         self.scheduler.add_waiting_request(child_state)
+        #     # Early stop if no forks can be done
+        #     if num_to_fork == 0:
+        #         continue
+        #     # Create the new request and add them to the scheduler
+        #     for new_request_id in new_request_ids:
+        #         self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
+        #     # Fork the cache
+        #     copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
+        #     copy_source.extend(copy_src)
+        #     copy_destination.extend(copy_dst)
 
         # The copy induced by the fork is done in one go (if it's even needed)
-        if copy_source:
-            # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
-            # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
-                self.cache.copy_cache(copy_source, copy_destination)
+        # if copy_source:
+        #     # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
+        #     # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
+        #     compute_stream = self.inputs_and_outputs.compute_stream
+        #     maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
+        #     with maybe_stream:
+        #         self.cache.copy_cache(copy_source, copy_destination)
 
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
@@ -725,7 +718,7 @@ class ContinuousBatchingManager:
         # Otherwise, we keep the batch processor and cache the manager as a model attribute
         else:
             logger.info("Continuous batching manager will be kept for next session.")
-            self.model._cached_continuous_batching_manager = self
+            self.model._cached_continuous_batching_manager = self # type: ignore
 
         # Restore the original attention implementation
         if self._original_attn_impl is not None:
@@ -1011,13 +1004,13 @@ class ContinuousBatchingManager:
         # And update continuous batching config now that we have concrete values
         update_cb_config_after_cache_creation(
             cb_config=self.continuous_batching_config,
-            num_blocks=paged_attention_cache.num_blocks,
+            num_blocks=paged_attention_cache.max_tokens_read,
             max_batch_tokens=paged_attention_cache.max_batch_tokens,
             use_prefix_sharing=self._use_prefix_sharing,
         )
 
         # Disable the decode path if the model has sliding window attention (TODO)
-        if paged_attention_cache.num_sliding_attention_groups > 0:
+        if SLIDING_ATTENTION in paged_attention_cache.cache_allocators:
             self.continuous_batching_config.max_blocks_per_request = 0
 
         # Retrieve the scheduler class
