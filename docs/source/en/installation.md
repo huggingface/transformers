@@ -44,9 +44,6 @@ Install Transformers with the following command.
 
 [uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
-```bash
-uv pip install transformers
-```
 
 <hfoptions id="installation">
 <hfoption id="CUDA">
@@ -76,7 +73,13 @@ uv pip install transformers
 </hfoption>
 <hfoption id="Intel GPU (XPU)">
 
-To install Transformers with PyTorch for Intel GPU (XPU), add the Intel GPU (XPU) PyTorch index URL. You also need to install the appropriate [Intel GPU (XPU) drivers for PyTorch](https://www.intel.com/content/www/us/en/developer/articles/tool/pytorch-prerequisites-for-intel-gpu/2-13.html).
+To install Transformers with PyTorch for Intel GPU (XPU), install the appropriate [Intel GPU (XPU) drivers for PyTorch](https://www.intel.com/content/www/us/en/developer/articles/tool/pytorch-prerequisites-for-intel-gpu/2-13.html) and add the Intel GPU (XPU) PyTorch index URL.
+
+After installing the drivers, run the command below to [check if your system detects an Intel GPU](https://dgpu-docs.intel.com/driver/verification.html).
+
+```bash
+xpu-smi
+```
 
 ```bash
 uv pip install "transformers[torch]" --extra-index-url https://download.pytorch.org/whl/xpu
