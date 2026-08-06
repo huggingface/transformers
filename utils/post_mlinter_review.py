@@ -151,10 +151,7 @@ def main():
             return 0
 
     # Map each changed file to its commentable lines.
-    anchors = {
-        f["filename"]: _commentable_lines(f.get("patch"))
-        for f in _paginate(f"{pulls_url}/files", token)
-    }
+    anchors = {f["filename"]: _commentable_lines(f.get("patch")) for f in _paginate(f"{pulls_url}/files", token)}
 
     comments = []
     skipped = []
