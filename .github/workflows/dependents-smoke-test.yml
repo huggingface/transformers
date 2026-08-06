@@ -126,11 +126,13 @@ jobs:
             --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]"
 
       - name: "Test: multimodal processing"
-        if: false
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -n 8 tests/models/multimodal/processing/
+          # Only transformers-backend-specific files; test_common.py excludes transformers models
+          # Full suite (1312 tests) requires pytest-shard parallelism (see .buildkite/test_areas/models_multimodal.yaml)
+          pytest -v -s tests/models/multimodal/processing/test_transformers_image.py \
+                       tests/models/multimodal/processing/test_transformers_audio.py
 
       - name: "Test: test_mapping"
         if: false
