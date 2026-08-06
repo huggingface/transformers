@@ -1629,22 +1629,29 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
         )
 
-        input_ids = input_ids[:, -num_last_main_model_tokens:]
-        position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
-        attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
+        # We need to cache the full target hidden states from the main model to be able to correct the cache based on validated tokens
+        if self.is_main_model_prefill:
+            self.full_target_hidden_states = target_hidden_states
+        else:
+            self.full_target_hidden_states = torch.cat([self.full_target_hidden_states, target_hidden_states], dim=1)
+
+        # We need to invalidate the cache on all previous block_size window, and use the actual valid tokens to re-feed it
+        if not self.is_main_model_prefill:
+            self.cache.crop(-self.block_size + 1)
+
+            input_ids = input_ids[:, -num_last_main_model_tokens - self.block_size + 1:]
+            position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.block_size + 1:]
+            attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.block_size + 1:]
+            target_hidden_states = self.full_target_hidden_states[:, -num_last_main_model_tokens - self.block_size + 1:, :]
+        # No need to crop the cache or slice right after the prefill, as the assistant cache is still empty
+        else:
+            input_ids = input_ids[:, -num_last_main_model_tokens:]
+            position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
+            attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
         # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
         mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
-
-        # Update draft cache with new `target_hidden_states`: project into model hidden state and encode for KV cache
-        # The slicing is there to strip off alreay cached values, keeping only the new unprocessed tokens
-        self.cache = self.assistant_model.update_cache_with_target_states(
-            target_hidden_states,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=self.cache,
-        )
 
         # Get assistant model outputs
         outputs = self.assistant_model(

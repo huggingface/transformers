@@ -112,28 +112,6 @@ class OnyxAssistantModel(Exaone4Model):
             [OnyxAssistantDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    def update_cache_with_target_states(
-        self,
-        target_hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor = None,
-        position_ids: torch.Tensor = None,
-        past_key_values: Cache = None,
-    ) -> Cache:
-        target_hidden_states = self.encoder(target_hidden_states)
-        cos, sin = self.rotary_emb(target_hidden_states, position_ids)
-        if past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        hidden_shape = (*target_hidden_states.shape[:-1], -1, self.config.head_dim)
-        for i, layer in enumerate(self.layers):
-            key_states = layer.self_attn.k_proj(target_hidden_states).view(hidden_shape).transpose(1, 2)
-            value_states = layer.self_attn.v_proj(target_hidden_states).view(hidden_shape).transpose(1, 2)
-            key_states = layer.self_attn.k_norm(key_states)
-            key_states, _ = apply_rotary_pos_emb(key_states, key_states, cos, sin)
-            key_states, value_states = past_key_values.update(key_states, value_states, i)
-
-        return past_key_values
-
     def forward(
         self,
         inputs_embeds: torch.FloatTensor | None = None,

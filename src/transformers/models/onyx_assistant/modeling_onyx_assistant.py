@@ -176,7 +176,9 @@ class OnyxAssistantAttention(nn.Module):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        # We use global NoPE for hybrid attention model
+        if self.sliding_window is None or self.is_sliding:
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -421,28 +423,6 @@ class OnyxAssistantModel(OnyxAssistantPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
-
-    def update_cache_with_target_states(
-        self,
-        target_hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor = None,
-        position_ids: torch.Tensor = None,
-        past_key_values: Cache = None,
-    ) -> Cache:
-        target_hidden_states = self.encoder(target_hidden_states)
-        cos, sin = self.rotary_emb(target_hidden_states, position_ids)
-        if past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        hidden_shape = (*target_hidden_states.shape[:-1], -1, self.config.head_dim)
-        for i, layer in enumerate(self.layers):
-            key_states = layer.self_attn.k_proj(target_hidden_states).view(hidden_shape).transpose(1, 2)
-            value_states = layer.self_attn.v_proj(target_hidden_states).view(hidden_shape).transpose(1, 2)
-            key_states = layer.self_attn.k_norm(key_states)
-            key_states, _ = apply_rotary_pos_emb(key_states, key_states, cos, sin)
-            key_states, value_states = past_key_values.update(key_states, value_states, i)
-
-        return past_key_values
 
 
 __all__ = ["OnyxAssistantModel"]
