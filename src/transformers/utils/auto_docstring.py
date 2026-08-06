@@ -3667,7 +3667,8 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         ):
             continue
 
-        if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
+        kwargs_type = _get_base_kwargs_class(kwarg_param.annotation.__args__[0])
+        if kwargs_type.__name__ in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
@@ -3691,10 +3692,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                                 actual_type = arg
                                 type_name = getattr(arg, "__name__", None)
                                 break
-
-                    # Skip only if it's one of the basic kwargs types
-                    if type_name in BASIC_KWARGS_TYPES:
-                        continue
 
                     # Otherwise, unroll the custom typed kwargs
                     # Get the nested TypedDict's annotations
@@ -3771,8 +3768,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
-                if documented_kwargs and param_name not in documented_kwargs:
-                    continue
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
@@ -3807,19 +3802,17 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     undocumented_parameters.append(
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
-
-        # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
-        kwargs_annot_cls = kwarg_param.annotation.__args__[0]
-        kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
-        kwargs_info = source_args_dict.get("__kwargs__", {})
-        kwargs_description = kwargs_info.get(
-            "description",
-            "Additional keyword arguments. Model-specific parameters are listed above.",
-        )
-        kwargs_summary = set_min_indent(
-            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
-            indent_level + 8,
-        )
+        else:
+            # Build **kwargs summary line if we couldn't unpack them
+            kwargs_info = source_args_dict.get("__kwargs__", {})
+            kwargs_description = kwargs_info.get(
+                "description",
+                "Additional keyword arguments. Model-specific parameters are listed above.",
+            )
+            kwargs_summary = set_min_indent(
+                f"**kwargs ([`{kwargs_type.__name__}`], *optional*):{kwargs_description}",
+                indent_level + 8,
+            )
 
     return docstring, kwargs_summary
 
