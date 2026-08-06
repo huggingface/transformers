@@ -85,6 +85,7 @@ class DtensorShardOperation:
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
+        self.param_shape = tuple(param.shape)
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
@@ -123,6 +124,11 @@ class DtensorShardOperation:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
                 dim_idx = self._normalize_param_dim(placement.dim)
+                # Replicated KV heads: the parameter describes the *expanded* projection, so the sharded dim is
+                # `n_rep` times larger than the checkpoint one and `n_rep` consecutive ranks read the same head.
+                n_rep = self._replication_factor(dim_idx, source_shape)
+                if n_rep > 1 and placement.is_shard():
+                    rank, world_size = rank // n_rep, world_size // n_rep
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
             # prepare the slices to fetch on disk for each tensor dimension.
@@ -307,6 +313,13 @@ class DtensorShardOperation:
             interval_tensors.append(source[interval_slices])
 
         return torch.cat(interval_tensors, dim=concat_dim).to(device=device, dtype=dtype)
+
+    def _replication_factor(self, dim_idx: int, source_shape: list[int]) -> int:
+        param_size = self.param_shape[dim_idx]
+        source_size = source_shape[dim_idx]
+        if source_size and param_size > source_size and param_size % source_size == 0:
+            return param_size // source_size
+        return 1
 
     def _get_sub_mesh(self, mesh_dim: int):
         if self.device_mesh.ndim == 1:
