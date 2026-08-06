@@ -74,6 +74,12 @@ jobs:
       - name: Pip freeze
         run: pip freeze
 
+      - name: System info
+        run: |
+          echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
+          echo "=== Memory ===" && free -h
+          echo "=== Disk ===" && df -h
+
       - name: Run tests
         working-directory: vllm
         run: |
