@@ -42,18 +42,23 @@ def get_experts_scheme(quantization_config):
     return groups[0]
 
 
-PACKED_EXPERTS_FORMATS = ("mxfp4-pack-quantized",)
+# compressed-tensors formats whose MoE experts can run without ever being decompressed, mapped to the
+# experts implementation that runs them.
+PACKED_EXPERTS_FORMATS = {
+    "mxfp4-pack-quantized": "mxfp4",
+    "nvfp4-pack-quantized": "nvfp4",
+}
 
 
 def get_packed_experts_format(quantization_config) -> str | None:
-    """The packed-fp4 format the MoE experts can run in, or `None` for every other scheme.
+    """The packed-FP4 format the MoE experts can run in, or `None` for every other scheme.
 
-    Only the formats in `PACKED_EXPERTS_FORMATS` can be executed straight from their packed bytes; anything
+    Only the formats in `PACKED_EXPERTS_FORMATS` have a runtime that reads their packed bytes; anything
     else (FP8, int4 `pack-quantized`, …) still has to be decompressed at load time.
     """
     scheme = get_experts_scheme(quantization_config)
     weights = getattr(scheme, "weights", None)
-    # `weight_zero_point` has no place in the packed layout the kernels read.
+    # `weight_zero_point` has no place in the packed layout the runtimes read.
     if weights is None or not getattr(weights, "symmetric", True):
         return None
     # Published checkpoints often leave the per-group `format` out and only set the checkpoint-level one.
@@ -78,21 +83,39 @@ def is_packed_experts_module(module) -> bool:
     )
 
 
-class LoadPackedExperts(ConversionOps):
-    """Load packed-fp4 MoE expert weights without decompressing them.
+def _broadcast_global_scales(global_scales: dict, input_dict: dict, sources: list[str]) -> dict:
+    """Give each per-projection NVFP4 global scale one row per output channel.
 
-    The checkpoint holds one `weight_packed` / `weight_scale` pair per expert projection. Those go through
-    the model's own expert-merging operations — once for the weights and once for the scales, so that a
-    `Concatenate` fusing the gate and up projections does not also try to fuse weights with scales — and
-    the merged stacks are then attached to the experts module in the layout its kernels read.
+    The checkpoint stores it as a single number per expert projection, which the merge operations cannot
+    concatenate along the output dimension the way they concatenate weights and group scales. Expanding
+    it to `(out_dim, 1)` first — a handful of floats per expert — lets it ride along unchanged.
+    """
+    broadcast = {}
+    for source in sources:
+        packed_source = source.replace("weight_global_scale", "weight_packed")
+        broadcast[source] = [
+            scale.reshape(1, 1).expand(packed.shape[0], 1).contiguous()
+            for scale, packed in zip(global_scales[source], input_dict[packed_source])
+        ]
+    return broadcast
+
+
+class LoadPackedExperts(ConversionOps):
+    """Load packed-FP4 MoE expert weights without decompressing them.
+
+    The checkpoint holds one `weight_packed` / `weight_scale` pair per expert projection, plus a
+    `weight_global_scale` for NVFP4. Each of those goes through the model's own expert-merging operations
+    separately, so that a `Concatenate` fusing the gate and up projections does not also try to fuse
+    weights with scales, and the merged stacks are then attached to the experts module.
 
     Nothing is handed back to the loader: like the GPT-OSS mxfp4 path, the module is updated in place,
-    because a kernel-ready weight is not an `nn.Parameter`.
+    because a packed weight is not the `nn.Parameter` the module declared.
     """
 
-    def __init__(self, hf_quantizer, scheme, operations: list[ConversionOps]):
+    def __init__(self, hf_quantizer, scheme, format: str, operations: list[ConversionOps]):
         self.hf_quantizer = hf_quantizer
         self.scheme = scheme
+        self.format = format
         # The model's own converter ops (e.g. `MergeModulelist` + `Concatenate`), replayed per component.
         self.operations = operations
 
@@ -106,13 +129,16 @@ class LoadPackedExperts(ConversionOps):
         missing_keys: set[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        from ..integrations.mxfp4 import attach_packed_mxfp4_proj
         from ..quantizers.quantizers_utils import get_module_from_name
 
         merged = {}
-        for component in ("weight_packed", "weight_scale"):
+        for component in ("weight_packed", "weight_scale", "weight_global_scale"):
             component_sources = [p for p in source_patterns if p.rstrip("$").endswith(component)]
             component_dict = {p: input_dict[p] for p in component_sources if p in input_dict}
+            if not component_dict:
+                continue
+            if component == "weight_global_scale":
+                component_dict = _broadcast_global_scales(component_dict, input_dict, component_sources)
             for operation in self.operations:
                 component_dict = operation.convert(
                     component_dict,
@@ -125,7 +151,21 @@ class LoadPackedExperts(ConversionOps):
             merged[component] = next(iter(component_dict.values()))
 
         module, proj = get_module_from_name(model, full_layer_name)
-        attach_packed_mxfp4_proj(module, proj, merged["weight_packed"], merged["weight_scale"])
+        if self.format == "mxfp4-pack-quantized":
+            from ..integrations.mxfp4 import attach_packed_mxfp4_proj
+
+            attach_packed_mxfp4_proj(module, proj, merged["weight_packed"], merged["weight_scale"])
+        else:
+            from ..integrations.nvfp4 import attach_packed_nvfp4_proj
+
+            if "weight_global_scale" not in merged:
+                raise ValueError(
+                    f"`{full_layer_name}` is quantized to {self.format} but the checkpoint has no "
+                    "`weight_global_scale` for it, without which its weights cannot be reconstructed."
+                )
+            attach_packed_nvfp4_proj(
+                module, proj, merged["weight_packed"], merged["weight_scale"], merged["weight_global_scale"]
+            )
 
         if missing_keys is not None:
             missing_keys.discard(full_layer_name)
@@ -201,11 +241,15 @@ class DecompressExperts(ConversionOps):
         compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
-            def __init__(self, weight, scale, shape):
+            def __init__(self, weight, scale, shape, global_scale=None):
                 super().__init__()
                 self.weight_packed = nn.Parameter(weight, requires_grad=False)
                 self.weight_scale = nn.Parameter(scale, requires_grad=False)
                 self.weight_shape = nn.Parameter(shape, requires_grad=False)
+                if global_scale is not None:
+                    # NVFP4 divides its group scales by one more factor per tensor. Without it the
+                    # decompressed weights come out scaled by several thousand.
+                    self.weight_global_scale = nn.Parameter(global_scale, requires_grad=False)
 
         # `pack_factor` low-bit weights are packed per int32 along the packed dim.
         # Used only as a fallback for `weight_shape` (see below): rebuilding the
@@ -221,6 +265,7 @@ class DecompressExperts(ConversionOps):
             quantized = value
             scales = input_dict[key.replace("weight_packed", "weight_scale")]
             shapes = input_dict.get(key.replace("weight_packed", "weight_shape"))
+            global_scales = input_dict.get(key.replace("weight_packed", "weight_global_scale"))
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
@@ -236,7 +281,7 @@ class DecompressExperts(ConversionOps):
                     shape = stored_shape
                 else:
                     shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
-                module = DummyModule(quant, scale, shape)
+                module = DummyModule(quant, scale, shape, None if global_scales is None else global_scales[i])
                 module.quantization_scheme = quantization_scheme
                 compressor.decompress_module(module)
 

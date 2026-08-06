@@ -26,6 +26,7 @@ from ..utils.import_utils import (
 )
 from .deepgemm import deepgemm_bf16_experts_forward
 from .mxfp4 import mxfp4_experts_forward
+from .nvfp4 import nvfp4_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
 
 
@@ -488,6 +489,7 @@ class ExpertsInterface(GeneralInterface):
         "grouped_mm": grouped_mm_experts_forward,
         "sonicmoe": sonicmoe_experts_forward,
         "mxfp4": mxfp4_experts_forward,
+        "nvfp4": nvfp4_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:

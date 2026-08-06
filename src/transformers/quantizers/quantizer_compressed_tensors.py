@@ -30,6 +30,7 @@ if is_torch_available():
 
     from ..core_model_loading import WeightConverter
     from ..integrations.compressed_tensors import (
+        PACKED_EXPERTS_FORMATS,
         DecompressExperts,
         LoadPackedExperts,
         get_experts_scheme,
@@ -122,6 +123,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if format is None:
             return None
 
+        # NVFP4 has no matmul kernel to reach here (see `integrations/nvfp4.py`); its runtime is plain
+        # torch and runs anywhere. MXFP4 goes through the Triton kernels, which need hardware and a
+        # hub-kernels download.
+        if format != "mxfp4-pack-quantized":
+            return format
+
         if torch.cuda.is_available():
             supported_device = torch.cuda.get_device_capability() >= (7, 5)
             has_triton = is_triton_available("3.4.0")
@@ -146,12 +153,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         The warmup reserves what the loaded model will occupy, read off the meta parameters, which for
         packed experts would be their dense size — the very allocation this path exists to avoid. Report
-        what they actually take instead: half a byte per value, plus one e8m0 scale per group of 32.
+        what they actually take instead: half a byte per value, plus one scale per group.
         """
         module_name, _, attribute = param_name.rpartition(".")
         if self.packed_experts_format is not None and module_name.endswith(".experts"):
             if attribute in ("gate_up_proj", "up_proj", "down_proj"):
-                return 0.5 + 1 / 32
+                group_size = 32 if self.packed_experts_format == "mxfp4-pack-quantized" else 16
+                return 0.5 + 1 / group_size
         return param.element_size()
 
     def _setup_packed_experts(self, model) -> None:
@@ -162,15 +170,18 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         `ExpertsInterface`. `self.packed_experts_format` is cleared otherwise, which sends the loader back
         to decompressing the experts.
         """
+        implementation = PACKED_EXPERTS_FORMATS[self.packed_experts_format]
         experts_modules = [
             module
             for name, module in model.named_modules()
             if name.endswith(".experts") and is_packed_experts_module(module)
         ]
         if experts_modules:
-            model.set_experts_implementation("mxfp4")
+            model.set_experts_implementation(implementation)
 
-        if not experts_modules or any(module.config._experts_implementation != "mxfp4" for module in experts_modules):
+        if not experts_modules or any(
+            module.config._experts_implementation != implementation for module in experts_modules
+        ):
             logger.warning_once(
                 f"This checkpoint stores its MoE experts in `{self.packed_experts_format}`, but "
                 f"{model.__class__.__name__} cannot run them in that format. The experts will be decompressed "
@@ -320,11 +331,20 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 else:
                     packed_weight = [p + "_packed$" for p in weight_sources]
                     shape_sources = [p + "_shape$" for p in weight_sources]
-                    new_sources = packed_weight + scale_sources + shape_sources + other
+                    # NVFP4 divides its group scales by one more factor per projection.
+                    global_scale_sources = [p + "_global_scale$" for p in weight_sources]
+                    new_sources = packed_weight + scale_sources + global_scale_sources + shape_sources + other
                 if self.packed_experts_format is not None:
                     # The packed runtime needs the merge to happen on the packed bytes, so it drives the
                     # model's operations itself instead of running after them.
-                    new_ops = [LoadPackedExperts(self, scheme=scheme, operations=list(conv.operations))]
+                    new_ops = [
+                        LoadPackedExperts(
+                            self,
+                            scheme=scheme,
+                            format=self.packed_experts_format,
+                            operations=list(conv.operations),
+                        )
+                    ]
                 else:
                     new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
                 conv = WeightConverter(

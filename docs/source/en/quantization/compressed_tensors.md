@@ -77,16 +77,33 @@ and run through FP4 kernels, see [Packed FP4 MoE experts](#packed-fp4-moe-expert
 
 ## Packed FP4 MoE experts
 
-Checkpoints whose `format` is `mxfp4-pack-quantized` store their MoE expert weights as 4-bit values, two per
-byte, next to a scale per group of 32. Those experts keep that packed form in memory and their matmuls run
-through the mxfp4 Triton kernels, so a mixture-of-experts model needs roughly as much memory as its
-checkpoint takes on disk instead of the four-or-more times that dequantizing to BF16 costs.
+Checkpoints whose `format` is `mxfp4-pack-quantized` or `nvfp4-pack-quantized` store their MoE expert
+weights as 4-bit values, two per byte, next to a scale per small group of them. Those experts keep that
+packed form in memory, so a mixture-of-experts model needs roughly as much memory as its checkpoint takes
+on disk instead of the four-or-more times that dequantizing to BF16 costs.
 
-This is the default. It needs a CUDA GPU with compute capability 7.5 or higher (or an XPU), Triton 3.4.0 or
-newer and the [`kernels`](https://github.com/huggingface/kernels) package; without any of those the experts
-are decompressed to the model dtype at load time instead, and a warning says so. `dequantize=True` asks for
-that decompressed path explicitly, which is what fine-tuning or saving the model needs — packed experts are
-inference only and a model holding them cannot be saved.
+```python
+from transformers import AutoModelForCausalLM
+
+# ~24 GB of expert weights instead of ~70 GB
+model = AutoModelForCausalLM.from_pretrained("RedHatAI/Qwen3.6-35B-A3B-NVFP4", device_map="auto")
+```
+
+This is the default. What runs the packed weights depends on the format.
+
+| Format | Scales | Execution |
+|--------|--------|-----------|
+| `mxfp4-pack-quantized` | one power of two per 32 values | mxfp4 Triton kernels, the ones GPT-OSS uses |
+| `nvfp4-pack-quantized` | one e4m3 per 16 values, plus one factor per tensor | each routed expert is expanded to the model dtype inside the forward pass, one at a time |
+
+MXFP4 needs a CUDA GPU with compute capability 7.5 or higher (or an XPU), Triton 3.4.0 or newer and the
+[`kernels`](https://github.com/huggingface/kernels) package; without any of those the experts are
+decompressed to the model dtype at load time instead, and a warning says so. NVFP4 has no such requirement,
+but no matmul kernel takes its layout either — cuBLAS only runs FP4 matmuls on Blackwell and the mxfp4
+Triton kernels are hard-wired to power-of-two scales — so it trades speed for the memory it saves.
+
+`dequantize=True` asks for the decompressed path explicitly, which is what fine-tuning or saving the model
+needs: packed experts are inference only and a model holding them cannot be saved.
 
 ## FP8 kernel acceleration
 
