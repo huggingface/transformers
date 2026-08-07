@@ -176,7 +176,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2, 4, and 8 bits. We recommend using intel-extension-for-pytorch (IPEX) for 4 bits inference.
+Supports 2, 4, and 8 bits. We recommend using the ARK backend from `auto-round-lib` for inference. PyTorch 2.8.0 or later is required when using ARK.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -195,7 +195,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 ### XPU
 
-Supports 4 bits only. We recommend using intel-extension-for-pytorch (IPEX) for inference.
+Supports 4 and 8 bits. We recommend using the ARK backend from `auto-round-lib` for inference. PyTorch 2.8.0 or later is required when using ARK.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -236,13 +236,13 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 AutoRound automatically selects the backend for each layer based on compatibility. In general, the priority order is Marlin > ExLLaMAV2 > Triton, but the final choice depends on factors such as group size, bit width, packing format, hardware device, and other implementation details. For more details, please refer to [backends](https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend),
 
 The backend may not always be the most suitable for certain devices.
-You can specify your preferred backend such as "ipex" for CPU, "ipex/triton" for XPU, "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
+You can specify your preferred backend such as "ark" for CPU and XPU, or "marlin/exllamav2/triton" for CUDA, according to your needs or hardware compatibility. Please note that additional corresponding libraries may be required.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoRoundConfig
 
 model_name = "OPEA/Qwen2.5-1.5B-Instruct-int4-sym-inc"
-quantization_config = AutoRoundConfig(backend="ipex")
+quantization_config = AutoRoundConfig(backend="ark")
 model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cpu", quantization_config=quantization_config, dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 text = "There is a girl who likes adventure,"

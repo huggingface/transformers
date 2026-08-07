@@ -215,7 +215,9 @@ class AutoRoundConfig(QuantizationConfigMixin):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
-        backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ipex,marlin, exllamav2, triton, etc. Ref. https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend
+        backend (`str`, *optional*, defaults to `"auto"`): The kernel to use, e.g., ark, marlin, exllamav2, triton, etc.
+            ARK (the `auto-round-lib` package) is recommended for CPU and XPU inference. Ref.
+            https://github.com/intel/auto-round?tab=readme-ov-file#specify-backend
     """
 
     def __init__(
