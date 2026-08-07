@@ -215,8 +215,8 @@ class Apertus1p5TextConfig(ApertusConfig):
 @strict
 class Apertus1p5Config(PreTrainedConfig):
     r"""
-    text_config (`Union[dict, PreTrainedConfig]`, *optional*):
-        Configuration of the Apertus language backbone. The extended vocabulary (text + visual + audio tokens)
+    text_config (`Union[dict, Apertus1p5TextConfig]`, *optional*):
+        Configuration of the Apertus 1.5 language backbone. The extended vocabulary (text + visual + audio tokens)
         lives in `text_config.vocab_size`, which sizes the input embedding table. The LM head uses
         `text_config.output_vocab_size` physical rows when set, otherwise it uses the full
         `text_config.vocab_size`. Model outputs have `text_config.vocab_size` logits (loss-only calls with
@@ -242,7 +242,7 @@ class Apertus1p5Config(PreTrainedConfig):
     ```python
     >>> from transformers import Apertus1p5Config, Apertus1p5ForConditionalGeneration
 
-    >>> # Initializing a configuration (Apertus backbone + vision/audio tokenizer defaults)
+    >>> # Initializing a configuration (Apertus 1.5 backbone + vision/audio tokenizer defaults)
     >>> configuration = Apertus1p5Config()
 
     >>> # Initializing a model (with random weights) from the configuration
@@ -255,14 +255,14 @@ class Apertus1p5Config(PreTrainedConfig):
     model_type = "apertus1p5"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {
-        "text_config": AutoConfig,
         "vision_tokenizer_config": Apertus1p5VisionTokenizerConfig,
         "audio_tokenizer_config": AutoConfig,
+        "text_config": Apertus1p5TextConfig,
     }
 
-    text_config: dict | PreTrainedConfig | None = None
     vision_tokenizer_config: dict | Apertus1p5VisionTokenizerConfig | None = None
     audio_tokenizer_config: dict | PreTrainedConfig | None = None
+    text_config: dict | Apertus1p5TextConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -272,8 +272,7 @@ class Apertus1p5Config(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         """Resolve nested configs and validate multimodal token ranges and pruned-head weight tying."""
         if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "apertus1p5_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+            self.text_config = Apertus1p5TextConfig(**self.text_config)
         elif self.text_config is None:
             # the extended vocabulary covers the visual and audio token ranges
             self.text_config = Apertus1p5TextConfig()
@@ -584,7 +583,6 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _no_split_modules = [
         "Apertus1p5TextDecoderLayer",
-        "ApertusDecoderLayer",  # plain `apertus` text configs remain accepted
         "Apertus1p5VisionTokenizerResnetBlock",
         "Apertus1p5VisionTokenizerAttnBlock",
     ]
@@ -740,9 +738,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
-        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_tokenizer_config)
         self.audio_tokenizer = AutoModel.from_config(config.audio_tokenizer_config)
+        self.language_model = Apertus1p5TextModel(config.text_config)
 
         # Initialize weights and apply final processing
         self.post_init()

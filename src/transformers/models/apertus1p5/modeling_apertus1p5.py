@@ -343,7 +343,6 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _no_split_modules = [
         "Apertus1p5TextDecoderLayer",
-        "ApertusDecoderLayer",  # plain `apertus` text configs remain accepted
         "Apertus1p5VisionTokenizerResnetBlock",
         "Apertus1p5VisionTokenizerAttnBlock",
     ]
@@ -898,9 +897,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
-        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_tokenizer_config)
         self.audio_tokenizer = AutoModel.from_config(config.audio_tokenizer_config)
+        self.language_model = Apertus1p5TextModel(config.text_config)
 
         # Initialize weights and apply final processing
         self.post_init()
