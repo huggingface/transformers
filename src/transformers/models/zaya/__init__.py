@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_zaya import *
     from .modeling_zaya import *
-
 else:
     import sys
 

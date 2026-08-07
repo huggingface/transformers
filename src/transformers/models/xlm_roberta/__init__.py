@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_xlm_roberta import *
     from .modeling_xlm_roberta import *
     from .tokenization_xlm_roberta import *
-    from .tokenization_xlm_roberta_fast import *
 else:
     import sys
 

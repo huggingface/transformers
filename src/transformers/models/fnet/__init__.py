@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_fnet import *
     from .modeling_fnet import *
-    from .tokenization_fnet import FNetTokenizer, FNetTokenizerFast
+    from .tokenization_fnet import *
 else:
     import sys
 
