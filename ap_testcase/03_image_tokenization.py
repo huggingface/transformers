@@ -39,7 +39,7 @@ def case_1_processor_path(processor, model, image):
     placeholders = processor.tokenizer.decode(inputs["input_ids"][0]).count("<|image|>")
     assert vocab_ids.numel() == placeholders, "expected one code per placeholder"
     assert int(vocab_ids.min()) >= config.image_token_offset, "image token below the configured offset"
-    assert int(vocab_ids.max()) < config.image_token_offset + config.vision_tokenizer_config.codebook_size, (
+    assert int(vocab_ids.max()) < config.image_token_offset + config.vision_config.codebook_size, (
         "image token exceeds the configured codebook"
     )
     first = int(vocab_ids[0])

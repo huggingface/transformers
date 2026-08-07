@@ -117,7 +117,7 @@ def _check_output_is_not_a_source(output_dir: str, *source_dirs: str) -> None:
             )
 
 
-def build_processor(apertus_checkpoint: str, audio_tokenizer_config: dict) -> Apertus1p5Processor:
+def build_processor(apertus_checkpoint: str, audio_config: dict) -> Apertus1p5Processor:
     """Build the composite processor, warning when the backbone tokenizer lacks expected multimodal metadata."""
     tokenizer = AutoTokenizer.from_pretrained(apertus_checkpoint)
     missing = [name for name in NAMED_SPECIAL_TOKEN_ATTRIBUTES if getattr(tokenizer, name, None) is None]
@@ -141,9 +141,9 @@ def build_processor(apertus_checkpoint: str, audio_tokenizer_config: dict) -> Ap
             "multimodal chat calls and media auto-loading will fail. Use a backbone with the updated "
             "apertus-omni-tokenizer template."
         )
-    hop_length = int(math.prod(audio_tokenizer_config.get("upsampling_ratios", (6, 5, 5, 4))))
+    hop_length = int(math.prod(audio_config.get("upsampling_ratios", (6, 5, 5, 4))))
     feature_extractor = WavTokenizerFeatureExtractor(
-        sampling_rate=audio_tokenizer_config.get("sampling_rate", 24000), hop_length=hop_length
+        sampling_rate=audio_config.get("sampling_rate", 24000), hop_length=hop_length
     )
     return Apertus1p5Processor(
         image_processor=Apertus1p5ImageProcessor(),
@@ -171,17 +171,17 @@ def build_config(
         )
     text_config["model_type"] = "apertus1p5_text"
     with open(os.path.join(vision_tokenizer_checkpoint, "config.json")) as f:
-        vision_tokenizer_config = json.load(f)
+        vision_config = json.load(f)
     _check_converted_tokenizer_source(
-        vision_tokenizer_config,
+        vision_config,
         expected="apertus1p5_vision_tokenizer",
         source=vision_tokenizer_checkpoint,
         converter="convert_apertus1p5_vision_tokenizer_to_hf.py",
     )
     with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
-        audio_tokenizer_config = json.load(f)
+        audio_config = json.load(f)
     _check_converted_tokenizer_source(
-        audio_tokenizer_config,
+        audio_config,
         expected="wavtokenizer",
         source=audio_tokenizer_checkpoint,
         converter="convert_wavtokenizer_checkpoint.py",
@@ -191,8 +191,8 @@ def build_config(
     # tie, and tied backbones ship no `lm_head.weight` tensor.
     config = Apertus1p5Config(
         text_config=text_config,
-        vision_tokenizer_config=vision_tokenizer_config,
-        audio_tokenizer_config=audio_tokenizer_config,
+        vision_config=vision_config,
+        audio_config=audio_config,
         tie_word_embeddings=bool(text_config.get("tie_word_embeddings", False)),
     )
     # `model.save_pretrained` would stamp this from the model class; the converter streams shards without
@@ -403,7 +403,7 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
         image_ids = model.model.get_image_tokens(image, torch.tensor([[256, 256]]))
     in_range = bool(
         (image_ids >= config.image_token_offset).all()
-        and (image_ids < config.image_token_offset + config.vision_tokenizer_config.codebook_size).all()
+        and (image_ids < config.image_token_offset + config.vision_config.codebook_size).all()
     )
     code = int(image_ids[0]) - config.image_token_offset
     token_str = tokenizer.convert_ids_to_tokens(int(image_ids[0]))
@@ -422,7 +422,7 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
         audio_ids = model.model.get_audio_tokens(sine, torch.ones(1, 24000, dtype=torch.long))
     in_range = bool(
         (audio_ids >= config.audio_token_offset).all()
-        and (audio_ids < config.audio_token_offset + config.audio_tokenizer_config.codebook_size).all()
+        and (audio_ids < config.audio_token_offset + config.audio_config.codebook_size).all()
     )
     code = int(audio_ids[0]) - config.audio_token_offset
     token_str = tokenizer.convert_ids_to_tokens(int(audio_ids[0]))
@@ -531,8 +531,8 @@ def write_processor(apertus_checkpoint: str, audio_tokenizer_checkpoint: str, ou
     _check_output_is_not_a_source(output_dir, apertus_checkpoint, audio_tokenizer_checkpoint)
     os.makedirs(output_dir, exist_ok=True)
     with open(os.path.join(audio_tokenizer_checkpoint, "config.json")) as f:
-        audio_tokenizer_config = json.load(f)
-    processor = build_processor(apertus_checkpoint, audio_tokenizer_config)
+        audio_config = json.load(f)
+    processor = build_processor(apertus_checkpoint, audio_config)
     processor.save_pretrained(output_dir)
     generation_config = os.path.join(apertus_checkpoint, "generation_config.json")
     output_generation_config = os.path.join(output_dir, "generation_config.json")
