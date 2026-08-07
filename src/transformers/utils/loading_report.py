@@ -19,6 +19,8 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from ..distributed.pipeline_parallel import PipelineStage
+
 
 _DIGIT_RX = re.compile(r"(?<=\.)(\d+)(?=\.|$)")  # numbers between dots or at the end
 
@@ -112,6 +114,7 @@ PALETTE = {
     "yellow": "[33m",
     "orange": "[38;5;208m",
     "purple": "[35m",
+    "green": "[32m",
     "bold": "[1m",
     "italic": "[3m",
     "dim": "[2m",
@@ -133,6 +136,22 @@ def _get_terminal_width(default=80):
         return default
 
 
+def _pp_report_key_owners(
+    stage: PipelineStage, model, skipped_pp_keys: set[str]
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Map checkpoint keys to their owning PP rank for the load report."""
+    prefix = model.base_model_prefix
+    num_layers = len(getattr(model, prefix).layers)
+
+    owned = dict.fromkeys(model.state_dict(), stage.pp_rank)
+    skipped = {
+        key: owner
+        for key in skipped_pp_keys
+        if (owner := stage.find_rank_for_key(key, num_layers, prefix)) is not None
+    }
+    return owned, skipped
+
+
 @dataclass
 class LoadStateDictInfo:
     """
@@ -144,6 +163,8 @@ class LoadStateDictInfo:
             Keys that are missing from the loaded checkpoints but expected in the model's architecture.
         unexpected_keys (`set[str]`):
             Keys that are found in the checkpoints, but not expected in the model's architecture.
+        skipped_pp_keys (`set[str]`):
+            Checkpoint keys owned by another pipeline-parallel rank and intentionally not loaded here.
         mismatched_keys (`set[tuple[str, tuple[int], tuple[int]]]`):
             Keys that are found in the checkpoints and are expected in the model's architecture, but with a different shape.
         error_msgs ( `list[str]`):
@@ -157,6 +178,7 @@ class LoadStateDictInfo:
     mismatched_keys: set[tuple[str, tuple[int], tuple[int]]]
     error_msgs: list[str]
     conversion_errors: dict[str, str]
+    skipped_pp_keys: set[str]
 
     def missing_and_mismatched(self):
         """Return all effective missing keys, including `missing` and `mismatched` keys."""
@@ -171,12 +193,13 @@ class LoadStateDictInfo:
             "error_msgs": self.error_msgs,
         }
 
-    def create_loading_report(self) -> str | None:
+    def create_loading_report(self, model=None) -> str | None:
         """Generate the minimal table of a loading report."""
         term_w = _get_terminal_width()
 
         rows = []
         tips = "\n\nNotes:"
+
         if self.unexpected_keys:
             tips += f"\n- {_style('UNEXPECTED:', 'orange')}\t" + _style(
                 "can be ignored when loading from different task/architecture; not ok if you expect identical arch.",
@@ -217,6 +240,20 @@ class LoadStateDictInfo:
                 status = _style("CONVERSION", "purple")
                 _details = f"\n\n{v}\n\n"
                 rows.append([k, status, _details])
+
+        stage = None
+        if model is not None:
+            stage = PipelineStage.from_device_mesh(getattr(model, "_device_mesh", None))
+        if stage is not None:
+            owned, skipped = _pp_report_key_owners(stage, model, self.skipped_pp_keys)
+            for status, color, note, key_owners in (
+                ("OWNED", "green", "checkpoint weights loaded on this pipeline stage.", owned),
+                ("SKIPPED", "dim", "checkpoint weights owned by another pipeline stage.", skipped),
+            ):
+                if key_owners:
+                    tips += f"\n- {_style(f'{status}:', color)}\t{note}"
+                    for key, owner in update_key_name(key_owners).items():
+                        rows.append([key, _style(status, color), f"PP rank {owner}"])
 
         # If nothing is wrong, return None
         if len(rows) == 0:
@@ -259,7 +296,7 @@ def log_state_dict_report(
         raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
     # Create the report table
-    report = loading_info.create_loading_report()
+    report = loading_info.create_loading_report(model)
     if report is None:
         return
 
