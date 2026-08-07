@@ -1063,13 +1063,10 @@ class GenerationMixin(ContinuousMixin):
             )
         elif generation_config.speculation_type == "dflash":
             candidate_generator = DFlashTokenCandidateGenerator(
-                input_ids=input_ids,
                 assistant_model=assistant_model,
-                target_model_input_embeddings=self.get_input_embeddings(),
-                target_model_output_embeddings=self.get_output_embeddings(),
+                main_model_input_embeddings=self.get_input_embeddings(),
+                main_model_output_embeddings=self.get_output_embeddings(),
                 generation_config=generation_config,
-                model_kwargs=model_kwargs,
-                inputs_tensor=inputs_tensor,
             )
         elif different_tokenizers:
             assistant_model = cast("PreTrainedModel", assistant_model)

@@ -1543,12 +1543,13 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
 
 
 class DFlashTokenCandidateGenerator(CandidateGenerator):
-    """Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
-    This capability is enabled by three concrete requirements for assistant models:
+    """
+    Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
+    Dflash reuses the main model's `hidden_states` at several `config.target_layer_ids` to populate the kv cache of the assistant,
+    and then uses the last "bonus" decoded token from the main model, along with `config.block_size` as its main forward to
+    draft `config.block_size` new tokens at every iteration, similar to a diffusion window.
 
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
         assistant_model (`PreTrainedModel`):
             The model to be used for generating candidates. This model should be smaller than the main model.
         target_model_input_embeddings (`torch.nn.Embedding`):
@@ -1557,11 +1558,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             The output embedding table from main model, used to get the candidate logits.
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
-        model_kwargs (`dict`):
-            The keyword arguments that will be passed to the main model, and are used as base inputs for the assistant
-            model as well.
-        inputs_tensor (`torch.Tensor`, *optional*):
-            The model input tensor. In encoder-decoder models, this is the encoder input.
     """
 
     requires_model_outputs: bool = True
@@ -1570,12 +1566,10 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     def __init__(
         self,
-        input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
-        target_model_input_embeddings: nn.Embedding,
-        target_model_output_embeddings: nn.Linear,
+        main_model_input_embeddings: nn.Embedding,
+        main_model_output_embeddings: nn.Linear,
         generation_config: "GenerationConfig",
-        model_kwargs: dict,
         **kwargs,
     ):
         from ..cache_utils import DynamicCache
@@ -1583,8 +1577,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.assistant_model = assistant_model
         self.main_model_max_length = generation_config.max_length
 
-        self.target_model_input_embeddings = target_model_input_embeddings
-        self.target_model_output_embeddings = target_model_output_embeddings
+        self.main_model_input_embeddings = main_model_input_embeddings
+        self.main_model_output_embeddings = main_model_output_embeddings
         self.target_layer_ids = assistant_model.config.target_layer_ids
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
@@ -1636,7 +1630,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
         # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
-        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.target_model_input_embeddings.weight)
+        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.main_model_input_embeddings.weight)
 
         # Append positions and mask for the noise tokens, we can't just crop off from `model_kwargs`!
         # because noise position go beyond what came from model kwargs
@@ -1657,7 +1651,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
-        candidate_logits = self.target_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
+        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
         candidate_ids = candidate_logits.argmax(dim=-1)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=1)
         return candidate_ids, candidate_logits
