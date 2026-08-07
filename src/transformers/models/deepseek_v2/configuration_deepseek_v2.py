@@ -124,6 +124,11 @@ class DeepseekV2Config(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         if self.head_dim is None:
+            if self.hidden_size % self.num_attention_heads != 0:
+                raise ValueError(
+                    f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                    f"heads ({self.num_attention_heads})."
+                )
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -132,11 +137,7 @@ class DeepseekV2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
+        super().validate_architecture()
 
 
 __all__ = ["DeepseekV2Config"]

@@ -129,6 +129,11 @@ class MiniCPM3Config(PreTrainedConfig):
         if self.dim_model_base is None:
             self.dim_model_base = self.hidden_size
         if self.head_dim is None:
+            if self.hidden_size % self.num_attention_heads != 0:
+                raise ValueError(
+                    f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                    f"heads ({self.num_attention_heads})."
+                )
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -137,11 +142,7 @@ class MiniCPM3Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
+        super().validate_architecture()
 
     @property
     def logits_scaling(self) -> float:
