@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mistral native format integration: tekken tokenizer conversion."""
+"""Mistral native format integration: tokenizer and config conversion utilities."""
 
 from typing import TYPE_CHECKING
 
@@ -20,6 +20,14 @@ from ...utils import _LazyModule
 
 
 _import_structure = {
+    "native_config": [
+        "MistralNativeConfig",
+        "mistral_native_config_from_params",
+    ],
+    "params_conversion": [
+        "mistral_native_config_from_hf_config",
+        "mistral_native_config_to_hf_config",
+    ],
     "tokenizer": [
         "MistralConverter",
         "convert_tekken_tokenizer",
@@ -28,11 +36,12 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
-    from .tokenizer import (
-        MistralConverter,
-        convert_tekken_tokenizer,
-        resolve_mistral_format,
+    from .native_config import (
+        MistralNativeConfig,
+        mistral_native_config_from_params,
     )
+    from .params_conversion import mistral_native_config_from_hf_config, mistral_native_config_to_hf_config
+    from .tokenizer import MistralConverter, convert_tekken_tokenizer, resolve_mistral_format
 else:
     import sys
 
