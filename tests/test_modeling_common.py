@@ -52,6 +52,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.integrations.hub_kernels import preserve_module_forwards
 from transformers.integrations.moe import (
     batched_mm_experts_forward,
     deepgemm_bf16_experts_forward,
@@ -5786,8 +5787,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
 
-            # Using kernels should not raise a `ValueError`
-            model.use_kernels = True
+            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
+            with preserve_module_forwards(model):
+                # Using kernels should not raise a `ValueError`
+                model.use_kernels = True
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
