@@ -1572,7 +1572,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         generation_config: "GenerationConfig",
         **kwargs,
     ):
-        from ..cache_utils import DynamicCache
+        from ..cache_utils import DFlashCache
 
         # Get the assistant model and the embeddings of the main model
         self.assistant_model = assistant_model
@@ -1587,7 +1587,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
 
         # Prepare a cache for the assistant, and activate the past recording
-        self.cache = DynamicCache(config=self.assistant_model.config)
+        self.cache = DFlashCache(config=self.assistant_model.config)
         self.cache.activate_past_recording()
 
         self.is_main_model_prefill = True
@@ -1623,6 +1623,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         context_hidden_states: torch.Tensor = torch.cat(
             [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
         )
+
+        # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
+        self.cache.set_previous_accepted_tokens(num_last_main_model_tokens)
 
         if not self.is_main_model_prefill:
             self.cache.crop(-self.block_size)
