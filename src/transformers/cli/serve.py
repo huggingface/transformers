@@ -63,6 +63,15 @@ class Serve:
                 )
             ),
         ] = None,
+        tokenizer: Annotated[
+            str | None,
+            typer.Option(
+                help=(
+                    "Load the tokenizer/processor from this model id instead of the served one. Needed "
+                    "for a GGUF-only repo, which ships no tokenizer files."
+                )
+            ),
+        ] = None,
         reasoning: Annotated[
             ReasoningMode,
             typer.Option(
@@ -142,6 +151,7 @@ class Serve:
             attn_implementation=attn_implementation,
             quantization=quantization,
             gguf_file=gguf_file,
+            tokenizer=tokenizer,
             model_timeout=model_timeout,
             force_model=force_model,
         )

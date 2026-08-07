@@ -78,7 +78,7 @@ class GgufHfQuantizer(HfQuantizer):
                 "instead, which runs anywhere and costs the memory of an unquantized model."
             )
         self.kernel = get_gguf_kernel()
-        if self.kernel is None:
+        if not self.kernel:
             # The weights still stay packed: torch can unpack a block, so only the speed goes. Every
             # forward unpacks its own weight instead of computing on the blocks — about a third of the
             # speed here, for a third of the memory.
