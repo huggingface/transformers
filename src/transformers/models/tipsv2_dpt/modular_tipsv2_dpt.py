@@ -676,10 +676,6 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Example:
 
         ```python

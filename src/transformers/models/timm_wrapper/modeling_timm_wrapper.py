@@ -299,10 +299,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         **kwargs,
     ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
         output_hidden_states (`bool`, *optional*):

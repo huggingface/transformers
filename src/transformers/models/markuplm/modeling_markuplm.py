@@ -741,8 +741,6 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -837,10 +835,6 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 

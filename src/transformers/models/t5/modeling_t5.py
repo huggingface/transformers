@@ -1316,8 +1316,6 @@ class T5ForTokenClassification(T5PreTrainedModel):
             [What are input IDs?](../glossary#input-ids)
 
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs: BaseModelOutput = self.transformer(
             input_ids,

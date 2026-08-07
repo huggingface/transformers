@@ -38,7 +38,12 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.testing_utils import require_torch
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils.auto_docstring import (
+    ImageProcessorArgs,
+    ModelArgs,
+    ModelForArgs,
     auto_docstring,
+    get_args_doc_from_source,
+    get_model_for_args,
 )
 from transformers.utils.import_utils import is_torch_available
 
@@ -273,6 +278,22 @@ class DummyForTestModel(PreTrainedModel):
         >>> logits = outputs.logits
         ```
         """
+        pass
+
+
+@auto_docstring
+class DummyModelForSequenceClassification(PreTrainedModel):
+    config_class = DummyConfig
+
+    def __init__(self, config: DummyConfig):
+        super().__init__(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+    ) -> CausalLMOutputWithPast:
         pass
 
 
@@ -668,6 +689,28 @@ Args:
 """
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
+
+    def test_task_specific_args_selected_by_class_name_suffix(self):
+        self.assertIs(get_model_for_args("XForSequenceClassification"), ModelForArgs.ForSequenceClassification)
+        # Aliased tasks resolve to the class they are aliasing.
+        self.assertIs(get_model_for_args("XForVideoClassification"), ModelForArgs.ForImageClassification)
+
+        # A suffix that is not registered contributes no args.
+        source_args_dict = get_args_doc_from_source([ModelArgs, get_model_for_args("XForAbc")])
+        self.assertEqual(source_args_dict["labels"], ModelArgs.labels)
+
+        # Task args take precedence over the language modeling default of `ModelArgs`.
+        source_args_dict = get_args_doc_from_source(
+            [ModelArgs, get_model_for_args("XForSequenceClassification"), ImageProcessorArgs]
+        )
+        self.assertEqual(source_args_dict["labels"], ModelForArgs.ForSequenceClassification.labels)
+
+    def test_task_specific_labels_in_generated_forward_docstring(self):
+        self.maxDiff = None
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            DummyModelForSequenceClassification.forward.__doc__,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1016,12 +1016,6 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.funnel(
@@ -1084,12 +1078,6 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.funnel(
@@ -1164,12 +1152,6 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MultipleChoiceModelOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1240,10 +1222,6 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.funnel(
