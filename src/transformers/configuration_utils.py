@@ -701,6 +701,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         kwargs["revision"] = revision
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if not config_dict and os.path.isdir(pretrained_model_name_or_path):
+            # Local directory without a config file: raise instead of silently building the class
+            # default config. Hub ids are intentionally left to their existing handling (AutoConfig
+            # raises its own ValueError for config-less repos).
+            raise OSError(
+                f"It looks like the config file at '{pretrained_model_name_or_path}' was not found. "
+                "Make sure the directory contains a `config.json` file (for example the one saved "
+                "with `save_pretrained`)."
+            )
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
 
