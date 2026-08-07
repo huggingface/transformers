@@ -203,12 +203,7 @@ GGUF_ARCHS = {
 
 
 class SubtractOne(ConversionOps):
-    """Undo llama.cpp storing zero-centred RMSNorm weights as `w + 1`.
-
-    Runs in fp32 on purpose. The file holds these norms as F32 and llama.cpp computed `w + 1` in
-    fp32, so subtracting in fp32 recovers `w` exactly; the cast to the model dtype then reproduces
-    the original value. Subtracting after a bf16 cast loses ~1 ULP near 1.0.
-    """
+    """Undo llama.cpp storing zero-centred RMSNorm weights as `w + 1`."""
 
     def __init__(self, offset: float = 1.0):
         self.offset = offset
@@ -226,10 +221,7 @@ class SubtractOne(ConversionOps):
 
 
 class LogNegate(ConversionOps):
-    """`A_log = log(-a)`, undoing llama.cpp storing `ssm_a = -exp(A_log)`.
-
-    Not bit-exact: `exp` then `log` is a 1-2 ULP round trip.
-    """
+    """`A_log = log(-a)`, undoing llama.cpp storing `ssm_a = -exp(A_log)`."""
 
     @torch.no_grad
     def convert(

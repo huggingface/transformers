@@ -35,6 +35,9 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     key = lambda name: metadata[f"qwen35.{name}"]  # noqa: E731
     head_dim = key("attention.key_length")
     value_heads = key("ssm.time_step_rank")
+    # Optional: a file converted without the MTP block does not carry the key at all — unsloth's
+    # Qwen3.5-4B-Q4_K_M is one — and then every block in the file is a decoder layer.
+    mtp_layers = metadata.get("qwen35.nextn_predict_layers", 0)
 
     return {
         "model_type": "qwen3_5_text",
@@ -51,8 +54,8 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
         "linear_num_key_heads": key("ssm.group_count"),
         "linear_num_value_heads": value_heads,
         # the file counts the multi-token-prediction block as a layer; the decoder stack does not
-        "num_hidden_layers": key("block_count") - key("nextn_predict_layers"),
-        "mtp_num_hidden_layers": key("nextn_predict_layers"),
+        "num_hidden_layers": key("block_count") - mtp_layers,
+        "mtp_num_hidden_layers": mtp_layers,
         # the value dimension is stated whole, where transformers wants it per head
         "linear_value_head_dim": key("ssm.inner_size") // value_heads,
         "rope_parameters": {

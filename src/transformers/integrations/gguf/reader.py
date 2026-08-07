@@ -69,7 +69,6 @@ class GgufHeader(NamedTuple):
 
     path: str
     architecture: str
-    metadata: dict  # the file's metadata keys, as `read_gguf_metadata` returns them
     tensors: tuple[TensorInfo, ...]
     data_start: int  # where the tensor data begins, after the aligned metadata
 
@@ -113,7 +112,7 @@ class GgufHeader(NamedTuple):
         )
         # the data section starts at the next alignment boundary after the tensor table
         data_start = (pos + alignment - 1) // alignment * alignment
-        return cls(gguf_path, architecture, metadata, infos, data_start)
+        return cls(gguf_path, architecture, infos, data_start)
 
 
 def read_gguf_metadata(gguf_path: str) -> tuple[dict, tuple[str, ...]]:
@@ -240,10 +239,10 @@ class LazyGgufTensor:
         # TODO: the loader should be doing this. It skips the cast for a pre-quantized
         # checkpoint under renamed keys, a rule meant for tensors that carry quantization state and have
         # to keep the dtype they were stored in; every GGUF key is renamed, so it catches the norms too.
-        return values.to(dtype=self.dtype)
+        return values if self.dtype is None else values.to(dtype=self.dtype)
 
 
-def load_gguf_state_dict(header: GgufHeader, dtype=None) -> dict[str, LazyGgufTensor]:
+def load_gguf_state_dict(header: GgufHeader, dtype: "torch.dtype | None" = None) -> dict[str, LazyGgufTensor]:
     """`{gguf_name: LazyGgufTensor}` — the file's tensors, none of them read yet.
 
     A quantized tensor keeps its `(rows, bytes_per_row)` blocks; `dtype` is the dtype the others are

@@ -25,7 +25,7 @@ Every quantized tensor is read as raw blocks; anything with no packed module to 
 import torch
 
 from ..integrations.gguf.kernels import get_gguf_kernel
-from ..integrations.gguf.reader import GgufHeader
+from ..integrations.gguf.reader import GgufHeader, read_gguf_metadata
 from ..integrations.gguf.utils import (
     add_gguf_dequantize_ops,
     get_gguf_conversion_mapping,
@@ -105,10 +105,15 @@ class GgufHfQuantizer(HfQuantizer):
         Not in `__init__`: `gguf_file` can be a name inside a repo until the checkpoint is resolved to
         a local path. Called before the dtype is settled, because `update_dtype` reads the file's own
         float type off this header.
+
+        The full header is only built for an architecture this path handles: sizing the tensor table
+        rejects a quantization this reader cannot unpack, and the legacy loader may well handle it.
         """
         self.gguf_file = gguf_file
-        self.header = GgufHeader.from_file(gguf_file)
-        self.supported = is_gguf_arch_supported(self.header)
+        metadata, _ = read_gguf_metadata(gguf_file)
+        self.supported = is_gguf_arch_supported(metadata["general.architecture"])
+        if self.supported:
+            self.header = GgufHeader.from_file(gguf_file)
 
     def update_dtype(self, dtype):
         """Settle the dtype the model is loaded in, and keep it.
@@ -120,9 +125,14 @@ class GgufHfQuantizer(HfQuantizer):
         Kept because `update_weight_conversions` needs it for the tensors it has to dequantize.
         """
         if dtype is None:
-            file_dtype = self.header.dtype
-            # default to bf16 in case the model is quantized
-            dtype = file_dtype if file_dtype is not None else torch.bfloat16
+            if not self.supported:
+                # No header on the legacy path, and nothing else says what the file holds, so those
+                # loads keep the dtype-less default they have always had.
+                self.dtype = torch.get_default_dtype()
+                return self.dtype
+            # A `None` here means the file is quantized, so it has no float type of its own. f32 is what
+            # the matmul kernels write and what its norms are stored in, so nothing has to be converted.
+            dtype = self.header.dtype if self.header.dtype is not None else torch.float32
         self.dtype = dtype
         return dtype
 

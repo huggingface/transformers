@@ -13,9 +13,9 @@
 # limitations under the License.
 """Which GGUF weights keep their bytes packed, and the modules that hold them.
 
-`get_gguf_plan` answers the question from the file alone — header, arch table and kernel — so it
-needs no model instance. `replace_with_gguf_modules` then settles which of the plan's entries really
-stay packed: only a module that can hold blocks gets swapped, and the rest are dequantized at load.
+`get_gguf_plan` answers from the file alone — header, arch table and kernel — so it needs no model
+instance. `replace_with_gguf_modules` then settles which of the plan's entries really stay packed:
+only a module that can hold blocks gets swapped, and the rest are dequantized at load.
 
 Keeping a weight packed is only worth it when a fused dequant-matmul kernel can read it: without one,
 unpacking the whole weight on every forward costs more than unpacking it once at load. That is why
@@ -39,8 +39,9 @@ from .reader import GgufHeader
 logger = logging.get_logger(__name__)
 
 
-def is_gguf_arch_supported(header: GgufHeader) -> bool:
-    return header.architecture in GGUF_ARCHS
+def is_gguf_arch_supported(gguf_arch: str) -> bool:
+    """Whether this path handles the architecture, or the legacy loader has to."""
+    return gguf_arch in GGUF_ARCHS
 
 
 def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]:
@@ -71,7 +72,6 @@ def get_gguf_plan(header: GgufHeader, mapping: list[WeightTransform]) -> tuple[d
         for renaming in renamings:
             param_name, _ = renaming.rename_source_key(param_name)
         quantized[param_name] = ggml_type
-
         # every conversion applied to this tensor must be safe on packed bytes
         converter = next((entry for entry in converters if entry.rename_source_key(param_name)[1]), None)
         if converter is None or all(getattr(op, "supports_packed", False) for op in converter.operations):
@@ -85,10 +85,9 @@ def add_gguf_dequantize_ops(mapping: list[WeightTransform], to_unpack: dict[str,
     `to_unpack` maps a parameter name to its ggml type. It holds only the tensors that need unpacking:
     the ones the file stores quantized whose module cannot compute on blocks.
     """
+    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
     if not to_unpack:
         return mapping
-    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
-
     dequantize_op = Dequantize(to_unpack, dtype)
     for converter in converters:
         converter.operations.insert(0, dequantize_op)
@@ -161,7 +160,7 @@ class GgufLinear(nn.Module):
 class GgufEmbedding(nn.Module):
     """`nn.Embedding` whose table stays as GGUF blocks."""
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, ggml_type: int, dtype=None, device=None):
+    def __init__(self, num_embeddings: int, embedding_dim: int, ggml_type: int, dtype=None):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
@@ -169,9 +168,7 @@ class GgufEmbedding(nn.Module):
         self.compute_dtype = dtype or torch.get_default_dtype()
         block_elems, block_bytes = GGML_BLOCK[ggml_type]
         self.weight = nn.Parameter(
-            torch.empty(
-                (num_embeddings, embedding_dim // block_elems * block_bytes), dtype=torch.uint8, device=device
-            ),
+            torch.empty((num_embeddings, embedding_dim // block_elems * block_bytes), dtype=torch.uint8),
             requires_grad=False,
         )
 
