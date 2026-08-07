@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GlmMoeDsa model."""
 
+import os
 import unittest
 
 import torch
@@ -21,12 +22,12 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    Cache,
     FineGrainedFP8Config,
     GlmMoeDsaConfig,
     is_torch_available,
     set_seed,
 )
+from transformers.distributed import DistributedConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -80,23 +81,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_default_mlp_layer_types(self):
         config = GlmMoeDsaConfig(num_hidden_layers=8)
@@ -172,15 +156,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("GLM-MoE-DSA uses qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
-
 
 @require_torch_accelerator
 @slow
@@ -204,7 +179,7 @@ class GlmMoeDsaIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            tp_plan="auto",
+            distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
             attn_implementation="eager",
         )
 

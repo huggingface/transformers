@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -100,8 +100,7 @@ The `"deepgemm"` backend routes expert matmuls through the [DeepGEMM](https://gi
 The `"deepgemm"` backend requires:
 
 - CUDA GPU with compute capability ≥ 9.0 (Hopper or newer).
-- CUDA runtime 12.3 or later on Hopper, 12.9 or later on Blackwell.
-- `nvcc`/`nvrtc` available on the system for the kernel's JIT compilation.
+- A full CUDA toolkit with `nvcc` for the kernel's JIT compilation, version 12.3 or later on Hopper and 12.9 or later on Blackwell. A runtime-only install has no `nvcc` and is rejected. Transformers locates the toolkit through `CUDA_HOME`, `CUDA_PATH`, `nvcc` on `PATH`, then `/usr/local/cuda`.
 - The [kernels](https://github.com/huggingface/kernels) package.
 
 ```py
@@ -152,7 +151,7 @@ On Blackwell (SM100+), set `experts_implementation="deepgemm_megamoe"` to run a 
 
 This backend requires:
 
-- A Blackwell GPU (compute capability ≥ 10.0) with CUDA runtime 12.9 or later.
+- A Blackwell GPU (compute capability ≥ 10.0) with a CUDA toolkit (`nvcc`) 12.9 or later.
 - FP4-packed expert weights paired with UE8M0 weight scales (the pre-quantized checkpoint typically declares `expert_dtype="fp4"` and `scale_fmt="ue8m0"` in its config).
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
@@ -214,7 +213,8 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="grouped_mm",
-).eval().cuda()
+    device_map="auto",
+).eval()
 
 # Works for grouped_mm (no CUDA graphs)
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")

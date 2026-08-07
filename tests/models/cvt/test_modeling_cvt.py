@@ -19,7 +19,7 @@ from math import floor
 
 from transformers import CvtConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -266,6 +266,13 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.9282, 0.9025, -0.3145]).to(torch_device)
+        # fmt: off
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor([0.9282, 0.9025, -0.3145]),
+                ("xpu", 5): torch.tensor([0.92800, 0.9023, -0.3142]),
+            }
+        ).get_expectation().to(torch_device)
+        # fmt: on
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)

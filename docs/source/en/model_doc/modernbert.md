@@ -120,7 +120,7 @@ inputs = prepare_text_for_padding_free(
     ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    model_id, attn_implementation="flash_attention_2", device_map="cuda"
+    model_id, attn_implementation="flash_attention_2", device_map="auto"
 )
 
 # Optional: use torch.compile for faster inference

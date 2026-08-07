@@ -1929,7 +1929,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 f"so that their combined length is less than {self.config.max_target_positions}."
             )
 
-        num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1] - 1)
+        num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1])
 
         # Make sure we don't get larger than `max_length`
         if generation_config.max_length is not None and generation_config.max_new_tokens is None:
@@ -1937,6 +1937,7 @@ class WhisperGenerationMixin(GenerationMixin):
             logger.info(
                 f"Increase max_length from {generation_config.max_length} to {max_length} since input is conditioned on previous segment."
             )
+            generation_config.max_length = max_length
         elif (
             generation_config.max_new_tokens is not None
             and generation_config.max_new_tokens + decoder_input_ids.shape[-1] > config.max_target_positions

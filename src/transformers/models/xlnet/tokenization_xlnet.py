@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for XLNet model."""
 
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_base import _get_prepend_scheme
@@ -111,6 +111,7 @@ class XLNetTokenizer(TokenizersBackend):
         pad_token="<pad>",
         cls_token="<cls>",
         mask_token="<mask>",
+        _spm_precompiled_charsmap=None,
         additional_special_tokens=None,
         **kwargs,
     ):
@@ -140,7 +141,8 @@ class XLNetTokenizer(TokenizersBackend):
         if do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         add_prefix_space = True
