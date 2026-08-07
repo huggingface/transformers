@@ -42,8 +42,10 @@ from transformers import CLIPImageProcessor, RadioModel
 
 hf_repo = "nvidia/C-RADIOv4-H"
 
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
 model = RadioModel.from_pretrained(hf_repo)
-model.eval().cuda()
+model.eval().to(device)
 
 image_processor = CLIPImageProcessor(
     size={"height": 224, "width": 224}, do_resize=True, do_center_crop=False, do_normalize=False
@@ -52,7 +54,7 @@ image_processor = CLIPImageProcessor(
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-pixel_values = pixel_values.cuda()
+pixel_values = pixel_values.to(device)
 
 with torch.no_grad():
     outputs = model(pixel_values)

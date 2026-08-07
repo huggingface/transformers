@@ -110,15 +110,18 @@ from transformers import AutoImageProcessor
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backend="torchvision")
 ```
 
-Control which device processing is performed on with the `device` argument. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise it falls back to CPU. The example below runs processing on a GPU.
+Control which device processing is performed on with the `device` argument. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise it falls back to CPU. The example below runs processing on an accelerator.
 
 ```py
+import torch
 from torchvision.io import read_image
 from transformers import DetrImageProcessor
 
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
 images = read_image("image.jpg")
 processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
-images_processed = processor(images, return_tensors="pt", device="cuda")
+images_processed = processor(images, return_tensors="pt", device=device)
 ```
 
 <details>
