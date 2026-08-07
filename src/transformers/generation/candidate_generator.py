@@ -1552,9 +1552,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
     Args:
         assistant_model (`PreTrainedModel`):
             The model to be used for generating candidates. This model should be smaller than the main model.
-        target_model_input_embeddings (`torch.nn.Embedding`):
+        main_model_input_embeddings (`torch.nn.Embedding`):
             The input embedding table from main model, used to get the embeddings from the last seen token.
-        target_model_output_embeddings (`torch.nn.Linear`):
+        main_model_output_embeddings (`torch.nn.Linear`):
             The output embedding table from main model, used to get the candidate logits.
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
@@ -1566,10 +1566,10 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     def __init__(
         self,
-        assistant_model: "PreTrainedModel",
+        assistant_model: PreTrainedModel,
         main_model_input_embeddings: nn.Embedding,
         main_model_output_embeddings: nn.Linear,
-        generation_config: "GenerationConfig",
+        generation_config: GenerationConfig,
         **kwargs,
     ):
         from ..cache_utils import DynamicCache
