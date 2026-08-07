@@ -244,6 +244,12 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_fixed_text_backbone(self):
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
+        model = Apertus1p5ForConditionalGeneration(config)
+        self.assertIsInstance(model.model.language_model, Apertus1p5TextModel)
+
     @pytest.mark.generate
     @unittest.skip("Apertus1p5 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
