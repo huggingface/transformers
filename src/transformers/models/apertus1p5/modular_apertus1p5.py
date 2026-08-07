@@ -326,6 +326,7 @@ class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
         where `factor` is `config.spatial_scale_factor` (16 by default).
     """
 
+    pooler_output: tuple[torch.FloatTensor] | None = None
     image_tokens: list[torch.LongTensor] | None = None
 
 
@@ -339,6 +340,7 @@ class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
         One 1D tensor of `ceil(length / hop)` discrete codebook indices per input clip.
     """
 
+    pooler_output: tuple[torch.FloatTensor] | None = None
     audio_tokens: list[torch.LongTensor] | None = None
 
 
@@ -491,6 +493,28 @@ class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
         return logits.argmax(dim=1)  # (batch_size, height, width)
 
 
+@auto_docstring
+class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
+    config: Apertus1p5VisionTokenizerConfig
+    base_model_prefix = "vision_tokenizer"
+    input_modalities = ("image",)
+    _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
+    # code assignment is an argmax over codebook logits: half precision flips ~10% of codes (bf16, 131k codebook),
+    # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
+    _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        elif isinstance(module, nn.GroupNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight)
+
+
 @auto_docstring(
     custom_intro="""
     The Apertus 1.5 vision tokenizer: an encode-only port of the EMU3.5 Vision Tokenizer by BAAI
@@ -508,26 +532,8 @@ class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
     not validate it.
     """
 )
-class Apertus1p5VisionTokenizerModel(PreTrainedModel):
-    config: Apertus1p5VisionTokenizerConfig
-    base_model_prefix = "vision_tokenizer"
+class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
-    # code assignment is an argmax over codebook logits: half precision flips ~10% of codes (bf16, 131k codebook),
-    # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
-    _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        elif isinstance(module, nn.GroupNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight)
 
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__(config)
@@ -1315,5 +1321,6 @@ __all__ = [
     "Apertus1p5TextModel",
     "Apertus1p5TextPreTrainedModel",
     "Apertus1p5VisionTokenizerModel",
+    "Apertus1p5VisionTokenizerPreTrainedModel",
     "Apertus1p5Model",
 ]
