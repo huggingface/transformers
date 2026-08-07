@@ -62,7 +62,7 @@ class Qwen3NextRMSNormGated(nn.Module):
         self.variance_epsilon = eps
         self.activation = "silu"
 
-    def forward(self, hidden_states, gate=None):
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -935,7 +935,8 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids: torch.LongTensor = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+            position_ids = position_ids + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
