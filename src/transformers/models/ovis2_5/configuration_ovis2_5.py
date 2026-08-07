@@ -82,33 +82,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         elif isinstance(self.fullatt_block_indexes, list):
             self.fullatt_block_indexes = tuple(self.fullatt_block_indexes)
 
-        if self.num_patches >= 0:
-            raise ValueError("Ovis2.5 only supports convolutional patch embedding (`num_patches < 0`).")
-        if self.temporal_patch_size != 1:
-            raise ValueError("The released Ovis2.5 vision tower requires `temporal_patch_size=1`.")
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError("`hidden_size` must be divisible by `num_attention_heads`.")
-        if self.image_size % self.patch_size != 0:
-            raise ValueError("`image_size` must be divisible by `patch_size`.")
-        if self.hidden_stride <= 0:
-            raise ValueError(f"`hidden_stride` must be positive, got {self.hidden_stride}.")
-        if self.window_size <= 0:
-            raise ValueError(f"`window_size` must be positive, got {self.window_size}.")
-        if self.vocab_size <= self.num_visual_indicator_tokens:
-            raise ValueError("`vocab_size` must be larger than `num_visual_indicator_tokens`.")
-        if self.num_visual_indicator_tokens != 4:
-            raise ValueError("Ovis2.5 requires exactly four image/video boundary indicator tokens.")
-        if self.fullatt_block_indexes is not None and (
-            len(set(self.fullatt_block_indexes)) != len(self.fullatt_block_indexes)
-            or any(
-                layer_index < 0 or layer_index >= self.num_hidden_layers for layer_index in self.fullatt_block_indexes
-            )
-        ):
-            raise ValueError(
-                "`fullatt_block_indexes` must contain unique indices between 0 and "
-                f"{self.num_hidden_layers - 1}, got {self.fullatt_block_indexes}."
-            )
-
         super().__post_init__(**kwargs)
 
 
@@ -166,40 +139,14 @@ class Ovis2_5Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             text_config = dict(self.text_config)
-            text_model_type = text_config.pop("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+            text_config.pop("model_type", None)
+            self.text_config = CONFIG_MAPPING["qwen3"](**text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        if self.text_config.model_type != "qwen3":
-            raise ValueError(
-                f"Ovis2.5 checkpoints require a Qwen3 language model, got `{self.text_config.model_type}`."
-            )
-        if self.vision_config.num_visual_indicator_tokens != 4:
-            raise ValueError("Ovis2.5 requires exactly four image/video boundary indicator tokens.")
-        if self.visual_vocab_size <= self.vision_config.num_visual_indicator_tokens:
-            raise ValueError(
-                "`visual_vocab_size` must be larger than the four reserved visual indicator tokens, "
-                f"got {self.visual_vocab_size}."
-            )
-
         self.vision_config.vocab_size = self.visual_vocab_size
-        self.text_config.tie_word_embeddings = bool(self.text_config.tie_word_embeddings)
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        visual_token_ids = (
-            self.visual_atom_token_id,
-            self.image_start_token_id,
-            self.image_end_token_id,
-            self.video_start_token_id,
-            self.video_end_token_id,
-        )
-        if len(set(visual_token_ids)) != len(visual_token_ids):
-            raise ValueError(f"Ovis2.5's five positive visual token IDs must be distinct, got {visual_token_ids}.")
-        if any(token_id < 0 or token_id >= self.text_config.vocab_size for token_id in visual_token_ids):
-            raise ValueError(
-                "Ovis2.5's five positive visual token IDs must be valid text-vocabulary indices, "
-                f"got {visual_token_ids} for vocab size {self.text_config.vocab_size}."
-            )
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
         # These aliases let generic multimodal utilities identify the repeated
         # placeholder token while preserving Ovis2.5's distinct boundary IDs.
         self.image_token_id = self.visual_atom_token_id

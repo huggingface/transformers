@@ -1,6 +1,19 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
-*This model was published in HF papers on 2025-08-16 and contributed to Hugging Face Transformers on 2026-07-30.*
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+*This model was published in HF papers on 2025-08-16 and contributed to Hugging Face Transformers on 2026-08-06.*
 
 # Ovis2.5
 
@@ -27,17 +40,18 @@ Convert either released checkpoint without executing its remote modeling code:
 
 ```bash
 python src/transformers/models/ovis2_5/convert_ovis2_5_weights_to_hf.py \
-    --model-id AIDC-AI/Ovis2.5-2B \
-    --dst-dir Ovis2.5-2B-hf
+    --input_model_id AIDC-AI/Ovis2.5-2B \
+    --output_dir Ovis2.5-2B-hf
 
 python src/transformers/models/ovis2_5/convert_ovis2_5_weights_to_hf.py \
-    --model-id AIDC-AI/Ovis2.5-9B \
-    --dst-dir Ovis2.5-9B-hf
+    --input_model_id AIDC-AI/Ovis2.5-9B \
+    --output_dir Ovis2.5-9B-hf
 ```
 
-The conversion requires the Transformers vision dependencies, including Torchvision. It validates the released
-architecture, applies the native weight mapping, registers the five visual tokens at their trained embedding rows,
-and writes native image and video processor metadata.
+The conversion requires the Transformers vision dependencies, including Torchvision. It applies the registered native
+weight mapping, fails on missing, unexpected, or mismatched weights, registers the five native visual special tokens
+without resizing the text embedding matrix, writes native image and video processor metadata, and reloads the converted
+checkpoint.
 
 ## Image inference
 
@@ -89,9 +103,9 @@ they should appear in the prompt.
 
 ## Video inference
 
-Ovis2.5 was released with uniformly sampled video frames; the official example uses eight. Load and sample the video
-before placing the decoded frames in a `video` content item. The processor returns `pixel_values_videos` and
-`video_grid_thw` along with the tokenized prompt.
+The official example uniformly samples eight frames. Load and sample the video before placing the decoded frames in a
+`video` content item. The processor returns `pixel_values_videos` and `video_grid_thw` along with the tokenized prompt.
+Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
 
 ```python
 from transformers.video_utils import load_video
@@ -115,6 +129,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     enable_thinking=False,
+    processor_kwargs={"videos_kwargs": {"max_pixels": 896 * 896}},
 ).to(model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=256)
@@ -122,8 +137,6 @@ generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
-
-
 
 ## Thinking mode
 

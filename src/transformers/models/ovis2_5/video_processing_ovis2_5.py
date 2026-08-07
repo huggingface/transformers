@@ -61,13 +61,6 @@ def _validate_patch_grid(height: int, width: int, patch_size: int, merge_size: i
         )
 
 
-def _validate_temporal_patch_size(temporal_patch_size: int) -> None:
-    if temporal_patch_size != 1:
-        raise ValueError(
-            f"The released Ovis2.5 checkpoints require `temporal_patch_size=1`, got {temporal_patch_size}."
-        )
-
-
 class Ovis2_5VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `448 * 448`):
@@ -77,7 +70,7 @@ class Ovis2_5VideoProcessorKwargs(VideosKwargs, total=False):
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size used by the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
-        The temporal patch size used by the vision encoder. The released Ovis2.5 checkpoints require a value of 1.
+        The temporal patch size used by the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The spatial merge size between the vision encoder and language model.
     """
@@ -145,11 +138,8 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        if not videos:
-            raise ValueError("Ovis2.5 requires at least one non-empty video.")
         if any(video.shape[0] == 0 for video in videos):
             raise ValueError("Ovis2.5 does not support videos with zero frames.")
-        _validate_temporal_patch_size(temporal_patch_size)
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -231,7 +221,6 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
         patch_size = videos_kwargs.get("patch_size", self.patch_size)
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        _validate_temporal_patch_size(temporal_patch_size)
         do_resize = videos_kwargs.get("do_resize", self.do_resize)
         if do_resize:
             min_pixels = videos_kwargs.get("min_pixels", self.size["shortest_edge"])

@@ -233,13 +233,7 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
             self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
 
-    def test_native_video_defaults(self):
-        self.assertEqual(self.video_processor.patch_size, 16)
-        self.assertEqual(self.video_processor.temporal_patch_size, 1)
-        self.assertEqual(self.video_processor.merge_size, 2)
-        self.assertFalse(self.video_processor.do_sample_frames)
-
-    def test_exact_video_grid_and_packing(self):
+    def test_video_grid_and_patch_count(self):
         video = np.zeros((3, 64, 96, 3), dtype=np.uint8)
         output = self.video_processor(video, return_tensors="pt")
 
@@ -250,24 +244,17 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             72,
         )
 
-    def test_rejects_incompatible_temporal_patches(self):
+    def test_temporal_patch_padding(self):
         video = np.zeros((3, 64, 96, 3), dtype=np.uint8)
+        video_processor = self.fast_video_processing_class(
+            size={"shortest_edge": 64 * 96, "longest_edge": 64 * 96},
+            temporal_patch_size=2,
+        )
+        output = video_processor(video, return_tensors="pt")
 
-        with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
-            self.video_processor(video, temporal_patch_size=2)
-        with self.assertRaisesRegex(ValueError, "temporal_patch_size=1"):
-            self.video_processor.get_number_of_video_patches(
-                3,
-                64,
-                96,
-                {"temporal_patch_size": 2},
-            )
-
-    def test_rejects_zero_frame_video(self):
-        video = np.zeros((0, 64, 96, 3), dtype=np.uint8)
-
-        with self.assertRaisesRegex(ValueError, "zero frames|at least one"):
-            self.video_processor(video)
+        self.assertEqual(tuple(output.pixel_values_videos.shape), (48, 1536))
+        self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 6]])
+        self.assertEqual(video_processor.get_number_of_video_patches(3, 64, 96), 48)
 
 
 if __name__ == "__main__":

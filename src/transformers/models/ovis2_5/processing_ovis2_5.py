@@ -13,8 +13,6 @@
 # limitations under the License.
 """Processor class for Ovis2.5."""
 
-import math
-
 from ...image_utils import make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
@@ -25,24 +23,15 @@ class Ovis2_5ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-def _as_list(value):
-    return value.tolist() if hasattr(value, "tolist") else value
-
-
-def _grid_product(grid) -> int:
-    grid = _as_list(grid)
-    return math.prod(int(dimension) for dimension in grid)
-
-
 @auto_docstring
 class Ovis2_5Processor(ProcessorMixin):
     valid_processor_kwargs = Ovis2_5ProcessorKwargs
 
     def __init__(
         self,
-        image_processor,
-        tokenizer,
-        video_processor,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
         chat_template=None,
         image_token="<image>",
         video_token="<video>",
@@ -132,67 +121,21 @@ class Ovis2_5Processor(ProcessorMixin):
         if video_count > 1:
             raise ValueError(f"Ovis2.5 supports exactly one video at a time, but received {video_count}.")
 
-        if text is None:
-            text_samples = []
-        elif isinstance(text, str):
-            text_samples = [text]
-        elif isinstance(text, (list, tuple)) and all(isinstance(sample, str) for sample in text):
-            text_samples = list(text)
-        elif image_count or video_count:
-            raise ValueError("Multimodal Ovis2.5 inputs require raw string text containing visual placeholders.")
-        else:
-            return
-
-        protected_tokens = (
-            self.visual_atom_token,
-            self.image_start_token,
-            self.image_end_token,
-            self.video_start_token,
-            self.video_end_token,
-        )
-        for sample in text_samples:
-            if any(token in sample for token in protected_tokens):
-                raise ValueError(
-                    "Ovis2.5 visual atom and indicator tokens are processor-generated and must not occur in raw text."
-                )
-
-        image_placeholder_count = sum(sample.count(self.image_token) for sample in text_samples)
-        video_placeholder_count = sum(sample.count(self.video_token) for sample in text_samples)
-        if image_placeholder_count and video_placeholder_count:
-            raise ValueError("Ovis2.5 text cannot contain both `<image>` and `<video>` placeholders.")
-        if image_placeholder_count != image_count:
-            raise ValueError(
-                "The number of Ovis2.5 image placeholders must match the number of images: "
-                f"got {image_placeholder_count} placeholder(s) and {image_count} image(s)."
-            )
-        if video_placeholder_count != video_count:
-            raise ValueError(
-                "The number of Ovis2.5 video placeholders must match the number of videos: "
-                f"got {video_placeholder_count} placeholder(s) and {video_count} video(s)."
-            )
-
-    def _get_num_visual_tokens(self, grid, merge_size: int) -> int:
-        num_patches = _grid_product(grid)
-        merge_length = merge_size**2
-        if num_patches % merge_length != 0:
-            raise ValueError(
-                f"Visual patch count {num_patches} is not divisible by Ovis2.5 merge length {merge_length}."
-            )
-        return num_patches // merge_length
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        merge_size = kwargs.get("merge_size", self.image_processor.merge_size)
-        num_visual_tokens = self._get_num_visual_tokens(image_inputs["image_grid_thw"][image_idx], merge_size)
+        merge_length = self.image_processor.merge_size**2
+        num_visual_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_start_token + self.visual_atom_token * num_visual_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        merge_size = kwargs.get("merge_size", self.video_processor.merge_size)
-        num_visual_tokens = self._get_num_visual_tokens(video_inputs["video_grid_thw"][video_idx], merge_size)
+        merge_length = self.video_processor.merge_size**2
+        num_visual_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_start_token + self.visual_atom_token * num_visual_tokens + self.video_end_token
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs, modalities: list[str]):
         super()._check_special_mm_tokens(text, text_inputs, modalities)
-        input_ids = _as_list(text_inputs["input_ids"])
+        input_ids = text_inputs["input_ids"]
+        if hasattr(input_ids, "tolist"):
+            input_ids = input_ids.tolist()
         if input_ids and isinstance(input_ids[0], int):
             input_ids = [input_ids]
 
@@ -216,11 +159,11 @@ class Ovis2_5Processor(ProcessorMixin):
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute multimodal token counts without materializing pixel values."""
         vision_data = {}
-        images_kwargs = dict(kwargs.get("images_kwargs", kwargs))
-        videos_kwargs = dict(kwargs.get("videos_kwargs", kwargs))
 
         if image_sizes is not None:
-            merge_size = images_kwargs.get("merge_size", self.image_processor.merge_size)
+            images_kwargs = dict(Ovis2_5ProcessorKwargs._defaults.get("images_kwargs", {}))
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(height, width, images_kwargs)
                 for height, width in image_sizes
@@ -229,7 +172,9 @@ class Ovis2_5Processor(ProcessorMixin):
             vision_data["num_image_tokens"] = [num_patches // merge_size**2 for num_patches in num_image_patches]
 
         if video_sizes is not None:
-            merge_size = videos_kwargs.get("merge_size", self.video_processor.merge_size)
+            videos_kwargs = dict(Ovis2_5ProcessorKwargs._defaults.get("videos_kwargs", {}))
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_number_of_video_patches(num_frames, height, width, videos_kwargs)
                 for num_frames, height, width in video_sizes

@@ -31,8 +31,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_position_ids,
@@ -174,33 +174,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         elif isinstance(self.fullatt_block_indexes, list):
             self.fullatt_block_indexes = tuple(self.fullatt_block_indexes)
 
-        if self.num_patches >= 0:
-            raise ValueError("Ovis2.5 only supports convolutional patch embedding (`num_patches < 0`).")
-        if self.temporal_patch_size != 1:
-            raise ValueError("The released Ovis2.5 vision tower requires `temporal_patch_size=1`.")
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError("`hidden_size` must be divisible by `num_attention_heads`.")
-        if self.image_size % self.patch_size != 0:
-            raise ValueError("`image_size` must be divisible by `patch_size`.")
-        if self.hidden_stride <= 0:
-            raise ValueError(f"`hidden_stride` must be positive, got {self.hidden_stride}.")
-        if self.window_size <= 0:
-            raise ValueError(f"`window_size` must be positive, got {self.window_size}.")
-        if self.vocab_size <= self.num_visual_indicator_tokens:
-            raise ValueError("`vocab_size` must be larger than `num_visual_indicator_tokens`.")
-        if self.num_visual_indicator_tokens != 4:
-            raise ValueError("Ovis2.5 requires exactly four image/video boundary indicator tokens.")
-        if self.fullatt_block_indexes is not None and (
-            len(set(self.fullatt_block_indexes)) != len(self.fullatt_block_indexes)
-            or any(
-                layer_index < 0 or layer_index >= self.num_hidden_layers for layer_index in self.fullatt_block_indexes
-            )
-        ):
-            raise ValueError(
-                "`fullatt_block_indexes` must contain unique indices between 0 and "
-                f"{self.num_hidden_layers - 1}, got {self.fullatt_block_indexes}."
-            )
-
         super().__post_init__(**kwargs)
 
 
@@ -258,40 +231,14 @@ class Ovis2_5Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             text_config = dict(self.text_config)
-            text_model_type = text_config.pop("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+            text_config.pop("model_type", None)
+            self.text_config = CONFIG_MAPPING["qwen3"](**text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        if self.text_config.model_type != "qwen3":
-            raise ValueError(
-                f"Ovis2.5 checkpoints require a Qwen3 language model, got `{self.text_config.model_type}`."
-            )
-        if self.vision_config.num_visual_indicator_tokens != 4:
-            raise ValueError("Ovis2.5 requires exactly four image/video boundary indicator tokens.")
-        if self.visual_vocab_size <= self.vision_config.num_visual_indicator_tokens:
-            raise ValueError(
-                "`visual_vocab_size` must be larger than the four reserved visual indicator tokens, "
-                f"got {self.visual_vocab_size}."
-            )
-
         self.vision_config.vocab_size = self.visual_vocab_size
-        self.text_config.tie_word_embeddings = bool(self.text_config.tie_word_embeddings)
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        visual_token_ids = (
-            self.visual_atom_token_id,
-            self.image_start_token_id,
-            self.image_end_token_id,
-            self.video_start_token_id,
-            self.video_end_token_id,
-        )
-        if len(set(visual_token_ids)) != len(visual_token_ids):
-            raise ValueError(f"Ovis2.5's five positive visual token IDs must be distinct, got {visual_token_ids}.")
-        if any(token_id < 0 or token_id >= self.text_config.vocab_size for token_id in visual_token_ids):
-            raise ValueError(
-                "Ovis2.5's five positive visual token IDs must be valid text-vocabulary indices, "
-                f"got {visual_token_ids} for vocab size {self.text_config.vocab_size}."
-            )
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
         # These aliases let generic multimodal utilities identify the repeated
         # placeholder token while preserving Ovis2.5's distinct boundary IDs.
         self.image_token_id = self.visual_atom_token_id
@@ -316,66 +263,43 @@ class Ovis2_5VisionRotaryEmbedding(VisionRotaryEmbedding):
 class Ovis2_5VisionEmbeddings(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
-        if config.num_patches >= 0:
-            raise ValueError("Ovis2.5 only supports convolutional patch embedding (`num_patches < 0`).")
         self.config = config
         self.embed_dim = config.hidden_size
         self.patch_size = config.patch_size
-        self.position_embedding_size = config.image_size // config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-            padding="valid",
-            bias=True,
-        )
-        self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
+        if config.num_patches > 0:
+            self.patch_embedding = nn.Linear(
+                config.num_channels * config.patch_size**2,
+                config.hidden_size,
+            )
+            if config.preserve_original_pe:
+                self.position_embedding_size = int(config.num_patches**0.5)
+                self.position_embedding = nn.Embedding(config.num_patches, config.hidden_size)
+        else:
+            self.patch_embedding = nn.Conv2d(
+                in_channels=config.num_channels,
+                out_channels=config.hidden_size,
+                kernel_size=config.patch_size,
+                stride=config.patch_size,
+                padding="valid",
+                bias=True,
+            )
+            if config.preserve_original_pe:
+                self.position_embedding_size = config.image_size // config.patch_size
+                self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
-        if pixel_values.ndim != 2:
-            raise ValueError(
-                "`pixel_values` must be a packed two-dimensional patch tensor of shape "
-                f"`(num_patches, patch_dim)`, got shape {tuple(pixel_values.shape)}."
-            )
-        expected_patch_dim = (
-            self.config.num_channels
-            * self.config.temporal_patch_size
-            * self.config.patch_size
-            * self.config.patch_size
-        )
-        if pixel_values.shape[1] != expected_patch_dim:
-            raise ValueError(f"Ovis2.5 expected patch dimension {expected_patch_dim}, got {pixel_values.shape[1]}.")
-        if grid_thw.ndim != 2 or grid_thw.shape[1] != 3:
-            raise ValueError(f"`grid_thw` must have shape `(num_visual_inputs, 3)`, got {tuple(grid_thw.shape)}.")
-
         grid_values = grid_thw.tolist()
-        if any(dimension <= 0 for grid in grid_values for dimension in grid):
-            raise ValueError(f"`grid_thw` dimensions must be positive, got {grid_values}.")
-        if any(
-            grid_h % self.config.hidden_stride != 0 or grid_w % self.config.hidden_stride != 0
-            for _, grid_h, grid_w in grid_values
-        ):
-            raise ValueError(
-                "Every Ovis2.5 spatial patch grid must be divisible by `hidden_stride`, "
-                f"got grid_thw={grid_values} and hidden_stride={self.config.hidden_stride}."
-            )
-        expected_num_patches = sum(grid_t * grid_h * grid_w for grid_t, grid_h, grid_w in grid_values)
-        if pixel_values.shape[0] != expected_num_patches:
-            raise ValueError(
-                f"`pixel_values` contains {pixel_values.shape[0]} patches, but `grid_thw` describes "
-                f"{expected_num_patches}."
-            )
-
         target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.view(
-            -1,
-            self.config.num_channels * self.config.temporal_patch_size,
-            self.patch_size,
-            self.patch_size,
-        )
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
+        if isinstance(self.patch_embedding, nn.Linear):
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        else:
+            pixel_values = pixel_values.view(
+                -1,
+                self.config.num_channels * self.config.temporal_patch_size,
+                self.patch_size,
+                self.patch_size,
+            )
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
 
         if not self.config.preserve_original_pe:
             return patch_embeds
@@ -458,11 +382,26 @@ class Ovis2_5VisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Ovis2_5VisionHiddenStateRecorder(nn.Module):
+    """Restore encoder states from window order before output hooks record them."""
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        reverse_indices: torch.LongTensor,
+        spatial_merge_unit: int,
+    ) -> torch.Tensor:
+        sequence_length = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+        return hidden_states[reverse_indices].reshape(sequence_length, -1)
+
+
 class Ovis2_5VisionEncoder(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([Ovis2_5VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.hidden_state_recorder = Ovis2_5VisionHiddenStateRecorder()
 
     def forward(
         self,
@@ -500,7 +439,7 @@ class Ovis2_5VisionEncoder(nn.Module):
             )
         reverse_indices = torch.argsort(window_index)
 
-        all_hidden_states = () if output_hidden_states else None
+        recorded_hidden_states = None
         for layer_index, encoder_layer in enumerate(self.layers):
             use_full_attention = (
                 self.config.fullatt_block_indexes is None or layer_index in self.config.fullatt_block_indexes
@@ -514,15 +453,19 @@ class Ovis2_5VisionEncoder(nn.Module):
                 **kwargs,
             )
             if output_hidden_states:
-                recorded_hidden_states = hidden_states.reshape(
-                    sequence_length // spatial_merge_unit, spatial_merge_unit, -1
-                )
-                recorded_hidden_states = recorded_hidden_states[reverse_indices].reshape(sequence_length, -1)
-                all_hidden_states += (recorded_hidden_states,)
+                recorded_hidden_states = self.hidden_state_recorder(hidden_states, reverse_indices, spatial_merge_unit)
+                if layer_index + 1 < len(self.layers):
+                    hidden_states = recorded_hidden_states.reshape(
+                        sequence_length // spatial_merge_unit, spatial_merge_unit, -1
+                    )
+                    hidden_states = hidden_states[window_index].reshape(sequence_length, -1)
 
-        hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
-        hidden_states = hidden_states[reverse_indices].reshape(sequence_length, -1)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        if recorded_hidden_states is not None:
+            hidden_states = recorded_hidden_states
+        else:
+            hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
+            hidden_states = hidden_states[reverse_indices].reshape(sequence_length, -1)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class Ovis2_5VisionTransformer(nn.Module):
@@ -561,7 +504,6 @@ class Ovis2_5VisionTransformer(nn.Module):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pre_layernorm_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -645,7 +587,10 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _can_record_outputs = {
-        "hidden_states": Ovis2_5VisionEncoderLayer,
+        "hidden_states": OutputRecorder(
+            Ovis2_5VisionHiddenStateRecorder,
+            capture_initial_hidden_state=False,
+        ),
         "attentions": Ovis2_5VisionAttention,
     }
 
@@ -666,7 +611,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -682,17 +626,14 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         transformer_outputs = self.transformer(
             pixel_values,
             grid_thw=grid_thw,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=(
+                self.config.output_hidden_states if output_hidden_states is None else output_hidden_states
+            ),
             **kwargs,
         )
         # The released visual-tokenizer head consumes the final encoder block before `post_layernorm`.
         hidden_states = transformer_outputs.pooler_output
         spatial_merge_unit = self.config.hidden_stride**2
-        if hidden_states.shape[0] % spatial_merge_unit != 0:
-            raise ValueError(
-                f"The packed vision sequence length ({hidden_states.shape[0]}) must be divisible by "
-                f"`hidden_stride ** 2` ({spatial_merge_unit})."
-            )
         hidden_states = hidden_states.reshape(hidden_states.shape[0] // spatial_merge_unit, -1)
         logits = self.head_norm(self.head_linear(hidden_states))
         visual_tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
@@ -706,7 +647,6 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=transformer_outputs.last_hidden_state,
             pooler_output=visual_tokens,
-            hidden_states=transformer_outputs.hidden_states,
         )
 
 
@@ -715,7 +655,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         vision_config = cast(Ovis2_5VisionConfig, config.vision_config)
-        # Ovis2_5Config.__post_init__ constructs and validates the Qwen3 sub-config.
+        # Ovis2_5Config.__post_init__ constructs the Qwen3 sub-config.
         text_config = cast(Any, config.text_config)
         self.vision_tower = Ovis2_5VisionModel(vision_config)
         self.visual_embeddings_table = Ovis2_5VisualEmbeddingTable(
@@ -744,7 +684,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
         return (inputs_embeds == token_embedding).all(dim=-1)
 
-    @can_return_tuple
     def _get_visual_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -774,6 +713,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             visual_indicator_features=visual_indicator_features,
         )
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into Ovis2.5 visual embeddings.")
     def get_image_features(
@@ -786,8 +726,12 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed image.
         """
-        return self._get_visual_features(pixel_values, image_grid_thw, **kwargs)
+        outputs = self._get_visual_features(pixel_values, image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.hidden_stride**2).tolist()
+        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
+        return outputs
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes videos into Ovis2.5 visual embeddings.")
     def get_video_features(
@@ -800,7 +744,10 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed video.
         """
-        return self._get_visual_features(pixel_values_videos, video_grid_thw, **kwargs)
+        outputs = self._get_visual_features(pixel_values_videos, video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(dim=1) // self.vision_tower.config.hidden_stride**2).tolist()
+        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
+        return outputs
 
     def _merge_visual_features(
         self,
@@ -892,8 +839,9 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
                 return_dict=True,
+                **kwargs,
             )
-            image_hidden_states = image_outputs.pooler_output
+            image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0)
             inputs_embeds = self._merge_visual_features(
                 inputs_embeds,
                 input_ids,
@@ -907,8 +855,9 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
                 return_dict=True,
+                **kwargs,
             )
-            video_hidden_states = video_outputs.pooler_output
+            video_hidden_states = torch.cat(video_outputs.pooler_output, dim=0)
             inputs_embeds = self._merge_visual_features(
                 inputs_embeds,
                 input_ids,
@@ -924,6 +873,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
         return Ovis2_5ModelOutputWithPast(
@@ -943,7 +893,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.model = Ovis2_5Model(config)
-        # Ovis2_5Config.__post_init__ constructs and validates the Qwen3 sub-config.
+        # Ovis2_5Config.__post_init__ constructs the Qwen3 sub-config.
         text_config = cast(Any, config.text_config)
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.post_init()
@@ -1017,6 +967,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             image_grid_thw=image_grid_thw,
             pixel_values_videos=pixel_values_videos,
             video_grid_thw=video_grid_thw,
+            return_dict=True,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state

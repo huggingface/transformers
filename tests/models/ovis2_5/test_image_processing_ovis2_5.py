@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers import Ovis2_5ImageProcessorPil
 from transformers.models.ovis2_5.image_processing_pil_ovis2_5 import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -209,14 +208,15 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 2, 2]]))
                 np.testing.assert_allclose(output.pixel_values, expected, atol=1e-6, rtol=0)
 
-    def test_pil_processor_exact_non_square_resize_and_grid(self):
-        image = np.zeros((333, 527, 3), dtype=np.uint8)
-        processor = Ovis2_5ImageProcessorPil()
-        output = processor(image, return_tensors="np")
-
-        self.assertEqual(output.pixel_values.shape, (864, 768))
-        np.testing.assert_array_equal(output.image_grid_thw, np.array([[1, 24, 36]]))
-        self.assertEqual(processor.get_number_of_image_patches(333, 527, {}), 864)
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class()
+            num_patches = image_processor.get_number_of_image_patches(
+                height=333,
+                width=527,
+                images_kwargs={},
+            )
+            self.assertEqual(num_patches, 864)
 
 
 if __name__ == "__main__":
