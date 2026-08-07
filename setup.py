@@ -125,7 +125,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@3c461e4317a2685d76402bba457a946339557d6b",
+    "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@3992698e5d574faa673d827d0536a55c42a944ef",
     "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
