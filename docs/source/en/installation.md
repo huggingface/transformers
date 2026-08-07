@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -44,11 +44,11 @@ Install Transformers with the following command.
 
 [uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
-```bash
-uv pip install transformers
-```
 
-For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally).
+<hfoptions id="installation">
+<hfoption id="CUDA">
+
+To install Transformers with PyTorch for NVIDIA GPU (CUDA), install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally).
 
 Run the command below to check if your system detects an NVIDIA GPU.
 
@@ -56,12 +56,37 @@ Run the command below to check if your system detects an NVIDIA GPU.
 nvidia-smi
 ```
 
+```bash
+uv pip install "transformers[torch]"
+```
+
+</hfoption>
+<hfoption id="CPU">
+
 To install a CPU-only version of Transformers, run the following command.
 
 ```bash
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 uv pip install transformers
 ```
+
+</hfoption>
+<hfoption id="Intel GPU (XPU)">
+
+To install Transformers with PyTorch for Intel GPU (XPU), install the appropriate [Intel GPU (XPU) drivers for PyTorch](https://www.intel.com/content/www/us/en/developer/articles/tool/pytorch-prerequisites-for-intel-gpu/2-13.html) and add the Intel GPU (XPU) PyTorch index URL.
+
+After installing the drivers, run the command below to [check if your system detects an Intel GPU](https://dgpu-docs.intel.com/driver/verification.html).
+
+```bash
+xpu-smi
+```
+
+```bash
+uv pip install "transformers[torch]" --extra-index-url https://download.pytorch.org/whl/xpu
+```
+
+</hfoption>
+</hfoptions>
 
 Test whether the install was successful with the following command. It should return a label and score for the provided text.
 
