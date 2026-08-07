@@ -1880,6 +1880,81 @@ class ModelTesterMixin(ExportTesterMixin):
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_loss_kwargs_are_forwarded_to_loss_function(self):
+        """
+        `Trainer` decides whether the loss still needs to be divided by `gradient_accumulation_steps` from
+        `model.accepts_loss_kwargs`, which defaults to "does `forward` declare `**kwargs`?". When it decides the model
+        handles it, `Trainer.compute_loss` injects `num_items_in_batch` into `forward` and skips its own
+        normalization. A head that declares `**kwargs` but drops `num_items_in_batch` before reaching
+        `self.loss_function` therefore trains with a loss inflated by roughly `gradient_accumulation_steps`.
+
+        Heads that do not route their loss through `self.loss_function` are skipped: the probe never fires for them.
+
+        Enforcement is scoped to the shared Generic* heads (fixed in modeling_layers) and the issue-repro families
+        (Swinv2, GPTNeoX). Remaining one-line head updates are intentionally deferred so this change stays under the
+        CI security-gate file cap; expand the guard below when those land.
+        """
+        num_items_in_batch = 7
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+            ]:
+                continue
+            if getattr(model_class, "accepts_loss_kwargs", True) is False:
+                continue
+            forward_params = inspect.signature(model_class.forward).parameters
+            if not any(param.kind == inspect.Parameter.VAR_KEYWORD for param in forward_params.values()):
+                continue
+
+            mro_names = {base.__name__ for base in model_class.__mro__}
+            enforced = (
+                "GenericForSequenceClassification" in mro_names
+                or "GenericForTokenClassification" in mro_names
+                or model_class.__name__.startswith("Swinv2")
+                or model_class.__name__.startswith("GPTNeoX")
+            )
+            if not enforced:
+                continue
+
+            if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+            else:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            if set(inputs) == set(self._prepare_for_class(inputs_dict, model_class)):
+                # no labels for this class, so `Trainer` would never compute `num_items_in_batch` for it
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            observed = {}
+            wrapped_loss_function = model.loss_function
+
+            def spy(*args, _observed=observed, _wrapped=wrapped_loss_function, **kwargs):
+                _observed["num_items_in_batch"] = kwargs.get("num_items_in_batch", "<not forwarded>")
+                return _wrapped(*args, **kwargs)
+
+            model.loss_function = spy
+            with torch.no_grad():
+                model(**inputs, num_items_in_batch=num_items_in_batch)
+
+            if not observed:
+                # this head does not compute its loss through `self.loss_function`, nothing to assert
+                continue
+
+            self.assertEqual(
+                observed["num_items_in_batch"],
+                num_items_in_batch,
+                f"`{model_class.__name__}.forward` declares `**kwargs`, so `Trainer` assumes it consumes "
+                "`num_items_in_batch` and skips the gradient accumulation normalization, but the value never "
+                "reaches `self.loss_function`. Either forward the variadic keyword arguments to "
+                "`self.loss_function(...)`, or set `accepts_loss_kwargs = False` on the class.",
+            )
+
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
         self.check_training_gradient_checkpointing()

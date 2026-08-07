@@ -545,7 +545,9 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(
+                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs
+            )
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -605,7 +607,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config, **kwargs)
 
         return TokenClassifierOutput(
             loss=loss,
@@ -656,7 +658,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions)
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
         return QuestionAnsweringModelOutput(
             loss=loss,
