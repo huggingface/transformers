@@ -14,9 +14,11 @@
 
 
 import json
+import os
+import tempfile
 import unittest
 
-from transformers import AutoTokenizer, RobertaTokenizer
+from transformers import AutoTokenizer, RobertaTokenizer, RobertaTokenizerFast
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -114,6 +116,75 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    def test_roberta_tokenizer_fast_from_pretrained_matches_slow(self):
+        """Regression for #47706: Hub tokenizer.json omits model.type.
+
+        Legacy RobertaTokenizerFast must still recover BPE merges + ByteLevel
+        pre_tokenizer/decoder and match RobertaTokenizer encoding.
+        """
+        slow = RobertaTokenizer.from_pretrained("FacebookAI/roberta-base")
+        fast = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
+
+        self.assertIsNotNone(fast.backend_tokenizer.pre_tokenizer)
+        self.assertIsNotNone(fast.backend_tokenizer.decoder)
+
+        for text in ("Hello world", " Hello world", "حسنا"):
+            self.assertListEqual(slow.encode(text), fast.encode(text), msg=f"mismatch for {text!r}")
+
+    def test_roberta_tokenizer_fast_omitted_model_type(self):
+        """Offline regression for #47706: omitted model.type must not break load."""
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
+        from tokenizers.trainers import BpeTrainer
+
+        backend = Tokenizer(models.BPE(unk_token="<unk>"))
+        backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        trainer = BpeTrainer(
+            special_tokens=["<s>", "</s>", "<pad>", "<unk>", "<mask>"],
+            vocab_size=100,
+        )
+        backend.train_from_iterator(
+            ["Hello world", "Hello", "world", "test this", "encoding works"],
+            trainer=trainer,
+        )
+        backend.decoder = decoders.ByteLevel()
+        backend.post_processor = processors.RobertaProcessing(
+            sep=("</s>", backend.token_to_id("</s>")),
+            cls=("<s>", backend.token_to_id("<s>")),
+            add_prefix_space=False,
+            trim_offsets=True,
+        )
+        expected_ids = backend.encode("Hello world").ids
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tokenizer_path = os.path.join(tmpdir, "tokenizer.json")
+            backend.save(tokenizer_path)
+            with open(tokenizer_path, encoding="utf-8") as handle:
+                tokenizer_json = json.load(handle)
+            # Older Hub files omit model.type entirely (not "type": null).
+            tokenizer_json["model"].pop("type", None)
+            with open(tokenizer_path, "w", encoding="utf-8") as handle:
+                json.dump(tokenizer_json, handle)
+            with open(os.path.join(tmpdir, "tokenizer_config.json"), "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "tokenizer_class": "RobertaTokenizerFast",
+                        "bos_token": "<s>",
+                        "eos_token": "</s>",
+                        "sep_token": "</s>",
+                        "cls_token": "<s>",
+                        "unk_token": "<unk>",
+                        "pad_token": "<pad>",
+                        "mask_token": "<mask>",
+                        "add_prefix_space": False,
+                    },
+                    handle,
+                )
+
+            fast = RobertaTokenizerFast.from_pretrained(tmpdir)
+            self.assertIsNotNone(fast.backend_tokenizer.pre_tokenizer)
+            self.assertIsNotNone(fast.backend_tokenizer.decoder)
+            self.assertListEqual(fast.encode("Hello world"), expected_ids)
 
     # def roberta_dict_integration_testing(self):
     #     tokenizer = self.get_tokenizer()
