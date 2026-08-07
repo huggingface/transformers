@@ -250,6 +250,22 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip(
+        reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
+    def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip(
+        reason="The audio tower and embeddings are non-splittable and hold almost all of the weights, so device_map='auto' can't split the model across GPUs"
+    )
+    def test_model_parallelism(self):
+        pass
+
 
 class InklingVision2TextModelTester:
     def __init__(
@@ -360,6 +376,7 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     all_model_classes = (InklingModel, InklingForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (InklingForConditionalGeneration,) if is_torch_available() else ()
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
+    test_torch_exportable = False  # data-dependent control flow in the HMLP vision tower (time/space folding)
     model_split_percents = [0.85, 0.9]
 
     def setUp(self):
@@ -437,6 +454,22 @@ class InklingVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Image placeholder embeddings are replaced when pixel values are provided")
     def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="Inkling attention always adds a relative position bias, which requires a float additive mask that is incompatible with the SDPA flash backend"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Inkling uses a custom hybrid cache that is incompatible with quantized cache")
+    def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip(
+        reason="The vision tower and embeddings are non-splittable and hold almost all of the weights, so device_map='auto' can't split the model across GPUs"
+    )
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip(

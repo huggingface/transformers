@@ -212,7 +212,9 @@ class BenchmarkRunner:
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         use_kernels = config.kernelize and kernelize is not None and Mode is not None
-        device_map = config.device if config.tp_plan is None else None
+        # `distributed_config` and `device_map` are mutually exclusive — TP does its own placement.
+        distributed_config = config.distributed_config
+        device_map = config.device if distributed_config is None else None
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=dtype,
@@ -220,7 +222,7 @@ class BenchmarkRunner:
             generation_config=generation_config,
             use_kernels=use_kernels,
             device_map=device_map,
-            tp_plan=config.tp_plan,
+            distributed_config=distributed_config,
         )
         self.model = self.model.eval()
         self.inputs = self.inputs.to(self.model.device)

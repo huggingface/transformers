@@ -34,7 +34,7 @@ args = TrainingArguments(
 
 When no backend is specified, [`TrainingArguments`] selects one based on your hardware. On most CPUs and GPUs, the default is `inductor`, which compiles to Triton kernels with AOTAutograd and suits most training workloads. On Intel Gaudi (HPU), the default is `hpu_backend`. On AWS Trainium and Inferentia (Neuron), the default is `neuron`.
 
-Use `cudagraphs` for fixed-shape inputs, or `ipex` for Intel CPU training.
+Use `cudagraphs` for fixed-shape inputs.
 
 ## Compile mode
 

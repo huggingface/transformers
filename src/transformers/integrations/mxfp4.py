@@ -294,12 +294,12 @@ def _convert_moe_packed_tensors(
         # out-of-bounds `lut` indices (illegal memory access on CUDA, indexing abort on XPU).
         # Aligning the active device with the tensor's device orders it correctly (no-op on CPU).
         with on_device(blk.device):
-            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            # This vector is only used to index into `lut`, but is huge in GPU memory so we delete it immediately
             idx_lo = (blk & 0x0F).to(torch.int)
             sub[:, 0::2] = lut[idx_lo]
             del idx_lo
 
-            # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
+            # This vector is only used to index into `lut`, but is huge in GPU memory so we delete it immediately
             idx_hi = (blk >> 4).to(torch.int)
             sub[:, 1::2] = lut[idx_hi]
             del idx_hi
@@ -324,7 +324,7 @@ def convert_moe_packed_tensors(
     Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
     pass of GPT_OSS.
     """
-    # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
+    # Since the intermediate ops require A LOT of memory, in very constrained device_map="auto" settings
     # it may OOM, hence this wrapper and move back to cpu if needed
     # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
     # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
