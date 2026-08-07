@@ -41,10 +41,7 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import load_video
 
-from ...test_modeling_common import (
-    _config_zero_init,
-    floats_tensor,
-)
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -157,9 +154,8 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             head_dim=8,
             hidden_act="gelu_pytorch_tanh",
             layer_norm_eps=1e-6,
-            image_default_input_size=[self.image_size, self.image_size],
-            image_patch_size=self.patch_size,
-            image_num_pos=(self.image_size // self.patch_size) ** 2,
+            image_size=[self.image_size, self.image_size],
+            patch_size=self.patch_size,
             attention_dropout=0.0,
             residual_dropout=0.0,
         )
@@ -205,15 +201,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     test_head_masking = False
     skip_test_image_features_output_shape = True
     skip_test_video_features_output_shape = True
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config, inputs_dict = config_and_inputs
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                _ = model(**inputs_dict)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
@@ -343,14 +330,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # `test_tied_weights_keys` is inherited: Molmo2 sets `_tied_weights_keys = None` (it ties no weights),
-    # so the base test passes without a skip (molbap: prefer the flag over skipping).
-
-    # Resize is intentionally not supported: `embed_tokens` holds `vocab_size + additional_vocab_size` rows
-    # and the multimodal special tokens (image_patch/start/end/col) have FIXED absolute ids in the extra-vocab
-    # range (>= vocab_size). Standard resize is keyed on `config.vocab_size`, so it would drop or shift the
-    # rows those fixed ids point at. (Kept as explicit skips rather than `test_resize_embeddings = False` so
-    # the related `test_resize_embeddings_untied_no_reinit_on_post_init`, which does pass, still runs.)
     @unittest.skip(
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
     )
@@ -363,11 +342,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     def test_resize_embeddings_untied(self):
         pass
 
-    # `test_model_outputs_equivalence` is inherited and now passes: the earlier "shape mismatch" was the
-    # image-merge bug (placeholder mask not expanded); with that fixed there is nothing to skip.
-
-    # `test_generate_from_inputs_embeds_0_greedy` is inherited and passes: Molmo2 now merges image features
-    # into a provided `inputs_embeds` (instead of forbidding it), so the multimodal greedy path runs.
     @unittest.skip(
         reason="Multimodal beam search from inputs_embeds would need the flat-concatenated image crops and "
         "their pooling offsets expanded by beam width; greedy multimodal and text-only beam both work."
@@ -407,20 +381,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
             # inputs_embeds-only generation returns only the newly generated tokens
             self.assertEqual(out.sequences.shape[0], input_ids.shape[0])
             self.assertEqual(out.sequences.shape[1], 5)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_bidirectional_image_attention(self):
         """
@@ -564,20 +524,11 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
     def test_preprocessing(self):
         inputs = self.build_inputs()
-
-        for key in (
-            "input_ids",
-            "pixel_values",
-            "image_token_pooling",
-            "image_grids",
-            "image_num_crops",
-            "mm_token_type_ids",
-        ):
-            self.assertIn(key, inputs)
-
         self.assertEqual(inputs["pixel_values"].shape, torch.Size([7, 729, 588]))
         self.assertEqual(inputs["image_token_pooling"].shape, torch.Size([955, 4]))
         self.assertEqual(inputs["image_grids"].shape, torch.Size([1, 4]))
+        self.assertEqual(inputs["image_num_crops"].tolist(), [7])
+        self.assertEqual(inputs["mm_token_type_ids"].sum().item(), 982)
         self.assertEqual(inputs["input_ids"].shape[0], 1)
         # 4B uses the Qwen tokenizer; `<|im_end|>` (151645) is the leading BOS.
         self.assertEqual(inputs["input_ids"][0, 0].item(), 151645)
@@ -602,12 +553,12 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             outputs = model(**device_inputs)
@@ -634,12 +585,12 @@ class Molmo2IntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
@@ -715,12 +666,12 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             outputs = model(**device_inputs)
@@ -747,12 +698,12 @@ class Molmo2O7BIntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
@@ -828,12 +779,12 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             outputs = model(**device_inputs)
@@ -860,12 +811,12 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             generated_ids = model.generate(**device_inputs, max_new_tokens=10, do_sample=False)
@@ -903,12 +854,12 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
 
         model = Molmo2ForConditionalGeneration.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map=torch_device,
         )
         model.eval()
 
-        device_inputs = {k: v.to(torch_device) if hasattr(v, "to") else v for k, v in inputs.items()}
+        device_inputs = inputs.to(torch_device)
 
         with torch.no_grad():
             generated_ids = model.generate(**device_inputs, max_new_tokens=64, do_sample=False)

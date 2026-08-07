@@ -16,7 +16,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import field
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -94,39 +93,58 @@ logger = logging.get_logger(__name__)
 @strict
 class Molmo2VisionConfig(PreTrainedConfig):
     r"""
-    image_default_input_size (`list[int]`, *optional*, defaults to `[378, 378]`):
-        Default input image size (height, width).
-    image_patch_size (`int`, *optional*, defaults to 14):
-        Size of each image patch.
-    image_num_pos (`int`, *optional*, defaults to 577):
-        Number of positional embeddings for the image.
+    image_size (`list[int]`, *optional*):
+        Input image size as (height, width), `[378, 378]` when not provided.
+    num_position_embeddings (`int`, *optional*):
+        Number of positional embeddings, one per image patch. Derived from `image_size` and `patch_size` when not
+        provided.
     """
 
     model_type = "molmo2"
     base_config_key = "vision_config"
+    # The names stored in the released checkpoints, also read by vLLM's native Molmo2 port.
+    attribute_map = {
+        "image_default_input_size": "image_size",
+        "image_patch_size": "patch_size",
+        "image_num_pos": "num_position_embeddings",
+    }
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
     num_hidden_layers: int = 27
     num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    head_dim: int = 72
+    num_key_value_heads: int | None = None
+    head_dim: int | None = None
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
-    image_default_input_size: list[int] = field(default_factory=lambda: [378, 378])
-    image_patch_size: int = 14
-    image_num_pos: int = 577
+    image_size: list[int] | None = None
+    patch_size: int = 14
+    num_position_embeddings: int | None = None
+    num_channels: int = 3
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.image_size is None:
+            self.image_size = [378, 378]
+        if self.num_position_embeddings is None:
+            self.num_position_embeddings = (self.image_size[0] // self.patch_size) * (
+                self.image_size[1] // self.patch_size
+            )
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
 @strict
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
-    vit_layers (`list[int]`, *optional*, defaults to `[-3, -9]`):
-        Indices of ViT layers to extract features from.
+    vit_layers (`list[int]`, *optional*):
+        Indices of ViT layers to extract features from, `[-3, -9]` when not provided.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
@@ -136,11 +154,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     model_type = "molmo2"
     base_config_key = "adapter_config"
 
-    vit_layers: list[int] = field(default_factory=lambda: [-3, -9])
+    vit_layers: list[int] | None = None
     hidden_size: int = 1152
     num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    head_dim: int = 72
+    num_key_value_heads: int | None = None
+    head_dim: int | None = None
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     hidden_act: str = "silu"
@@ -148,6 +166,15 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     text_hidden_size: int = 3584
     image_feature_dropout: float = 0.0
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.vit_layers is None:
+            self.vit_layers = [-3, -9]
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -228,8 +255,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
 
-    # Read and written by vLLM; the value moved into `rope_parameters` in the v5 RoPE standardization.
-    # Raises AttributeError before standardization so `getattr(config, "rope_theta", default)` returns the default.
     @property
     def rope_theta(self) -> float:
         rope_parameters = self.rope_parameters or {}
@@ -352,31 +377,44 @@ def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) 
     return tilings[int(required_scale.argmin())]
 
 
-def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
-    """Reshape images of [num_images, h, w, 3] -> [num_images, n_patches, pixels_per_patch]"""
-    if len(array.shape) == 3:
-        num_crops, height, width = array.shape
-        num_patches_height = height // patch_size
-        num_patches_width = width // patch_size
-        array = array.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size)
-        array = array.permute(0, 1, 3, 2, 4)
-        array = array.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size)
-        return array
-    else:
-        num_crops, height, width, channels = array.shape
-        num_patches_height = height // patch_size
-        num_patches_width = width // patch_size
-        array = array.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
-        array = array.permute(0, 1, 3, 2, 4, 5)
-        array = array.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
-        return array
+def compute_crop_geometry(
+    height: int,
+    width: int,
+    max_crops: int,
+    overlap_margins: list[int],
+    crop_size: int,
+    patch_size: int,
+) -> tuple[int, int, int, int]:
+    """Tiling `(tiling_h, tiling_w)` and canvas pixel size `(canvas_height, canvas_width)` for one image."""
+    left_margin, right_margin = overlap_margins
+    crop_patches = crop_size // patch_size
+    window_patches = crop_patches - (left_margin + right_margin)
+    window_size = window_patches * patch_size
+    margin_size = (left_margin + right_margin) * patch_size
+    tiling_h, tiling_w = select_tiling(height - margin_size, width - margin_size, window_size, max_crops)
+    canvas_height = tiling_h * window_size + margin_size
+    canvas_width = tiling_w * window_size + margin_size
+    return tiling_h, tiling_w, canvas_height, canvas_width
+
+
+def batch_pixels_to_patches(images: torch.Tensor, patch_size: int) -> torch.Tensor:
+    """Reshape images of [num_images, h, w, channels] -> [num_images, n_patches, pixels_per_patch]"""
+    num_crops, height, width, channels = images.shape
+    num_patches_height = height // patch_size
+    num_patches_width = width // patch_size
+    images = images.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
+    images = images.permute(0, 1, 3, 2, 4, 5)
+    images = images.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
+    return images
 
 
 def arange_for_pooling(
     index_grid: torch.Tensor,
     pool_h: int,
     pool_w: int,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, int, int]:
+    """Group a [h, w] patch-index grid into pooling windows: `[num_rows * num_cols, pool_h * pool_w]`, padded
+    with -1. Also returns the pooled grid's `(num_rows, num_cols)`."""
     height_padding = pool_h * ((index_grid.shape[0] + pool_h - 1) // pool_h) - index_grid.shape[0]
     width_padding = pool_w * ((index_grid.shape[1] + pool_w - 1) // pool_w) - index_grid.shape[1]
     index_grid = F.pad(
@@ -386,16 +424,17 @@ def arange_for_pooling(
         value=-1,
     )
     num_rows, num_cols = index_grid.shape[0] // pool_h, index_grid.shape[1] // pool_w
-    return (
+    pooling_indices = (
         index_grid.reshape(num_rows, pool_h, num_cols, pool_w)
         .permute(0, 2, 1, 3)
-        .reshape(num_rows, num_cols, pool_h * pool_w)
+        .reshape(num_rows * num_cols, pool_h * pool_w)
     )
+    return pooling_indices, num_rows, num_cols
 
 
 def resize_and_normalize_image(
     backend: "TorchvisionBackend",
-    image_chw: torch.Tensor,
+    image: torch.Tensor,
     output_size: list[int],
     resample: PILImageResampling,
     do_rescale: bool,
@@ -407,22 +446,22 @@ def resize_and_normalize_image(
     # Under `torch.compile`, torchvision's uint8 bilinear resize can produce values slightly outside 0-255,
     # which overflow and wrap around (-1 becomes 255, so a near-black pixel becomes white). Resizing in
     # float, then rounding and clamping back, avoids that and gives the exact same bytes in eager mode.
-    is_integer_input = not image_chw.dtype.is_floating_point
+    is_integer_input = not image.dtype.is_floating_point
     resized = backend.resize(
-        image_chw.float() if is_integer_input else image_chw,
+        image.float() if is_integer_input else image,
         size=SizeDict(height=output_size[0], width=output_size[1]),
         resample=resample,
         antialias=False,
     )
     if is_integer_input:
-        resized = resized.round().clamp(0, 255).to(image_chw.dtype)
+        resized = resized.round().clamp(0, 255).to(image.dtype)
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
 def build_resized_image(
     backend: "TorchvisionBackend",
-    images_nchw: torch.Tensor,
-    base_image_input_size: int,
+    images: torch.Tensor,
+    crop_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
     rescale_factor: float,
@@ -431,11 +470,11 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    # `images_nchw`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
+    # `images`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
     resized = resize_and_normalize_image(
         backend,
-        images_nchw,
-        [base_image_input_size, base_image_input_size],
+        images,
+        [crop_size, crop_size],
         resample,
         do_rescale=do_rescale,
         rescale_factor=rescale_factor,
@@ -446,10 +485,10 @@ def build_resized_image(
     # [N, C, S, S] -> [N, 1, S, S, C]: one global (low-res) view per image.
     resized = resized.permute(0, 2, 3, 1).unsqueeze(1)
     # The per-patch index grid depends only on the (shared) shape, so it is built once.
-    crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resized_index_grid = torch.arange(
-        crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device
-    ).reshape(crop_patch_h, crop_patch_w)
+    patches_per_side = crop_size // image_patch_size
+    resized_index_grid = torch.arange(patches_per_side**2, dtype=torch.int32, device=images.device).reshape(
+        patches_per_side, patches_per_side
+    )
     return resized, resized_index_grid
 
 
@@ -493,10 +532,10 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _build_overlapping_crops(
         self,
-        images_nchw: torch.Tensor,
+        images: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: int,
+        crop_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -506,23 +545,24 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         image_patch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Tile a batch of same-shape images `[N, C, H, W]` into overlapping square crops. The tiling and the per-patch index grid depend only on the (shared) shape, so they are computed once and the resize/unfold are batched over N."""
-        crop_size = base_image_input_size
         left_margin, right_margin = overlap_margins
         crop_patches = crop_size // image_patch_size
         window_patches = crop_patches - (left_margin + right_margin)
         window_size = window_patches * image_patch_size
-        margin_size = (left_margin + right_margin) * image_patch_size
 
-        _, _, original_height, original_width = images_nchw.shape
-        tiling_h, tiling_w = select_tiling(
-            original_height - margin_size, original_width - margin_size, window_size, max_crops
+        num_images, num_channels, original_height, original_width = images.shape
+        tiling_h, tiling_w, canvas_height, canvas_width = compute_crop_geometry(
+            original_height,
+            original_width,
+            max_crops=max_crops,
+            overlap_margins=overlap_margins,
+            crop_size=crop_size,
+            patch_size=image_patch_size,
         )
-        canvas_height = tiling_h * window_size + margin_size
-        canvas_width = tiling_w * window_size + margin_size
 
         canvas = resize_and_normalize_image(
             self,
-            images_nchw,
+            images,
             [canvas_height, canvas_width],
             resample,
             do_rescale=do_rescale,
@@ -536,12 +576,12 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         crops = canvas.unfold(2, crop_size, window_size).unfold(3, crop_size, window_size)
         crops = (
             crops.permute(0, 2, 3, 4, 5, 1)
-            .reshape(canvas.shape[0], tiling_h * tiling_w, crop_size, crop_size, 3)
+            .reshape(num_images, tiling_h * tiling_w, crop_size, crop_size, num_channels)
             .contiguous()
         )
 
         patch_index_grid = torch.arange(
-            tiling_h * tiling_w * crop_patches * crop_patches, dtype=torch.int32, device=images_nchw.device
+            tiling_h * tiling_w * crop_patches * crop_patches, dtype=torch.int32, device=images.device
         ).reshape(tiling_h, tiling_w, crop_patches, crop_patches)
         if left_margin:
             patch_index_grid[1:, :, :left_margin, :] = -1
@@ -559,10 +599,10 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
     def _image_batch_to_patches_and_grids(
         self,
-        images_nchw: torch.Tensor,
+        images: torch.Tensor,
         max_crops: int,
         overlap_margins: list[int],
-        base_image_input_size: int,
+        crop_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -576,58 +616,56 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         """Process a batch of same-shape images `[N, C, H, W]`. The grid and pooling indices are
         shape-dependent (shared across the batch) and returned expanded to `[N, ...]` so the caller
         can reorder them per-image alongside the batched patch tensor."""
-        base_image_input_d = image_patch_size
-        pooling_w = image_pooling_w
-        pooling_h = image_pooling_h
-        crop_patch_h = crop_patch_w = base_image_input_size // base_image_input_d
+        patches_per_crop = (crop_size // image_patch_size) ** 2
 
         crops, patch_index_grid = self._build_overlapping_crops(
-            images_nchw,
-            max_crops,
-            overlap_margins,
-            base_image_input_size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            image_patch_size,
+            images,
+            max_crops=max_crops,
+            overlap_margins=overlap_margins,
+            crop_size=crop_size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            image_patch_size=image_patch_size,
         )
-        pooling_indices = arange_for_pooling(patch_index_grid, pooling_h, pooling_w)
-        num_patch_rows, num_patch_cols = pooling_indices.shape[:2]
-        pooling_indices = pooling_indices.reshape([-1, pooling_h * pooling_w])
+        pooling_indices, num_patch_rows, num_patch_cols = arange_for_pooling(
+            patch_index_grid, image_pooling_h, image_pooling_w
+        )
 
         resized, resized_index_grid = build_resized_image(
             self,
-            images_nchw,
-            base_image_input_size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            image_patch_size,
+            images,
+            crop_size=crop_size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            image_patch_size=image_patch_size,
         )
         # [N, 1, S, S, C] + [N, ncrops, S, S, C] -> [N, 1 + ncrops, S, S, C]
         crops = torch.cat([resized, crops], dim=1)
 
-        resized_index_grid = arange_for_pooling(resized_index_grid, pooling_h, pooling_w)
-        resized_h, resized_w = resized_index_grid.shape[:2]
-        resized_index_grid = resized_index_grid.reshape([-1, pooling_h * pooling_w])
+        resized_pooling_indices, resized_h, resized_w = arange_for_pooling(
+            resized_index_grid, image_pooling_h, image_pooling_w
+        )
 
-        pooling_indices = torch.where(pooling_indices >= 0, pooling_indices + crop_patch_h * crop_patch_w, -1)
-        pooling_indices = torch.cat([resized_index_grid, pooling_indices])
+        pooling_indices = torch.where(pooling_indices >= 0, pooling_indices + patches_per_crop, -1)
+        pooling_indices = torch.cat([resized_pooling_indices, pooling_indices])
         image_grid = torch.tensor(
-            [[resized_h, resized_w, num_patch_rows, num_patch_cols]], dtype=torch.int64, device=images_nchw.device
+            [[resized_h, resized_w, num_patch_rows, num_patch_cols]], dtype=torch.int64, device=images.device
         )
 
         # [N, total_crops, S, S, C] -> patches [N, total_crops, n_patch, pixels_per_patch]
         num_images, total_crops = crops.shape[0], crops.shape[1]
+        pixels_per_patch = image_patch_size * image_patch_size * crops.shape[-1]
         patches = batch_pixels_to_patches(
             crops.reshape(num_images * total_crops, *crops.shape[2:]), image_patch_size
-        ).reshape(num_images, total_crops, -1, image_patch_size * image_patch_size * 3)
+        ).reshape(num_images, total_crops, -1, pixels_per_patch)
 
         # The grid and pooling indices are shared by all images of this shape; expand them to one row
         # per image so the batch can later be restored to the original image order.
@@ -657,13 +695,13 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         overlap_margins: list[int],
         patch_size: int,
         pooling_size: list[int],
-        disable_grouping: bool | None = None,
-        return_tensors: str | TensorType | None = None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if size.height != size.width:
             raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
-        base_image_input_size = size.height
+        crop_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         # Group images by shape and process each unique shape as a single batch (the tiling and all
@@ -677,18 +715,18 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         for shape, stacked_images in grouped_images.items():
             image_grid, patches, pooled_indices = self._image_batch_to_patches_and_grids(
                 stacked_images,
-                max_crops,
-                overlap_margins,
-                base_image_input_size,
-                resample,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                image_mean,
-                image_std,
-                patch_size,
-                image_pooling_w,
-                image_pooling_h,
+                max_crops=max_crops,
+                overlap_margins=overlap_margins,
+                crop_size=crop_size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                image_patch_size=patch_size,
+                image_pooling_w=image_pooling_w,
+                image_pooling_h=image_pooling_h,
             )
             grids_grouped[shape] = image_grid
             patches_grouped[shape] = patches
@@ -731,27 +769,21 @@ class Molmo2ImageProcessor(TorchvisionBackend):
 
         base_h = size["height"] if isinstance(size, dict) else size.height
         base_w = size["width"] if isinstance(size, dict) else size.width
-        left_margin, right_margin = overlap_margins
         pooling_h, pooling_w = pooling_size
 
-        total_margin_pixels = patch_size * (left_margin + right_margin)
-        crop_patches = base_h // patch_size
-        crop_window_patches = crop_patches - (left_margin + right_margin)
-        crop_window_size = crop_window_patches * patch_size
+        tiling_h, tiling_w, canvas_height, canvas_width = compute_crop_geometry(
+            height,
+            width,
+            max_crops=max_crops,
+            overlap_margins=overlap_margins,
+            crop_size=base_h,
+            patch_size=patch_size,
+        )
+        num_patch_rows_high = math.ceil((canvas_height // patch_size) / pooling_h)
+        num_patch_cols_high = math.ceil((canvas_width // patch_size) / pooling_w)
 
-        effective_h = height - total_margin_pixels
-        effective_w = width - total_margin_pixels
-        tiling_h, tiling_w = select_tiling(effective_h, effective_w, crop_window_size, max_crops)
-
-        high_res_h = tiling_h * crop_window_patches + left_margin + right_margin
-        high_res_w = tiling_w * crop_window_patches + left_margin + right_margin
-        num_patch_rows_high = math.ceil(high_res_h / pooling_h)
-        num_patch_cols_high = math.ceil(high_res_w / pooling_w)
-
-        crop_patch_h = base_h // patch_size
-        crop_patch_w = base_w // patch_size
-        resized_h = math.ceil(crop_patch_h / pooling_h)
-        resized_w = math.ceil(crop_patch_w / pooling_w)
+        resized_h = math.ceil((base_h // patch_size) / pooling_h)
+        resized_w = math.ceil((base_w // patch_size) / pooling_w)
 
         return [resized_h, resized_w, num_patch_rows_high, num_patch_cols_high], tiling_h * tiling_w + 1
 
@@ -835,8 +867,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 
     def _build_video_patches(
         self,
-        video_tchw: torch.Tensor,
-        base_image_input_size: int,
+        video: torch.Tensor,
+        crop_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -850,20 +882,20 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         # `build_resized_image` takes a whole `[N, C, H, W]` batch, so all frames of a video are resized in one call.
         resized_frames, resized_index_grid = build_resized_image(
             self,
-            video_tchw,
-            base_image_input_size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            image_patch_size,
+            video,
+            crop_size=crop_size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            image_patch_size=image_patch_size,
         )
         # The pooling index grid is shape-dependent only, hence shared by every frame.
-        pooling_indices = arange_for_pooling(resized_index_grid, image_pooling_h, image_pooling_w)
-        num_patch_rows, num_patch_cols = pooling_indices.shape[:2]
-        pooling_indices = pooling_indices.reshape([-1, image_pooling_h * image_pooling_w])
+        pooling_indices, num_patch_rows, num_patch_cols = arange_for_pooling(
+            resized_index_grid, image_pooling_h, image_pooling_w
+        )
         # [T, 1, S, S, C] -> [T, n_patch, pixels_per_patch]
         patches = batch_pixels_to_patches(resized_frames.squeeze(1), image_patch_size)
         return [num_patch_rows, num_patch_cols], patches, pooling_indices
@@ -871,21 +903,21 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        size: SizeDict | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool = True,
-        rescale_factor: float = 1.0 / 255.0,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        pooling_size: list[int] | None = None,
+        size: SizeDict,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        pooling_size: list[int],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         if size.height != size.width:
             raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
-        base_image_input_size = size.height
+        crop_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_crops: list[torch.Tensor] = []
@@ -896,16 +928,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         for video in videos:
             image_grid, patches, pooling_indices = self._build_video_patches(
                 video,
-                base_image_input_size,
-                resample,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                image_mean,
-                image_std,
-                patch_size,
-                image_pooling_h,
-                image_pooling_w,
+                crop_size=crop_size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                image_patch_size=patch_size,
+                image_pooling_h=image_pooling_h,
+                image_pooling_w=image_pooling_w,
             )
             num_frames, patches_per_frame = patches.shape[:2]
             frame_offsets = (
@@ -926,23 +958,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return BatchFeature(data, tensor_type=return_tensors)
 
 
-class Molmo2ProcessorImagesKwargs(Molmo2ImagesKwargs, total=False):
-    """
-    max_crops (`int`, *optional*):
-        Maximum number of image crops produced by the image processor.
-    overlap_margins (`list[int]`, *optional*):
-        Pixel margins `[left_right, top_bottom]` to overlap between neighboring crops.
-    patch_size (`int`, *optional*):
-        Side length in pixels of each ViT patch.
-    pooling_size (`list[int]`, *optional*):
-        `[pool_h, pool_w]` pooling window applied to patch features in the vision adapter.
-    """
-
-
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
-    images_kwargs: Molmo2ProcessorImagesKwargs
+    images_kwargs: Molmo2ImagesKwargs
     videos_kwargs: Molmo2VideosKwargs
     _defaults = {
         "text_kwargs": {
@@ -1106,21 +1125,19 @@ class Molmo2Processor(ProcessorMixin):
         video_grid = video_inputs["video_grids"][video_idx]
         video_metadata = video_inputs.get("video_metadata", [])
         metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
-        if metadata is not None:
-            if metadata.frames_indices is None:
-                metadata.frames_indices = list(range(int(video_grid[0].item())))
-            if metadata.fps is None:
-                metadata.fps = self.video_processor.max_fps or 2
-                logger.warning_once(
-                    "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
-                    f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
-                    "`video_metadata` for more accurate timestamps."
-                )
-            timestamps = metadata.timestamps
-        else:
-            fps = self.video_processor.max_fps or 2
-            num_frames = int(video_grid[0].item())
-            timestamps = [i / fps for i in range(num_frames)]
+
+        frames_indices = getattr(metadata, "frames_indices", None)
+        if frames_indices is None:
+            frames_indices = range(int(video_grid[0].item()))
+        fps = getattr(metadata, "fps", None)
+        if fps is None:
+            fps = self.video_processor.max_fps
+            logger.warning_once(
+                "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
+                f"provided or could not be inferred. Defaulting to `fps={fps}`. Please provide "
+                "`video_metadata` for more accurate timestamps."
+            )
+        timestamps = [frame_idx / fps for frame_idx in frames_indices]
         return self.get_video_string(video_grid, timestamps)
 
 
@@ -1190,6 +1207,7 @@ class Molmo2VisionAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
@@ -1225,23 +1243,21 @@ class Molmo2VisionModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=self.config.initializer_range)
-        else:
-            super()._init_weights(module)
 
     def __init__(self, config: Molmo2VisionConfig):
         super().__init__(config)
         self.config = config
-        self.image_default_input_size = config.image_default_input_size
 
         self.positional_embedding = nn.Parameter(
-            torch.zeros(config.image_num_pos, config.hidden_size),
+            torch.zeros(config.num_position_embeddings, config.hidden_size),
         )
 
-        image_patch_size = config.image_patch_size
+        patch_size = config.patch_size
         self.patch_embedding = nn.Linear(
-            image_patch_size * image_patch_size * 3,
+            patch_size * patch_size * config.num_channels,
             config.hidden_size,
             bias=True,
         )
@@ -1254,7 +1270,7 @@ class Molmo2VisionModel(PreTrainedModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.patch_embedding(pixel_values.to(dtype=self.dtype))
-        # patch count == image_num_pos, locked by config; only retraining with a different grid breaks this.
+        # patch count == num_position_embeddings, locked by config; only retraining with a different grid breaks this.
         hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(hidden_states, **kwargs)
@@ -1334,20 +1350,7 @@ class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class Molmo2RMSNorm(LlamaRMSNorm):
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
-        super().__init__(hidden_size, eps=eps)
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        with torch.autocast(enabled=False, device_type=hidden_states.device.type):
-            input_dtype = hidden_states.dtype
-            hidden_states = hidden_states.to(torch.float32)
-            variance = hidden_states.pow(2).mean(-1, keepdim=True)
-            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    pass
 
 
 class Molmo2Attention(Olmo2Attention):
@@ -1519,10 +1522,9 @@ class Molmo2PreTrainedModel(LlamaPreTrainedModel):
     }
 
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=self.config.initializer_range)
-        else:
-            super()._init_weights(module)
 
 
 class Molmo2TextModel(LlamaModel):
@@ -1555,6 +1557,7 @@ class Molmo2TextModel(LlamaModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1637,6 +1640,12 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return torch.where(is_image, image_group_ids, -1)
 
 
+@auto_docstring(
+    custom_intro="""
+    The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model, without a language
+    modeling head.
+    """
+)
 class Molmo2Model(Molmo2PreTrainedModel):
     config: Molmo2Config
 
@@ -1655,6 +1664,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` holds "
+        "one projected feature per pooled image token."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1677,6 +1690,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         return image_outputs
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` holds "
+        "one projected feature per pooled video token."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1711,6 +1728,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         return special_image_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1791,6 +1809,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model.
+    """
+)
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     # the loss must not be normalized by `num_items_in_batch`: logits/labels are filtered before computing it
     accepts_loss_kwargs = False
@@ -1807,6 +1830,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1828,6 +1852,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2CausalLMOutputWithPast:
         r"""
+        Example:
+
         ```python
         >>> from PIL import Image
         >>> import requests

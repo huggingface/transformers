@@ -18,10 +18,13 @@ import numpy as np
 
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available() and is_torchvision_available():
     from PIL import Image
@@ -181,11 +184,18 @@ class Molmo2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             for crops in outputs.image_num_crops.tolist():
                 self.assertGreater(crops, 0)
 
-    @unittest.skip(
-        reason="Molmo2ImageProcessor expects channels-last (HWC) numpy input; CHW torch tensors are not supported."
-    )
     def test_call_pytorch(self):
-        pass
+        for image_processing_class in [self.image_processing_class]:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
+
+            outputs = image_processing(image_inputs[0], return_tensors="pt")
+            self._assert_patchified_output(outputs, 1)
+
+            outputs = image_processing([[image] for image in image_inputs], return_tensors="pt")
+            self._assert_patchified_output(outputs, self.image_processor_tester.batch_size)
 
     @unittest.skip(
         reason="Molmo2ImageProcessor always converts to RGB before processing; 4-channel images are not supported."

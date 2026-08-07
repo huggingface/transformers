@@ -64,23 +64,10 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
     sampling_fps: int | float | None
 
 
-class Molmo2ProcessorImagesKwargs(Molmo2ImagesKwargs, total=False):
-    """
-    max_crops (`int`, *optional*):
-        Maximum number of image crops produced by the image processor.
-    overlap_margins (`list[int]`, *optional*):
-        Pixel margins `[left_right, top_bottom]` to overlap between neighboring crops.
-    patch_size (`int`, *optional*):
-        Side length in pixels of each ViT patch.
-    pooling_size (`list[int]`, *optional*):
-        `[pool_h, pool_w]` pooling window applied to patch features in the vision adapter.
-    """
-
-
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
-    images_kwargs: Molmo2ProcessorImagesKwargs
+    images_kwargs: Molmo2ImagesKwargs
     videos_kwargs: Molmo2VideosKwargs
     _defaults = {
         "text_kwargs": {
@@ -244,21 +231,19 @@ class Molmo2Processor(ProcessorMixin):
         video_grid = video_inputs["video_grids"][video_idx]
         video_metadata = video_inputs.get("video_metadata", [])
         metadata = video_metadata[video_idx] if video_idx < len(video_metadata) else None
-        if metadata is not None:
-            if metadata.frames_indices is None:
-                metadata.frames_indices = list(range(int(video_grid[0].item())))
-            if metadata.fps is None:
-                metadata.fps = self.video_processor.max_fps or 2
-                logger.warning_once(
-                    "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
-                    f"provided or could not be inferred. Defaulting to `fps={metadata.fps}`. Please provide "
-                    "`video_metadata` for more accurate timestamps."
-                )
-            timestamps = metadata.timestamps
-        else:
-            fps = self.video_processor.max_fps or 2
-            num_frames = int(video_grid[0].item())
-            timestamps = [i / fps for i in range(num_frames)]
+
+        frames_indices = getattr(metadata, "frames_indices", None)
+        if frames_indices is None:
+            frames_indices = range(int(video_grid[0].item()))
+        fps = getattr(metadata, "fps", None)
+        if fps is None:
+            fps = self.video_processor.max_fps
+            logger.warning_once(
+                "Molmo2 inserts frame timestamps into video prompts, but the input video's `fps` was not "
+                f"provided or could not be inferred. Defaulting to `fps={fps}`. Please provide "
+                "`video_metadata` for more accurate timestamps."
+            )
+        timestamps = [frame_idx / fps for frame_idx in frames_indices]
         return self.get_video_string(video_grid, timestamps)
 
 

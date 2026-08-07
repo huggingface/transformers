@@ -273,10 +273,6 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Output keys should be a subset of model_input_names (video keys absent when no video passed)
         self.assertTrue(set(inputs.keys()).issubset(set(processor.model_input_names)))
 
-    # =====================================================================
-    # Hub model has auto_map in processor_config.json which is not preserved
-    # through save/load cycle. Override to filter auto_map before comparison.
-    # =====================================================================
     def _filter_auto_map(self, d):
         """Remove auto_map keys from processor dict for comparison."""
         filtered = {k: v for k, v in d.items() if k != "auto_map"}
@@ -308,7 +304,9 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self._filter_auto_map(processor_first.to_dict()),
             )
 
-    # Hub processor_config.json has use_single_crop_col_tokens=False which
-    # differs from the __init__ default of None when building from components.
+    @unittest.skip(
+        reason="Hub processor_config.json has use_single_crop_col_tokens=False, which differs from the __init__ "
+        "default of None when building from components."
+    )
     def test_processor_from_pretrained_vs_from_components(self):
         pass

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-01-15 and contributed to Hugging Face Transformers on 2026-07-29.*
+*This model was published in HF papers on 2026-01-15 and contributed to Hugging Face Transformers on 2026-08-04.*
 *This model was released on 2026-01-15 and added to Hugging Face Transformers on 2026-05-21.*
 
 <div style="float: right;">
@@ -37,14 +37,41 @@ You can find all the original Molmo2 checkpoints under the [Molmo2](https://hugg
 
 ### Image-text-to-text generation
 
-Here's how to use Molmo2 for image-text-to-text generation:
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
-from transformers import Molmo2ForConditionalGeneration, Molmo2Processor
-import torch
+from transformers import pipeline
 
-processor = Molmo2Processor.from_pretrained("allenai/Molmo2-8B")
-model = Molmo2ForConditionalGeneration.from_pretrained(
+pipeline = pipeline(
+    task="image-text-to-text",
+    model="allenai/Molmo2-8B",
+    device=0,
+    torch_dtype="auto",
+)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+pipeline(text=messages, max_new_tokens=128, return_full_text=False)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+processor = AutoProcessor.from_pretrained("allenai/Molmo2-8B")
+model = AutoModelForImageTextToText.from_pretrained(
     "allenai/Molmo2-8B",
     device_map="auto",
 )
@@ -68,11 +95,15 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_text = processor.batch_decode(
-    generated_ids[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+generated_text = processor.decode(
+    generated_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
 )
-print(generated_text[0])
+print(generated_text)
+# In this captivating image, a snow leopard is captured ...
 ```
+
+</hfoption>
+</hfoptions>
 
 ### Video pointing
 
@@ -83,14 +114,14 @@ image coordinates.
 ```python
 import torch
 
-from transformers import Molmo2ForConditionalGeneration, Molmo2Processor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
 model_id = "allenai/Molmo2-8B"
 video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"
 
-processor = Molmo2Processor.from_pretrained(model_id)
-model = Molmo2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 model.eval()
 
 messages = [
@@ -114,7 +145,7 @@ with torch.no_grad():
     generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=False)
 
 input_len = inputs["input_ids"].shape[1]
-generated_text = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
+generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=True)
 print(generated_text)
 ```
 

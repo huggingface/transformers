@@ -205,6 +205,7 @@ class Molmo2VisionAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
@@ -295,23 +296,21 @@ class Molmo2VisionModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=self.config.initializer_range)
-        else:
-            super()._init_weights(module)
 
     def __init__(self, config: Molmo2VisionConfig):
         super().__init__(config)
         self.config = config
-        self.image_default_input_size = config.image_default_input_size
 
         self.positional_embedding = nn.Parameter(
-            torch.zeros(config.image_num_pos, config.hidden_size),
+            torch.zeros(config.num_position_embeddings, config.hidden_size),
         )
 
-        image_patch_size = config.image_patch_size
+        patch_size = config.patch_size
         self.patch_embedding = nn.Linear(
-            image_patch_size * image_patch_size * 3,
+            patch_size * patch_size * config.num_channels,
             config.hidden_size,
             bias=True,
         )
@@ -324,7 +323,7 @@ class Molmo2VisionModel(PreTrainedModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.patch_embedding(pixel_values.to(dtype=self.dtype))
-        # patch count == image_num_pos, locked by config; only retraining with a different grid breaks this.
+        # patch count == num_position_embeddings, locked by config; only retraining with a different grid breaks this.
         hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
 
         encoder_outputs = self.encoder(hidden_states, **kwargs)
@@ -463,7 +462,7 @@ class Molmo2RotaryEmbedding(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class Molmo2RMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6) -> None:
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         Molmo2RMSNorm is equivalent to T5LayerNorm
         """
@@ -472,11 +471,10 @@ class Molmo2RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        with torch.autocast(enabled=False, device_type=hidden_states.device.type):
-            input_dtype = hidden_states.dtype
-            hidden_states = hidden_states.to(torch.float32)
-            variance = hidden_states.pow(2).mean(-1, keepdim=True)
-            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
@@ -700,10 +698,9 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=self.config.initializer_range)
-        else:
-            super()._init_weights(module)
 
 
 @auto_docstring
@@ -737,6 +734,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -819,6 +817,12 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return torch.where(is_image, image_group_ids, -1)
 
 
+@auto_docstring(
+    custom_intro="""
+    The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model, without a language
+    modeling head.
+    """
+)
 class Molmo2Model(Molmo2PreTrainedModel):
     config: Molmo2Config
 
@@ -837,6 +841,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` holds "
+        "one projected feature per pooled image token."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -859,6 +867,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         return image_outputs
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` holds "
+        "one projected feature per pooled video token."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -893,6 +905,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         return special_image_mask
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -973,6 +986,11 @@ class Molmo2Model(Molmo2PreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model.
+    """
+)
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     # the loss must not be normalized by `num_items_in_batch`: logits/labels are filtered before computing it
     accepts_loss_kwargs = False
@@ -989,6 +1007,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1010,6 +1029,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Molmo2CausalLMOutputWithPast:
         r"""
+        Example:
+
         ```python
         >>> from PIL import Image
         >>> import requests

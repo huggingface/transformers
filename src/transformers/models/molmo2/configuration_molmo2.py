@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import field
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -31,39 +29,58 @@ from ...utils import auto_docstring
 @strict
 class Molmo2VisionConfig(PreTrainedConfig):
     r"""
-    image_default_input_size (`list[int]`, *optional*, defaults to `[378, 378]`):
-        Default input image size (height, width).
-    image_patch_size (`int`, *optional*, defaults to 14):
-        Size of each image patch.
-    image_num_pos (`int`, *optional*, defaults to 577):
-        Number of positional embeddings for the image.
+    image_size (`list[int]`, *optional*):
+        Input image size as (height, width), `[378, 378]` when not provided.
+    num_position_embeddings (`int`, *optional*):
+        Number of positional embeddings, one per image patch. Derived from `image_size` and `patch_size` when not
+        provided.
     """
 
     model_type = "molmo2"
     base_config_key = "vision_config"
+    # The names stored in the released checkpoints, also read by vLLM's native Molmo2 port.
+    attribute_map = {
+        "image_default_input_size": "image_size",
+        "image_patch_size": "patch_size",
+        "image_num_pos": "num_position_embeddings",
+    }
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
     num_hidden_layers: int = 27
     num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    head_dim: int = 72
+    num_key_value_heads: int | None = None
+    head_dim: int | None = None
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
-    image_default_input_size: list[int] = field(default_factory=lambda: [378, 378])
-    image_patch_size: int = 14
-    image_num_pos: int = 577
+    image_size: list[int] | None = None
+    patch_size: int = 14
+    num_position_embeddings: int | None = None
+    num_channels: int = 3
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.image_size is None:
+            self.image_size = [378, 378]
+        if self.num_position_embeddings is None:
+            self.num_position_embeddings = (self.image_size[0] // self.patch_size) * (
+                self.image_size[1] // self.patch_size
+            )
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
 @strict
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
-    vit_layers (`list[int]`, *optional*, defaults to `[-3, -9]`):
-        Indices of ViT layers to extract features from.
+    vit_layers (`list[int]`, *optional*):
+        Indices of ViT layers to extract features from, `[-3, -9]` when not provided.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
@@ -73,11 +90,11 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     model_type = "molmo2"
     base_config_key = "adapter_config"
 
-    vit_layers: list[int] = field(default_factory=lambda: [-3, -9])
+    vit_layers: list[int] | None = None
     hidden_size: int = 1152
     num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    head_dim: int = 72
+    num_key_value_heads: int | None = None
+    head_dim: int | None = None
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     hidden_act: str = "silu"
@@ -85,6 +102,15 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     text_hidden_size: int = 3584
     image_feature_dropout: float = 0.0
     initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.vit_layers is None:
+            self.vit_layers = [-3, -9]
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
@@ -165,8 +191,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
 
-    # Read and written by vLLM; the value moved into `rope_parameters` in the v5 RoPE standardization.
-    # Raises AttributeError before standardization so `getattr(config, "rope_theta", default)` returns the default.
     @property
     def rope_theta(self) -> float:
         rope_parameters = self.rope_parameters or {}

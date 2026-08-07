@@ -35,31 +35,24 @@ from .processing_molmo2 import Molmo2VideosKwargs
 logger = logging.get_logger(__name__)
 
 
-def batch_pixels_to_patches(array: torch.Tensor, patch_size: int) -> torch.Tensor:
-    """Reshape images of [num_images, h, w, 3] -> [num_images, n_patches, pixels_per_patch]"""
-    if len(array.shape) == 3:
-        num_crops, height, width = array.shape
-        num_patches_height = height // patch_size
-        num_patches_width = width // patch_size
-        array = array.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size)
-        array = array.permute(0, 1, 3, 2, 4)
-        array = array.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size)
-        return array
-    else:
-        num_crops, height, width, channels = array.shape
-        num_patches_height = height // patch_size
-        num_patches_width = width // patch_size
-        array = array.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
-        array = array.permute(0, 1, 3, 2, 4, 5)
-        array = array.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
-        return array
+def batch_pixels_to_patches(images: torch.Tensor, patch_size: int) -> torch.Tensor:
+    """Reshape images of [num_images, h, w, channels] -> [num_images, n_patches, pixels_per_patch]"""
+    num_crops, height, width, channels = images.shape
+    num_patches_height = height // patch_size
+    num_patches_width = width // patch_size
+    images = images.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
+    images = images.permute(0, 1, 3, 2, 4, 5)
+    images = images.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
+    return images
 
 
 def arange_for_pooling(
     index_grid: torch.Tensor,
     pool_h: int,
     pool_w: int,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, int, int]:
+    """Group a [h, w] patch-index grid into pooling windows: `[num_rows * num_cols, pool_h * pool_w]`, padded
+    with -1. Also returns the pooled grid's `(num_rows, num_cols)`."""
     height_padding = pool_h * ((index_grid.shape[0] + pool_h - 1) // pool_h) - index_grid.shape[0]
     width_padding = pool_w * ((index_grid.shape[1] + pool_w - 1) // pool_w) - index_grid.shape[1]
     index_grid = F.pad(
@@ -69,16 +62,17 @@ def arange_for_pooling(
         value=-1,
     )
     num_rows, num_cols = index_grid.shape[0] // pool_h, index_grid.shape[1] // pool_w
-    return (
+    pooling_indices = (
         index_grid.reshape(num_rows, pool_h, num_cols, pool_w)
         .permute(0, 2, 1, 3)
-        .reshape(num_rows, num_cols, pool_h * pool_w)
+        .reshape(num_rows * num_cols, pool_h * pool_w)
     )
+    return pooling_indices, num_rows, num_cols
 
 
 def resize_and_normalize_image(
     backend: "TorchvisionBackend",
-    image_chw: torch.Tensor,
+    image: torch.Tensor,
     output_size: list[int],
     resample: PILImageResampling,
     do_rescale: bool,
@@ -90,22 +84,22 @@ def resize_and_normalize_image(
     # Under `torch.compile`, torchvision's uint8 bilinear resize can produce values slightly outside 0-255,
     # which overflow and wrap around (-1 becomes 255, so a near-black pixel becomes white). Resizing in
     # float, then rounding and clamping back, avoids that and gives the exact same bytes in eager mode.
-    is_integer_input = not image_chw.dtype.is_floating_point
+    is_integer_input = not image.dtype.is_floating_point
     resized = backend.resize(
-        image_chw.float() if is_integer_input else image_chw,
+        image.float() if is_integer_input else image,
         size=SizeDict(height=output_size[0], width=output_size[1]),
         resample=resample,
         antialias=False,
     )
     if is_integer_input:
-        resized = resized.round().clamp(0, 255).to(image_chw.dtype)
+        resized = resized.round().clamp(0, 255).to(image.dtype)
     return backend.rescale_and_normalize(resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
 def build_resized_image(
     backend: "TorchvisionBackend",
-    images_nchw: torch.Tensor,
-    base_image_input_size: int,
+    images: torch.Tensor,
+    crop_size: int,
     resample: PILImageResampling,
     do_rescale: bool,
     rescale_factor: float,
@@ -114,11 +108,11 @@ def build_resized_image(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    # `images_nchw`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
+    # `images`: a batch of same-shape images `[N, C, H, W]`; resize the whole batch at once.
     resized = resize_and_normalize_image(
         backend,
-        images_nchw,
-        [base_image_input_size, base_image_input_size],
+        images,
+        [crop_size, crop_size],
         resample,
         do_rescale=do_rescale,
         rescale_factor=rescale_factor,
@@ -129,10 +123,10 @@ def build_resized_image(
     # [N, C, S, S] -> [N, 1, S, S, C]: one global (low-res) view per image.
     resized = resized.permute(0, 2, 3, 1).unsqueeze(1)
     # The per-patch index grid depends only on the (shared) shape, so it is built once.
-    crop_patch_h = crop_patch_w = base_image_input_size // image_patch_size
-    resized_index_grid = torch.arange(
-        crop_patch_w * crop_patch_h, dtype=torch.int32, device=images_nchw.device
-    ).reshape(crop_patch_h, crop_patch_w)
+    patches_per_side = crop_size // image_patch_size
+    resized_index_grid = torch.arange(patches_per_side**2, dtype=torch.int32, device=images.device).reshape(
+        patches_per_side, patches_per_side
+    )
     return resized, resized_index_grid
 
 
@@ -194,8 +188,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 
     def _build_video_patches(
         self,
-        video_tchw: torch.Tensor,
-        base_image_input_size: int,
+        video: torch.Tensor,
+        crop_size: int,
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
@@ -209,20 +203,20 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         # `build_resized_image` takes a whole `[N, C, H, W]` batch, so all frames of a video are resized in one call.
         resized_frames, resized_index_grid = build_resized_image(
             self,
-            video_tchw,
-            base_image_input_size,
-            resample,
-            do_rescale,
-            rescale_factor,
-            do_normalize,
-            image_mean,
-            image_std,
-            image_patch_size,
+            video,
+            crop_size=crop_size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            image_patch_size=image_patch_size,
         )
         # The pooling index grid is shape-dependent only, hence shared by every frame.
-        pooling_indices = arange_for_pooling(resized_index_grid, image_pooling_h, image_pooling_w)
-        num_patch_rows, num_patch_cols = pooling_indices.shape[:2]
-        pooling_indices = pooling_indices.reshape([-1, image_pooling_h * image_pooling_w])
+        pooling_indices, num_patch_rows, num_patch_cols = arange_for_pooling(
+            resized_index_grid, image_pooling_h, image_pooling_w
+        )
         # [T, 1, S, S, C] -> [T, n_patch, pixels_per_patch]
         patches = batch_pixels_to_patches(resized_frames.squeeze(1), image_patch_size)
         return [num_patch_rows, num_patch_cols], patches, pooling_indices
@@ -230,21 +224,21 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        size: SizeDict | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool = True,
-        rescale_factor: float = 1.0 / 255.0,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        pooling_size: list[int] | None = None,
+        size: SizeDict,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        pooling_size: list[int],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         if size.height != size.width:
             raise ValueError(f"Molmo2 only supports a square `size`, got height={size.height}, width={size.width}.")
-        base_image_input_size = size.height
+        crop_size = size.height
         image_pooling_h, image_pooling_w = pooling_size
 
         all_crops: list[torch.Tensor] = []
@@ -255,16 +249,16 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         for video in videos:
             image_grid, patches, pooling_indices = self._build_video_patches(
                 video,
-                base_image_input_size,
-                resample,
-                do_rescale,
-                rescale_factor,
-                do_normalize,
-                image_mean,
-                image_std,
-                patch_size,
-                image_pooling_h,
-                image_pooling_w,
+                crop_size=crop_size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                image_patch_size=patch_size,
+                image_pooling_h=image_pooling_h,
+                image_pooling_w=image_pooling_w,
             )
             num_frames, patches_per_frame = patches.shape[:2]
             frame_offsets = (
