@@ -40,6 +40,8 @@ from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
 
+pytest_plugins = ["memory_tracker_plugin"]
+
 _ci_fallback_cache_dir = None
 # Directory holding one append-only file per process recording the repo/file id for every
 # call retried through the read-only cache fallback. A directory (rather than an in-memory
@@ -301,7 +303,9 @@ def pytest_addoption(parser):
 def pytest_runtest_logreport(report):
     if report.when == "call":
         outcome = "PASSED" if report.passed else "FAILED" if report.failed else "SKIPPED"
-        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s")
+        delta = next((v for k, v in report.user_properties if k == "memory_delta_mb"), None)
+        mem_str = f" mem:{delta:+.0f}MB" if delta is not None else ""
+        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s{mem_str}")
 
 
 def pytest_terminal_summary(terminalreporter):
