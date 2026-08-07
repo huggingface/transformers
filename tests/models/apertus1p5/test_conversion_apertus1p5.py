@@ -27,7 +27,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file
 
-    from transformers import Apertus1p5VisionTokenizerConfig, Apertus1p5VisionTokenizerModel
+    from transformers import Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig, Apertus1p5VisionTokenizerModel
     from transformers.models.apertus1p5 import convert_apertus1p5_vision_tokenizer_to_hf as vision_conversion
     from transformers.models.apertus1p5 import convert_apertus1p5_weights_to_hf as conversion
     from transformers.models.apertus1p5.convert_apertus1p5_vision_tokenizer_to_hf import _comparable
@@ -82,8 +82,22 @@ class Apertus1p5ConversionTest(unittest.TestCase):
             config = conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
 
         self.assertEqual(config.architectures, ["Apertus1p5ForConditionalGeneration"])
+        self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
+        self.assertEqual(config.text_config.model_type, "apertus1p5_text")
         # the backbone's own entrypoint must not leak into the text sub-config
         self.assertIsNone(getattr(config.text_config, "architectures", None))
+
+    def test_build_config_rejects_unrelated_text_model(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            for source in ("text", "vision", "audio"):
+                (tmp / source).mkdir()
+            (tmp / "text" / "config.json").write_text(json.dumps({"model_type": "llama"}))
+            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
+
+            with self.assertRaisesRegex(ValueError, "not an Apertus text checkpoint"):
+                conversion.build_config(str(tmp / "text"), str(tmp / "vision"), str(tmp / "audio"))
 
     def test_convert_rejects_output_dir_equal_to_source(self):
         # writing the composite into a source directory would overwrite its config and delete its weights
