@@ -81,7 +81,7 @@ from .models.auto.modeling_auto import (
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import is_torch_greater_or_equal_than_2_6
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -99,6 +99,7 @@ from .trainer_optimizer import (
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
+    BatchRebalanceSampler,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
@@ -999,16 +1000,37 @@ class Trainer:
         if is_torch_greater_or_equal_than_2_6:
             dataloader_params["in_order"] = self.args.dataloader_in_order
 
+        sampler: torch.utils.data.Sampler | None = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
-            if sampler_fn is not None:
-                dataloader_params["sampler"] = sampler_fn(dataset)
-            dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            sampler = sampler_fn(dataset) if sampler_fn is not None else None
+            if isinstance(sampler, BatchRebalanceSampler):
+                # Pass as `batch_sampler`; it is mutually exclusive with `batch_size`/`sampler`/`drop_last`.
+                dataloader_params.pop("batch_size", None)
+                dataloader_params["batch_sampler"] = sampler
+            else:
+                if sampler is not None:
+                    dataloader_params["sampler"] = sampler
+                dataloader_params["drop_last"] = self.args.dataloader_drop_last
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
+
+        # `BatchRebalanceSampler` is already rank-aware: it assigns per-rank groups itself and each
+        # rank only iterates its own portion. `accelerator.prepare` unconditionally wraps every
+        # map-style `batch_sampler` in Accelerate's `BatchSamplerShard` (which keeps every
+        # `num_processes`-th batch per rank), so leaving it active would re-shard on top of the
+        # sampler's own per-rank yields -> double sharding that silently drops most samples each
+        # epoch. Make that wrapper a passthrough (num_processes=1) so the prepared dataloader
+        # iterates the rank-aware sampler directly. (The wrapper has plain settable attrs; we can't
+        # reassign `batch_sampler` on the underlying DataLoader after init.)
+        if isinstance(sampler, BatchRebalanceSampler):
+            prepared_bs = getattr(dataloader, "batch_sampler", None)
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
+                prepared_bs.num_processes = 1
+                prepared_bs.process_index = 0
 
         # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
@@ -1050,6 +1072,49 @@ class Trainer:
                 dataset=train_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+            )
+        elif self.args.train_sampling_strategy == "batch_rebalance":
+            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+                lengths = (
+                    train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in train_dataset.column_names
+                    else None
+                )
+            else:
+                lengths = None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
+            if lengths is None:
+                model_input_name = model_input_name if model_input_name is not None else "input_ids"
+                if not isinstance(train_dataset[0], (dict, BatchEncoding)) or model_input_name not in train_dataset[0]:
+                    raise ValueError(
+                        "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                        f"'{model_input_name}' key."
+                    )
+                lengths = [len(feature[model_input_name]) for feature in train_dataset]
+            elif isinstance(lengths, torch.Tensor):
+                lengths = lengths.tolist()
+
+            world_size = max(1, self.args.world_size)
+            rank = self.args.process_index if self.args.world_size > 1 else 0
+            grad_accum = self.args.gradient_accumulation_steps
+            # `self.args.train_batch_size` is the per-process batch (per_device_train_batch_size *
+            # #GPUs in this process) and already excludes world_size. Multiplying it by grad_accum
+            # and world_size yields the true global effective batch size across all processes and
+            # accumulation steps, covering both DDP (world_size > 1, n_gpu == 1) and DP
+            # (world_size == 1, n_gpu > 1).
+            effective_batch_size = self.args.train_batch_size * grad_accum * world_size
+
+            return BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=world_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                drop_last=self.args.dataloader_drop_last,
+                alpha=self.args.batch_rebalance_alpha,
+                max_tokens=self.args.batch_rebalance_max_tokens,
             )
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)
