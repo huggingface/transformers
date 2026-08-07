@@ -1093,7 +1093,7 @@ class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 @add_start_docstrings(
-    "",  # intentional TRF008 violation for testing
+    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
         patch_size (`int`, *optional*, defaults to 14):
