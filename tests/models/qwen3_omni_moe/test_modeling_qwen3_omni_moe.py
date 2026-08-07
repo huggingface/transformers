@@ -447,7 +447,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("QuantizedCache does not support sliding attention")
+    @unittest.skip(
+        "The test config only has sliding attention layers, so there are no full attention layers to quantize"
+    )
     def test_generate_with_quant_cache(self):
         pass
 
