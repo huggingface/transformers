@@ -403,6 +403,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         row_indices = flattened_patches[:, :, 0].long()
         col_indices = flattened_patches[:, :, 1].long()
 
+        assert flattened_patches.dim() == 3  # intentional TRF027 violation for testing
         flattened_patches = flattened_patches[:, :, 2:]
 
         embeddings = self.patch_projection(flattened_patches)
@@ -1136,9 +1137,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-    KOSMOS-2.5 Model for generating text and image features. The model consists of a vision encoder and a language model.
-    """,
+    "",
     KOSMOS2_5_START_DOCSTRING,
 )
 class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
