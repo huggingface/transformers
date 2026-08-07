@@ -538,10 +538,11 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         )
         allocator.block_table["req"] = block_table
 
-        # Read indices: cache positions followed by one sentinel per query token
-        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        # Read indices: the (at most) `sliding_window - 1` most recent cached tokens, in chronological order,
+        # followed by one sentinel per query token. The most recent cached token is the one at logical position
+        # `past_length - 1`, and it must be part of the read.
         read_cache_length = min(past_length, sliding_window - 1)
-        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        expected_read = [to_physical(i) for i in range(past_length - read_cache_length, past_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
 
@@ -555,11 +556,10 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
         # window
-        write_start = past_length % sliding_window
         write_cache_length = min(query_length, sliding_window)
         padding_length = query_length - write_cache_length
         expected_write = [write_trash_index] * padding_length
-        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        expected_write += [to_physical(i) for i in range(past_length + padding_length, past_length + query_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
 
         # Main check
@@ -569,6 +569,63 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
             self.assertIn(idx // block_size, block_table)
+
+    @parameterized.expand(
+        [
+            # (block_size, sliding_window, block_table, query_lengths)
+            # Prefill shorter than the window, then decode past the wrap-around
+            (4, 8, [0, 1], [3] + [1] * 16),
+            # Prefill exactly the size of the window, then decode
+            (4, 8, [0, 1], [8] + [1] * 16),
+            # Prefill longer than the window, then decode
+            (4, 8, [3, 5], [11] + [1] * 16),
+            # Chunked prefill, with chunks smaller and larger than the window
+            (4, 8, [0, 1], [3, 5, 4, 10, 2] + [1] * 8),
+            # Single-block window
+            (4, 4, [7], [1] * 12),
+            # Larger block size
+            (16, 32, [0, 1], [5] + [1] * 40),
+        ]
+    )
+    def test_sliding_attention_read_write_round_trip(
+        self,
+        block_size: int,
+        sliding_window: int,
+        block_table: list[int],
+        query_lengths: list[int],
+    ) -> None:
+        """Replays a sequence of prefill/decode steps through the rolling buffer, tracking which logical token each
+        physical slot holds, and checks that every read returns the `sliding_window - 1` most recent tokens in
+        chronological order. Reads and writes are only consistent with each other if both agree on where a given
+        logical position lives, so this catches off-by-one errors that the two index computations would otherwise hide
+        from each other."""
+        allocator = SlidingAttentionCacheAllocator(
+            index=0,
+            block_size=block_size,
+            sliding_window=sliding_window,
+            sentinel_index=-1,
+            write_trash_index=-2,
+        )
+        allocator.block_table["req"] = block_table
+
+        slot_to_token: dict[int, int] = {}  # physical slot -> logical position currently stored there
+        past_length = 0
+        for query_length in query_lengths:
+            # Reads happen before writes, and only when there is cache to read from
+            if past_length > 0:
+                read = allocator.get_read_indices("req", past_length, query_length)
+                self.assertEqual(read[-query_length:], [allocator.sentinel_index] * query_length)
+                cached_tokens = [slot_to_token[idx] for idx in read[:-query_length]]
+                expected_tokens = list(range(max(0, past_length - sliding_window + 1), past_length))
+                self.assertEqual(
+                    cached_tokens,
+                    expected_tokens,
+                    f"Wrong cache read at {past_length = } for {sliding_window = }, {block_size = }",
+                )
+            for offset, idx in enumerate(allocator.get_write_indices("req", past_length, query_length)):
+                if idx != allocator.write_trash_index:
+                    slot_to_token[idx] = past_length + offset
+            past_length += query_length
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
