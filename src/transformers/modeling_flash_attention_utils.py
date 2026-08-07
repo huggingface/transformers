@@ -533,14 +533,15 @@ def _prepare_from_posids(query, key, value, position_ids):
     return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 
-def _is_packed_sequence(position_ids, batch_size):
+def _is_packed_sequence(position_ids, batch_size, query_length=None):
     """
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
         2. Flattened sequences only are supported
-        3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+        3. The query has more than one token, since a decode step cannot contain packed sequences
+        4. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
     """
-    if position_ids is None:
+    if position_ids is None or query_length == 1:
         return False
 
     increasing_position_sequences = (
@@ -763,7 +764,9 @@ def _flash_attention_forward(
     #
     # NOTE: it is user's responsibility to take care of flattening `position_ids` if that's needed by the model.
     # See #39121 for more information.
-    is_fa_with_position_ids = _is_packed_sequence(position_ids, batch_size=query_states.size(0))
+    is_fa_with_position_ids = _is_packed_sequence(
+        position_ids, batch_size=query_states.size(0), query_length=query_length
+    )
     is_fa_with_varlen_kwargs = all(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
