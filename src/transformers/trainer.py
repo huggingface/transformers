@@ -172,6 +172,7 @@ from .utils import (
     is_torch_hpu_available,
     is_torch_mlu_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_npu_available,
     is_torch_xla_available,
     logging,
@@ -1702,25 +1703,28 @@ class Trainer:
         # Neuron profiling
         import contextlib
 
-        import torch_neuronx
         from torch.profiler import ProfilerActivity, profile, record_function
         from torch.profiler import schedule as profiler_schedule
-        from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
 
-        exp_config = NeuronConfig(
-            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
-            profile_output_dir=os.environ.get("NEURON_PROFILER_OUTPUT_DIR"),
-            max_events_per_nc=4_000_000,
-        )
-        exporter = NeuronProfiler(exp_config)
-        prof = profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
-            experimental_config=exp_config,
-            with_stack=True,
-            on_trace_ready=exporter.export_trace,
-            schedule=profiler_schedule(wait=0, warmup=3, active=1, repeat=1),
-        )
-        prof.start()
+        use_neuron_profiler = is_torch_neuron_available(check_device=True)
+        if use_neuron_profiler:
+            import torch_neuronx
+            from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
+
+            exp_config = NeuronConfig(
+                modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
+                profile_output_dir=os.environ.get("NEURON_PROFILER_OUTPUT_DIR"),
+                max_events_per_nc=4_000_000,
+            )
+            exporter = NeuronProfiler(exp_config)
+            prof = profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
+                experimental_config=exp_config,
+                with_stack=True,
+                on_trace_ready=exporter.export_trace,
+                schedule=profiler_schedule(wait=0, warmup=3, active=1, repeat=1),
+            )
+            prof.start()
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % self.args.gradient_accumulation_steps
@@ -1812,7 +1816,8 @@ class Trainer:
 
                         model.zero_grad()
                         self.state.global_step += 1
-                        prof.step()
+                        if use_neuron_profiler:
+                            prof.step()
                         self.state.epoch = epoch + (step + 1) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
                         self._maybe_log_save_evaluate(
@@ -1833,9 +1838,10 @@ class Trainer:
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
 
-        # Waiting for profiling.
-        torch_neuronx.synchronize()
-        prof.stop()
+        if use_neuron_profiler:
+            # Waiting for profiling.
+            torch_neuronx.synchronize()
+            prof.stop()
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.

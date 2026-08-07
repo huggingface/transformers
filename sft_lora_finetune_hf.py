@@ -20,12 +20,16 @@ from datasets import load_dataset
 from accelerate import ParallelismConfig
 from transformers import AutoModelForCausalLM, AutoConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.utils import is_torch_neuron_available
 
 from peft import get_peft_model
 from trl import ModelConfig, ScriptArguments, SFTConfig, SFTTrainer, TrlParser, get_peft_config
 
 
 def main(script_args, training_args, model_args):
+    if not torch.cuda.is_available() and is_torch_neuron_available(check_device=True):
+        import torch_neuronx  # noqa: F401
+
     # ---------------------------------------------------------------------------
     # Tensor Parallelism
     # ---------------------------------------------------------------------------

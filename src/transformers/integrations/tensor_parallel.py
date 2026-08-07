@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import contextlib
 import math
 import operator
 import os
@@ -22,7 +23,7 @@ from functools import reduce
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_neuron_available
 
 
 if is_torch_available():
@@ -462,7 +463,8 @@ def _split_along_last_dim(x, world_size):
 #   └────────────────────┴─────────────────────┴─────────────────────┘
 # ===================
 
-import torch_neuronx
+if is_torch_neuron_available(check_device=True):
+    import torch_neuronx
 
 
 # Cache of Neuron streams dedicated to collective communication, one per device. Running
@@ -474,6 +476,13 @@ def _get_cc_stream(device):
     if device not in _cc_streams:
         _cc_streams[device] = torch_neuronx.Stream(device)
     return _cc_streams[device]
+
+
+def _cc_stream_context(device):
+    """Dedicated stream for a collective on Neuron so it shows up as a distinct op in the profiler trace. No-op elsewhere."""
+    if is_torch_neuron_available(check_device=True):
+        return torch_neuronx.stream(_get_cc_stream(device))
+    return contextlib.nullcontext()
 
 
 class _AllReduceBackward(torch.autograd.Function):
@@ -490,7 +499,7 @@ class _AllReduceBackward(torch.autograd.Function):
         if device_mesh.size() == 1:
             return grad_output, None
         grad_output = grad_output.contiguous()
-        with record_function("all_reduce_backward"), torch_neuronx.stream(_get_cc_stream(grad_output.device)):
+        with record_function("all_reduce_backward"), _cc_stream_context(grad_output.device):
             dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return grad_output, None
 
@@ -502,7 +511,7 @@ class _AllReduceForward(torch.autograd.Function):
     def forward(ctx, x, device_mesh):
         if device_mesh.size() == 1:
             return x
-        with record_function("all_reduce_forward"), torch_neuronx.stream(_get_cc_stream(x.device)):
+        with record_function("all_reduce_forward"), _cc_stream_context(x.device):
             dist.all_reduce(x, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return x
 
@@ -529,7 +538,7 @@ class _AllGather(torch.autograd.Function):
         x = x.contiguous()
         tensor_list = [torch.empty_like(x) for _ in range(world_size)]
         tensor_list[rank] = x
-        with record_function("all_gather"), torch_neuronx.stream(_get_cc_stream(x.device)):
+        with record_function("all_gather"), _cc_stream_context(x.device):
             dist.all_gather(tensor_list, x, group=group)
         return torch.cat(tensor_list, dim=last_dim).contiguous()
 
@@ -576,7 +585,7 @@ class _Split(torch.autograd.Function):
         grad_output = grad_output.contiguous()
         tensor_list = [torch.empty_like(grad_output) for _ in range(world_size)]
         tensor_list[rank] = grad_output
-        with record_function("split_backward_all_gather"), torch_neuronx.stream(_get_cc_stream(grad_output.device)):
+        with record_function("split_backward_all_gather"), _cc_stream_context(grad_output.device):
             dist.all_gather(tensor_list, grad_output, group=group)
         return torch.cat(tensor_list, dim=last_dim).contiguous(), None
 
@@ -600,7 +609,7 @@ class _ReduceScatter(torch.autograd.Function):
         output_shape[last_dim] //= world_size
         output = torch.empty(output_shape, dtype=x.dtype, device=x.device)
 
-        with record_function("reduce_scatter"), torch_neuronx.stream(_get_cc_stream(x.device)):
+        with record_function("reduce_scatter"), _cc_stream_context(x.device):
             dist.reduce_scatter(output, input_chunks, op=dist.ReduceOp.SUM, group=group)
         return output
 
@@ -619,9 +628,7 @@ class _ReduceScatter(torch.autograd.Function):
         grad_output = grad_output.contiguous()
         tensor_list = [torch.empty_like(grad_output) for _ in range(world_size)]
         tensor_list[rank] = grad_output
-        with record_function(
-            "reduce_scatter_backward_all_gather"
-        ), torch_neuronx.stream(_get_cc_stream(grad_output.device)):
+        with record_function("reduce_scatter_backward_all_gather"), _cc_stream_context(grad_output.device):
             dist.all_gather(tensor_list, grad_output, group=group)
         return torch.cat(tensor_list, dim=last_dim).contiguous(), None
 
