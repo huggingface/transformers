@@ -115,9 +115,13 @@ def sdpa_attention_forward(
     # Quirks on the conditionals:
     # - We avoid inline passing this to the SDPA function directly to support both torch.compile's dynamic shapes and
     #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
-    # - Check the static conditions first so non-causal attention and explicit masks do not propagate a symbolic
-    #   sequence-length comparison to SDPA's boolean `is_causal` argument.
-    is_causal = is_causal and attention_mask is None and q_length > 1
+    # - It is important to check first for the shape, otherwise compile will fail with
+    #   `argument 'is_causal' must be bool, not SymBool`.
+    # TODO: dynamic export can still hit `argument 'is_causal' must be bool, not SymBool` here
+    #   (e.g. the seamless_m4t / seamless_m4t_v2 speech encoders) as the symbolic `q_length > 1` is evaluated first.
+    #   This should be fixed on the exporter side rather than by reordering the conditions.
+    #   See https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141
+    is_causal = q_length > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
     # We convert it to a bool for the SDPA kernel that only accepts bools.
