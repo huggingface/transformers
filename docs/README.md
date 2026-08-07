@@ -80,7 +80,7 @@ Readers run our snippets on NVIDIA GPUs, AMD ROCm, Intel XPU, Apple MPS, Ascend 
 
 - Load with `device_map="auto"` instead of `device_map="cuda"`.
 - Move inputs with `inputs.to(model.device)` instead of `.to("cuda")` or `.cuda()`.
-- Use the `torch.accelerator` API (`torch.accelerator.synchronize()`, `torch.accelerator.empty_cache()`, `torch.accelerator.max_memory_allocated()`) instead of the `torch.cuda` equivalents, and `torch.Event(enable_timing=True)` instead of `torch.cuda.Event`.
+- Use `torch.accelerator.synchronize()` for synchronization and and `torch.Event(enable_timing=True)` for timing. Memory helpers live under `torch.accelerator.memory`, for example `torch.accelerator.memory.empty_cache()` and `torch.accelerator.memory.max_memory_allocated()`.
 - If you really need a device string, use `device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"`.
 - Keep `cuda` only where it is genuinely CUDA-specific: toolchain instructions (`nvcc`, `nvidia-smi`), NVIDIA-only backends, PyTorch API names such as `use_cuda_graph`, and sample outputs copied from a real run.
 
