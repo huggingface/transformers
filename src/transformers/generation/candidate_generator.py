@@ -1614,9 +1614,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
 
         num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
-        # The hidden states hold all tokens from last `tgt_model` forward on all the candidates. We need the
+        # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
         # hidden states of only accepted tokens thus crop out the rest
-        target_hidden_states: torch.Tensor = torch.cat(
+        context_hidden_states: torch.Tensor = torch.cat(
             [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
         )
 
@@ -1628,12 +1628,14 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             position_ids = model_kwargs["position_ids"][:, :num_last_main_model_tokens]
             attention_mask = model_kwargs["attention_mask"][:, :num_last_main_model_tokens]
 
-        input_mask_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
-        # the assistant needs embedding without norm thus take the lookup table and call `F.embedding`
-        mask_token_embedding = torch.nn.functional.embedding(input_mask_ids, self.main_model_input_embeddings.weight)
+        # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
+        # the main model, and the noise tokens
+        noise_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
+        # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
+        noise_embeds = torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
 
-        # Append positions and mask for the noise tokens, we can't just crop off from `model_kwargs`!
-        # because noise position go beyond what came from model kwargs
+        # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
+        # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
         noise_position_ids = torch.arange(self.block_size, device=position_ids.device) + position_ids[..., -1:] + 1
         position_ids = torch.cat([position_ids, noise_position_ids], dim=-1)
         noise_attention_mask = torch.ones(1, self.block_size, device=attention_mask.device, dtype=attention_mask.dtype)
@@ -1641,8 +1643,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get assistant model outputs
         outputs = self.assistant_model(
-            noise_embeds=mask_token_embedding,
-            context_hidden_states=target_hidden_states,
+            noise_embeds=noise_embeds,
+            context_hidden_states=context_hidden_states,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=self.cache,
