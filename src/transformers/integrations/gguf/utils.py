@@ -176,11 +176,12 @@ class GgufEmbedding(nn.Module):
         return f"{self.num_embeddings}, {self.embedding_dim}, ggml_type={self.ggml_type}"
 
 
-def replace_with_gguf_modules(model, plan: dict[str, int], kernel) -> dict[str, nn.Module]:
+def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -> dict[str, nn.Module]:
     """Replace every module named in `plan` with one that holds GGUF blocks; return `{param_name: module}`.
 
-    Runs under the model's init context, so the modules built here get meta weights and the requested
-    dtype from `torch.get_default_dtype()`, exactly like the ones they replace.
+    Runs under the model's init context, so the modules built here get meta weights exactly like the
+    ones they replace. `dtype` is the dtype the model is being loaded in, which an embedding needs to
+    know: it unpacks the rows it gathers, so it has to be told what to unpack them into.
     """
     # update plan for tied weights
     for target, source in (model._tied_weights_keys or {}).items():
@@ -198,7 +199,7 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel) -> dict[str, 
             gemv = bool(kernel) and kernel.supports(ggml_type)
             new_module = GgufLinear(module.in_features, module.out_features, ggml_type, module.bias is not None, gemv)
         elif type(module) is nn.Embedding:
-            new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type)
+            new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type, dtype)
         else:
             continue
         model.set_submodule(module_name, new_module)

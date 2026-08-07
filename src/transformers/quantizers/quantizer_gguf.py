@@ -147,7 +147,7 @@ class GgufHfQuantizer(HfQuantizer):
         self.quantized, packable = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:
             return
-        self.keep_packed = set(replace_with_gguf_modules(model, packable, self.kernel))
+        self.keep_packed = set(replace_with_gguf_modules(model, packable, self.kernel, self.dtype))
 
     def update_weight_conversions(self, weight_conversions):
         """Prepend this file's conversions: the GGUF -> transformers mapping, and the unpacking.

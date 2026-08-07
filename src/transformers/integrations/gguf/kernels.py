@@ -71,8 +71,7 @@ def _dequantize_chunk(weight, ggml_type: int, rows: int, cols: int, dtype):
 
 
 class GgufKernel:
-    """A resolved kernel: its two ops, and which quant types it implements a gemv for.
-    """
+    """A resolved kernel: its two ops, and which quant types it implements a gemv for."""
 
     def __init__(self, module):
         self.mul_mat_vec = module.mul_mat_vec
