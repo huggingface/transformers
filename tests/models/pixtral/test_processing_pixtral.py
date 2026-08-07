@@ -11,20 +11,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
+import tempfile
 import unittest
+from collections.abc import Mapping
+from pathlib import Path
 
 import numpy as np
 import torch
 from parameterized import parameterized
 
-from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
+from tests.integrations.mistral.tekken_fixtures import write_fake_tekken_json
+from transformers import AutoProcessor
+from transformers.testing_utils import require_mistral_common, require_torchvision, require_vision
+from transformers.utils import is_mistral_common_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
     from transformers import PixtralProcessor
+
+if is_mistral_common_available():
+    from transformers.tokenization_mistral_common import MistralCommonBackend
+
+
+def _build_mistral_common_tokenizer():
+    """Build a real MistralCommonBackend with all special tokens required by mistral-common."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tekken_path = write_fake_tekken_json(Path(tmpdir))
+        tokenizer = MistralCommonBackend(tokenizer_path=tekken_path)
+    return tokenizer
 
 
 @require_vision
@@ -261,6 +278,37 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         # fmt: on
 
+    @require_mistral_common
+    def test_apply_chat_template_with_mistral_common_backend(self):
+        """PixtralProcessor.apply_chat_template delegates to MistralCommonBackend and produces real tokens."""
+
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+
+        mc_tokenizer = _build_mistral_common_tokenizer()
+
+        processor.tokenizer = mc_tokenizer
+
+        conversation = [{"role": "user", "content": "Hello"}]
+
+        result_str = processor.apply_chat_template(conversation, tokenize=False)
+        self.assertIsInstance(result_str, str)
+        self.assertIn("Hello", result_str)
+
+        result_dict = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
+        self.assertIsInstance(result_dict, Mapping)
+        self.assertIn("input_ids", result_dict)
+        self.assertGreater(len(result_dict["input_ids"]), 0)
+
+        result_pt = processor.apply_chat_template(conversation, tokenize=True, return_dict=True, return_tensors="pt")
+        self.assertIsInstance(result_pt, Mapping)
+        self.assertIn("input_ids", result_pt)
+        self.assertIsInstance(result_pt["input_ids"], torch.Tensor)
+        self.assertGreater(result_pt["input_ids"].numel(), 0)
+
+        result_ids = processor.apply_chat_template(conversation, tokenize=True, return_dict=False)
+        self.assertIsInstance(result_ids, list)
+        self.assertGreater(len(result_ids), 0)
+
     def test_processor_returns_full_length_batches(self):
         # to avoid https://github.com/huggingface/transformers/issues/34204
         processor = self.processor_class.from_pretrained(self.tmpdirname)
@@ -279,3 +327,205 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("input_ids", inputs_image)
         self.assertTrue(len(inputs_image["input_ids"]) == 5)
         self.assertTrue(len(inputs_image["pixel_values"]) == 5)
+
+
+def _write_fake_params_json(directory: Path) -> None:
+    """Write a minimal `params.json` with a `vision_encoder` block."""
+    params = {
+        "vision_encoder": {
+            "patch_size": 16,
+            "image_size": 512,
+            "spatial_merge_size": 1,
+        }
+    }
+    with open(directory / "params.json", "w", encoding="utf-8") as f:
+        json.dump(params, f)
+
+
+def _write_fake_preprocessor_config(directory: Path) -> None:
+    """Write a minimal `preprocessor_config.json` for PixtralImageProcessor."""
+    config = {
+        "image_processor_type": "PixtralImageProcessor",
+        "patch_size": {"height": 16, "width": 16},
+        "size": {"longest_edge": 512},
+    }
+    with open(directory / "preprocessor_config.json", "w", encoding="utf-8") as f:
+        json.dump(config, f)
+
+
+class PixtralNativeCheckpointTest(unittest.TestCase):
+    """Fast (no-network) unit tests for native Mistral checkpoint support in PixtralProcessor."""
+
+    @require_mistral_common
+    @require_torchvision
+    def test_from_pretrained_native_returns_mistral_backend(self):
+        """from_pretrained on a native checkpoint (tekken.json + params.json) returns MistralCommonBackend."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+
+            processor = PixtralProcessor.from_pretrained(tmpdir)
+
+            self.assertIsInstance(processor.tokenizer, MistralCommonBackend)
+
+    @require_torchvision
+    def test_from_pretrained_mistral_format_false_yields_non_mistral(self):
+        """mistral_format=False on a native checkpoint never yields MistralCommonBackend."""
+        from transformers.integrations.mistral import convert_tekken_tokenizer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+            _write_fake_preprocessor_config(tmpdir_path)
+
+            # Produce a standard HF tokenizer.json from the fake tekken vocab so that
+            # the TokenizersBackend fallback path (mistral_format=False) can load it.
+            hf_tok = convert_tekken_tokenizer(str(tmpdir_path / "tekken.json"))
+            hf_tok.save_pretrained(tmpdir)
+
+            processor = PixtralProcessor.from_pretrained(tmpdir, mistral_format=False)
+
+            # String comparison avoids importing MistralCommonBackend when mistral_common is absent;
+            # the test is only gated on torchvision, not on mistral_common.
+            self.assertNotEqual(type(processor.tokenizer).__name__, "MistralCommonBackend")
+
+    @require_mistral_common
+    @require_torchvision
+    def test_from_pretrained_native_missing_params_raises(self):
+        """from_pretrained on a native checkpoint without params.json raises OSError mentioning params.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            # Deliberately do NOT write params.json
+
+            with self.assertRaisesRegex(OSError, "params.json"):
+                PixtralProcessor.from_pretrained(tmpdir)
+
+    @require_mistral_common
+    @require_torchvision
+    def test_auto_processor_native_full_path(self):
+        """AutoProcessor.from_pretrained on a native dir returns PixtralProcessor with MistralCommonBackend."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+            # No HF-format markers (config.json / tokenizer_config.json / tokenizer.json)
+
+            processor = AutoProcessor.from_pretrained(tmpdir)
+
+            self.assertIsInstance(processor, PixtralProcessor)
+            self.assertIsInstance(processor.tokenizer, MistralCommonBackend)
+
+    @require_mistral_common
+    @require_torchvision
+    def test_both_formats_auto_prefers_native(self):
+        """Auto mode prefers the native (tekken) format even when HF-format markers coexist with tekken.json.
+
+        A both-formats checkpoint (tekken.json + params.json + saved HF tokenizer) loaded via
+        ``PixtralProcessor.from_pretrained`` (auto) must yield a ``MistralCommonBackend`` tokenizer
+        because auto-detection is tekken-first: if ``mistral-common`` is available and ``tekken.json``
+        is present, native format wins regardless of HF-format markers.
+        """
+        from transformers.integrations.mistral import convert_tekken_tokenizer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+            _write_fake_preprocessor_config(tmpdir_path)
+
+            # Produce HF tokenizer files (tokenizer.json + tokenizer_config.json) — HF-format markers
+            hf_tok = convert_tekken_tokenizer(str(tmpdir_path / "tekken.json"))
+            hf_tok.save_pretrained(tmpdir)
+
+            processor = PixtralProcessor.from_pretrained(tmpdir)  # auto: mistral_format=None
+
+            self.assertIsInstance(processor.tokenizer, MistralCommonBackend)
+
+    @require_mistral_common
+    @require_torchvision
+    def test_explicit_native_wins_over_hf_markers(self):
+        """mistral_format=True on a both-formats checkpoint still yields MistralCommonBackend.
+
+        Explicit opt-in to native format must take precedence over HF-format markers even when
+        ``tokenizer.json`` / ``tokenizer_config.json`` are present in the directory.
+        """
+        from transformers.integrations.mistral import convert_tekken_tokenizer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+            _write_fake_preprocessor_config(tmpdir_path)
+
+            # Write HF tokenizer markers alongside the native files
+            hf_tok = convert_tekken_tokenizer(str(tmpdir_path / "tekken.json"))
+            hf_tok.save_pretrained(tmpdir)
+
+            processor = PixtralProcessor.from_pretrained(tmpdir, mistral_format=True)
+
+            self.assertIsInstance(processor.tokenizer, MistralCommonBackend)
+
+    # ------------------------------------------------------------------
+    # AutoProcessor explicit-flag tests (Fix: AutoProcessor honors mistral_format)
+    # ------------------------------------------------------------------
+
+    @require_mistral_common
+    @require_torchvision
+    def test_auto_processor_explicit_true_native_dir(self):
+        """AutoProcessor.from_pretrained with mistral_format=True on a native dir returns MistralCommonBackend.
+
+        Native dir has only tekken.json + params.json (no config.json, no HF markers), so
+        AutoProcessor falls through to the OSError handler and probes resolve_mistral_format.
+        The explicit True must be forwarded to PixtralProcessor.from_pretrained.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+
+            processor = AutoProcessor.from_pretrained(tmpdir, mistral_format=True)
+
+            self.assertIsInstance(processor, PixtralProcessor)
+            self.assertIsInstance(processor.tokenizer, MistralCommonBackend)
+
+    @require_mistral_common
+    @require_torchvision
+    def test_auto_processor_explicit_false_yields_non_mistral(self):
+        """AutoProcessor.from_pretrained with mistral_format=False on a both-formats dir returns a
+        non-MistralCommonBackend tokenizer, confirming the explicit False is honored end-to-end.
+
+        A `preprocessor_config.json` with `processor_class` is used so AutoProcessor can route
+        to PixtralProcessor before hitting the config-probe OSError handler, allowing the
+        mistral_format=False kwarg to be forwarded cleanly via the standard kwargs path.
+        """
+        from transformers.integrations.mistral import convert_tekken_tokenizer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            write_fake_tekken_json(tmpdir_path)
+            _write_fake_params_json(tmpdir_path)
+
+            # Write HF tokenizer markers
+            hf_tok = convert_tekken_tokenizer(str(tmpdir_path / "tekken.json"))
+            hf_tok.save_pretrained(tmpdir)
+
+            # preprocessor_config.json with explicit processor_class lets AutoProcessor route
+            # to PixtralProcessor via the early-detection path (no OSError needed).
+            import json
+
+            preprocessor_cfg = {
+                "image_processor_type": "PixtralImageProcessor",
+                "processor_class": "PixtralProcessor",
+                "patch_size": {"height": 16, "width": 16},
+                "size": {"longest_edge": 512},
+            }
+            with open(tmpdir_path / "preprocessor_config.json", "w", encoding="utf-8") as f:
+                json.dump(preprocessor_cfg, f)
+
+            processor = AutoProcessor.from_pretrained(tmpdir, mistral_format=False)
+
+            self.assertIsInstance(processor, PixtralProcessor)
+            self.assertNotIsInstance(processor.tokenizer, MistralCommonBackend)

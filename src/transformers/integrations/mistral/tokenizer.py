@@ -20,6 +20,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
+from typing import TYPE_CHECKING
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -34,6 +35,10 @@ from .constants import TEKKEN_VOCAB_FILE, is_tekken_vocab_filename
 
 if is_mistral_common_available():
     from mistral_common.tokens.tokenizers.tekken import Tekkenizer
+
+
+if TYPE_CHECKING:
+    from ...models.pixtral.processing_pixtral import PixtralProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -528,3 +533,73 @@ def convert_tekken_tokenizer(
         **_MAP_SPECIALS,
     )
     return fast
+
+
+def convert_tekken_image_processor(
+    tokenizer_file: str,
+    params_file: str,
+    chat_template: str | None = None,
+) -> "PixtralProcessor":
+    """Build a `PixtralProcessor` from a tekken tokenizer file and a native `params.json`.
+
+    Args:
+        tokenizer_file (`str`): Path to the `tekken.json` vocabulary file.
+        params_file (`str`): Path to the native `params.json` config file.
+        chat_template (`str`, *optional*): Explicit Jinja2 chat template string.
+            When not provided (`None`), the template is resolved automatically
+            from sibling files or generated via `mistral-common` if available
+            (see `_resolve_chat_template` for the full precedence order).
+
+    Returns:
+        Configured `PixtralProcessor` with tokenizer and image processor.
+
+    Raises:
+        ValueError: If `params_file` does not contain a `vision_encoder` key.
+    """
+    with open(params_file, encoding="utf-8") as f:
+        params = json.load(f)
+
+    vision_config = params.get("vision_encoder")
+    if vision_config is None:
+        raise ValueError(
+            f"'vision_encoder' key not found in {params_file}. "
+            "This model does not appear to be a vision-language model and does not need a processor. "
+            "Use `convert_tekken_tokenizer` for text-only models instead."
+        )
+
+    # Lazy imports: processing_pixtral imports from integrations.mistral at module level,
+    # so importing it here avoids a circular dependency. Placed after validation to avoid
+    # triggering heavy imports (torchvision) for text-only models that will fail anyway.
+    from ...models.pixtral.image_processing_pixtral import PixtralImageProcessor
+    from ...models.pixtral.processing_pixtral import PixtralProcessor
+
+    patch_size = vision_config["patch_size"]
+    max_image_size = vision_config.get("max_image_size", vision_config["image_size"])
+    spatial_merge_size = vision_config.get("spatial_merge_size", 1)
+
+    if is_mistral_common_available():
+        from ...tokenization_mistral_common import MistralCommonBackend
+
+        tokenizer = MistralCommonBackend(tokenizer_path=tokenizer_file)
+    else:
+        tokenizer = convert_tekken_tokenizer(tokenizer_file)
+
+    chat_template = _resolve_chat_template(tokenizer_file, chat_template)
+
+    image_processor = PixtralImageProcessor(
+        patch_size=patch_size,
+        size={"longest_edge": max_image_size},
+    )
+
+    processor = PixtralProcessor(
+        tokenizer=tokenizer,
+        image_processor=image_processor,
+        image_token="[IMG]",
+        image_break_token="[IMG_BREAK]",
+        image_end_token="[IMG_END]",
+        patch_size=patch_size,
+        spatial_merge_size=spatial_merge_size,
+        chat_template=chat_template,
+    )
+
+    return processor
