@@ -263,6 +263,8 @@ IGNORE_NON_TESTED = (
         "GlmOcrTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "LlavaOnevision1_5TextModel",  # Building part of bigger (tested) model
+        "LlavaOnevision1_5VisionModel",  # Building part of bigger (tested) model
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
         "MiniCPMV4_6ForConditionalGeneration",  # Tested in MiniCPMV4_6ModelTest via VLMModelTest; check_repo doesn't detect VLMModelTest.conditional_generation_class.
         "InternVLVisionModel",  # Building part of bigger (tested) model

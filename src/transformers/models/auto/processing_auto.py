@@ -59,6 +59,7 @@ else:
             ("inkling_mm_model", "InklingProcessor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
+            ("llava_onevision1_5", "Qwen2_5_VLProcessor"),
             ("metaclip_2", "CLIPProcessor"),
             ("mistral3", "PixtralProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
