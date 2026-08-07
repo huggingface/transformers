@@ -437,6 +437,7 @@ if TYPE_CHECKING:
     from .smollm3 import *
     from .smolvlm import *
     from .solar_open import *
+    from .solar_open2 import *
     from .speech_encoder_decoder import *
     from .speech_to_text import *
     from .speecht5 import *

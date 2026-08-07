@@ -958,12 +958,12 @@ def is_mamba_2_ssm_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_flash_linear_attention_available():
+def is_flash_linear_attention_available(min_version: str = "0.2.2"):
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return (
         (is_torch_cuda_available() or is_torch_xpu_available())
         and is_available
-        and version.parse(fla_version) >= version.parse("0.2.2")
+        and version.parse(fla_version) >= version.parse(min_version)
     )
 
 

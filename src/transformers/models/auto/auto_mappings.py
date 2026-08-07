@@ -606,6 +606,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("smolvlm", "SmolVLMConfig"),
         ("smolvlm_vision", "SmolVLMVisionConfig"),
         ("solar_open", "SolarOpenConfig"),
+        ("solar_open2", "SolarOpen2Config"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("speech_to_text", "Speech2TextConfig"),
         ("speecht5", "SpeechT5Config"),
