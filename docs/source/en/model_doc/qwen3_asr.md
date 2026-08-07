@@ -400,7 +400,7 @@ num_warmup = 5
 batch_size = 4
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTokenClassification.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTokenClassification.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda")
 
 # Prepare a batch of 4 samples
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
@@ -437,7 +437,7 @@ num_warmup = 3
 max_new_tokens = 256
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto").eval()
+model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16).to("cuda").eval()
 
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
@@ -453,7 +453,7 @@ with torch.inference_mode():
             **inputs, max_new_tokens=max_new_tokens, do_sample=False,
             cache_implementation="static", compile_config=compile_config,
         )
-torch.accelerator.synchronize()
+torch.cuda.synchronize()
 
 # Apply model
 with torch.inference_mode():
