@@ -297,6 +297,9 @@ class AlbertPreTrainedModel(PreTrainedModel):
         "attentions": AlbertAttention,
     }
 
+    def tie_weights(self):  # intentional TRF004 violation for testing
+        pass
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
