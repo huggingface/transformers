@@ -842,16 +842,17 @@ def _get_dtype(
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
                     elif checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
-                        dtype = torch.float32
+                        dtype = None
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
                         dtype = get_state_dict_dtype(state_dict)
-                    logger.info(
-                        f"Since the `dtype` attribute can't be found in model's config object, "
-                        f"will use dtype={dtype} as derived from model's weights"
-                    )
+                    if dtype is not None:
+                        logger.info(
+                            f"Since the `dtype` attribute can't be found in model's config object, "
+                            f"will use dtype={dtype} as derived from model's weights"
+                        )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
             else:
@@ -870,9 +871,6 @@ def _get_dtype(
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
 
-    if hf_quantizer is not None:
-        dtype = hf_quantizer.update_dtype(dtype)
-
     # Get the main dtype
     if isinstance(dtype, dict):
         main_dtype = dtype.get("", torch.get_default_dtype())
@@ -886,6 +884,9 @@ def _get_dtype(
 
     else:
         main_dtype = dtype
+
+    if hf_quantizer is not None:
+        main_dtype = hf_quantizer.update_dtype(main_dtype)
 
     # Set it on the config and subconfigs
     config.dtype = main_dtype
@@ -4222,12 +4223,19 @@ class PreTrainedModel(
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        if gguf_file is not None and quantization_config is None:
+            # GGUF weights are quantized data, so they are loaded through a quantizer like any other
+            # quantized checkpoint. It decides per tensor whether the bytes stay packed.
+            from .utils.quantization_config import GgufConfig
+
+            quantization_config = GgufConfig(gguf_file=gguf_file)
+
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
         )
 
         if gguf_file:
-            if hf_quantizer is not None:
+            if hf_quantizer.quantization_config.quant_method != "gguf":
                 raise ValueError(
                     "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
                 )
@@ -4259,22 +4267,15 @@ class PreTrainedModel(
 
         is_quantized = hf_quantizer is not None
 
+        if gguf_file:
+            # `checkpoint_files[0]` is the local path the file was resolved to. Read before the dtype is
+            # settled: the file's own float type is what `dtype="auto"` resolves to for a GGUF.
+            hf_quantizer.read_header(checkpoint_files[0])
+
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
-
-        if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
-            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4314,13 +4315,27 @@ class PreTrainedModel(
                     use_kernels=use_kernels,
                 )
 
+        if gguf_file:
+            from .integrations.gguf import load_gguf_state_dict
+
+            # the quantizer parsed the file's metadata and answered both questions already
+            if hf_quantizer.supported:
+                state_dict = load_gguf_state_dict(hf_quantizer.header, dtype=dtype)
+            else:
+                # No mapping for this architecture yet: fall back to the legacy loader, which renames
+                # and dequantizes everything itself.
+                from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+                state_dict = load_gguf_checkpoint(
+                    checkpoint_files[0], return_tensors=True, model_to_load=model, torch_dtype=dtype
+                )["tensors"]
+
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
-
         model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
