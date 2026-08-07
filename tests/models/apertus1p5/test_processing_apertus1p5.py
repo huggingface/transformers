@@ -291,7 +291,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "intermediate_size": 37,
             "pad_token_id": 0,
         }
-        vision_tokenizer_config = {
+        vision_config = {
             "codebook_size": 20,
             "base_channels": 32,
             "channel_multiplier": [1, 2, 1],  # spatial factor 4
@@ -301,7 +301,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "attn_resolutions": [],
             "resolution": 32,
         }
-        audio_tokenizer_config = {
+        audio_config = {
             "model_type": "wavtokenizer",
             "num_filters": 8,
             "upsampling_ratios": [2, 2],  # hop_length 4
@@ -314,8 +314,8 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         config = Apertus1p5Config(
             text_config=text_config,
-            vision_tokenizer_config=vision_tokenizer_config,
-            audio_tokenizer_config=audio_tokenizer_config,
+            vision_config=vision_config,
+            audio_config=audio_config,
             image_token_id=processor.image_token_id,
             audio_token_id=processor.audio_token_id,
             image_token_offset=image_token_offset,

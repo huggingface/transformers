@@ -162,7 +162,7 @@ class Apertus1p5ModelTester:
             "bos_token_id": self.bos_token_id,
             "eos_token_id": self.eos_token_id,
         }
-        vision_tokenizer_config = {
+        vision_config = {
             "codebook_size": self.codebook_size,
             "base_channels": self.base_channels,
             "channel_multiplier": self.vq_channel_multiplier,
@@ -172,7 +172,7 @@ class Apertus1p5ModelTester:
             "attn_resolutions": [],
             "resolution": self.image_size,
         }
-        audio_tokenizer_config = {
+        audio_config = {
             "model_type": "wavtokenizer",
             "num_filters": 8,
             "upsampling_ratios": [2, 2],  # hop_length = 4
@@ -185,8 +185,8 @@ class Apertus1p5ModelTester:
         }
         return Apertus1p5Config(
             text_config=text_config,
-            vision_tokenizer_config=vision_tokenizer_config,
-            audio_tokenizer_config=audio_tokenizer_config,
+            vision_config=vision_config,
+            audio_config=audio_config,
             image_token_id=self.image_token_id,
             audio_token_id=self.audio_token_id,
             image_token_offset=self.image_token_offset,
@@ -353,9 +353,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with torch.no_grad():
             vocab_ids = model.get_image_tokens(inputs_dict["pixel_values"], inputs_dict["image_sizes"])
         self.assertGreaterEqual(vocab_ids.min().item(), config.image_token_offset)
-        self.assertLess(
-            vocab_ids.max().item(), config.image_token_offset + config.vision_tokenizer_config.codebook_size
-        )
+        self.assertLess(vocab_ids.max().item(), config.image_token_offset + config.vision_config.codebook_size)
 
     def test_audio_tokens_offset_and_count(self):
         """Audio codes must land in the audio vocabulary range with exactly ceil(length / hop) codes per clip."""
@@ -364,7 +362,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with torch.no_grad():
             embed = model.audio_tokenizer.quantizer.codebook.embed
             embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
-        hop = config.audio_tokenizer_config.hop_length
+        hop = config.audio_config.hop_length
         lengths = [1, hop - 1, hop, hop + 1, 5 * hop, 5 * hop + 2]
         input_features = torch.zeros(len(lengths), 1, max(lengths), device=torch_device)
         for i, length in enumerate(lengths):
@@ -390,9 +388,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         expected_total = sum(-(-length // hop) for length in lengths)
         self.assertEqual(vocab_ids.numel(), expected_total)
         self.assertGreaterEqual(vocab_ids.min().item(), config.audio_token_offset)
-        self.assertLess(
-            vocab_ids.max().item(), config.audio_token_offset + config.audio_tokenizer_config.codebook_size
-        )
+        self.assertLess(vocab_ids.max().item(), config.audio_token_offset + config.audio_config.codebook_size)
 
     def test_audio_influences_logits(self):
         """The generation wrapper must pass audio tensors down and scatter them into the sequence."""
@@ -841,9 +837,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
             vocab_ids = self.model.model.get_image_tokens(image, torch.tensor([[256, 256]]))
         self.assertEqual(vocab_ids.numel(), 256)
         self.assertGreaterEqual(vocab_ids.min().item(), config.image_token_offset)
-        self.assertLess(
-            vocab_ids.max().item(), config.image_token_offset + config.vision_tokenizer_config.codebook_size
-        )
+        self.assertLess(vocab_ids.max().item(), config.image_token_offset + config.vision_config.codebook_size)
         for vocab_id in (int(vocab_ids[0]), int(vocab_ids[-1])):
             self.assertEqual(
                 self.tokenizer.convert_ids_to_tokens(vocab_id),
