@@ -134,12 +134,10 @@ jobs:
 
       - name: "Test: multimodal processing"
         if: false
-        # TODO: re-enable this step by reworking the workflow to use matrix job.
+        # Replaced by the vllm-multimodal-processing matrix job below.
         working-directory: vllm
         continue-on-error: true
         run: |
-          # Only transformers-backend-specific files; test_common.py excludes transformers models
-          # Full suite (1312 tests) requires pytest-shard parallelism (see .buildkite/test_areas/models_multimodal.yaml)
           pytest -v -s tests/models/multimodal/processing/test_transformers_image.py \
                        tests/models/multimodal/processing/test_transformers_audio.py
 
@@ -163,3 +161,76 @@ jobs:
         continue-on-error: true
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
+  # Multimodal processing tests split across 4 parallel shards (1312 tests total).
+  # Each shard runs on a fresh runner — no cross-test memory accumulation.
+  # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
+  vllm-multimodal-processing:
+    name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    runs-on:
+      group: aws-m8i-2xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm pytest-shard
+
+      - name: Patch vLLM gpu_memory_utilization for CPU
+        run: |
+          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
+          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
+
+      - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
+        working-directory: vllm
+        continue-on-error: true
+        run: |
+          pytest -v -s tests/models/multimodal/processing/ \
+            --ignore tests/models/multimodal/processing/test_tensor_schema.py \
+            --num-shards=4 --shard-id=${{ matrix.shard }}
