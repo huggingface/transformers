@@ -64,6 +64,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        QuantoQuantizedLayer,
         StaticLayer,
     )
     from transformers.integrations.executorch import export_with_dynamic_cache
@@ -323,6 +324,18 @@ class CacheIntegrationTest(unittest.TestCase):
         self.assertListEqual(decoded, expected_generation)
 
         # Check that something is actually quantized
+
+    def test_quantized_cache_with_sliding_layers(self):
+        if not is_optimum_quanto_available():
+            self.skipTest("Quanto is not available")
+
+        config = LlamaConfig(
+            num_hidden_layers=2, layer_types=["full_attention", "sliding_attention"], sliding_window=8
+        )
+        cache = QuantizedCache(backend="quanto", config=config, nbits=4, q_group_size=16, residual_length=4)
+
+        self.assertIsInstance(cache.layers[0], QuantoQuantizedLayer)
+        self.assertIsInstance(cache.layers[1], DynamicSlidingWindowLayer)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):

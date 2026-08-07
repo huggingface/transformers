@@ -48,11 +48,6 @@ class GraniteSWAModelTester(CausalLMModelTester):
 class GraniteSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteSWAModelTester
 
-    @pytest.mark.generate
-    @unittest.skip("GraniteSWA does not support QuantizedCache as it uses sliding_attention layers")
-    def test_generate_with_quant_cache(self):
-        pass
-
 
 @slow
 @require_torch_accelerator

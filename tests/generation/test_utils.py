@@ -83,6 +83,7 @@ if is_torch_available():
     from transformers.cache_utils import (
         Cache,
         DynamicCache,
+        DynamicSlidingWindowLayer,
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
@@ -1584,7 +1585,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             }
 
             results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.past_key_values.layers))
+            cache_layers = results.past_key_values.layers
+            self.assertTrue(any(isinstance(layer, QuantoQuantizedLayer) for layer in cache_layers))
+            self.assertTrue(
+                all(isinstance(layer, (QuantoQuantizedLayer, DynamicSlidingWindowLayer)) for layer in cache_layers)
+            )
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):

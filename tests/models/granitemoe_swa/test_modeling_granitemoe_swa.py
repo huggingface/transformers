@@ -46,10 +46,6 @@ class GraniteMoeSWAModelTester(CausalLMModelTester):
 class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = GraniteMoeSWAModelTester
 
-    @unittest.skip("GraniteMoeSWA sliding attention layers are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
 
 @slow
 @require_torch_accelerator
