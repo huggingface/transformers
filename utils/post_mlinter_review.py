@@ -22,8 +22,10 @@ Usage:
     GITHUB_TOKEN=... GITHUB_REPOSITORY=owner/repo python utils/post_mlinter_review.py
 """
 
+import hashlib
 import json
 import os
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -33,10 +35,21 @@ from github_utils import get_github_json, github_request
 
 
 GITHUB_API_URL = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-# Lets a re-run recognise its own previous review instead of stacking duplicates.
-MARKER = "<!-- mlinter-review -->"
+# Marker prefix embeds a short hash of the findings for content-based deduplication.
+# Format: <!-- mlinter-review:a3f7c2d1 -->
+MARKER_PREFIX = "<!-- mlinter-review:"
 MAX_INLINE = 40
 MAX_PER_FILE = 10
+
+
+def _findings_hash(findings):
+    """Short hash of the findings content, excluding parse-error sentinels (rule=None)."""
+    key = json.dumps(
+        sorted(
+            [(f["path"], f["line"], f["rule"], f["message"]) for f in findings if f.get("rule")]
+        )
+    ).encode()
+    return hashlib.sha256(key).hexdigest()[:8]
 
 
 def _paginate(url, token):
@@ -89,10 +102,10 @@ def _comment_body(finding, rules):
     return "\n".join(lines)
 
 
-def _review_body(findings, rules, skipped):
+def _review_body(findings, rules, skipped, findings_hash):
     counts = Counter(f["rule"] for f in findings)
     lines = [
-        MARKER,
+        f"{MARKER_PREFIX}{findings_hash} -->",
         "## Model linter — first pass",
         "",
         f"`transformers-mlinter` found **{len(findings)} item(s)** in the model files this PR touches. "
@@ -143,12 +156,16 @@ def main():
         return 0
 
     pulls_url = f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}"
+    current_hash = _findings_hash(findings)
 
-    # Don't post twice on the same PR.
+    # Skip if an existing review already covers these exact findings.
     for review in _paginate(f"{pulls_url}/reviews", token):
-        if MARKER in (review.get("body") or ""):
-            print(f"Already posted review {review['id']}; skipping.")
-            return 0
+        m = re.match(r"<!-- mlinter-review:([0-9a-f]{8}) -->", review.get("body") or "")
+        if m:
+            if m.group(1) == current_hash:
+                print(f"Findings unchanged (hash {current_hash}); skipping.")
+                return 0
+            print(f"Findings changed (was {m.group(1)}, now {current_hash}); posting new review.")
 
     # Map each changed file to its commentable lines.
     anchors = {f["filename"]: _commentable_lines(f.get("patch")) for f in _paginate(f"{pulls_url}/files", token)}
@@ -164,7 +181,7 @@ def main():
         else:
             skipped.append(finding)
 
-    body = _review_body(findings, rules, skipped)
+    body = _review_body(findings, rules, skipped, current_hash)
     try:
         review = github_request(
             f"{pulls_url}/reviews",
