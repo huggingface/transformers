@@ -35,21 +35,54 @@ from github_utils import get_github_json, github_request
 
 
 GITHUB_API_URL = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-# Marker prefix embeds a short hash of the findings for content-based deduplication.
-# Format: <!-- mlinter-review:a3f7c2d1 -->
-MARKER_PREFIX = "<!-- mlinter-review:"
 MAX_INLINE = 40
 MAX_PER_FILE = 10
 
+# Delimiters for the mlinter state block embedded in the PR description.
+_STATE_START = "<!-- mlinter-state-start -->"
+_STATE_END = "<!-- mlinter-state-end -->"
+
 
 def _findings_hash(findings):
-    """Short hash of the findings content, excluding parse-error sentinels (rule=None)."""
+    """Short SHA-256 hash of findings content, excluding parse-error sentinels (rule=None)."""
     key = json.dumps(
-        sorted(
-            [(f["path"], f["line"], f["rule"], f["message"]) for f in findings if f.get("rule")]
-        )
+        sorted([(f["path"], f["line"], f["rule"], f["message"]) for f in findings if f.get("rule")])
     ).encode()
     return hashlib.sha256(key).hexdigest()[:8]
+
+
+def _read_pr_state(pr_body):
+    """Extract the mlinter hash from the PR description state block. Returns hash string or None."""
+    m = re.search(
+        r"<!-- mlinter-state-start -->.*?hash: `([0-9a-f]{8})`.*?<!-- mlinter-state-end -->",
+        pr_body or "",
+        re.DOTALL,
+    )
+    return m.group(1) if m else None
+
+
+def _update_pr_description(pr_body, findings_hash, commit_sha, review_url):
+    """Add or replace the mlinter state block in the PR description."""
+    block = "\n".join([
+        _STATE_START,
+        "<details>",
+        "<summary>🤖 mlinter review state</summary>",
+        "",
+        f"- hash: `{findings_hash}`",
+        f"- commit: `{commit_sha}`",
+        f"- review: {review_url}",
+        "",
+        "</details>",
+        _STATE_END,
+    ])
+    if _STATE_START in (pr_body or ""):
+        return re.sub(
+            r"<!-- mlinter-state-start -->.*?<!-- mlinter-state-end -->",
+            block,
+            pr_body,
+            flags=re.DOTALL,
+        )
+    return (pr_body or "").rstrip() + "\n\n" + block
 
 
 def _paginate(url, token):
@@ -102,10 +135,9 @@ def _comment_body(finding, rules):
     return "\n".join(lines)
 
 
-def _review_body(findings, rules, skipped, findings_hash):
+def _review_body(findings, rules, skipped):
     counts = Counter(f["rule"] for f in findings)
     lines = [
-        f"{MARKER_PREFIX}{findings_hash} -->",
         "## Model linter — first pass",
         "",
         f"`transformers-mlinter` found **{len(findings)} item(s)** in the model files this PR touches. "
@@ -158,14 +190,17 @@ def main():
     pulls_url = f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}"
     current_hash = _findings_hash(findings)
 
-    # Skip if an existing review already covers these exact findings.
-    for review in _paginate(f"{pulls_url}/reviews", token):
-        m = re.match(r"<!-- mlinter-review:([0-9a-f]{8}) -->", review.get("body") or "")
-        if m:
-            if m.group(1) == current_hash:
-                print(f"Findings unchanged (hash {current_hash}); skipping.")
-                return 0
-            print(f"Findings changed (was {m.group(1)}, now {current_hash}); posting new review.")
+    # Read PR description once — used for both deduplication and state update.
+    pr_data = get_github_json(pulls_url, token=token)
+    pr_body = pr_data.get("body") or ""
+    commit_sha = pr_data["head"]["sha"][:8]
+
+    existing_hash = _read_pr_state(pr_body)
+    if existing_hash == current_hash:
+        print(f"Findings unchanged (hash {current_hash}); skipping.")
+        return 0
+    if existing_hash:
+        print(f"Findings changed (was {existing_hash}, now {current_hash}); posting new review.")
 
     # Map each changed file to its commentable lines.
     anchors = {f["filename"]: _commentable_lines(f.get("patch")) for f in _paginate(f"{pulls_url}/files", token)}
@@ -181,7 +216,7 @@ def main():
         else:
             skipped.append(finding)
 
-    body = _review_body(findings, rules, skipped, current_hash)
+    body = _review_body(findings, rules, skipped)
     try:
         review = github_request(
             f"{pulls_url}/reviews",
@@ -200,6 +235,12 @@ def main():
             payload={"event": "COMMENT", "body": body},
         )
         print(f"Posted summary-only review {review['id']}.")
+
+    # Update PR description with the new state (1 API call, replaces existing block if present).
+    review_url = f"https://github.com/{repo}/pull/{pr_number}#pullrequestreview-{review['id']}"
+    new_pr_body = _update_pr_description(pr_body, current_hash, commit_sha, review_url)
+    github_request(pulls_url, token=token, method="PATCH", payload={"body": new_pr_body})
+    print(f"Updated PR description with mlinter state (hash {current_hash}, commit {commit_sha}).")
     return 0
 
 
