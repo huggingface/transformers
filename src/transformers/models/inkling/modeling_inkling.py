@@ -351,7 +351,7 @@ class InklingTopkRouter(nn.Module):
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
         self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.empty(self.num_experts))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
