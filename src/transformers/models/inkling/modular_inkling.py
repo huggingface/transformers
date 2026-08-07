@@ -1081,8 +1081,8 @@ class InklingModel(InklingPreTrainedModel):
         that the placeholder token count matches the length of `features`. If the lengths differ, an error is raised.
         """
         if input_ids is None:
-            special_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+            special_mask = inputs_embeds == self.language_model.embed_norm(
+                self.get_input_embeddings()(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
             )
             special_mask = special_mask.all(-1)
         else:
