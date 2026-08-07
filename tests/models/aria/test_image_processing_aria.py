@@ -103,8 +103,10 @@ class AriaImageProcessingTester(ImageProcessingTester):
         """
         batch_size = batch_size if batch_size is not None else self.batch_size
         num_images = num_images if num_images is not None else self.num_images
+        # super() must be called outside list comprehension on Python <= 3.12
+        prepare_images = super().prepare_image_inputs
         image_inputs = [
-            super().prepare_image_inputs(
+            prepare_images(
                 batch_size=num_images,
                 min_resolution=min_resolution,
                 max_resolution=max_resolution,
