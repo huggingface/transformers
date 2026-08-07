@@ -568,6 +568,14 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
+        if not is_flash_attention_requested(self.config):
+            # Non-flash attention splits the packed sequence with Python sizes derived from
+            # `cu_seqlens.tolist()` in every block. These are tiny control-flow tensors; keep
+            # them on CPU so those conversions never trigger device-to-host syncs (grid_thw
+            # itself is host-side metadata from the processor). FlashAttention still gets the
+            # GPU tensors below.
+            cu_seqlens = cu_seqlens.cpu()
+            cu_window_seqlens = cu_window_seqlens.cpu()
 
         hidden_states = self.patch_embed(hidden_states)
 
