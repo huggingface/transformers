@@ -293,6 +293,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
 
+
     @require_torch
     def test_bc_torch_dtype(self):
         import torch
