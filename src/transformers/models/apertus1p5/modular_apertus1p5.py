@@ -24,7 +24,7 @@ Vision tokenization is implemented in this module by `Apertus1p5VisionTokenizerM
 encoder, quantizer, and codebook-scoring path from BAAI's EMU3.5 Vision Tokenizer. It intentionally omits the
 EMU3.5 decoder and backbone. Audio tokenization is provided by WavTokenizer,
 which is implemented separately as a standalone Transformers model rather than reimplemented here; it is loaded
-through `AutoModel` from `audio_tokenizer_config`. Both tokenizers must run in float32 for stable code assignment.
+through `AutoModel` from `audio_config`. Both tokenizers must run in float32 for stable code assignment.
 """
 
 from dataclasses import dataclass
@@ -146,7 +146,7 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5_vision_tokenizer"
-    base_config_key = "vision_tokenizer_config"
+    base_config_key = "vision_config"
 
     codebook_size: int = 131072
     embed_dim: int = 256
@@ -159,9 +159,9 @@ class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
     resolution: int = 256
     dropout: float = 0.0
 
-    @property
-    def spatial_scale_factor(self) -> int:
-        return 2 ** (len(self.channel_multiplier) - 1)
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        self.spatial_scale_factor = 2 ** (len(self.channel_multiplier) - 1)
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -227,9 +227,9 @@ class Apertus1p5Config(PreTrainedConfig):
         `text_config.vocab_size`. Model outputs have `text_config.vocab_size` logits (loss-only calls with
         `labels` keep the physical width); input-only ids beyond the physical LM head are padded with
         `torch.finfo(dtype).min` scores and cannot be selected by unconstrained generation.
-    vision_tokenizer_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
+    vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_tokenizer_config (`Union[dict, PreTrainedConfig]`, *optional*):
+    audio_config (`Union[dict, PreTrainedConfig]`, *optional*):
         Configuration of the WavTokenizer audio codec.
     image_token_id (`int`, *optional*, defaults to 131079):
         Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
@@ -260,14 +260,14 @@ class Apertus1p5Config(PreTrainedConfig):
     model_type = "apertus1p5"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {
-        "vision_tokenizer_config": Apertus1p5VisionTokenizerConfig,
-        "audio_tokenizer_config": AutoConfig,
         "text_config": Apertus1p5TextConfig,
+        "vision_config": Apertus1p5VisionTokenizerConfig,
+        "audio_config": AutoConfig,
     }
 
-    vision_tokenizer_config: dict | Apertus1p5VisionTokenizerConfig | None = None
-    audio_tokenizer_config: dict | PreTrainedConfig | None = None
     text_config: dict | Apertus1p5TextConfig | None = None
+    vision_config: dict | Apertus1p5VisionTokenizerConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -282,26 +282,24 @@ class Apertus1p5Config(PreTrainedConfig):
             # the extended vocabulary covers the visual and audio token ranges
             self.text_config = Apertus1p5TextConfig()
 
-        if isinstance(self.vision_tokenizer_config, dict):
-            self.vision_tokenizer_config = Apertus1p5VisionTokenizerConfig(**self.vision_tokenizer_config)
-        elif self.vision_tokenizer_config is None:
-            self.vision_tokenizer_config = Apertus1p5VisionTokenizerConfig()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Apertus1p5VisionTokenizerConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Apertus1p5VisionTokenizerConfig()
 
-        if isinstance(self.audio_tokenizer_config, dict):
-            self.audio_tokenizer_config["model_type"] = self.audio_tokenizer_config.get("model_type", "wavtokenizer")
-            self.audio_tokenizer_config = CONFIG_MAPPING[self.audio_tokenizer_config["model_type"]](
-                **self.audio_tokenizer_config
-            )
-        elif self.audio_tokenizer_config is None:
-            self.audio_tokenizer_config = CONFIG_MAPPING["wavtokenizer"]()
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "wavtokenizer")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
 
-        if self.image_token_offset + self.vision_tokenizer_config.codebook_size != self.audio_token_offset:
+        if self.image_token_offset + self.vision_config.codebook_size != self.audio_token_offset:
             raise ValueError(
                 "The visual token range must end where the audio token range begins: expected "
                 f"`image_token_offset + codebook_size == audio_token_offset`, got {self.image_token_offset} + "
-                f"{self.vision_tokenizer_config.codebook_size} != {self.audio_token_offset}."
+                f"{self.vision_config.codebook_size} != {self.audio_token_offset}."
             )
-        audio_vocab_end = self.audio_token_offset + self.audio_tokenizer_config.codebook_size
+        audio_vocab_end = self.audio_token_offset + self.audio_config.codebook_size
         if audio_vocab_end > self.text_config.vocab_size:
             raise ValueError(
                 f"The audio token range ends at {audio_vocab_end}, beyond the vocabulary "
@@ -717,9 +715,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
-        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_tokenizer_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_tokenizer_config)
         self.language_model = Apertus1p5TextModel(config.text_config)
+        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
