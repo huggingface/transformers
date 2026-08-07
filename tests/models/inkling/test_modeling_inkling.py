@@ -35,7 +35,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...causal_lm_tester import CausalLMModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -45,6 +45,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        InklingForCausalLM,
         InklingForConditionalGeneration,
         InklingModel,
         InklingTextModel,
@@ -60,7 +61,7 @@ class InklingTextModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = InklingTextConfig
         base_model_class = InklingTextModel
-        causal_lm_class = InklingForConditionalGeneration
+        causal_lm_class = InklingForCausalLM
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -75,6 +76,11 @@ class InklingTextModelTester(CausalLMModelTester):
         # To activate moe blocks
         self.enable_moe_block = True
         self.moe_intermediate_size = 16
+
+
+class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = InklingTextModelTester
+    _torch_compile_train_cls = InklingForCausalLM if is_torch_available() else None
 
 
 class InklingAudio2TextModelTester:
