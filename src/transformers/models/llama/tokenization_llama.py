@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, normalizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -116,10 +115,11 @@ class LlamaTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
-        self._tokenizer.normalizer = None
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
-        )
+        normalizer_sequence = []
+        if self.add_prefix_space:
+            normalizer_sequence.append(normalizers.Prepend(prepend="▁"))
+        normalizer_sequence.append(normalizers.Replace(pattern=" ", content="▁"))
+        self._tokenizer.normalizer = normalizers.Sequence(normalizer_sequence)
 
         sequence = [
             decoders.Replace("▁", " "),
