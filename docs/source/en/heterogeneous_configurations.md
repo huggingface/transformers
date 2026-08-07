@@ -205,3 +205,13 @@ serialized_per_layer_config
 
 Use sparse serialization for compact configs. Use explicit serialization when readability or downstream tooling benefits
 from seeing the full per-layer layout.
+
+## Architecture support
+
+The presence of `per_layer_config` does not by itself mean that an architecture supports generic heterogeneous modeling.
+It must either use generic patching through a heterogeneous modeling spec or have patching disabled when that mechanism
+does not fit the model's structure.
+
+See [Architecture support](./heterogeneous_modeling#architecture-support) for how built-in and custom models declare
+either behavior. The [heterogeneous modeling guide](./heterogeneous_modeling) also explains which
+submodules a `skip` attribute can name and how to write a spec for a new architecture.
