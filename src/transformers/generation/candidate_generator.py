@@ -1626,7 +1626,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
         self.cache.set_previous_accepted_tokens(num_last_main_model_tokens)
-
         # We need to remvoe the previous "noise" from the cache
         if not self.is_main_model_prefill:
             self.cache.crop(-self.block_size)
