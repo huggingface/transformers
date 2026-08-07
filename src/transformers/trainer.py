@@ -1836,7 +1836,6 @@ class Trainer:
         # Waiting for profiling.
         torch_neuronx.synchronize()
         prof.stop()
-        torch.distributed.barrier()
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.
