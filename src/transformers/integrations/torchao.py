@@ -66,6 +66,8 @@ class TorchAoQuantize(ConversionOps):
             module.to("cpu")
         else:
             quantize_(module, config, *args, **kwargs)
+        # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
+        module._hf_quantized_needs_local_tp = True
 
     def convert(
         self,
@@ -190,6 +192,9 @@ class TorchAoDeserialize(ConversionOps):
             Float8Tensor instance as the value.
         """
         is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
+        module, _ = get_module_from_name(model, full_layer_name)
+        # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
+        module._hf_quantized_needs_local_tp = True
 
         param_data = {}
         layer_name = ".".join(full_layer_name.split(".")[:-1])
@@ -218,7 +223,6 @@ class TorchAoDeserialize(ConversionOps):
         assert not leftover_state_dict  # there should be no unprocessed tensors
         new_param = unflattened_state_dict[full_layer_name]
 
-        module, _ = get_module_from_name(model, full_layer_name)
         # Add repr to the module
         if isinstance(module, torch.nn.Linear):
             module.extra_repr = types.MethodType(_linear_extra_repr, module)

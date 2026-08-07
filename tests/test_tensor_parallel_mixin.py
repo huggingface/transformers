@@ -19,7 +19,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
+from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
@@ -31,10 +31,12 @@ if is_torchao_available():
     from torchao.quantization import Float8WeightOnlyConfig
 
 
+# TODO(3outeille): better guarding
 if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.tensor import DTensor
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
@@ -179,7 +181,7 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
             for dim in range(param.ndim):
                 if param.size(dim) != param_full.size(dim):
                     param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
-                    if param_plan in ("packed_colwise",):
+                    if param_plan in ("packed_colwise", "packed_rowwise"):
                         expected_size = param_full.size(dim) // world_size
                         assert param.size(dim) == expected_size, (
                             f"Packed weight {name} sharding incorrect: expected {expected_size}, got {param.size(dim)}"
@@ -255,12 +257,17 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
             grad = param.grad
             grad_tp = param_tp.grad
 
+            # A sharded param's grad is a DTensor: take this rank's local shard, since a DTensor
+            # reports the *global* shape and can't be compared against a plain tensor.
+            if isinstance(grad_tp, DTensor):
+                grad_tp = grad_tp.to_local()
+
             # Slice reference gradient to match local shard if parameter is sharded
             if grad.shape != grad_tp.shape:
                 for dim in range(grad.ndim):
                     if grad.size(dim) != grad_tp.size(dim):
                         param_plan = _get_parameter_tp_plan(name, model_tp._tp_plan, is_weight=True)
-                        if param_plan in ("packed_colwise",):
+                        if param_plan in ("packed_colwise", "packed_rowwise"):
                             # interleaved slicing
                             grad = get_packed_grad_shard(grad, world_size, rank, dim)
                         else:
