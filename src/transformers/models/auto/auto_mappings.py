@@ -181,6 +181,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ernie4_5_vl_moe_text", "Ernie4_5_VLMoeTextConfig"),
         ("ernie4_5_vl_moe_vision", "Ernie4_5_VLMoeVisionConfig"),
         ("esm", "EsmConfig"),
+        ("esmc", "EsmcConfig"),
+        ("esmfold2", "EsmFold2Config"),
         ("eurobert", "EuroBertConfig"),
         ("evolla", "EvollaConfig"),
         ("exaone4", "Exaone4Config"),

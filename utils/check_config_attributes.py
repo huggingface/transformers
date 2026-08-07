@@ -63,6 +63,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "EsmcConfig": ["expansion_ratio"],  # consumed in __post_init__ to derive intermediate_size
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
@@ -182,6 +183,22 @@ SPECIAL_CASES_TO_ALLOW = {
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
+    "EsmFold2Config": [
+        # Only read in the config's own __post_init__, to derive the transition FFN widths.
+        "transition_expansion_ratio",
+        # Read in generation_esmfold2.py (the sampling loop), which this check does not scan --
+        # it only looks at files named modeling_*.
+        "num_diffusion_samples",
+        "max_atomic_number",
+    ],
+    # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
+    # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
+    "EsmFold2AtomEncoderConfig": True,
+    "EsmFold2DiffusionModuleConfig": True,
+    "EsmFold2StructureHeadConfig": True,
+    "EsmFold2ConfidenceHeadConfig": True,
+    "EsmFold2MsaEncoderConfig": True,
+    "EsmFold2LmEncoderConfig": True,
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,

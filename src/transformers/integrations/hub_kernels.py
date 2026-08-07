@@ -289,6 +289,16 @@ if is_kernels_available():
                     ),
                 },
             },
+            "EsmFold2TriangleMultiplication": {
+                "cuda": {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-staging/esmfold2-trimul-kernel",
+                        # The layer name exported by the remote repo, not the local class name.
+                        layer_name="ESMFold2TriangleMultiplication",
+                        version=0,
+                    ),
+                },
+            },
             "SwiGLUMLP": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
