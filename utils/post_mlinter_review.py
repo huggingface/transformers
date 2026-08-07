@@ -63,18 +63,20 @@ def _read_pr_state(pr_body):
 
 def _update_pr_description(pr_body, findings_hash, commit_sha, review_url):
     """Add or replace the mlinter state block in the PR description."""
-    block = "\n".join([
-        _STATE_START,
-        "<details>",
-        "<summary>🤖 mlinter review state</summary>",
-        "",
-        f"- hash: `{findings_hash}`",
-        f"- commit: `{commit_sha}`",
-        f"- review: {review_url}",
-        "",
-        "</details>",
-        _STATE_END,
-    ])
+    block = "\n".join(
+        [
+            _STATE_START,
+            "<details>",
+            "<summary>🤖 mlinter review state</summary>",
+            "",
+            f"- hash: `{findings_hash}`",
+            f"- commit: `{commit_sha}`",
+            f"- review: {review_url}",
+            "",
+            "</details>",
+            _STATE_END,
+        ]
+    )
     if _STATE_START in (pr_body or ""):
         return re.sub(
             r"<!-- mlinter-state-start -->.*?<!-- mlinter-state-end -->",
