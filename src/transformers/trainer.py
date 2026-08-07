@@ -1711,6 +1711,29 @@ class Trainer:
             train_dataloader.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
+        # Neuron profiling
+        import contextlib
+
+        import torch_neuronx
+        from torch.profiler import ProfilerActivity, profile, record_function
+        from torch.profiler import schedule as profiler_schedule
+        from torch_neuronx.profiling import NeuronConfig, NeuronProfiler, ProfileMode
+
+        exp_config = NeuronConfig(
+            modes=[ProfileMode.DEVICE, ProfileMode.RUNTIME, ProfileMode.CPU_UTIL, ProfileMode.HOST_MEMORY],
+            profile_output_dir=os.environ.get("NEURON_PROFILER_OUTPUT_DIR"),
+            max_events_per_nc=4_000_000,
+        )
+        exporter = NeuronProfiler(exp_config)
+        prof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1],
+            experimental_config=exp_config,
+            with_stack=True,
+            on_trace_ready=exporter.export_trace,
+            schedule=profiler_schedule(wait=0, warmup=3, active=1, repeat=1),
+        )
+        prof.start()
+
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
         remainder = steps_in_epoch % self.args.gradient_accumulation_steps
         if remainder == 0:
@@ -1737,83 +1760,94 @@ class Trainer:
             # Inner loop: forward + backward for each micro-batch. Gradients are
             # accumulated without syncing until the last micro-batch, then we clip,
             # step the optimizer, and log/save/evaluate.
-            for i, inputs in enumerate(batch_samples):
-                step += 1
-                do_sync_step = (step + 1) % self.args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
-                # Since we perform prefetching, we need to manually set sync_gradients
-                self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
+            with record_function("training_step"):
+                for i, inputs in enumerate(batch_samples):
+                    step += 1
+                    do_sync_step = (step + 1) % self.args.gradient_accumulation_steps == 0 or (
+                        step + 1
+                    ) == steps_in_epoch
+                    # Since we perform prefetching, we need to manually set sync_gradients
+                    self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
-                if step % self.args.gradient_accumulation_steps == 0:
-                    self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
+                    if step % self.args.gradient_accumulation_steps == 0:
+                        self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                # We sync the gradients in the following cases: 1. sync_each_batch set to True 2. Using deepspeed 3. when we are at the last batch sample
-                if (
-                    self.accelerator.gradient_state.plugin_kwargs.get("sync_each_batch", False)
-                    or self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                    or i == len(batch_samples) - 1
-                ):
-                    sync_context = contextlib.nullcontext
-                else:
-                    sync_context = functools.partial(self.accelerator.no_sync, model=model)
-                with sync_context():
-                    tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+                    # We sync the gradients in the following cases: 1. sync_each_batch set to True 2. Using deepspeed 3. when we are at the last batch sample
+                    if (
+                        self.accelerator.gradient_state.plugin_kwargs.get("sync_each_batch", False)
+                        or self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                        or i == len(batch_samples) - 1
+                    ):
+                        sync_context = contextlib.nullcontext
+                    else:
+                        sync_context = functools.partial(self.accelerator.no_sync, model=model)
 
-                if (
-                    self.args.logging_nan_inf_filter
-                    and not is_torch_xla_available()
-                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
-                ):
-                    # if loss is nan or inf simply add the average of previous logged losses
-                    self._tr_loss += self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
-                else:
-                    if self._tr_loss.device != tr_loss_step.device:
-                        raise ValueError(
-                            f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
+                    with sync_context():
+                        tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
+
+                    if (
+                        self.args.logging_nan_inf_filter
+                        and not is_torch_xla_available()
+                        and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
+                    ):
+                        # if loss is nan or inf simply add the average of previous logged losses
+                        self._tr_loss += self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    else:
+                        if self._tr_loss.device != tr_loss_step.device:
+                            raise ValueError(
+                                f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
+                            )
+                        self._tr_loss += tr_loss_step
+
+                    self.current_flos += float(self.floating_point_ops(inputs))
+                    self._track_num_input_tokens(inputs)
+
+                    if do_sync_step:
+                        grad_norm = None
+                        if self.args.max_grad_norm > 0:
+                            grad_norm = self._clip_grad_norm(model)
+                        grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
+
+                        self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
+                        self.optimizer.step()
+                        self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
+
+                        # get leaning rate before update
+                        learning_rate = self._get_learning_rate()
+
+                        if not self.accelerator.optimizer_step_was_skipped:
+                            # Delay optimizer scheduling until metrics are generated
+                            if not isinstance(
+                                self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)
+                            ):
+                                self.lr_scheduler.step()
+
+                        model.zero_grad()
+                        self.state.global_step += 1
+                        prof.step()
+                        self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                        self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
+                        self._maybe_log_save_evaluate(
+                            self._tr_loss,
+                            grad_norm,
+                            model,
+                            trial,
+                            epoch,
+                            ignore_keys_for_eval,
+                            start_time,
+                            learning_rate=learning_rate,
                         )
-                    self._tr_loss += tr_loss_step
+                    else:
+                        self.control = self.callback_handler.on_substep_end(self.args, self.state, self.control)
 
-                self.current_flos += float(self.floating_point_ops(inputs))
-                self._track_num_input_tokens(inputs)
-
-                if do_sync_step:
-                    grad_norm = None
-                    if self.args.max_grad_norm > 0:
-                        grad_norm = self._clip_grad_norm(model)
-                    grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
-
-                    self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
-                    self.optimizer.step()
-                    self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
-
-                    # get leaning rate before update
-                    learning_rate = self._get_learning_rate()
-
-                    if not self.accelerator.optimizer_step_was_skipped:
-                        # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
-                            self.lr_scheduler.step()
-
-                    model.zero_grad()
-                    self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
-                    self._maybe_log_save_evaluate(
-                        self._tr_loss,
-                        grad_norm,
-                        model,
-                        trial,
-                        epoch,
-                        ignore_keys_for_eval,
-                        start_time,
-                        learning_rate=learning_rate,
-                    )
-                else:
-                    self.control = self.callback_handler.on_substep_end(self.args, self.state, self.control)
-
-                if self.control.should_epoch_stop or self.control.should_training_stop:
-                    break
+                    if self.control.should_epoch_stop or self.control.should_training_stop:
+                        break
             if self.control.should_epoch_stop or self.control.should_training_stop:
                 break
+
+        # Waiting for profiling.
+        torch_neuronx.synchronize()
+        prof.stop()
 
         # PyTorch/XLA relies on the dataloader to insert mark_step each iteration.
         # When we break out of the loop early, we flush the pending graph manually.
