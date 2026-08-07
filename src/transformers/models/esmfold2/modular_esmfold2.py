@@ -267,7 +267,7 @@ class EsmFold2AtomAttention(nn.Module):
         # Needed because padding can sometimes create tokens with no attendable keys, creating NaN outputs
         attn_output = torch.nan_to_num(attn_output)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
         return self.o_proj(attn_output), attn_weights
 
@@ -601,8 +601,6 @@ class EsmFold2AttentionPairBias(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        gate = torch.sigmoid(self.gate_proj(hidden_states)).view(hidden_shape)
-
         # The step-invariant per-head bias doubles as the additive attention mask. Returns [B, Q, H, D].
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -618,8 +616,9 @@ class EsmFold2AttentionPairBias(nn.Module):
             **kwargs,
         )
 
-        attn_output = gate * attn_output
-        return self.o_proj(attn_output.reshape(*input_shape, -1)), attn_weights
+        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = attn_output * torch.sigmoid(self.gate_proj(hidden_states))
+        return self.o_proj(attn_output), attn_weights
 
 
 class EsmFold2ConditionedTransition(nn.Module):
