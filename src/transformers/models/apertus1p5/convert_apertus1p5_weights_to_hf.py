@@ -161,9 +161,15 @@ def build_config(
         text_config = json.load(f)
     text_config.pop("architectures", None)
     text_config.pop("transformers_version", None)
-    # the 1.5 backbone supersedes plain apertus; its config understands `output_vocab_size` (pruned LM head)
-    if text_config.get("model_type", "apertus") == "apertus":
-        text_config["model_type"] = "apertus1p5_text"
+    # The 1.5 backbone supersedes plain Apertus; its config understands `output_vocab_size` (pruned LM head).
+    # Accept the original backbone type as a conversion source, but do not silently reinterpret another model.
+    text_model_type = text_config.get("model_type", "apertus")
+    if text_model_type not in {"apertus", "apertus1p5_text"}:
+        raise ValueError(
+            f"{apertus_checkpoint!r} is not an Apertus text checkpoint: its `model_type` is "
+            f"{text_model_type!r}, expected 'apertus' or 'apertus1p5_text'."
+        )
+    text_config["model_type"] = "apertus1p5_text"
     with open(os.path.join(vision_tokenizer_checkpoint, "config.json")) as f:
         vision_tokenizer_config = json.load(f)
     _check_converted_tokenizer_source(
