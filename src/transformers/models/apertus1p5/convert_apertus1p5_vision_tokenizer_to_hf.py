@@ -15,9 +15,9 @@
 
 `Apertus1p5VisionTokenizerModel` is an encode-only port of BAAI's EMU3.5 Vision Tokenizer
 (`BAAI/Emu3.5-VisionTokenizer`, Apache-2.0): Apertus 1.5 consumes discrete image codes but never generates
-images, so the decoder branch is dropped. The remaining tensors keep their original names (there is no
-renaming), and `load_state_dict(strict=True)` is the correctness gate for both the tensor set and the
-geometry derived from the source configuration.
+images, so the decoder branch is dropped. Encoder stage tensors are renamed into the grouped Transformers
+layout, and `load_state_dict(strict=True)` is the correctness gate for both the tensor set and the geometry
+derived from the source configuration.
 
 The source may be a local directory or a Hub `repo_id[@revision]`, of which only two files are read: a single
 float32 `model.safetensors` and `config.json`. A full snapshot download would also pull the redundant 1.8 GB
@@ -131,9 +131,27 @@ def convert_config(original_config: dict) -> Apertus1p5VisionTokenizerConfig:
     )
 
 
+def convert_key(key: str) -> str:
+    """Map an original EMU3.5 encoder-stage key to the grouped Transformers module layout."""
+    parts = key.split(".")
+    if len(parts) < 4 or parts[:2] != ["encoder", "down"]:
+        return key
+
+    stage_idx, module_name = parts[2:4]
+    if module_name in ("block", "attn") and len(parts) >= 6:
+        layer_idx = parts[4]
+        component = "resnet" if module_name == "block" else "attention"
+        return ".".join(("encoder", "stages", stage_idx, "layers", layer_idx, component, *parts[5:]))
+    if module_name == "downsample":
+        return ".".join(("encoder", "stages", stage_idx, "downsample", *parts[4:]))
+    return key
+
+
 def convert_state_dict(original_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Drop the original decoder branch; the encode path keeps its original key names one to one."""
-    return {key: value for key, value in original_state_dict.items() if not key.startswith(DROPPED_PREFIXES)}
+    """Drop the original decoder branch and rename the retained encoder-stage tensors."""
+    return {
+        convert_key(key): value for key, value in original_state_dict.items() if not key.startswith(DROPPED_PREFIXES)
+    }
 
 
 def _check_fp32_source(state_dict: dict[str, torch.Tensor]) -> None:

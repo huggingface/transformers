@@ -46,6 +46,11 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ..apertus.configuration_apertus import ApertusConfig
 from ..apertus.modeling_apertus import ApertusForCausalLM, ApertusModel, ApertusPreTrainedModel
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..chameleon.modeling_chameleon import (
+    ChameleonVQVAEEncoderAttnBlock,
+    ChameleonVQVAEEncoderConvDownsample,
+    ChameleonVQVAEEncoderResnetBlock,
+)
 
 
 def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Tensor:
@@ -344,131 +349,98 @@ class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
     audio_tokens: list[torch.LongTensor] | None = None
 
 
-class Apertus1p5VisionTokenizerResnetBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int | None = None, dropout: float = 0.0):
-        super().__init__()
-        self.in_channels = in_channels
-        out_channels = in_channels if out_channels is None else out_channels
-        self.out_channels = out_channels
+class Apertus1p5VisionTokenizerResnetBlock(ChameleonVQVAEEncoderResnetBlock):
+    pass
 
-        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
-        self.dropout = nn.Dropout(dropout)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if in_channels != out_channels:
-            self.nin_shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+
+class Apertus1p5VisionTokenizerAttnBlock(ChameleonVQVAEEncoderAttnBlock):
+    pass
+
+
+class Apertus1p5VisionTokenizerDownsample(ChameleonVQVAEEncoderConvDownsample):
+    pass
+
+
+class Apertus1p5VisionTokenizerEncoderBlock(nn.Module):
+    def __init__(
+        self,
+        config: Apertus1p5VisionTokenizerConfig,
+        in_channels: int,
+        out_channels: int,
+        use_attention: bool,
+    ):
+        super().__init__()
+        self.resnet = Apertus1p5VisionTokenizerResnetBlock(config, in_channels, out_channels, conv_shortcut=False)
+        self.attention = Apertus1p5VisionTokenizerAttnBlock(out_channels) if use_attention else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        if self.in_channels != self.out_channels:
-            residual = self.nin_shortcut(residual)
-        return residual + hidden_states
+        hidden_states = self.resnet(hidden_states)
+        return self.attention(hidden_states)
 
 
-class Apertus1p5VisionTokenizerAttnBlock(nn.Module):
-    """Single-head self-attention over spatial positions with 1x1 convolutions.
-
-    The manual `bmm` attention (instead of the library attention interface) preserves bitwise parity with the
-    original tokenizer, whose argmax code assignment is sensitive to tiny numeric differences.
-    """
-
-    def __init__(self, in_channels: int):
+class Apertus1p5VisionTokenizerEncoderStage(nn.Module):
+    def __init__(self, config: Apertus1p5VisionTokenizerConfig, stage_idx: int):
         super().__init__()
-        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        previous_multiplier = 1 if stage_idx == 0 else config.channel_multiplier[stage_idx - 1]
+        in_channels = config.base_channels * previous_multiplier
+        out_channels = config.base_channels * config.channel_multiplier[stage_idx]
+        resolution = config.resolution // 2**stage_idx
+        use_attention = resolution in config.attn_resolutions
+
+        layers = []
+        for _ in range(config.num_res_blocks):
+            layers.append(Apertus1p5VisionTokenizerEncoderBlock(config, in_channels, out_channels, use_attention))
+            in_channels = out_channels
+
+        self.layers = nn.ModuleList(layers)
+        self.downsample = (
+            Apertus1p5VisionTokenizerDownsample(out_channels)
+            if stage_idx < len(config.channel_multiplier) - 1
+            else nn.Identity()
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states)
-        query = self.q(hidden_states)
-        key = self.k(hidden_states)
-        value = self.v(hidden_states)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
 
-        batch_size, channels, height, width = query.shape
-        query = query.reshape(batch_size, channels, height * width).permute(0, 2, 1)
-        key = key.reshape(batch_size, channels, height * width)
-        attn_weights = torch.bmm(query, key) * channels**-0.5
-        attn_weights = F.softmax(attn_weights, dim=2)
-
-        value = value.reshape(batch_size, channels, height * width)
-        hidden_states = torch.bmm(value, attn_weights.permute(0, 2, 1))
-        hidden_states = hidden_states.reshape(batch_size, channels, height, width)
-        return residual + self.proj_out(hidden_states)
+        return self.downsample(hidden_states)
 
 
-class Apertus1p5VisionTokenizerDownsample(nn.Module):
-    def __init__(self, in_channels: int):
+class Apertus1p5VisionTokenizerMiddleBlock(nn.Module):
+    def __init__(self, config: Apertus1p5VisionTokenizerConfig, channels: int):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+        self.block_1 = Apertus1p5VisionTokenizerResnetBlock(config, channels, channels, conv_shortcut=False)
+        self.attn_1 = Apertus1p5VisionTokenizerAttnBlock(channels)
+        self.block_2 = Apertus1p5VisionTokenizerResnetBlock(config, channels, channels, conv_shortcut=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # asymmetric right/bottom padding, as in the original VQGAN-style tokenizer
-        hidden_states = F.pad(hidden_states, (0, 1, 0, 1), mode="constant", value=0)
-        return self.conv(hidden_states)
+        hidden_states = self.block_1(hidden_states)
+        hidden_states = self.attn_1(hidden_states)
+        return self.block_2(hidden_states)
 
 
 class Apertus1p5VisionTokenizerEncoder(nn.Module):
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__()
-        self.num_resolutions = len(config.channel_multiplier)
-        self.num_res_blocks = config.num_res_blocks
+        output_channels = config.base_channels * config.channel_multiplier[-1]
 
         self.conv_in = nn.Conv2d(config.in_channels, config.base_channels, kernel_size=3, stride=1, padding=1)
-
-        current_resolution = config.resolution
-        in_channel_multiplier = (1,) + tuple(config.channel_multiplier)
-        self.down = nn.ModuleList()
-        for i_level in range(self.num_resolutions):
-            block = nn.ModuleList()
-            attn = nn.ModuleList()
-            block_in = config.base_channels * in_channel_multiplier[i_level]
-            block_out = config.base_channels * config.channel_multiplier[i_level]
-            for _ in range(self.num_res_blocks):
-                block.append(Apertus1p5VisionTokenizerResnetBlock(block_in, block_out, dropout=config.dropout))
-                block_in = block_out
-                if current_resolution in config.attn_resolutions:
-                    attn.append(Apertus1p5VisionTokenizerAttnBlock(block_in))
-
-            down = nn.Module()
-            down.block = block
-            down.attn = attn
-            if i_level != self.num_resolutions - 1:
-                down.downsample = Apertus1p5VisionTokenizerDownsample(block_in)
-                current_resolution = current_resolution // 2
-            self.down.append(down)
-
-        self.mid = nn.Module()
-        self.mid.block_1 = Apertus1p5VisionTokenizerResnetBlock(block_in, block_in, dropout=config.dropout)
-        self.mid.attn_1 = Apertus1p5VisionTokenizerAttnBlock(block_in)
-        self.mid.block_2 = Apertus1p5VisionTokenizerResnetBlock(block_in, block_in, dropout=config.dropout)
-
-        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
-        self.conv_out = nn.Conv2d(block_in, config.latent_channels, kernel_size=3, stride=1, padding=1)
+        self.stages = nn.ModuleList(
+            [
+                Apertus1p5VisionTokenizerEncoderStage(config, stage_idx)
+                for stage_idx in range(len(config.channel_multiplier))
+            ]
+        )
+        self.mid = Apertus1p5VisionTokenizerMiddleBlock(config, output_channels)
+        self.norm_out = nn.GroupNorm(num_groups=32, num_channels=output_channels, eps=1e-6, affine=True)
+        self.conv_out = nn.Conv2d(output_channels, config.latent_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv_in(pixel_values)
-        for i_level in range(self.num_resolutions):
-            for i_block in range(self.num_res_blocks):
-                hidden_states = self.down[i_level].block[i_block](hidden_states)
-                if len(self.down[i_level].attn) > 0:
-                    hidden_states = self.down[i_level].attn[i_block](hidden_states)
-            if i_level != self.num_resolutions - 1:
-                hidden_states = self.down[i_level].downsample(hidden_states)
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
 
-        hidden_states = self.mid.block_1(hidden_states)
-        hidden_states = self.mid.attn_1(hidden_states)
-        hidden_states = self.mid.block_2(hidden_states)
+        hidden_states = self.mid(hidden_states)
 
         hidden_states = self.norm_out(hidden_states)
         hidden_states = hidden_states * torch.sigmoid(hidden_states)
@@ -488,9 +460,10 @@ class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
         self.embedding = nn.Embedding(config.codebook_size, config.embed_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.LongTensor:
-        # hidden_states: (batch_size, embed_dim, height, width)
-        logits = torch.einsum("bdhw,nd->bnhw", hidden_states, self.embedding.weight)
-        return logits.argmax(dim=1)  # (batch_size, height, width)
+        batch_size, _, height, width = hidden_states.shape
+        hidden_states = hidden_states.flatten(2)
+        logits = torch.matmul(self.embedding.weight, hidden_states)
+        return logits.argmax(dim=1).reshape(batch_size, height, width)
 
 
 @auto_docstring
