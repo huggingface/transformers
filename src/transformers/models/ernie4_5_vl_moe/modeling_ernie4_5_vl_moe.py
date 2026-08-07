@@ -107,7 +107,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
         inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
 
-        return inv_freq_3d.to(device), attention_factor
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -132,7 +132,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
     def recomposition_to_3d(self, freq):
         freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
-        freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
         return freq_hwt.repeat_interleave(2, dim=-1)
 

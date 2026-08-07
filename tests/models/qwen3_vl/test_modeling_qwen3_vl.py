@@ -14,11 +14,13 @@
 """Testing suite for the PyTorch Qwen3-VL model."""
 
 import copy
+import gc
 import unittest
 
 import pytest
 
 from transformers import (
+    AutoProcessor,
     Qwen3VLConfig,
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
@@ -26,7 +28,9 @@ from transformers import (
 )
 from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_torch,
+    slow,
     torch_device,
 )
 
@@ -491,3 +495,46 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
             output = model(input_ids=input_ids, position_ids=position_ids_2d, use_cache=False)
         self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
         self.assertTrue(torch.isfinite(output.last_hidden_state).all())
+
+
+@slow
+@require_torch
+class Qwen3VLIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def test_small_model_integration_test(self):
+        model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
+
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device, dtype=model.dtype)
+
+        output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
+        EXPECTED_DECODED_TEXT = "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **"
+
+        print([self.processor.decode(output[0], skip_special_tokens=True)])
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
