@@ -682,6 +682,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeConfig"),
         ("voxtral_realtime_encoder", "VoxtralRealtimeEncoderConfig"),
         ("voxtral_realtime_text", "VoxtralRealtimeTextConfig"),
+        ("voxtral_tts", "VoxtralTtsConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
