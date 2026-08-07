@@ -1581,7 +1581,9 @@ class GenerationMixin(ContinuousMixin):
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
-        if (assistant_model := generation_mode_kwargs.get("assistant_model")) is not None:
+        if (
+            assistant_model := generation_mode_kwargs.get("assistant_model")
+        ) is not None and generation_config.speculation_type != "dflash":
             if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
                 attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
                 attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
@@ -1597,9 +1599,7 @@ class GenerationMixin(ContinuousMixin):
             doc_reference = (
                 "(see https://huggingface.co/docs/transformers/en/generation_strategies#universal-assisted-decoding)"
             )
-            if generation_config.speculation_type == "dflash":
-                pass  # draft has no input/output embedding of its own an thus no `config.vocan_size`
-            elif self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
+            if self.config.get_text_config().vocab_size == assistant_model.config.get_text_config().vocab_size:
                 if "assistant_tokenizer" in generation_mode_kwargs:
                     raise ValueError(
                         f"`assistant_tokenizer` is not required when the main and assistant models use the same tokenizer. Please omit `assistant_tokenizer` from `generate()` {doc_reference}."
