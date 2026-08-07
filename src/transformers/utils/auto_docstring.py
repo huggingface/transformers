@@ -2015,6 +2015,46 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
+    image_token_pooling = {
+        "description": """
+    Indices into the flattened image patch sequence gathered by each pooled image token, with `-1` marking padding
+    slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_image_tokens, pool_h * pool_w)`",
+    }
+
+    image_grids = {
+        "description": """
+    Per-image `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled token grid. Can be obtained using
+    [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images, 4)`",
+    }
+
+    image_num_crops = {
+        "description": """
+    Number of crops per image, low-resolution view included. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images,)`",
+    }
+
+    video_token_pooling = {
+        "description": """
+    Indices into the flattened video frame-patch sequence gathered by each pooled video token, with `-1` marking
+    padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_video_tokens, pool_h * pool_w)`",
+    }
+
+    video_grids = {
+        "description": """
+    Per-video `[num_frames, pooled_h, pooled_w]` token grid. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     position_ids = {
         "description": """
     Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
