@@ -31,7 +31,7 @@ class OnyxAssistantConfig(PreTrainedConfig):
     mask_token_id (`int`, *optional*):
         Mask token ids used as noisey input to model.
     target_layer_ids (`list[int]`, *optional*):
-       Zero indexed layer ids whose hidden states are concatenated as context for the model.
+        Zero indexed layer ids whose hidden states are concatenated as context for the model.
 
     Example:
 

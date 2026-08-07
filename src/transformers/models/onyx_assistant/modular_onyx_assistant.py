@@ -46,7 +46,8 @@ class OnyxAssistantRMSNorm(Exaone4RMSNorm):
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """
     Applies Rotary Position Embedding to the query and key tensors where keys have concatenated context
-    from main model
+    from main model. This means that `q` and `k` do not have the same seq_len, so we slice to get the `cos` and `sin` corresponding
+    to latest positions for `q`.
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -108,6 +109,8 @@ class OnyxAssistantAttention(Exaone4Attention):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
+        # Note that here q_states and k_states do not have the same seq_len (even before the `cache.update()` call), so this
+        # will take care of slicing for latest positions for q_states
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -140,16 +143,13 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         self.input_layernorm = OnyxAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.post_feedforward_layernorm
 
-    # override: apply pre-LN not post-LM, and pass target states!
     def forward(
         self,
         hidden_states: torch.Tensor,
         context_hidden_states: torch.FloatTensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -157,11 +157,9 @@ class OnyxAssistantDecoderLayer(Exaone4DecoderLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             context_hidden_states=context_hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -220,8 +218,18 @@ class OnyxAssistantModel(Exaone4Model):
         r"""
         noise_embeds (`torch.FloatTensor` of shape `[batch_size, config.block_size, dim]`):
             Input embedding for the last generated anchor token and mask tokens to be denoised.
-        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
+        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, number_of_previous_accepted_tokens, dim * len(config.target_layer_ids)]`):
             Context hidden states from target model's selected layer ids concatenated in the last dim.
+        attention_mask (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens + config.block_size]`):
+            Similar to the usual attention_mask, but note that it has length `number_of_previous_accepted_tokens + config.block_size`,
+            because the Attention will first concatenate `context_hidden_states` and the hidden states derived from `noise_embeds`, so that
+            k/v states do not have the same length as q_states, even before the `cache.update()` call. Thus the kv_seq_len dimension of
+            the attention mask needs to span the additional positions.
+        position_ids (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens + config.block_size]`):
+            Similar to the usual position_ids, but note that it has length `number_of_previous_accepted_tokens + config.block_size`,
+            because the Attention will first concatenate `context_hidden_states` and the hidden states derived from `noise_embeds`, so that
+            k/v states do not have the same length as q_states, even before the `cache.update()` call. Thus the `position_ids` and the derived
+            `position_embeddings` need to span all the additional positions.
         """
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -255,20 +263,15 @@ class OnyxAssistantModel(Exaone4Model):
             hidden_states = decoder_layer(
                 hidden_states,
                 context_hidden_states=context_hidden_states,
-                attention_mask=mask_mapping[layer_type],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
                 position_embeddings=position_embeddings,
+                attention_mask=mask_mapping[layer_type],
+                past_key_values=past_key_values,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
     @staticmethod
     def create_bidirectional_decoder_attention_mask(

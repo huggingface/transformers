@@ -1566,23 +1566,27 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     def __init__(
         self,
-        assistant_model: PreTrainedModel,
+        assistant_model: "PreTrainedModel",
         main_model_input_embeddings: nn.Embedding,
         main_model_output_embeddings: nn.Linear,
-        generation_config: GenerationConfig,
+        generation_config: "GenerationConfig",
         **kwargs,
     ):
         from ..cache_utils import DynamicCache
 
+        # Get the assistant model and the embeddings of the main model
         self.assistant_model = assistant_model
         self.main_model_max_length = generation_config.max_length
-
         self.main_model_input_embeddings = main_model_input_embeddings
         self.main_model_output_embeddings = main_model_output_embeddings
+
+        # Get the layers used to obtain the intermediate hidden_states from main model, and prepare the diffusion window ids tensor
         self.target_layer_ids = assistant_model.config.target_layer_ids
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
-        self.block_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+        self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+
+        # Prepare a cache for the assistant, and activate the past recording
         self.cache = DynamicCache(config=self.assistant_model.config)
         self.cache.activate_past_recording()
 
@@ -1630,7 +1634,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
-        noise_ids = torch.cat([input_ids[:, -1:], self.block_mask.to(input_ids.device)], dim=-1)
+        noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
         # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
         noise_embeds = torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
 
