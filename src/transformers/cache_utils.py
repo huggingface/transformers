@@ -1934,7 +1934,7 @@ class QuantizedCache(Cache):
         for layer_type in layer_types:
             if layer_type == "full_attention":
                 layers.append(layer_class(nbits, axis_key, axis_value, q_group_size, residual_length))
-            else:
+            elif layer_type in ("sliding_attention", "chunked_attention"):
                 layers.append(DynamicSlidingWindowLayer(sliding_window=layer_kwargs["sliding_window"]))
         super().__init__(layers=layers)
 
