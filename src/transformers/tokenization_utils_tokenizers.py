@@ -146,19 +146,23 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
 
             # Older Hub tokenizer.json files (e.g. roberta-base / roberta-large) omit
-            # `model.type`. When the class also does not declare a model (legacy Fast
-            # wrappers like RobertaTokenizerFast), reconstructing from vocab alone drops
-            # merges, pre_tokenizer, decoder, and normalizer and yields a broken
-            # character-level tokenizer. Keep the fully loaded backend instead (#47706).
-            if model_type is None and getattr(cls, "model", None) is None:
+            # `model.type` while still shipping BPE merges. When the class also does not
+            # declare a model (legacy Fast wrappers like RobertaTokenizerFast),
+            # reconstructing from vocab alone drops merges, pre_tokenizer, decoder, and
+            # normalizer and yields a broken character-level tokenizer. Keep the fully
+            # loaded backend only for that case (#47706) — do not short-circuit all
+            # model=None Fast classes (Llama/Idefics rebuild paths need vocab+merges).
+            json_model = tokenizer_json.get("model", {})
+            if model_type is None and getattr(cls, "model", None) is None and "merges" in json_model:
                 local_kwargs["tokenizer_object"] = tok_from_file
                 return local_kwargs
 
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
-            # Pass pipeline components promised by the comment above so custom __init__
-            # rebuilds stay faithful to tokenizer.json when the class does not set them.
+            # Pass pipeline components promised by the comment above so hollow vocab/merges
+            # rebuilds can restore them. Applied in __init__ only when the backend was
+            # reconstructed from vocab (not when a class already built its own pipeline).
             if tok_from_file.pre_tokenizer is not None:
                 local_kwargs["pre_tokenizer"] = tok_from_file.pre_tokenizer
             if tok_from_file.decoder is not None:
@@ -368,6 +372,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         merges = kwargs.get("merges")
 
         fast_tokenizer = None
+        # True when we construct a hollow backend from extracted vocab/merges only.
+        # Pipeline components from tokenizer.json should only be applied in that case —
+        # classes that already built their own backend (e.g. LlamaTokenizer sets
+        # normalizer=None + Metaspace) must keep their intentional pipeline.
+        rebuilt_from_vocab = False
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
@@ -386,6 +395,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 kwargs.update(additional_kwargs)
         elif self._tokenizer is None and vocab is not None:
             # Build from vocab/merges extracted by convert_to_native_format
+            rebuilt_from_vocab = True
             if merges is not None:
                 vocab_dict = vocab if isinstance(vocab, dict) else {w: i for i, (w, _) in enumerate(vocab)}
                 fast_tokenizer = TokenizerFast(BPE(vocab=vocab_dict, merges=merges, fuse_unk=True, dropout=None))
@@ -440,18 +450,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._add_eos_token = kwargs.get("add_eos_token", False)
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
-        # Apply pipeline components extracted from tokenizer.json when the backend was
-        # rebuilt without them (only fill gaps so class-defined pipelines win). Always
-        # pop so they are not forwarded into init_kwargs / super().__init__.
+        # Always pop pipeline kwargs so they are not stored in init_kwargs.
+        # Only apply them when we rebuilt a hollow backend from vocab/merges —
+        # never overwrite a class-built pipeline (Llama intentional normalizer=None).
         pre_tokenizer = kwargs.pop("pre_tokenizer", None)
         decoder = kwargs.pop("decoder", None)
         normalizer = kwargs.pop("normalizer", None)
-        if pre_tokenizer is not None and self._tokenizer.pre_tokenizer is None:
-            self._tokenizer.pre_tokenizer = pre_tokenizer
-        if decoder is not None and self._tokenizer.decoder is None:
-            self._tokenizer.decoder = decoder
-        if normalizer is not None and self._tokenizer.normalizer is None:
-            self._tokenizer.normalizer = normalizer
+        if rebuilt_from_vocab:
+            if pre_tokenizer is not None and self._tokenizer.pre_tokenizer is None:
+                self._tokenizer.pre_tokenizer = pre_tokenizer
+            if decoder is not None and self._tokenizer.decoder is None:
+                self._tokenizer.decoder = decoder
+            if normalizer is not None and self._tokenizer.normalizer is None:
+                self._tokenizer.normalizer = normalizer
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
