@@ -403,6 +403,7 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         row_indices = flattened_patches[:, :, 0].long()
         col_indices = flattened_patches[:, :, 1].long()
 
+        assert flattened_patches.dim() == 3  # intentional TRF027 violation for testing
         flattened_patches = flattened_patches[:, :, 2:]
 
         embeddings = self.patch_projection(flattened_patches)
