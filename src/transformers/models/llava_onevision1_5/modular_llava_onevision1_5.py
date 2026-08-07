@@ -41,7 +41,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ..qwen3.modeling_qwen3 import Qwen3Model
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3Model
 from .configuration_llava_onevision1_5 import (
     LlavaOnevision1_5Config,
     LlavaOnevision1_5TextConfig,
@@ -412,7 +412,7 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
         else:
             merged_hidden_states = hidden_states
         return BaseModelOutputWithPooling(
-            last_hidden_state=merged_hidden_states,
+            last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
 
@@ -431,12 +431,20 @@ class LlavaOnevision1_5TextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
+class LlavaOnevision1_5TextAttention(Qwen3Attention):
+    pass
+
+
+class LlavaOnevision1_5TextDecoderLayer(Qwen3DecoderLayer):
+    pass
+
+
 @auto_docstring
 class LlavaOnevision1_5TextModel(Qwen3Model):
     config: LlavaOnevision1_5TextConfig
     _can_record_outputs = {
-        "hidden_states": "LlavaOnevision1_5TextDecoderLayer",
-        "attentions": "LlavaOnevision1_5TextAttention",
+        "hidden_states": LlavaOnevision1_5TextDecoderLayer,
+        "attentions": LlavaOnevision1_5TextAttention,
     }
 
 
@@ -492,13 +500,19 @@ class LlavaOnevision1_5Model(LlavaModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = vision_outputs.pooler_output
-        return BaseModelOutputWithPooling(
-            last_hidden_state=image_embeds,
-            pooler_output=image_embeds,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-        )
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        expected_features = sum(split_sizes)
+        if vision_outputs.pooler_output.shape[0] != expected_features:
+            if expected_features % vision_outputs.pooler_output.shape[0] != 0:
+                raise ValueError(
+                    "Image features and image_grid_thw do not match, "
+                    f"expected {expected_features} features but got {vision_outputs.pooler_output.shape[0]}."
+                )
+            vision_outputs.pooler_output = vision_outputs.pooler_output.repeat_interleave(
+                expected_features // vision_outputs.pooler_output.shape[0], dim=0
+            )
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        return vision_outputs
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -522,13 +536,19 @@ class LlavaOnevision1_5Model(LlavaModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
-        video_embeds = vision_outputs.pooler_output
-        return BaseModelOutputWithPooling(
-            last_hidden_state=video_embeds,
-            pooler_output=video_embeds,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-        )
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        expected_features = sum(split_sizes)
+        if vision_outputs.pooler_output.shape[0] != expected_features:
+            if expected_features % vision_outputs.pooler_output.shape[0] != 0:
+                raise ValueError(
+                    "Video features and video_grid_thw do not match, "
+                    f"expected {expected_features} features but got {vision_outputs.pooler_output.shape[0]}."
+                )
+            vision_outputs.pooler_output = vision_outputs.pooler_output.repeat_interleave(
+                expected_features // vision_outputs.pooler_output.shape[0], dim=0
+            )
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -602,12 +622,9 @@ class LlavaOnevision1_5Model(LlavaModel):
 
         if pixel_values is not None:
             image_outputs = self.get_image_features(pixel_values, image_grid_thw, **kwargs)
-            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-
-            if input_ids is not None:
-                n_image_tokens = int((input_ids == self.config.image_token_id).sum().item())
-                if image_features.shape[0] != n_image_tokens and n_image_tokens % image_features.shape[0] == 0:
-                    image_features = image_features.repeat_interleave(n_image_tokens // image_features.shape[0], dim=0)
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -616,12 +633,9 @@ class LlavaOnevision1_5Model(LlavaModel):
 
         if pixel_values_videos is not None:
             video_outputs = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-
-            if input_ids is not None:
-                n_video_tokens = int((input_ids == self.config.video_token_id).sum().item())
-                if video_features.shape[0] != n_video_tokens and n_video_tokens % video_features.shape[0] == 0:
-                    video_features = video_features.repeat_interleave(n_video_tokens // video_features.shape[0], dim=0)
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
@@ -682,6 +696,97 @@ class LlavaOnevision1_5ForConditionalGeneration(LlavaForConditionalGeneration):
         return self.model.get_video_features(
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict]:
+        if expand_size == 1:
+            return input_ids, model_kwargs
+
+        def get_token_counts(token_id):
+            if input_ids is not None:
+                return (input_ids == token_id).sum(dim=1).tolist()
+            inputs_embeds = model_kwargs["inputs_embeds"]
+            token_embed = self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            return (inputs_embeds == token_embed).all(-1).sum(dim=1).tolist()
+
+        def get_grid_counts(grid_thw, token_counts):
+            if grid_thw is None:
+                return None
+            if sum(token_counts) == 0:
+                batch_size = len(token_counts)
+                if grid_thw.shape[0] % batch_size != 0:
+                    raise ValueError(
+                        f"Cannot distribute {grid_thw.shape[0]} vision grids across batch size {batch_size}."
+                    )
+                return [grid_thw.shape[0] // batch_size] * batch_size
+            feature_lengths = (grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
+            grid_counts = []
+            offset = 0
+            for token_count in token_counts:
+                count = 0
+                features = 0
+                while offset + count < len(feature_lengths) and features < token_count:
+                    features += feature_lengths[offset + count]
+                    count += 1
+                grid_counts.append(count)
+                offset += count
+            return grid_counts
+
+        def repeat_samples(tensor, lengths):
+            return torch.cat(
+                [sample.repeat((expand_size,) + (1,) * (tensor.ndim - 1)) for sample in torch.split(tensor, lengths)],
+                dim=0,
+            )
+
+        image_grid_thw = model_kwargs.get("image_grid_thw")
+        video_grid_thw = model_kwargs.get("video_grid_thw")
+        image_grid_counts = get_grid_counts(image_grid_thw, get_token_counts(self.config.image_token_id))
+        video_grid_counts = get_grid_counts(video_grid_thw, get_token_counts(self.config.video_token_id))
+
+        visual_lengths = {}
+        for pixel_key, grid_key, grid_counts in (
+            ("pixel_values", "image_grid_thw", image_grid_counts),
+            ("pixel_values_videos", "video_grid_thw", video_grid_counts),
+        ):
+            pixels = model_kwargs.get(pixel_key)
+            grid = model_kwargs.get(grid_key)
+            if pixels is None or grid is None:
+                continue
+            raw_lengths = grid.prod(-1)
+            sample_raw_lengths = [int(chunk.sum().item()) for chunk in torch.split(raw_lengths, grid_counts)]
+            raw_total = sum(sample_raw_lengths)
+            if raw_total != pixels.shape[0]:
+                sample_raw_lengths = [length * pixels.shape[0] // raw_total for length in sample_raw_lengths]
+            visual_lengths[pixel_key] = sample_raw_lengths
+
+        visual_keys = {"pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"}
+        for key, value in model_kwargs.items():
+            if value is None or not isinstance(value, torch.Tensor):
+                continue
+            if key in visual_lengths:
+                model_kwargs[key] = repeat_samples(value, visual_lengths[key])
+            elif key == "image_grid_thw":
+                model_kwargs[key] = repeat_samples(value, image_grid_counts)
+            elif key == "video_grid_thw":
+                model_kwargs[key] = repeat_samples(value, video_grid_counts)
+            elif key not in visual_keys:
+                model_kwargs[key] = value.repeat_interleave(expand_size, dim=0)
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+        if is_encoder_decoder:
+            model_kwargs["encoder_outputs"] = {
+                key: value.repeat_interleave(expand_size, dim=0) if isinstance(value, torch.Tensor) else value
+                for key, value in model_kwargs["encoder_outputs"].items()
+            }
+        return input_ids, model_kwargs
 
     @can_return_tuple
     @auto_docstring
