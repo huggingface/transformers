@@ -11,16 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Which GGUF weights keep their bytes packed, and the modules that hold them.
-
-`get_gguf_plan` answers the question from the file alone — header, arch table and kernel — so it
-needs no model instance. `replace_with_gguf_modules` then settles which of the plan's entries really
-stay packed: only a module that can hold blocks gets swapped, and the rest are dequantized at load.
-
-Keeping a weight packed is only worth it when a fused dequant-matmul kernel can read it: without one,
-unpacking the whole weight on every forward costs more than unpacking it once at load. That is why
-`get_gguf_plan` asks `kernels.py` first, and why these modules exist only where the answer was yes.
-"""
 
 import re
 from copy import deepcopy
@@ -139,7 +129,10 @@ class GgufLinear(nn.Module):
             out = self._unpack_matmul(flat)
         if self.bias is not None:
             out = out + self.bias
-        return out.reshape(*x.shape[:-1], self.out_features).to(x.dtype)
+        out = out.reshape(*x.shape[:-1], self.out_features)
+        # The gemv returns f32 whatever `x` is, so this is usually a real cast -- but when the model
+        # already runs in f32 it is not, and skipping it saves a dispatch on every linear.
+        return out if out.dtype == x.dtype else out.to(x.dtype)
 
     def _unpack_matmul(self, flat: torch.Tensor) -> torch.Tensor:
         """Matmul against the weight unpacked a row chunk at a time, so it is never fully materialized."""
@@ -205,7 +198,7 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel) -> dict[str, 
             continue
         if type(module) is nn.Linear:
             # the fused gemv is used only where one exists; without it the forward unpacks instead
-            gemv = kernel is not None and kernel.supports(ggml_type)
+            gemv = bool(kernel) and kernel.supports(ggml_type)
             new_module = GgufLinear(module.in_features, module.out_features, ggml_type, module.bias is not None, gemv)
         elif type(module) is nn.Embedding:
             new_module = GgufEmbedding(module.num_embeddings, module.embedding_dim, ggml_type)

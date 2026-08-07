@@ -27,6 +27,11 @@ What is left out is what the config derives or defaults on its own, like the rop
 
 This mirrors `gguf_conversion_mapping.py`: one entry per `general.architecture`, and an architecture is
 supported only when it appears in both.
+
+`architectures` is stated too, even though nothing in the file says it: a GGUF repo has no
+`config.json` to carry it, and a config without it is not interchangeable with one loaded from a
+normal repo -- anything that resolves a model class from `config.architectures[0]` would have to
+special-case GGUF.
 """
 
 
@@ -35,9 +40,17 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     key = lambda name: metadata[f"qwen35.{name}"]  # noqa: E731
     head_dim = key("attention.key_length")
     value_heads = key("ssm.time_step_rank")
+    # Writers only emit this when the file carries an MTP block, so a file without one omits it
+    # rather than storing zero. ggml reads its keys the same way, defaulting what is absent. Used
+    # only to take the block off `block_count`; the config has no field for it, so none is set.
+    mtp_layers = metadata.get("qwen35.nextn_predict_layers", 0)
 
     return {
         "model_type": "qwen3_5_text",
+        # Stated so a rebuilt config carries the same architecture a `config.json` would. Callers that
+        # pick a class from `config.architectures` -- `transformers serve` among them -- then need no
+        # special case for a GGUF repo.
+        "architectures": ["Qwen3_5ForCausalLM"],
         "max_position_embeddings": key("context_length"),
         "hidden_size": key("embedding_length"),
         "intermediate_size": key("feed_forward_length"),
@@ -51,8 +64,7 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
         "linear_num_key_heads": key("ssm.group_count"),
         "linear_num_value_heads": value_heads,
         # the file counts the multi-token-prediction block as a layer; the decoder stack does not
-        "num_hidden_layers": key("block_count") - key("nextn_predict_layers"),
-        "mtp_num_hidden_layers": key("nextn_predict_layers"),
+        "num_hidden_layers": key("block_count") - mtp_layers,
         # the value dimension is stated whole, where transformers wants it per head
         "linear_value_head_dim": key("ssm.inner_size") // value_heads,
         "rope_parameters": {

@@ -113,6 +113,7 @@ class ModelManager:
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
         gguf_file: str | None = None,
+        tokenizer: str | None = None,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -133,6 +134,7 @@ class ModelManager:
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
         self.gguf_file = gguf_file
+        self.tokenizer = tokenizer
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -233,6 +235,14 @@ class ModelManager:
         from transformers import AutoProcessor
 
         model_id, revision = model_id_and_revision.split("@", 1)
+        if self.tokenizer is not None:
+            # A GGUF-only repo ships no tokenizer files, and building one from the file's metadata is
+            # not implemented for every architecture, so the caller can name where it comes from.
+            # A tokenizer rather than a processor: the reference repo for a text GGUF is often the
+            # multimodal checkpoint, whose processor emits vision kwargs a text model will reject.
+            from transformers import AutoTokenizer
+
+            return AutoTokenizer.from_pretrained(self.tokenizer, trust_remote_code=self.trust_remote_code)
         return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
@@ -264,15 +274,14 @@ class ModelManager:
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
 
+        if self.gguf_file is not None:
+            # A GGUF-only repo carries no `config.json`, so the config comes from the file's own
+            # metadata -- which means the config lookup below needs to know which file to read.
+            model_kwargs["gguf_file"] = self.gguf_file
+
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-
-        if self.gguf_file is not None:
-            # Reuse the config resolved above: `from_pretrained` would otherwise try to rebuild it
-            # from the GGUF metadata, which is not supported for every architecture.
-            model_kwargs["gguf_file"] = self.gguf_file
-            model_kwargs["config"] = config
 
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 
