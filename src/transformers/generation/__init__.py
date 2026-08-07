@@ -77,14 +77,15 @@ else:
         "WatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
-        "MaxLengthCriteria",
-        "MaxTimeCriteria",
         "ConfidenceCriteria",
         "EosTokenCriteria",
+        "MaxLengthCriteria",
+        "MaxTimeCriteria",
+        "RepeatedNGramCriteria",
+        "StopStringCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
         "validate_stopping_criteria",
-        "StopStringCriteria",
     ]
     _import_structure["continuous_batching"] = [
         "ContinuousBatchingManager",
@@ -186,6 +187,7 @@ if TYPE_CHECKING:
             EosTokenCriteria,
             MaxLengthCriteria,
             MaxTimeCriteria,
+            RepeatedNGramCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
             StopStringCriteria,
