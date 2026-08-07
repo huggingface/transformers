@@ -111,7 +111,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-Let's call [`torch.accelerator.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.accelerator.max_memory_allocated.html) to measure the peak accelerator memory allocation.
+Let's call [`torch.accelerator.memory.max_memory_allocated`](https://docs.pytorch.org/docs/main/generated/torch.accelerator.memory.max_memory_allocated.html) to measure the peak accelerator memory allocation.
 
 ```python
 bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
