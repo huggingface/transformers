@@ -85,9 +85,6 @@ class RadioPatchEmbeddings(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
         self.patch_size = config.patch_size
-        self.embed_dim = config.hidden_size
-        self.num_cls_tokens = config.num_cls_tokens
-        self.num_registers = config.num_registers
 
         self.max_rows = config.max_img_size // config.patch_size
         self.max_cols = config.max_img_size // config.patch_size

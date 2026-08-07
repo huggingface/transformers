@@ -39,13 +39,9 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         Fixed input image resolution (in pixels) the vision tower expects.
     downsample_ratio (`float`, *optional*, defaults to 0.5):
         Pixel-shuffle spatial downsample ratio applied to the vision features.
-    template (`str`, *optional*):
-        Conversation template name (legacy; the chat template is carried by the processor).
     ps_version (`str`, *optional*, defaults to `"v1"`):
         Pixel-shuffle implementation version (`"v2"` swaps height/width back; `"v1"` is the legacy
         transposed variant).
-    image_tag_type (`str`, *optional*, defaults to `"internvl"`):
-        Image-tag convention used when expanding image placeholders.
     projector_hidden_size (`int`, *optional*, defaults to 4096):
         Hidden size of the vision-to-LLM MLP projector.
     vit_hidden_size (`int`, *optional*, defaults to 1280):
@@ -54,20 +50,12 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
         Efficient-Video-Sampling token pruning rate; `0.0` disables pruning.
     video_temporal_patch_size (`int`, *optional*, defaults to 2):
         Number of frames collapsed into a single temporal patch by the video embedder.
-    patch_size (`int`, *optional*, defaults to 16):
-        Vision patch size in pixels.
     img_context_token_id (`int`, *optional*):
         Token id used as the image-context placeholder in `input_ids`.
-    img_context_token (`str`, *optional*, defaults to `"<image>"`):
-        Textual image-context placeholder token.
     video_context_token_id (`int`, *optional*):
         Token id used as the video-context placeholder in `input_ids`.
-    video_context_token (`str`, *optional*, defaults to `"<video>"`):
-        Textual video-context placeholder token.
     sound_context_token_id (`int`, *optional*):
         Token id used as the audio-context placeholder in `input_ids`.
-    sound_context_token (`str`, *optional*, defaults to `"<audio>"`):
-        Textual audio-context placeholder token.
     """
 
     model_type = "nemotron_h_omni"
@@ -78,22 +66,16 @@ class NemotronH_Omni_Reasoning_V3_Config(PreTrainedConfig):
     sound_config: dict | ParakeetEncoderConfig | None = None
     force_image_size: int | None = None
     downsample_ratio: float = 0.5
-    template: str | None = None  # TODO move out of here and into the tokenizer
     ps_version: str = "v1"  # Pixel shuffle version
-    image_tag_type: str = "internvl"  # TODO: into the tokenizer too?
     projector_hidden_size: int = 4096
     vit_hidden_size: int = 1280
     video_pruning_rate: float = 0.0
     video_temporal_patch_size: int = 2
     # Vision token settings
-    patch_size: int = 16
     img_context_token_id: int | None = None
-    img_context_token: str = "<image>"
     video_context_token_id: int | None = None
-    video_context_token: str = "<video>"
     # Sound/audio token settings
     sound_context_token_id: int | None = None
-    sound_context_token: str = "<audio>"
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):

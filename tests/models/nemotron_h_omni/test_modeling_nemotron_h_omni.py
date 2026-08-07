@@ -110,7 +110,6 @@ class NemotronHOmniVisionText2TextModelTester:
             llm_config=self.llm_config,
             sound_config=None,
             force_image_size=self.force_image_size,
-            patch_size=self.patch_size,
             downsample_ratio=self.downsample_ratio,
             vit_hidden_size=self.vit_hidden_size,
             projector_hidden_size=self.projector_hidden_size,

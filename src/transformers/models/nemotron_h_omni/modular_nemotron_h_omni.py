@@ -253,21 +253,11 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
     def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
         super().__init__(config)
 
-        image_size = config.force_image_size
-        patch_size = config.patch_size
-        self.patch_size = patch_size
-        self.template = config.template
-        self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio**2))
-        self.downsample_ratio = config.downsample_ratio
-        self.image_tag_type = config.image_tag_type
         self.img_context_token_id = config.img_context_token_id
-        self.video_context_token_id = config.video_context_token_id
 
         self.language_model = AutoModelForCausalLM.from_config(config.llm_config)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.vision_model.make_preprocessor_external()
-
-        self.drop_vision_class_token = True
 
         llm_hidden_size = config.llm_config.hidden_size
 
