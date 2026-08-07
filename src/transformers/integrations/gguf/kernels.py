@@ -42,8 +42,12 @@ def kernel_can_read(tensor) -> bool:
     False when there is no kernel, or when a `device_map` left this weight on the host: a build is
     always for an accelerator, so host memory is the one place its ops cannot reach. Asked instead of
     naming a backend, so whichever accelerator was built for is used without saying which.
+
+    Compared against the `False` sentinel rather than asked for truthiness: this runs inside the
+    forward, and dynamo cannot trace `bool()` on a `GgufKernel`, which breaks the graph at every
+    embedding lookup and makes `fullgraph=True` a hard error.
     """
-    return bool(get_gguf_kernel()) and tensor.device.type != "cpu"
+    return get_gguf_kernel() is not False and tensor.device.type != "cpu"
 
 
 def dequantize_blocks(weight, ggml_type: int, rows: int, cols: int, dtype):

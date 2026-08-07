@@ -226,7 +226,8 @@ class GgufIntegrationTest(unittest.TestCase):
         """With a matmul kernel, the blocks are what the modules hold and compute on."""
         from transformers.integrations.gguf.kernels import get_gguf_kernel
 
-        if get_gguf_kernel() is None:
+        # `False` when there is none, so this asks for truthiness rather than a sentinel
+        if not get_gguf_kernel():
             self.skipTest("no GGUF kernel is available for this device")
         model = self.load(device_map=torch_device)
 
@@ -313,9 +314,9 @@ class GgufIntegrationTest(unittest.TestCase):
 @require_torch_accelerator
 @slow
 class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
-    gguf_repo = "bartowski/Qwen_Qwen3.5-4B-GGUF"
-    gguf_file = "Qwen_Qwen3.5-4B-bf16.gguf"
-    quantized_gguf_file = "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
+    gguf_repo = "unsloth/Qwen3.5-4B-GGUF"
+    gguf_file = "Qwen3.5-4B-BF16.gguf"
+    quantized_gguf_file = "Qwen3.5-4B-Q4_K_M.gguf"
     reference_repo = "Qwen/Qwen3.5-4B"
     model_class = Qwen3_5ForCausalLM
 
