@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -36,7 +36,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class PixtralImageProcessingTester:
+class PixtralImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -112,18 +112,6 @@ class PixtralImageProcessingTester:
             return_width = max(num_width_tokens * patch_width, return_width)
 
         return batch_size, self.num_channels, return_height, return_width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        images = prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-        return images
 
 
 @require_torch

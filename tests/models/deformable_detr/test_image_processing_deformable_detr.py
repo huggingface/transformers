@@ -17,8 +17,6 @@ import json
 import pathlib
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -29,7 +27,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+)
 
 
 if is_torch_available():
@@ -39,7 +41,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class DeformableDetrImageProcessingTester:
+class DeformableDetrImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -83,54 +85,6 @@ class DeformableDetrImageProcessingTester:
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
         }
-
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to DeformableDetrImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

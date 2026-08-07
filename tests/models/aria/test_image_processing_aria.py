@@ -21,7 +21,7 @@ from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
 
-class AriaImageProcessingTester:
+class AriaImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -81,16 +81,8 @@ class AriaImageProcessingTester:
             "resample": self.resample,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to AriaImageProcessor,
-        assuming do_resize is set to True. The expected size in that case the max image size.
-        """
-        return self.max_image_size, self.max_image_size
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
+        return self.num_channels, self.max_image_size, self.max_image_size
 
     def prepare_image_inputs(
         self,
@@ -109,41 +101,24 @@ class AriaImageProcessingTester:
 
         One can specify whether the images are of the same resolution or not.
         """
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
         batch_size = batch_size if batch_size is not None else self.batch_size
-        min_resolution = min_resolution if min_resolution is not None else self.min_resolution
-        max_resolution = max_resolution if max_resolution is not None else self.max_resolution
-        num_channels = num_channels if num_channels is not None else self.num_channels
         num_images = num_images if num_images is not None else self.num_images
-
-        images_list = []
-        for i in range(batch_size):
-            images = []
-            for j in range(num_images):
-                if equal_resolution:
-                    width = height = max_resolution
-                else:
-                    # To avoid getting image width/height 0
-                    if size_divisor is not None:
-                        # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-                        min_resolution = max(size_divisor, min_resolution)
-                    width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-                images.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
-            images_list.append(images)
-
-        if not numpify and not torchify:
-            # PIL expects the channel dimension as last dimension
-            images_list = [[Image.fromarray(np.moveaxis(image, 0, -1)) for image in images] for images in images_list]
-
-        if torchify:
-            images_list = [[torch.from_numpy(image) for image in images] for images in images_list]
-
-        if numpify:
-            # Numpy images are typically in channels last format
-            images_list = [[image.transpose(1, 2, 0) for image in images] for images in images_list]
-
-        return images_list
+        # super() must be called outside list comprehension on Python <= 3.12
+        prepare_images = super().prepare_image_inputs
+        image_inputs = [
+            prepare_images(
+                batch_size=num_images,
+                min_resolution=min_resolution,
+                max_resolution=max_resolution,
+                num_channels=num_channels,
+                size_divisor=size_divisor,
+                equal_resolution=equal_resolution,
+                numpify=numpify,
+                torchify=torchify,
+            )
+            for _ in range(batch_size)
+        ]
+        return image_inputs
 
 
 @require_torch

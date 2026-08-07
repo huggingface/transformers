@@ -14,15 +14,13 @@
 
 import unittest
 
-from datasets import load_dataset
-
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -35,7 +33,7 @@ if is_vision_available():
     pass
 
 
-class Sam3ImageProcessingTester:
+class Sam3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -74,20 +72,6 @@ class Sam3ImageProcessingTester:
             "mask_size": self.mask_size,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
             "outputs": Sam3ImageSegmentationOutput(
@@ -100,17 +84,6 @@ class Sam3ImageProcessingTester:
             "width": self.mask_size["width"],
         }
         return inputs, expected_shape
-
-
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -180,7 +153,7 @@ class Sam3ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images) with segmentation maps from dataset
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processor(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
                 encoding["pixel_values"].shape,
@@ -204,7 +177,9 @@ class Sam3ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
             encoding = image_processor(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
                 encoding["pixel_values"].shape,
