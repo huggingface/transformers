@@ -174,8 +174,9 @@ def convert_text_state_dict(source: dict[str, torch.Tensor], config) -> dict[str
 
         qkv = source.pop(f"{src}.attention.qkv_proj.weight")
         pieces = qkv.split([q_dim, kv_dim, kv_dim, og_dim], dim=0)
-        out[f"{dst}.self_attn.q_proj.weight"] = pieces[0]
-        out[f"{dst}.self_attn.k_proj.weight"] = pieces[1]
+
+        out[f"{dst}.self_attn.q_proj.weight"] = _permute_for_rope(pieces[0], n_heads=text_cfg.num_attention_heads)
+        out[f"{dst}.self_attn.k_proj.weight"] = _permute_for_rope(pieces[1], n_heads=text_cfg.num_key_value_heads)
         out[f"{dst}.self_attn.v_proj.weight"] = pieces[2]
         out[f"{dst}.self_attn.gate_proj.weight"] = pieces[3]
 

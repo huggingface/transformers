@@ -38,7 +38,6 @@ from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
-    no_inherit_decorator,
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
@@ -49,7 +48,6 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
-from ..deepseek_v3.modeling_deepseek_v3 import apply_rotary_pos_emb_interleave
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
@@ -58,6 +56,7 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
+    apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
@@ -689,7 +688,6 @@ class OnyxTextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-@no_inherit_decorator
 class OnyxTextAttention(AfmoeAttention):
     def __init__(self, config: OnyxTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -719,7 +717,7 @@ class OnyxTextAttention(AfmoeAttention):
         # NoPE layers receive `position_embeddings=None` from the model.
         if position_embeddings is not None:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb_interleave(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
