@@ -36,7 +36,7 @@ jobs:
         run: python3 update_pr_ci_dashboard_recap.py
 
   post-mlinter-review:
-    if: github.event.workflow_run.event == 'pull_request'
+    if: always() && github.event.workflow_run.event == 'pull_request'
     needs: post-link
     runs-on: ubuntu-22.04
     steps:
