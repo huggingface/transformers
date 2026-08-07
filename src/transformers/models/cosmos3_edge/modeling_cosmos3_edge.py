@@ -955,12 +955,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed video-frame patches.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed video patch grids.
-        """
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -973,12 +967,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed image patches.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed image patch grid.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
@@ -1094,12 +1082,6 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1169,8 +1151,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1184,8 +1164,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
@@ -1209,15 +1187,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), and the loss is only computed for tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-
         Example:
 
         ```python

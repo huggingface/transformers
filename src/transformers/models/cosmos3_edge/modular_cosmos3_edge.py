@@ -38,21 +38,18 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
-    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     logging,
     torch_compilable_check,
 )
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
@@ -627,21 +624,12 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.rope_deltas = None
         self.post_init()
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed image patches.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed image patch grid.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
@@ -650,21 +638,12 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
         return vision_outputs
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed video-frame patches.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed video patch grids.
-        """
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -709,12 +688,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -903,15 +876,6 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), and the loss is only computed for tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-
         Example:
 
         ```python
@@ -1087,23 +1051,20 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int
 
 
-@add_start_docstrings(
-    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
 class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
     image_mean = IMAGENET_STANDARD_MEAN
