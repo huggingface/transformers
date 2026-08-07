@@ -218,6 +218,7 @@ if TYPE_CHECKING:
     from .hunyuan_vl import *
     from .hy_v3 import *
     from .hyperclovax import *
+    from .hyperclovax_vision_v2 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *

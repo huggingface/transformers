@@ -98,6 +98,10 @@ else:
             ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
+            (
+                "hyperclovax_vision_v2",
+                {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},
+            ),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
