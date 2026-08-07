@@ -86,7 +86,7 @@ class EsmFold2DenoiserConditioning:
     position_embeddings: tuple[Tensor, Tensor]
     atom_mask: Tensor
     atom_to_token: Tensor
-    # Token stack. One additive bias per block, `[batch, num_attention_heads, num_queries, num_keys]`.
+    # Token stack. One additive bias per layer, `[batch, num_attention_heads, num_queries, num_keys]`.
     projected_single_inputs: Tensor
     token_attention_bias: list[Tensor]
 
@@ -105,7 +105,7 @@ class EsmFold2RMSNorm(NanoChatRMSNorm):
 
 
 class EsmFold2Transition(nn.Module):
-    """LayerNorm + SwiGLU feed-forward residual block, chunked along the token axis.
+    """LayerNorm + SwiGLU feed-forward residual, chunked along the token axis.
 
     ``chunk_size`` has no default and every call site states it, because passing ``None`` (unchunked)
     is a deliberate numerical choice at two of them: chunking is exact, but its reassociation moves
@@ -132,10 +132,9 @@ class EsmFold2Transition(nn.Module):
 class EsmFold2AdaptiveLayerNorm(nn.Module):
     """Adaptive layer normalization (adaLN-Zero)."""
 
-    def __init__(self, config: EsmFold2DiffusionModuleConfig, eps: float = 1e-5) -> None:
+    def __init__(self, hidden_size: int, eps: float = 1e-5) -> None:
         super().__init__()
-        # Both the token and the single stream are the diffusion token width at both call sites.
-        self.hidden_size = config.hidden_size
+        self.hidden_size = hidden_size
         self.eps = eps
         self.cond_norm = EsmFold2LayerNorm(self.hidden_size, eps=eps, bias=False)
         self.gate_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -572,7 +571,7 @@ class EsmFold2AttentionPairBias(nn.Module):
         self.pair_bias_proj = nn.Linear(config.pairwise_hidden_size, diffusion_config.num_attention_heads, bias=False)
 
     def compute_pair_bias(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> Tensor:
-        """This block's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
+        """This layer's additive attention bias, ``[batch_size, num_attention_heads, num_queries, num_keys]``:
         the per-head projection of the normed pair representation with token padding folded in.
 
         Step-invariant, so it is built once per fold outside the sampling loop and ``forward`` never
@@ -628,7 +627,7 @@ class EsmFold2ConditionedTransition(nn.Module):
 
     def __init__(self, config: EsmFold2DiffusionModuleConfig) -> None:
         super().__init__()
-        self.adaln = EsmFold2AdaptiveLayerNorm(config)
+        self.adaln = EsmFold2AdaptiveLayerNorm(config.hidden_size)
         self.output_gate = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.mlp = EsmFold2SwiGLU(config.hidden_size, config.intermediate_size)
 
@@ -650,7 +649,7 @@ class EsmFold2DiffusionLayer(nn.Module):
         # The pair-bias attention also needs trunk-level widths, so it keeps the full config; the
         # transition is entirely described by the diffusion sub-config and takes only that.
         diffusion_config = config.structure_head.diffusion_module
-        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config)
+        self.adaln = EsmFold2AdaptiveLayerNorm(diffusion_config.hidden_size)
         self.attn = EsmFold2AttentionPairBias(config)
         self.out_gate = nn.Linear(diffusion_config.hidden_size, diffusion_config.hidden_size, bias=True)
         self.transition = EsmFold2ConditionedTransition(diffusion_config)
@@ -793,7 +792,7 @@ class EsmFold2DiffusionModule(nn.Module):
         ``batch_size * num_diffusion_samples``. The two attention masks are only ever broadcast
         against, so they stay at the unexpanded batch size whenever that broadcasts over the sample
         batch (``batch_size == 1``, i.e. every single-sequence fold) and are materialized only when it
-        cannot. They are also the only large tensors here: at length 1000 the per-block token biases
+        cannot. They are also the only large tensors here: at length 1000 the per-layer token biases
         are ~366 MiB unexpanded, against ~11.4 GiB expanded across the 32 samples the released
         checkpoints ask for (the class default is 8). Everything else is a few MB, and expanding it
         keeps the scatter/gather helpers on a single shape.
@@ -1635,11 +1634,11 @@ def _inverse_softplus(value: float) -> float:
 
 
 class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
-    """One MSA encoder block: OPM into pair, MSA pair-weighted averaging, then the pair update.
+    """One MSA encoder layer: OPM into pair, MSA pair-weighted averaging, then the pair update.
 
     The pair half is exactly an `EsmFold2PairUpdateLayer`, so it is inherited rather than repeated.
 
-    The final block updates only the pair stream, so it does not build the two MSA-stream submodules:
+    The final layer updates only the pair stream, so it does not build the two MSA-stream submodules:
     the released checkpoints carry no weights for them (the MSA representation it would produce is
     never read), and `nn.Identity` is not a substitute -- these sit on residuals, so an identity would
     double the stream rather than leave it alone.
