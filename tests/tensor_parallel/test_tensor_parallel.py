@@ -24,8 +24,11 @@ from transformers.integrations.tensor_parallel import (
     GroupedGemmParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
+    ReplicateKVHeadsParallel,
     RowwiseParallel,
+    _maybe_enable_kv_head_replication,
     add_tensor_parallel_hooks_to_module,
+    get_kv_replication_factor,
     get_packed_weights,
     repack_weights,
 )
@@ -299,6 +302,72 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(
                 expected_shape, ground_truth, f"Rank {rank} expected shape {ground_truth} but got {expected_shape}"
             )
+
+    def test_replicate_kv_heads_shard_tensor(self):
+        # 2 KV heads of size 8, sharded over 4 ranks -> each head is replicated twice
+        world_size, num_key_value_heads, head_dim = 4, 2, 8
+        weight = torch.arange(num_key_value_heads * head_dim * 32, dtype=torch.float32).reshape(-1, 32)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            layer = ReplicateKVHeadsParallel(device_mesh=device_mesh, rank=rank, empty_param=weight)
+            layer.num_key_value_heads = num_key_value_heads
+
+            self.assertEqual(layer.get_expected_sharded_shape(weight.shape), (head_dim, 32))
+            head_idx = rank // (world_size // num_key_value_heads)
+            expected = weight[head_idx * head_dim : (head_idx + 1) * head_dim]
+            torch.testing.assert_close(layer.shard_tensor(weight), expected)
+
+    def test_replicate_kv_heads_falls_back_to_colwise(self):
+        # 4 KV heads over 2 ranks: no replication needed, plain colwise sharding
+        world_size, num_key_value_heads, head_dim = 2, 4, 8
+        weight = torch.randn(num_key_value_heads * head_dim, 32)
+
+        for rank in range(world_size):
+            device_mesh = self.MockDeviceMesh(world_size=world_size, rank=rank)
+            layer = ReplicateKVHeadsParallel(device_mesh=device_mesh, rank=rank, empty_param=weight)
+            layer.num_key_value_heads = num_key_value_heads
+
+            self.assertEqual(layer.get_expected_sharded_shape(weight.shape), (2 * head_dim, 32))
+            torch.testing.assert_close(layer.shard_tensor(weight), weight.chunk(world_size)[rank])
+
+    def test_get_kv_replication_factor(self):
+        self.assertEqual(get_kv_replication_factor(2, 4), 2)
+        self.assertEqual(get_kv_replication_factor(1, 4), 4)
+        self.assertEqual(get_kv_replication_factor(8, 4), 1)
+        self.assertEqual(get_kv_replication_factor(2, 1), 1)
+        with self.assertRaises(ValueError):
+            get_kv_replication_factor(3, 4)
+
+    def test_kv_replication_only_updates_planned_attention_modules(self):
+        class Attention(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.head_dim = 8
+                self.num_key_value_groups = 8
+                self.q_proj = torch.nn.Linear(32, 32, bias=False)
+                self.k_proj = torch.nn.Linear(32, 16, bias=False)
+                self.v_proj = torch.nn.Linear(32, 16, bias=False)
+
+        model = torch.nn.Module()
+        model.layers = torch.nn.ModuleList([torch.nn.Module()])
+        model.layers[0].self_attn = Attention()
+        model.vision = torch.nn.Module()
+        model.vision.attn = Attention()
+        model.config = SimpleNamespace(get_text_config=lambda: SimpleNamespace(num_key_value_heads=2))
+        tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+        }
+
+        updated_plan = _maybe_enable_kv_head_replication(model, tp_plan, tp_size=4)
+
+        self.assertEqual(updated_plan["layers.*.self_attn.k_proj"], "colwise_replicate_kv")
+        self.assertEqual(updated_plan["layers.*.self_attn.v_proj"], "colwise_replicate_kv")
+        self.assertEqual(model.layers[0].self_attn.num_key_value_groups, 1)
+        self.assertEqual(model.vision.attn.num_key_value_groups, 8)
+        self.assertEqual(model.layers[0].self_attn.k_proj._hf_num_key_value_heads, 2)
 
     def test_colwise_update_module_attributes(self):
         device_mesh = self.MockDeviceMesh(world_size=4, rank=0)

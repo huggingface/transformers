@@ -1835,14 +1835,15 @@ class GenerationMixin(ContinuousMixin):
         text_config = self.config.get_text_config(decoder=True)
         tp_size = getattr(self, "_tp_size", None) or 1
         num_key_value_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-        if num_key_value_heads % tp_size != 0:
-            # The model cannot be evenly sharded by head
+        if num_key_value_heads % tp_size != 0 and tp_size % num_key_value_heads != 0:
+            # The model cannot be evenly sharded by head, nor evenly replicated
             return None
         if getattr(text_config, "qk_head_dim", None) is not None:
             # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
         head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-        return num_key_value_heads // tp_size, head_dim
+        # When there are fewer KV heads than ranks, heads are replicated and each rank holds exactly one
+        return max(num_key_value_heads // tp_size, 1), head_dim
 
     def _prepare_static_cache(
         self: "GenerativePreTrainedModel",
