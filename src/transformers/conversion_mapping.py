@@ -850,6 +850,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
+        "apertus1p5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."

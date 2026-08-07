@@ -257,6 +257,7 @@ IGNORE_NON_TESTED = (
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Apertus1p5VisionTokenizerModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "GlmImageTextModel",  # Building part of bigger (tested) model
@@ -494,6 +495,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Apertus1p5VisionTokenizerModel",  # no autoclass for VQ-VAE-style tokenizer models
         "JanusVQVAE",  # no autoclass for VQ-VAE models
         "JanusVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model

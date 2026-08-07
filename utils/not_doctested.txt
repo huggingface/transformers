@@ -318,6 +318,7 @@ src/transformers/models/align/configuration_align.py
 src/transformers/models/align/modeling_align.py
 src/transformers/models/altclip/configuration_altclip.py
 src/transformers/models/altclip/modeling_altclip.py
+src/transformers/models/apertus1p5/modeling_apertus1p5.py
 src/transformers/models/audio_spectrogram_transformer/configuration_audio_spectrogram_transformer.py
 src/transformers/models/audio_spectrogram_transformer/convert_audio_spectrogram_transformer_original_to_pytorch.py
 src/transformers/models/auto/auto_factory.py

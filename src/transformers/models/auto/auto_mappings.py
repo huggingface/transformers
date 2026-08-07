@@ -35,6 +35,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("altclip_text_model", "AltCLIPTextConfig"),
         ("altclip_vision_model", "AltCLIPVisionConfig"),
         ("apertus", "ApertusConfig"),
+        ("apertus1p5", "Apertus1p5Config"),
+        ("apertus1p5_text", "Apertus1p5TextConfig"),
+        ("apertus1p5_vision_tokenizer", "Apertus1p5VisionTokenizerConfig"),
         ("arcee", "ArceeConfig"),
         ("aria", "AriaConfig"),
         ("aria_text", "AriaTextConfig"),
@@ -686,6 +689,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
+        ("wavtokenizer", "WavTokenizerConfig"),
         ("whisper", "WhisperConfig"),
         ("xclip", "XCLIPConfig"),
         ("xclip_text_model", "XCLIPTextConfig"),
@@ -717,6 +721,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("align_vision_model", "align"),
         ("altclip_text_model", "altclip"),
         ("altclip_vision_model", "altclip"),
+        ("apertus1p5_text", "apertus1p5"),
+        ("apertus1p5_vision_tokenizer", "apertus1p5"),
         ("aria_text", "aria"),
         ("audio-spectrogram-transformer", "audio_spectrogram_transformer"),
         ("audioflamingo3_encoder", "audioflamingo3"),
@@ -1009,6 +1015,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
+        ("wavtokenizer", "WavTokenizerFeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xcodec2", "Xcodec2FeatureExtractor"),
     ]
@@ -1018,6 +1025,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
+        ("apertus1p5", "Apertus1p5Processor"),
         ("aria", "AriaProcessor"),
         ("audioflamingo3", "AudioFlamingo3Processor"),
         ("aya_vision", "AyaVisionProcessor"),
@@ -1156,6 +1164,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", {"torchvision": "Apertus1p5ImageProcessor"}),
         ("aria", {"pil": "AriaImageProcessorPil", "torchvision": "AriaImageProcessor"}),
         ("beit", {"pil": "BeitImageProcessorPil", "torchvision": "BeitImageProcessor"}),
         ("bit", {"pil": "BitImageProcessorPil", "torchvision": "BitImageProcessor"}),
