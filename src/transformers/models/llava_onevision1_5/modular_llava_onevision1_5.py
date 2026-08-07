@@ -138,7 +138,9 @@ class LlavaOnevision1_5VisionAttention(VisionAttention):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         attn_weights = None
 
         if is_flash_attention_requested(self.config):
@@ -343,7 +345,9 @@ class LlavaOnevision1_5VisionModel(LlavaOnevision1_5PreTrainedModel):
             rotary_start = 0
             for raw_seg_len, compressed_seg_len in zip(segment_seqlens.tolist(), compressed_seqlens.tolist()):
                 rotary_end = rotary_start + raw_seg_len
-                compressed_rotary_pos_emb.append(rotary_pos_emb[rotary_start:rotary_end:compression_factor][:compressed_seg_len])
+                compressed_rotary_pos_emb.append(
+                    rotary_pos_emb[rotary_start:rotary_end:compression_factor][:compressed_seg_len]
+                )
                 rotary_start = rotary_end
             rotary_pos_emb = torch.cat(compressed_rotary_pos_emb, dim=0)
             segment_seqlens = compressed_seqlens
