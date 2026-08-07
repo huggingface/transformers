@@ -93,9 +93,9 @@ Released checkpoints additionally prune the LM head to the text-only prefix and 
 
 **1. Vision tokenizer.** [`Apertus1p5VisionTokenizerModel`] is an encode-only port of
 [BAAI/Emu3.5-VisionTokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer). The converter derives the
-configuration from the original `config.json`, drops the decoder branch the port does not implement, and keeps
-the remaining tensors under their original names. The source may be a local directory or a Hub
-`repo_id[@revision]`:
+configuration from the original `config.json`, drops the decoder branch the port does not implement, and
+renames the remaining encoder-stage tensors into the grouped Transformers layout. The source may be a local
+directory or a Hub `repo_id[@revision]`:
 
 ```bash
 python src/transformers/models/apertus1p5/convert_apertus1p5_vision_tokenizer_to_hf.py \

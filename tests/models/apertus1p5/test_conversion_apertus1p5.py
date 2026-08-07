@@ -25,7 +25,7 @@ from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, WEIGH
 
 if is_torch_available():
     import torch
-    from safetensors.torch import save_file
+    from safetensors.torch import load_file, save_file
 
     from transformers import Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig, Apertus1p5VisionTokenizerModel
     from transformers.models.apertus1p5 import convert_apertus1p5_vision_tokenizer_to_hf as vision_conversion
@@ -195,12 +195,29 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
         "torch_dtype": "float32",
     }
 
+    @staticmethod
+    def _to_original_key(key: str) -> str:
+        """Undo the grouped encoder layout to synthesize an original EMU3.5 checkpoint."""
+        parts = key.split(".")
+        if len(parts) < 4 or parts[:2] != ["encoder", "stages"]:
+            return key
+
+        stage_idx, module_name = parts[2:4]
+        if module_name == "layers" and len(parts) >= 7:
+            layer_idx, component = parts[4:6]
+            original_component = "block" if component == "resnet" else "attn"
+            return ".".join(("encoder", "down", stage_idx, original_component, layer_idx, *parts[6:]))
+        if module_name == "downsample":
+            return ".".join(("encoder", "down", stage_idx, "downsample", *parts[4:]))
+        return key
+
     def _write_original(self, directory, config=None, dtype=torch.float32):
         """Write a synthetic original checkpoint (`config.json` + `model.safetensors`); return the kept half."""
         config = self.ORIGINAL_CONFIG if config is None else config
         directory = Path(directory)
-        # the kept half comes from the real model class, so its key names and shapes are correct by construction
+        # The kept half comes from the real model class, so its shapes and converted names are correct by construction.
         kept = Apertus1p5VisionTokenizerModel(vision_conversion.convert_config(config)).state_dict()
+        original_kept = {self._to_original_key(key): value for key, value in kept.items()}
         dropped = {
             "post_quant_conv.weight": torch.zeros(8, 8, 1, 1),
             "post_quant_conv.bias": torch.zeros(8),
@@ -208,7 +225,7 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
             "decoder.up.0.block.0.norm1.weight": torch.zeros(4),
             "decoder.conv_out.bias": torch.zeros(3),
         }
-        tensors = {key: value.to(dtype).contiguous() for key, value in {**kept, **dropped}.items()}
+        tensors = {key: value.to(dtype).contiguous() for key, value in {**original_kept, **dropped}.items()}
         save_file(tensors, str(directory / SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
         (directory / "config.json").write_text(json.dumps(config))
         return kept
@@ -281,15 +298,32 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
     def test_convert_state_dict_drops_decoder_branch(self):
         original = {
             "encoder.conv_in.weight": torch.ones(2, 2),
+            "encoder.down.1.block.2.conv1.weight": torch.ones(2, 2),
+            "encoder.down.1.attn.2.q.weight": torch.ones(2, 2),
+            "encoder.down.1.downsample.conv.weight": torch.ones(2, 2),
             "quantize.embedding.weight": torch.ones(2, 2),
             "quant_conv.weight": torch.ones(2, 2),
             "decoder.conv_in.weight": torch.ones(2, 2),
             "post_quant_conv.weight": torch.ones(2, 2),
         }
         converted = vision_conversion.convert_state_dict(original)
-        self.assertEqual(set(converted), {"encoder.conv_in.weight", "quantize.embedding.weight", "quant_conv.weight"})
+        self.assertEqual(
+            set(converted),
+            {
+                "encoder.conv_in.weight",
+                "encoder.stages.1.layers.2.resnet.conv1.weight",
+                "encoder.stages.1.layers.2.attention.q.weight",
+                "encoder.stages.1.downsample.conv.weight",
+                "quantize.embedding.weight",
+                "quant_conv.weight",
+            },
+        )
         # kept tensors are passed through untouched
         self.assertIs(converted["encoder.conv_in.weight"], original["encoder.conv_in.weight"])
+        self.assertIs(
+            converted["encoder.stages.1.layers.2.resnet.conv1.weight"],
+            original["encoder.down.1.block.2.conv1.weight"],
+        )
 
     def test_converts_and_reloads_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -333,8 +367,8 @@ class Apertus1p5VisionTokenizerConversionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             source, output = Path(tmp_dir) / "original", Path(tmp_dir) / "converted"
             source.mkdir()
-            kept = self._write_original(source)
-            tensors = {**kept, "encoder.bogus.weight": torch.zeros(2)}
+            self._write_original(source)
+            tensors = {**load_file(source / SAFE_WEIGHTS_NAME), "encoder.bogus.weight": torch.zeros(2)}
             save_file(
                 {key: value.contiguous() for key, value in tensors.items()},
                 str(source / SAFE_WEIGHTS_NAME),
