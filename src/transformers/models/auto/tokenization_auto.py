@@ -114,6 +114,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("dia", "DiaTokenizer"),
         ("diffusion_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("dots3_note_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("dpr", "DPRQuestionEncoderTokenizer" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
