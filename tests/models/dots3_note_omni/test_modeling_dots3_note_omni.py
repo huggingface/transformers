@@ -27,8 +27,17 @@ from transformers import (
     FineGrainedFP8Config,
     is_torch_available,
 )
+from transformers.cache_utils import (
+    DynamicCache,
+    DynamicIndexedLayer,
+    DynamicSlidingWindowLayer,
+    StaticCache,
+    StaticIndexedLayer,
+    StaticSlidingWindowLayer,
+)
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import WeightConverter, rename_source_key
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import require_torch
 
@@ -49,6 +58,8 @@ if is_torch_available():
         Dots3NoteOmniTextModel,
         Dots3NoteOmniVisionModel,
         dsa_sparse_attention_forward,
+        eager_attention_forward,
+        quantize_indexer_fp8,
     )
 
 
@@ -270,7 +281,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_dsa_text_forward(self):
         config = get_tiny_config(use_dsa=True)
-        config.layer_types = ["full_attention", "full_attention"]
+        config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
         model = Dots3NoteOmniTextForCausalLM(config).eval()
         with torch.no_grad():
             logits = model(torch.tensor([[1, 5, 6, 7, 2]]), use_cache=False).logits
@@ -288,16 +299,20 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
             [query_positions, query_positions - 1, query_positions - 2, query_positions - 3], dim=-1
         ).to(torch.int32)
         padding_mask = torch.ones(batch_size, key_length, dtype=torch.long)
+        attention_mask = torch.ones(batch_size, 1, query_length, key_length, dtype=torch.bool)
+        attention_mask[:, :, :, 5] = False
         scaling = query.shape[-1] ** -0.5
 
         actual, _ = dsa_sparse_attention_forward(
+            torch.nn.Identity().eval(),
             query,
             key,
             value,
-            topk_indices,
-            cache_position,
-            padding_mask,
-            scaling,
+            attention_mask=attention_mask,
+            indices=topk_indices,
+            cache_position=cache_position,
+            padding_mask=padding_mask,
+            scaling=scaling,
             query_chunk_size=2,
             head_chunk_size=2,
         )
@@ -305,6 +320,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         scores = torch.matmul(query, key.transpose(-1, -2)) * scaling
         allowed = torch.zeros(batch_size, query_length, key_length, dtype=torch.bool)
         allowed.scatter_(-1, topk_indices.long(), True)
+        allowed &= attention_mask[:, 0]
         scores.masked_fill_(~allowed[:, None], torch.finfo(scores.dtype).min)
         probabilities = torch.softmax(scores, dim=-1)
         expected = torch.matmul(probabilities, value).transpose(1, 2).contiguous()
@@ -343,12 +359,14 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         padding_mask = torch.tensor([[0, 0, 0, 1, 1]])
 
         actual, _ = dsa_sparse_attention_forward(
+            torch.nn.Identity().eval(),
             query,
             key,
             value,
-            topk_indices,
-            torch.tensor([4]),
-            padding_mask,
+            attention_mask=None,
+            indices=topk_indices,
+            cache_position=torch.tensor([4]),
+            padding_mask=padding_mask,
             scaling=1.0,
         )
 
@@ -419,7 +437,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_dsa_left_padded_batch_cache_matches_unpadded_decode(self):
         torch.manual_seed(0)
         config = get_tiny_config(use_dsa=True)
-        config.layer_types = ["full_attention", "full_attention"]
+        config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
         # Select every key so this test targets physical cache/padding coordinates rather than
         # the numerical discontinuity of hard top-k selection on a randomly initialized indexer.
         config.index_topk = config.max_position_embeddings
@@ -474,6 +492,121 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
                 )
 
         torch.testing.assert_close(batched, torch.cat(unpadded), rtol=1e-4, atol=1e-4)
+
+    def test_dsa_sparse_fallback_uses_attention_interface(self):
+        config = get_tiny_config(use_dsa=True)
+        config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
+        config.index_topk = 2
+        model = Dots3NoteOmniTextForCausalLM(config).eval()
+
+        with patch.object(
+            ALL_ATTENTION_FUNCTIONS, "get_interface", wraps=ALL_ATTENTION_FUNCTIONS.get_interface
+        ) as get_interface:
+            with torch.no_grad():
+                logits = model(torch.tensor([[1, 7, 11, 9, 6, 2]]), use_cache=False).logits
+
+        self.assertTrue(torch.isfinite(logits).all())
+        self.assertTrue(
+            any(call.args == ("eager", dsa_sparse_attention_forward) for call in get_interface.call_args_list)
+        )
+
+    def test_text_attention_backend_kwargs_reach_interface(self):
+        config = get_tiny_config(use_dsa=False)
+        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        marker = object()
+        received_markers = []
+
+        def attention_spy(module, query, key, value, attention_mask, backend_marker=None, **kwargs):
+            received_markers.append(backend_marker)
+            return eager_attention_forward(module, query, key, value, attention_mask, **kwargs)
+
+        with patch.object(ALL_ATTENTION_FUNCTIONS, "get_interface", return_value=attention_spy):
+            with torch.no_grad():
+                model(torch.tensor([[1, 7, 2]]), use_cache=False, backend_marker=marker)
+
+        self.assertEqual(received_markers, [marker] * config.num_hidden_layers)
+
+    def test_dsa_cache_uses_dynamic_layer_dispatch(self):
+        config = get_tiny_config(use_dsa=True)
+        model = Dots3NoteOmniTextForCausalLM(config).eval()
+
+        with torch.no_grad():
+            outputs = model.generate(
+                torch.tensor([[1, 7, 11, 9]]),
+                do_sample=False,
+                max_new_tokens=2,
+                return_dict_in_generate=True,
+            )
+
+        cache = outputs.past_key_values
+        self.assertIs(type(cache), DynamicCache)
+        self.assertIsInstance(cache.layers[0], DynamicIndexedLayer)
+        self.assertIsInstance(cache.layers[1], DynamicSlidingWindowLayer)
+        self.assertEqual(cache.layers[0].indexer_keys.dtype, torch.float32)
+
+    def test_dsa_static_cache_matches_dynamic_cache(self):
+        torch.manual_seed(0)
+        config = get_tiny_config(use_dsa=True)
+        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        input_ids = torch.tensor([[1, 7, 11, 9]])
+        attention_mask = torch.ones_like(input_ids)
+
+        with torch.no_grad():
+            dynamic = model(input_ids, attention_mask=attention_mask, use_cache=True)
+            next_token = dynamic.logits[:, -1:].argmax(dim=-1)
+            decode_mask = torch.cat((attention_mask, torch.ones_like(next_token)), dim=-1)
+            dynamic_decode = model(
+                next_token,
+                attention_mask=decode_mask,
+                past_key_values=dynamic.past_key_values,
+                use_cache=True,
+            )
+
+            static_cache = StaticCache(config=config, max_cache_len=16)
+            static = model(
+                input_ids,
+                attention_mask=attention_mask,
+                past_key_values=static_cache,
+                cache_position=torch.arange(input_ids.shape[1]),
+                use_cache=True,
+            )
+            static_decode = model(
+                next_token,
+                attention_mask=decode_mask,
+                past_key_values=static.past_key_values,
+                cache_position=torch.tensor([input_ids.shape[1]]),
+                use_cache=True,
+            )
+
+        self.assertIsInstance(static_cache.layers[0], StaticIndexedLayer)
+        self.assertIsInstance(static_cache.layers[1], StaticSlidingWindowLayer)
+        torch.testing.assert_close(static_decode.logits, dynamic_decode.logits, rtol=1e-4, atol=1e-4)
+
+    def test_dsa_fp8_index_key_is_exact_in_bfloat16_cache(self):
+        torch.manual_seed(0)
+        key = torch.randn(2, 7, 128) * 10
+        quantized_key, key_scale = quantize_indexer_fp8(key)
+        dequantized_key = quantized_key.float() * key_scale
+
+        torch.testing.assert_close(dequantized_key.bfloat16().float(), dequantized_key, rtol=0, atol=0)
+
+    def test_dsa_precomputed_mask_uses_dispatched_layer_type(self):
+        model = Dots3NoteOmniTextForCausalLM(get_tiny_config(use_dsa=True)).eval()
+        full_mask = torch.ones(1, 1, 2, 2, dtype=torch.bool)
+        sliding_mask = torch.eye(2, dtype=torch.bool).view(1, 1, 2, 2)
+
+        actual_full, actual_sliding = model.model._make_masks(
+            {
+                "deepseek_sparse_attention": full_mask,
+                "sliding_attention": sliding_mask,
+            },
+            inputs_embeds=None,
+            past_key_values=None,
+            position_ids=None,
+        )
+
+        self.assertIs(actual_full, full_mask)
+        self.assertIs(actual_sliding, sliding_mask)
 
     def test_vision_forward(self):
         config = get_tiny_config().vision_config
@@ -584,6 +717,22 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         dequant_scale_key, _ = rename_source_key(f"{prefix}.weight_scale_inv", [], dequant_converters)
         self.assertEqual(dequant_weight_key, "model.layers.1.mlp.experts.gate_up_proj")
         self.assertEqual(dequant_scale_key, dequant_weight_key)
+
+    def test_fp8_partial_weight_block_dequantization(self):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(dequantize=True, weight_block_size=(128, 128)))
+        quantizer.pre_quantized = True
+
+        for rows in (576, 1088):
+            with self.subTest(rows=rows):
+                weight = torch.ones(rows, 256, dtype=torch.float8_e4m3fn)
+                scales = torch.arange(1, ((rows + 127) // 128) * 2 + 1, dtype=torch.float32).reshape(-1, 2)
+
+                actual = Fp8Dequantize(quantizer)._dequantize_one(weight, scales, output_dtype=torch.float32)
+                expected = scales.repeat_interleave(128, 0).repeat_interleave(128, 1)[:rows, :256]
+
+                torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 if __name__ == "__main__":

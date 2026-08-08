@@ -28,7 +28,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicIndexedLayer, DynamicSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -119,79 +119,6 @@ class Dots3NoteOmniTextIndexerLayerNorm(nn.Module):
         ).to(hidden_states.dtype)
 
 
-class Dots3NoteOmniTextDynamicIndexedLayer(DynamicIndexedLayer):
-    """Dynamic DSA cache layer with a companion per-token FP8 scale cache."""
-
-    def __init__(self):
-        super().__init__()
-        self.indexer_scales = None
-
-    def update_indexer_fp8(self, indexer_keys, indexer_scales):
-        indexer_keys = super().update_indexer(indexer_keys)
-        if self.indexer_scales is None:
-            self.indexer_scales = torch.empty(
-                (*indexer_scales.shape[:1], 0, *indexer_scales.shape[2:]),
-                dtype=indexer_scales.dtype,
-                device=indexer_scales.device,
-            )
-        self.indexer_scales = torch.cat((self.indexer_scales, indexer_scales), dim=1)
-        return indexer_keys, self.indexer_scales
-
-    def offload(self):
-        super().offload()
-        if self.indexer_scales is not None:
-            self.indexer_scales = self.indexer_scales.to("cpu", non_blocking=True)
-
-    def prefetch(self):
-        super().prefetch()
-        if self.indexer_scales is not None and self.indexer_scales.device != self.device:
-            self.indexer_scales = self.indexer_scales.to(self.device, non_blocking=True)
-
-    def reset(self):
-        super().reset()
-        if self.indexer_scales is not None:
-            self.indexer_scales.zero_()
-
-    def reorder_cache(self, beam_idx):
-        super().reorder_cache(beam_idx)
-        if self.indexer_scales is not None and self.indexer_scales.numel() > 0:
-            self.indexer_scales = self.indexer_scales.index_select(0, beam_idx.to(self.indexer_scales.device))
-
-    def crop(self, tokens_to_remove):
-        super().crop(tokens_to_remove)
-        if self.indexer_scales is not None and self.indexer_scales.numel() > 0:
-            self.indexer_scales = self.indexer_scales[:, : self.indexer_keys.shape[1], :]
-
-    def batch_repeat_interleave(self, repeats):
-        super().batch_repeat_interleave(repeats)
-        if self.indexer_scales is not None and self.indexer_scales.numel() > 0:
-            self.indexer_scales = self.indexer_scales.repeat_interleave(repeats, dim=0)
-
-    def batch_select_indices(self, indices):
-        super().batch_select_indices(indices)
-        if self.indexer_scales is not None and self.indexer_scales.numel() > 0:
-            self.indexer_scales = self.indexer_scales[indices, ...]
-
-
-class Dots3NoteOmniTextDynamicCache(DynamicCache):
-    """Hybrid DSA/SWA cache with FP8 index-key storage on DSA layers."""
-
-    def __init__(self, config):
-        layers = [
-            DynamicSlidingWindowLayer(sliding_window=config.sliding_window)
-            if layer_type == "sliding_attention"
-            else Dots3NoteOmniTextDynamicIndexedLayer()
-            for layer_type in config.layer_types
-        ]
-        Cache.__init__(self, layers=layers)
-
-    def update_indexer_fp8(self, indexer_keys, indexer_scales, layer_idx):
-        layer = self.layers[layer_idx]
-        if not isinstance(layer, Dots3NoteOmniTextDynamicIndexedLayer):
-            raise ValueError(f"Layer {layer_idx} is not configured as a DSA cache layer")
-        return layer.update_indexer_fp8(indexer_keys, indexer_scales)
-
-
 def apply_rotary_interleaved(x, cos, sin):
     """Apply GPT-J-style interleaved rotary embeddings.
 
@@ -259,6 +186,14 @@ def _normalize_cache_position(cache_position, query_length, key_length, device):
     return cache_position[:, -query_length:]
 
 
+def _padding_mask_for_key_length(padding_mask, key_length):
+    """Trim or right-pad a 2D padding mask to the physical cache width."""
+    padding_mask = padding_mask[:, :key_length].to(torch.bool)
+    if padding_mask.shape[-1] < key_length:
+        padding_mask = F.pad(padding_mask, (0, key_length - padding_mask.shape[-1]), value=False)
+    return padding_mask
+
+
 class Dots3NoteOmniTextIndexer(nn.Module):
     """Lightning indexer used on the DSA/full-attention layers."""
 
@@ -292,15 +227,13 @@ class Dots3NoteOmniTextIndexer(nn.Module):
 
         query, query_scale = quantize_indexer_fp8(query.contiguous())
         key, key_scale = quantize_indexer_fp8(key.contiguous())
+        # E4M3 values multiplied by the power-of-two index scale are exactly representable in BF16.
+        # Storing the dequantized key lets Dots reuse the standard indexed cache (including crop,
+        # offload, beam reorder, and static/dynamic dispatch) without changing indexer scores.
+        key = (key.float() * key_scale).to(hidden_states.dtype)
 
         if past_key_values is not None:
-            if hasattr(past_key_values, "update_indexer_fp8"):
-                key, key_scale = past_key_values.update_indexer_fp8(key, key_scale, self.layer_idx)
-            else:
-                dequantized_key = key.float() * key_scale
-                dequantized_key = past_key_values.update_indexer(dequantized_key, self.layer_idx)
-                key = dequantized_key
-                key_scale = None
+            key = past_key_values.update_indexer(key, self.layer_idx)
 
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5) * self.softmax_scale
         key_float = key.float()
@@ -314,8 +247,6 @@ class Dots3NoteOmniTextIndexer(nn.Module):
             stop = min(start + self.query_chunk_size, seq_len)
             scores = torch.matmul(query[:, start:stop].float(), key_transposed)
             scores = scores * query_scale[:, start:stop]
-            if key_scale is not None:
-                scores = scores * key_scale[:, None, None, :, 0]
             scores = F.relu(scores)
 
             index_scores = torch.matmul(weights[:, start:stop].unsqueeze(-2), scores).squeeze(-2)
@@ -323,7 +254,7 @@ class Dots3NoteOmniTextIndexer(nn.Module):
             index_scores.masked_fill_(causal, float("-inf"))
             if padding_mask is not None:
                 if padding_mask.ndim == 2:
-                    padding = padding_mask[:, None, : key.shape[1]].to(torch.bool)
+                    padding = _padding_mask_for_key_length(padding_mask, key.shape[1])[:, None]
                     index_scores.masked_fill_(~padding, float("-inf"))
                 else:
                     index_scores = index_scores + padding_mask[:, start:stop, : key.shape[1]]
@@ -509,17 +440,26 @@ def eager_attention_forward(module, query, key, value, attention_mask, scaling, 
 
 
 def dsa_sparse_attention_forward(
+    module,
     query,
     key,
     value,
-    topk_indices,
-    cache_position,
-    padding_mask,
-    scaling,
+    attention_mask,
+    scaling=None,
+    dropout=0.0,
+    indices=None,
+    cache_position=None,
+    padding_mask=None,
     query_chunk_size=512,
     head_chunk_size=32,
+    **kwargs,
 ):
     """Reference DSA fallback that computes attention only over indexer-selected tokens."""
+    if indices is None:
+        raise ValueError("The DSA sparse attention fallback requires top-k `indices`.")
+    if scaling is None:
+        scaling = module.scaling
+
     batch_size, num_heads, query_length, _ = query.shape
     output = value.new_empty(batch_size, num_heads, query_length, value.shape[-1])
     batch_indices = torch.arange(batch_size, device=query.device)[:, None, None, None]
@@ -527,11 +467,17 @@ def dsa_sparse_attention_forward(
 
     for query_start in range(0, query_length, query_chunk_size):
         query_stop = min(query_start + query_chunk_size, query_length)
-        token_indices = topk_indices[:, query_start:query_stop].long()
+        token_indices = indices[:, query_start:query_stop].long()
         valid = token_indices <= query_cache_positions[:, query_start:query_stop, None]
         if padding_mask is not None:
-            selected_padding = padding_mask[:, : key.shape[2]].to(torch.bool).gather(1, token_indices.flatten(1))
+            selected_padding = _padding_mask_for_key_length(padding_mask, key.shape[2]).gather(
+                1, token_indices.flatten(1)
+            )
             valid = valid & selected_padding.view_as(token_indices)
+
+        mask_chunk = None
+        if attention_mask is not None:
+            mask_chunk = attention_mask[:, :, query_start:query_stop, : key.shape[2]]
 
         for head_start in range(0, num_heads, head_chunk_size):
             head_stop = min(head_start + head_chunk_size, num_heads)
@@ -542,8 +488,26 @@ def dsa_sparse_attention_forward(
                 query[:, head_start:head_stop, query_start:query_stop],
                 selected_key,
             ).float()
-            scores.mul_(scaling).masked_fill_(~valid[:, None], torch.finfo(scores.dtype).min)
+            scores.mul_(scaling)
+            head_valid = valid[:, None]
+            selected_mask = None
+            if mask_chunk is not None:
+                head_mask = mask_chunk if mask_chunk.shape[1] == 1 else mask_chunk[:, head_start:head_stop]
+                selected_mask = head_mask.expand(-1, head_stop - head_start, -1, -1).gather(
+                    -1, token_indices[:, None].expand(-1, head_stop - head_start, -1, -1)
+                )
+                if selected_mask.dtype == torch.bool:
+                    head_valid = head_valid & selected_mask
+                else:
+                    scores.add_(selected_mask.float())
+            scores.masked_fill_(~head_valid, torch.finfo(scores.dtype).min)
             probabilities = F.softmax(scores, dim=-1).to(query.dtype)
+            fully_masked = ~head_valid.any(dim=-1, keepdim=True)
+            if selected_mask is not None and selected_mask.dtype != torch.bool:
+                mask_min = torch.finfo(selected_mask.dtype).min
+                fully_masked = fully_masked | (selected_mask.amax(dim=-1, keepdim=True) <= mask_min / 2)
+            probabilities.masked_fill_(fully_masked, 0)
+            probabilities = F.dropout(probabilities, p=dropout, training=module.training)
             selected_value = value[batch_indices, head_indices, token_indices[:, None], :]
             output[:, head_start:head_stop, query_start:query_stop] = torch.einsum(
                 "bhqk,bhqkd->bhqd", probabilities, selected_value
@@ -650,6 +614,7 @@ class Dots3NoteOmniTextAttention(nn.Module):
         past_key_value=None,
         cache_position=None,
         output_attentions=False,
+        **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -706,21 +671,23 @@ class Dots3NoteOmniTextAttention(nn.Module):
                 past_key_values=past_key_value,
             )
 
-            if not output_attentions and key_states.shape[-2] > topk_indices.shape[-1] * 2:
-                attn_output, attn_weights = dsa_sparse_attention_forward(
-                    query_states,
-                    key_states,
-                    value_states,
-                    topk_indices,
-                    cache_position,
-                    padding_mask,
-                    self.scaling,
-                )
-                attention_backend = None
+            sparse_fallback = (
+                not output_attentions
+                and self.config._attn_implementation in ("eager", "sdpa")
+                and key_states.shape[-2] > topk_indices.shape[-1] * 2
+            )
+            if sparse_fallback:
+                # Generic eager/SDPA cannot consume sparse indices without materializing an O(QK) mask.
+                # Dispatch the memory-bounded eager fallback through the common attention interface.
+                attention_backend = "eager"
+                attention_default = dsa_sparse_attention_forward
+                sparse_indices = topk_indices
             else:
-                attention_backend = self.config._attn_implementation
+                attention_backend = "eager" if output_attentions else self.config._attn_implementation
+                attention_default = eager_attention_forward
+                sparse_indices = None if attention_backend in ("eager", "sdpa") else topk_indices
 
-            if attention_backend is not None:
+            if not sparse_fallback and sparse_indices is None:
                 index_mask = (
                     topk_indices.new_ones((bsz, q_len, key_states.shape[-2]), dtype=torch.bool)
                     .scatter(-1, topk_indices.long(), False)
@@ -732,7 +699,7 @@ class Dots3NoteOmniTextAttention(nn.Module):
                 )
                 index_mask |= key_positions[None, None, None, :] > query_cache_positions[:, None, :, None]
                 if padding_mask is not None:
-                    index_mask |= ~padding_mask[:, None, None, : key_states.shape[-2]].to(torch.bool)
+                    index_mask |= ~_padding_mask_for_key_length(padding_mask, key_states.shape[-2])[:, None, None]
                 if attention_mask is None:
                     attention_mask = ~index_mask
                 elif attention_mask.dtype == torch.bool:
@@ -741,29 +708,26 @@ class Dots3NoteOmniTextAttention(nn.Module):
                     attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             attention_backend = self.config._attn_implementation
+            attention_default = eager_attention_forward
+            sparse_indices = None
 
-        if attention_backend is not None:
-            attention_interface = eager_attention_forward
-            if not output_attentions and attention_backend != "eager":
-                if hasattr(ALL_ATTENTION_FUNCTIONS, "get_interface"):
-                    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                        attention_backend, eager_attention_forward
-                    )
-                else:
-                    attention_interface = ALL_ATTENTION_FUNCTIONS[attention_backend]
-
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask,
-                dropout=self.attention_dropout if self.training else 0.0,
-                scaling=self.scaling,
-                sliding_window=self.sliding_window,
-                is_causal=attention_mask is None,
-                output_attentions=output_attentions,
-            )
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(attention_backend, attention_default)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            is_causal=attention_mask is None,
+            output_attentions=output_attentions,
+            indices=sparse_indices,
+            cache_position=cache_position,
+            padding_mask=padding_mask,
+            **kwargs,
+        )
 
         # ---- output sigmoid gate ----
         if self.g_proj is not None:
@@ -827,6 +791,7 @@ class Dots3NoteOmniTextDecoderLayer(nn.Module):
         past_key_value=None,
         cache_position=None,
         output_attentions=False,
+        **kwargs,
     ):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -840,6 +805,7 @@ class Dots3NoteOmniTextDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             cache_position=cache_position,
             output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -928,7 +894,10 @@ class Dots3NoteOmniTextModel(Dots3NoteOmniPreTrainedModel):
     def _make_masks(self, attention_mask, inputs_embeds, past_key_values, position_ids):
         """Return backend-specific masks without eagerly constructing additive square tensors."""
         if isinstance(attention_mask, dict):
-            return attention_mask["full_attention"], attention_mask["sliding_attention"]
+            full_mask = attention_mask.get("deepseek_sparse_attention", attention_mask.get("full_attention"))
+            if full_mask is None:
+                raise ValueError("The attention mask mapping must contain a full or DeepSeek sparse attention mask.")
+            return full_mask, attention_mask.get("sliding_attention", full_mask)
 
         mask_kwargs = {
             "config": self.config,
@@ -977,7 +946,7 @@ class Dots3NoteOmniTextModel(Dots3NoteOmniPreTrainedModel):
             use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = Dots3NoteOmniTextDynamicCache(self.config)
+            past_key_values = DynamicCache(config=self.config)
 
         past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
@@ -1027,6 +996,7 @@ class Dots3NoteOmniTextModel(Dots3NoteOmniPreTrainedModel):
                     past_key_value=past_key_values,
                     cache_position=cache_position,
                     output_attentions=output_attentions,
+                    **kwargs,
                 )
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -1055,12 +1025,6 @@ class Dots3NoteOmniTextModel(Dots3NoteOmniPreTrainedModel):
 # ---------------------------------------------------------------------------
 class Dots3NoteOmniTextForCausalLM(Dots3NoteOmniPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-
-    @classmethod
-    def _supports_default_dynamic_cache(cls):
-        # Let Dots3NoteOmniTextModel create Dots3NoteOmniTextDynamicCache so the DSA index keys
-        # remain FP8 during the standard generate() path.
-        return False
 
     def __init__(self, config: Dots3NoteOmniConfig):
         super().__init__(config)
@@ -1113,6 +1077,7 @@ class Dots3NoteOmniTextForCausalLM(Dots3NoteOmniPreTrainedModel, GenerationMixin
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = outputs.last_hidden_state
 

@@ -444,7 +444,15 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
             self.layer_types = list(self.layer_types)
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError("layer_types must contain one entry per hidden layer")
-        unsupported = set(self.layer_types) - {"full_attention", "sliding_attention"}
+        self.layer_types = [
+            "deepseek_sparse_attention"
+            if self.use_dsa and layer_type == "full_attention"
+            else "full_attention"
+            if not self.use_dsa and layer_type == "deepseek_sparse_attention"
+            else layer_type
+            for layer_type in self.layer_types
+        ]
+        unsupported = set(self.layer_types) - {"full_attention", "sliding_attention", "deepseek_sparse_attention"}
         if unsupported:
             raise ValueError(f"Unsupported layer types: {sorted(unsupported)}")
         if self.index_head_dim <= 0 or self.index_head_dim & (self.index_head_dim - 1):
