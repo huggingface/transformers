@@ -455,10 +455,8 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
         unsupported = set(self.layer_types) - {"full_attention", "sliding_attention", "deepseek_sparse_attention"}
         if unsupported:
             raise ValueError(f"Unsupported layer types: {sorted(unsupported)}")
-        if self.index_head_dim <= 0 or self.index_head_dim & (self.index_head_dim - 1):
-            raise ValueError("index_head_dim must be a positive power of two")
-        if self.index_head_dim % 128 != 0:
-            raise ValueError("index_head_dim must be divisible by the FP8 indexer block size (128)")
+        if self.index_head_dim != 128:
+            raise ValueError(f"Dots3 Note Omni requires index_head_dim=128, got {self.index_head_dim}")
         if self.qk_rope_head_dim > self.index_head_dim:
             raise ValueError("qk_rope_head_dim must not exceed index_head_dim")
         if self.n_group < 1 or self.n_routed_experts % self.n_group != 0:
@@ -481,6 +479,18 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
 
         quantization_config = kwargs.get("quantization_config")
         if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
+            for name, expected in (("activation_scheme", "dynamic"), ("fmt", "e4m3")):
+                actual = quantization_config.get(name, expected if name == "fmt" else None)
+                if actual != expected:
+                    raise ValueError(f"Dots3 Note Omni FP8 requires {name}={expected!r}, got {actual!r}")
+            block_size = quantization_config.get("weight_block_size")
+            if not isinstance(block_size, (list, tuple)) or tuple(block_size) != (128, 128):
+                raise ValueError(f"Dots3 Note Omni FP8 requires weight_block_size=(128, 128), got {block_size!r}")
+            scale_fmt = quantization_config.get("scale_fmt", "float")
+            if scale_fmt != "float":
+                raise ValueError(f"Dots3 Note Omni FP8 requires scale_fmt='float', got {scale_fmt!r}")
+            # Distinguish a pre-quantized checkpoint before the generic quantizer runs after model construction.
+            self._is_quantized = True
             quantization_config.setdefault("modules_to_not_convert", ["vision_encoder", "audio_encoder", "lm_head"])
         super().__post_init__(**kwargs)
 

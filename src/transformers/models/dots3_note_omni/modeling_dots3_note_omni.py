@@ -117,7 +117,40 @@ class Dots3NoteOmniTextIndexerLayerNorm(nn.Module):
             self.weight.float(),
             self.bias.float(),
             self.eps,
-        ).to(hidden_states.dtype)
+        )
+
+
+class Dots3NoteOmniTextIndexerProjection(nn.Linear):
+    """One of the two projections fused into SGLang's BF16 ``wk_weights_proj``."""
+
+    def __init__(self, config, out_features):
+        super().__init__(config.hidden_size, out_features, bias=False)
+        quantization_config = getattr(config, "quantization_config", None)
+        dequantize = (
+            quantization_config.get("dequantize", False)
+            if isinstance(quantization_config, dict)
+            else getattr(quantization_config, "dequantize", False)
+        )
+        if not getattr(config, "_is_quantized", False) or dequantize:
+            self.register_parameter("weight_scale_inv", None)
+            return
+
+        self.weight = nn.Parameter(
+            torch.empty(self.out_features, self.in_features, dtype=torch.float8_e4m3fn), requires_grad=False
+        )
+        self.weight_scale_inv = nn.Parameter(
+            torch.empty(((self.out_features + 127) // 128, (self.in_features + 127) // 128), dtype=torch.float32),
+            requires_grad=False,
+        )
+        # These tensors are populated by the pre-quantized checkpoint and cannot be initialized with normal_().
+        self._is_hf_initialized = True
+
+    def get_compute_weight(self):
+        if self.weight_scale_inv is None:
+            return self.weight
+        rows, cols = self.weight.shape
+        scales = self.weight_scale_inv.repeat_interleave(128, 0).repeat_interleave(128, 1)[:rows, :cols]
+        return (self.weight.float() * scales).to(torch.bfloat16)
 
 
 def apply_rotary_interleaved(x, cos, sin):
@@ -134,29 +167,12 @@ def apply_rotary_interleaved(x, cos, sin):
     out_even = even * cos - odd * sin
     out_odd = odd * cos + even * sin
     out = torch.stack((out_even, out_odd), dim=-1)
-    return out.flatten(-2)
+    return out.flatten(-2).to(x.dtype)
 
 
 # ---------------------------------------------------------------------------
 # Dynamic sparse attention indexer
 # ---------------------------------------------------------------------------
-def normalized_hadamard_transform(x):
-    """Reference normalized Walsh-Hadamard transform over the last dimension."""
-    hidden_size = x.shape[-1]
-    if hidden_size < 1 or hidden_size & (hidden_size - 1):
-        raise ValueError("The DSA index_head_dim must be a positive power of two")
-
-    original_shape = x.shape
-    output = x.float().reshape(-1, hidden_size)
-    block_size = 1
-    while block_size < hidden_size:
-        output = output.reshape(-1, hidden_size // (block_size * 2), 2, block_size)
-        left, right = output.unbind(dim=-2)
-        output = torch.cat((left + right, left - right), dim=-1).reshape(-1, hidden_size)
-        block_size *= 2
-    return (output.reshape(original_shape) * hidden_size**-0.5).to(x.dtype)
-
-
 def quantize_indexer_fp8(x):
     """Apply the per-token FP8 E4M3 quantization used by the checkpoint indexer."""
     block_size = 128
@@ -165,7 +181,6 @@ def quantize_indexer_fp8(x):
 
     blocks = x.float().reshape(*x.shape[:-1], -1, block_size)
     scale = blocks.abs().amax(dim=-1, keepdim=True).clamp_min(1e-4) / 448.0
-    scale = torch.pow(2.0, torch.ceil(torch.log2(scale)))
     quantized = (blocks / scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
     return quantized.reshape_as(x), scale.squeeze(-1)
 
@@ -196,7 +211,7 @@ def _padding_mask_for_key_length(padding_mask, key_length):
 
 
 class Dots3NoteOmniTextIndexer(nn.Module):
-    """Inference-only Lightning indexer used on the DSA/full-attention layers."""
+    """Inference-only DSA indexer matching SGLang's default CUDA fusion path."""
 
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -209,9 +224,28 @@ class Dots3NoteOmniTextIndexer(nn.Module):
         self.query_chunk_size = 1024
 
         self.wq_b = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
-        self.wk = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.wk = Dots3NoteOmniTextIndexerProjection(config, self.head_dim)
         self.k_norm = Dots3NoteOmniTextIndexerLayerNorm(self.head_dim)
-        self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
+        self.weights_proj = Dots3NoteOmniTextIndexerProjection(config, self.n_heads)
+        self.register_buffer("_wk_weights_proj_weight", None, persistent=False)
+        self.register_load_state_dict_post_hook(self._clear_projection_cache)
+
+    @staticmethod
+    def _clear_projection_cache(module, _incompatible_keys):
+        module._wk_weights_proj_weight = None
+
+    @torch.no_grad()
+    def _project_key_and_weights(self, hidden_states):
+        if self._wk_weights_proj_weight is None:
+            self._wk_weights_proj_weight = torch.cat(
+                (self.wk.get_compute_weight(), self.weights_proj.get_compute_weight()), dim=0
+            ).contiguous()
+        if hidden_states.dtype != self._wk_weights_proj_weight.dtype:
+            raise ValueError(
+                f"DSA fused projection requires {self._wk_weights_proj_weight.dtype} inputs, got {hidden_states.dtype}"
+            )
+        output = F.linear(hidden_states, self._wk_weights_proj_weight)
+        return output.split((self.head_dim, self.n_heads), dim=-1)
 
     @torch.no_grad()
     def forward(
@@ -240,26 +274,28 @@ class Dots3NoteOmniTextIndexer(nn.Module):
 
         batch_size, seq_len, _ = hidden_states.shape
         query = self.wq_b(q_lora).view(batch_size, seq_len, self.n_heads, self.head_dim)
-        key = self.k_norm(self.wk(hidden_states)).view(batch_size, seq_len, 1, self.head_dim)
+        key, weights = self._project_key_and_weights(hidden_states)
+        key = self.k_norm(key).view(batch_size, seq_len, 1, self.head_dim)
 
         q_rope, q_nope = torch.split(query, [self.rope_head_dim, self.head_dim - self.rope_head_dim], dim=-1)
         k_rope, k_nope = torch.split(key, [self.rope_head_dim, self.head_dim - self.rope_head_dim], dim=-1)
-        q_rope = apply_rotary_interleaved(q_rope.transpose(1, 2), cos, sin).transpose(1, 2)
+        q_rope = apply_rotary_interleaved(q_rope.transpose(1, 2).float(), cos, sin).transpose(1, 2)
         k_rope = apply_rotary_interleaved(k_rope.transpose(1, 2), cos, sin).transpose(1, 2)
-        query = normalized_hadamard_transform(torch.cat((q_rope, q_nope), dim=-1))
-        key = normalized_hadamard_transform(torch.cat((k_rope, k_nope), dim=-1)).squeeze(2)
+        # SGLang's default CUDA fusion omits the fallback/training-path Hadamard rotation.
+        query = torch.cat((q_rope, q_nope.float()), dim=-1)
+        # The fused SGLang K path performs LayerNorm and RoPE in FP32, then rounds once to BF16 before FP8 quantization.
+        key = torch.cat((k_rope, k_nope), dim=-1).to(hidden_states.dtype).squeeze(2)
 
         query, query_scale = quantize_indexer_fp8(query.contiguous())
         key, key_scale = quantize_indexer_fp8(key.contiguous())
-        # E4M3 values multiplied by the power-of-two index scale are exactly representable in BF16.
-        # Storing the dequantized key lets Dots reuse the standard indexed cache (including crop,
-        # offload, beam reorder, and static/dynamic dispatch) without changing indexer scores.
-        key = (key.float() * key_scale).to(hidden_states.dtype)
+        weights = weights.float().unsqueeze(-1) * (self.softmax_scale * self.n_heads**-0.5) * query_scale
+        # SGLang stores E4M3 keys and their FP32 scales separately. Keep the equivalent dequantized
+        # value in FP32 so the standard indexed cache can be reused without an additional BF16 rounding.
+        key = key.float() * key_scale
 
         if past_key_values is not None:
             key = past_key_values.update_indexer(key, self.layer_idx)
 
-        weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5) * self.softmax_scale
         key_float = key.float()
         key_transposed = key_float.transpose(-1, -2).unsqueeze(1)
         key_positions = torch.arange(key.shape[1], device=hidden_states.device)
@@ -270,10 +306,9 @@ class Dots3NoteOmniTextIndexer(nn.Module):
         for start in range(0, seq_len, self.query_chunk_size):
             stop = min(start + self.query_chunk_size, seq_len)
             scores = torch.matmul(query[:, start:stop].float(), key_transposed)
-            scores = scores * query_scale[:, start:stop]
             scores = F.relu(scores)
 
-            index_scores = torch.matmul(weights[:, start:stop].unsqueeze(-2), scores).squeeze(-2)
+            index_scores = torch.matmul(weights[:, start:stop].transpose(-1, -2), scores).squeeze(-2)
             causal = key_positions[None, None, :] > query_cache_positions[:, start:stop, None]
             index_scores.masked_fill_(causal, float("-inf"))
             if padding_mask is not None:
@@ -995,7 +1030,8 @@ class Dots3NoteOmniTextModel(Dots3NoteOmniPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0).expand(bsz, -1)
 
-        cos, sin = self.rotary_emb(inputs_embeds, position_ids)
+        rotary_input = inputs_embeds.float() if self.config.use_dsa else inputs_embeds
+        cos, sin = self.rotary_emb(rotary_input, position_ids)
         swa_cos, swa_sin = self.swa_rotary_emb(inputs_embeds, position_ids)
 
         padding_mask = (
@@ -1763,19 +1799,20 @@ class Dots3NoteOmniVisionMoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, shape[-1])
-        router_logits = F.linear(hidden_states.float(), self.gate_weight)
+        router_logits = F.linear(hidden_states.float(), self.gate_weight.float())
+        # Keep routing in FP32 so near-tied expert scores do not collapse before top-k selection.
         if self.router_scoring_func == "softmax":
-            router_probs = router_logits.softmax(dim=-1, dtype=torch.float32).to(hidden_states.dtype)
+            router_probs = router_logits.softmax(dim=-1, dtype=torch.float32)
         else:
-            router_probs = router_logits.sigmoid().to(hidden_states.dtype)
+            router_probs = router_logits.sigmoid()
 
         _, selected_experts = torch.topk(
-            router_probs + self.router_bias.unsqueeze(0), self.top_k, dim=-1, sorted=False
+            router_probs + self.router_bias.float().unsqueeze(0), self.top_k, dim=-1, sorted=False
         )
         routing_weights = router_probs.gather(1, selected_experts)
         if self.router_scoring_func == "sigmoid" and self.top_k > 1:
-            routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights * self.router_scale
+            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-9)
+        routing_weights = (routing_weights * self.router_scale).to(hidden_states.dtype)
 
         output = torch.zeros_like(hidden_states)
         weight_sum = torch.zeros(hidden_states.shape[0], dtype=hidden_states.dtype, device=hidden_states.device)

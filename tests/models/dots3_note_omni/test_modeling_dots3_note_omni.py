@@ -57,6 +57,7 @@ if is_torch_available():
         Dots3NoteOmniTextIndexer,
         Dots3NoteOmniTextModel,
         Dots3NoteOmniVisionModel,
+        Dots3NoteOmniVisionMoE,
         dsa_sparse_attention_forward,
         eager_attention_forward,
         quantize_indexer_fp8,
@@ -661,13 +662,67 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         self.assertIsInstance(static_cache.layers[1], StaticSlidingWindowLayer)
         torch.testing.assert_close(static_decode.logits, dynamic_decode.logits, rtol=1e-4, atol=1e-4)
 
-    def test_dsa_fp8_index_key_is_exact_in_bfloat16_cache(self):
+    def test_dsa_fp8_index_key_keeps_sglang_scale_in_fp32(self):
         torch.manual_seed(0)
         key = torch.randn(2, 7, 128) * 10
         quantized_key, key_scale = quantize_indexer_fp8(key)
         dequantized_key = quantized_key.float() * key_scale
 
-        torch.testing.assert_close(dequantized_key.bfloat16().float(), dequantized_key, rtol=0, atol=0)
+        expected_scale = key.abs().amax(dim=-1, keepdim=True).clamp_min(1e-4) / 448.0
+        torch.testing.assert_close(key_scale, expected_scale, rtol=0, atol=0)
+        self.assertEqual(dequantized_key.dtype, torch.float32)
+        self.assertTrue(torch.any(dequantized_key.bfloat16().float() != dequantized_key))
+
+    def test_dsa_fused_indexer_projection_keeps_bf16_and_fp8_paths_distinct(self):
+        with self.assertRaisesRegex(ValueError, "index_head_dim=128, got 256"):
+            Dots3NoteOmniConfig(index_head_dim=256)
+        Dots3NoteOmniConfig(quantization_config=FineGrainedFP8Config().to_dict())
+        with self.assertRaisesRegex(ValueError, "scale_fmt='float', got 'ue8m0'"):
+            Dots3NoteOmniConfig(quantization_config=FineGrainedFP8Config(scale_fmt="ue8m0").to_dict())
+
+        config = get_tiny_config(use_dsa=True)
+        config.hidden_size = 256
+        hidden_states = torch.randn(2, 3, config.hidden_size, dtype=torch.bfloat16)
+
+        bf16_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0).to(torch.bfloat16)
+        bf16_weight = torch.cat((bf16_indexer.wk.weight, bf16_indexer.weights_proj.weight))
+        bf16_actual = torch.cat(bf16_indexer._project_key_and_weights(hidden_states), dim=-1)
+        self.assertIsNone(bf16_indexer.wk.weight_scale_inv)
+        torch.testing.assert_close(bf16_actual, torch.nn.functional.linear(hidden_states, bf16_weight), rtol=0, atol=0)
+
+        reloaded_state = {name: tensor.clone() for name, tensor in bf16_indexer.state_dict().items()}
+        reloaded_state["wk.weight"].zero_()
+        reloaded_state["weights_proj.weight"].zero_()
+        bf16_indexer.load_state_dict(reloaded_state)
+        self.assertIsNone(bf16_indexer._wk_weights_proj_weight)
+        reloaded_actual = torch.cat(bf16_indexer._project_key_and_weights(hidden_states), dim=-1)
+        self.assertEqual(torch.count_nonzero(reloaded_actual), 0)
+
+        config.quantization_config = FineGrainedFP8Config(dequantize=False, weight_block_size=(128, 128))
+        config._is_quantized = True
+        fp8_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0)
+        torch.manual_seed(0)
+        for projection in (fp8_indexer.wk, fp8_indexer.weights_proj):
+            projection.weight.data.fill_(1)
+            projection.weight_scale_inv.data.copy_(
+                torch.arange(1, projection.weight_scale_inv.numel() + 1, dtype=torch.float32).reshape_as(
+                    projection.weight_scale_inv
+                )
+            )
+
+        expected_weight = torch.cat(
+            (fp8_indexer.wk.get_compute_weight(), fp8_indexer.weights_proj.get_compute_weight())
+        )
+        fp8_actual = torch.cat(fp8_indexer._project_key_and_weights(hidden_states), dim=-1)
+        self.assertEqual(fp8_indexer.wk.weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(fp8_indexer.wk.weight_scale_inv.shape, (1, 2))
+        torch.testing.assert_close(
+            fp8_actual, torch.nn.functional.linear(hidden_states, expected_weight), rtol=0, atol=0
+        )
+
+        config.quantization_config = FineGrainedFP8Config(dequantize=True, weight_block_size=(128, 128))
+        dequantized_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0)
+        self.assertIsNone(dequantized_indexer.wk.weight_scale_inv)
 
     def test_dsa_precomputed_mask_uses_dispatched_layer_type(self):
         model = Dots3NoteOmniTextForCausalLM(get_tiny_config(use_dsa=True)).eval()
@@ -696,6 +751,37 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
             outputs = model(pixel_values, grid_thw)
         self.assertEqual(outputs.last_hidden_state.shape, (4, config.embed_dim))
         self.assertEqual(outputs.pooler_output.shape, (1, config.hidden_size))
+
+    def test_vision_moe_router_keeps_near_ties_in_float32(self):
+        class RecordingExpert(torch.nn.Module):
+            def __init__(self, expert_idx, selected_experts):
+                super().__init__()
+                self.expert_idx = expert_idx
+                self.selected_experts = selected_experts
+
+            def forward(self, hidden_states):
+                self.selected_experts.append(self.expert_idx)
+                return torch.full_like(hidden_states, self.expert_idx + 1)
+
+        for scoring_func, logit_step in (("sigmoid", 1e-3), ("softmax", 1e-4)):
+            with self.subTest(scoring_func=scoring_func):
+                config = get_tiny_config().vision_config
+                config.pyramid_num_routed[0] = 3
+                config.capacity_factor = 2
+                config.router_scoring_func = scoring_func
+                moe = Dots3NoteOmniVisionMoE(config, layer_idx=0).eval()
+                selected_experts = []
+                moe.experts = torch.nn.ModuleList(
+                    [RecordingExpert(expert_idx, selected_experts) for expert_idx in range(3)]
+                )
+
+                with torch.no_grad():
+                    moe.gate_weight.zero_()
+                    moe.gate_weight[:, 0] = torch.tensor([0.0, logit_step, 2 * logit_step])
+                    output = moe(torch.tensor([[1.0, 0.0] + [0.0] * (config.embed_dim - 2)]).bfloat16())
+
+                self.assertEqual(selected_experts, [1, 2])
+                self.assertEqual(output.dtype, torch.bfloat16)
 
     def test_audio_forward(self):
         config = get_tiny_config().audio_config
