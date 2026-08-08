@@ -167,6 +167,153 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
             ],
         )
 
+    # ── Enhancement 1 + 2: top_k parameter and score-sorted results ──────────
+
+    @require_torch
+    def test_top_k(self):
+        """top_k=1 must return exactly one detection (the highest-scoring one)."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+            top_k=1,
+        )
+        self.assertEqual(len(outputs), 1)
+        self.assertIn("score", outputs[0])
+        self.assertIn("label", outputs[0])
+        self.assertIn("box", outputs[0])
+
+    @require_torch
+    def test_results_sorted_by_score(self):
+        """Results must always be returned in descending score order."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+        )
+        scores = [o["score"] for o in outputs]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    # ── Enhancement 3: label filtering ───────────────────────────────────────
+
+    @require_torch
+    @slow
+    def test_label_filter(self):
+        """Only detections whose label is in the `labels` allowlist are returned."""
+        object_detector = pipeline("object-detection", model="facebook/detr-resnet-50")
+
+        all_outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        all_labels = {o["label"] for o in all_outputs}
+
+        target_label = "cat"
+        self.assertIn(target_label, all_labels, "Precondition: model must detect 'cat' on this image")
+
+        filtered = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            labels=[target_label],
+        )
+        self.assertGreater(len(filtered), 0)
+        for det in filtered:
+            self.assertEqual(det["label"], target_label)
+
+    @require_torch
+    def test_label_filter_excludes_all(self):
+        """If no detection matches the labels allowlist, an empty list is returned."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+            labels=["__nonexistent_label__"],
+        )
+        self.assertEqual(outputs, [])
+
+    # ── Enhancement 4: box_format ─────────────────────────────────────────────
+
+    @require_torch
+    def test_box_format_xyxy(self):
+        """Default box_format='xyxy' returns integer xmin/ymin/xmax/ymax keys."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+            box_format="xyxy",
+        )
+        for det in outputs:
+            self.assertEqual(set(det["box"].keys()), {"xmin", "ymin", "xmax", "ymax"})
+            for v in det["box"].values():
+                self.assertIsInstance(v, int)
+
+    @require_torch
+    def test_box_format_xywh(self):
+        """box_format='xywh' returns x_center/y_center/width/height integer keys."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+            box_format="xywh",
+        )
+        for det in outputs:
+            self.assertEqual(set(det["box"].keys()), {"x_center", "y_center", "width", "height"})
+            self.assertGreater(det["box"]["width"], 0)
+            self.assertGreater(det["box"]["height"], 0)
+
+    @require_torch
+    def test_box_format_normalized(self):
+        """box_format='normalized' returns float values in [0, 1]."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            threshold=0.0,
+            box_format="normalized",
+        )
+        for det in outputs:
+            self.assertEqual(set(det["box"].keys()), {"xmin", "ymin", "xmax", "ymax"})
+            for v in det["box"].values():
+                self.assertIsInstance(v, float)
+                self.assertGreaterEqual(v, 0.0)
+                self.assertLessEqual(v, 1.0)
+
+    @require_torch
+    def test_box_format_invalid_raises(self):
+        """An unsupported box_format value must raise ValueError."""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        with self.assertRaises(ValueError):
+            object_detector(
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                threshold=0.0,
+                box_format="pascal_voc",
+            )
+
+    # ── Existing slow tests (preserved, expected outputs updated for sort order) ──
+
     @require_torch
     @slow
     def test_large_model_pt(self):
@@ -180,11 +327,11 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
+                {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                 {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                 {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
             ],
         )
 
@@ -198,18 +345,18 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
             nested_simplify(outputs, decimals=4),
             [
                 [
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                     {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                     {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                     {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 ],
                 [
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                     {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                     {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                     {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 ],
             ],
         )
@@ -225,11 +372,11 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
+                {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                 {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                 {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
             ],
         )
 
@@ -243,18 +390,18 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
             nested_simplify(outputs, decimals=4),
             [
                 [
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                     {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                     {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                     {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 ],
                 [
+                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
+                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                     {"score": 0.9982, "label": "remote", "box": {"xmin": 40, "ymin": 70, "xmax": 175, "ymax": 117}},
                     {"score": 0.9960, "label": "remote", "box": {"xmin": 333, "ymin": 72, "xmax": 368, "ymax": 187}},
                     {"score": 0.9955, "label": "couch", "box": {"xmin": 0, "ymin": 1, "xmax": 639, "ymax": 473}},
-                    {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
-                    {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
                 ],
             ],
         )
