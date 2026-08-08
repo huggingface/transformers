@@ -881,6 +881,19 @@ def replace_with_fp8_linear(
     return model
 
 
+def _resolve_weight_block_size(hf_quantizer, value: torch.Tensor) -> tuple[int, int]:
+    block_size = None
+    quantization_config = hf_quantizer.quantization_config
+    if quantization_config is not None:
+        if isinstance(quantization_config, dict):
+            block_size = quantization_config.get("weight_block_size")
+        else:
+            block_size = getattr(quantization_config, "weight_block_size", None)
+    if block_size is None:
+        block_size = value.shape[-2:]
+    return tuple(block_size)
+
+
 class Fp8Quantize(ConversionOps):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
@@ -890,33 +903,35 @@ class Fp8Quantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def _resolve_block_size(self, value: torch.Tensor) -> tuple[int, int]:
-        block_size = None
-        if self.hf_quantizer.quantization_config is not None:
-            if isinstance(self.hf_quantizer.quantization_config, dict):
-                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
-            else:
-                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
-        if block_size is None:
-            block_size = (value.shape[-2], value.shape[-1])
-        return tuple(block_size)
+        return _resolve_weight_block_size(self.hf_quantizer, value)
 
     def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
-        # Pass through tensors that aren't tileable (1D norms / biases, or shapes
-        # that don't divide cleanly by the configured block) — they were never
-        # FP8-quantized on the load side, so the reverse op shouldn't touch them.
+        # Norms and biases are not block-quantized.
         if value.ndim < 2:
             return {key: value}
         block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
-        if rows % block_m != 0 or cols % block_n != 0:
+        has_partial_block = rows % block_m != 0 or cols % block_n != 0
+        quantization_config = self.hf_quantizer.quantization_config
+        requantizing_pre_quantized_checkpoint = getattr(self.hf_quantizer, "pre_quantized", False) and getattr(
+            quantization_config, "dequantize", False
+        )
+        # Keep the existing on-the-fly quantization behavior for odd-shaped linears:
+        # they stay in full precision. Partial blocks are only required when reversing
+        # dequantization while saving a checkpoint that was already FP8-quantized.
+        if has_partial_block and not requantizing_pre_quantized_checkpoint:
             return {key: value}
 
         # Leading dims can be empty (2D) or include num_experts/... (3D+)
         leading_shape = value.shape[:-2]
-        rows_tiles = rows // block_m
-        cols_tiles = cols // block_n
+        rows_tiles = _cdiv(rows, block_m)
+        cols_tiles = _cdiv(cols, block_n)
+        padded_rows = rows_tiles * block_m
+        padded_cols = cols_tiles * block_n
         original_shape = value.shape
         value_fp32 = value.to(torch.float32)
+        if padded_rows != rows or padded_cols != cols:
+            value_fp32 = F.pad(value_fp32, (0, padded_cols - cols, 0, padded_rows - rows))
         # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
         reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
         # Per-tile max-abs over the block dims (block_m at -3, block_n at -1)
@@ -936,6 +951,7 @@ class Fp8Quantize(ConversionOps):
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
         quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        quantized = quantized.reshape(*leading_shape, padded_rows, padded_cols)[..., :rows, :cols].contiguous()
         quantized = quantized.reshape(original_shape)
         scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
         return {key: quantized, scale_key: inv_scales}
@@ -1008,25 +1024,43 @@ class Fp8Dequantize(ConversionOps):
         # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
         # first so the rest of the routine sees a normal (rows, cols) float matrix.
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
-        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
+        is_fp4 = quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype)
+        if is_fp4:
             quantized_fp32 = self._unpack_fp4(quantized)
         else:
             quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        # Derive block size from the scale grid rather than the global config: MoE experts
-        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
-        # and the same dequant has to handle both within one checkpoint.
         try:
             scale_rows, scale_cols = scales.shape[-2:]
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
-            raise ValueError(
-                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
-            )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
+        if is_fp4:
+            # MXFP4 experts use a different block layout and keep the existing
+            # scale-grid-derived behavior.
+            if rows % scale_rows or cols % scale_cols:
+                raise ValueError(
+                    f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
+                )
+            block_m = rows // scale_rows
+            block_n = cols // scale_cols
+        else:
+            # FP8 checkpoints encode the block size in their quantization config. The
+            # scale grid uses ceil division, so its last row/column may describe a
+            # partial weight block.
+            block_m, block_n = _resolve_weight_block_size(self.hf_quantizer, quantized_fp32)
+            expected_scale_shape = (_cdiv(rows, block_m), _cdiv(cols, block_n))
+            if (scale_rows, scale_cols) != expected_scale_shape:
+                # Preserve the legacy path for existing checkpoints whose scale grid
+                # is valid but does not match the global block-size metadata.
+                if rows % scale_rows == 0 and cols % scale_cols == 0:
+                    block_m = rows // scale_rows
+                    block_n = cols // scale_cols
+                else:
+                    raise ValueError(
+                        f"Weight shape ({rows}, {cols}) with block size ({block_m}, {block_n}) expects scale grid "
+                        f"{expected_scale_shape}, but got ({scale_rows}, {scale_cols})."
+                    )
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
@@ -1043,9 +1077,14 @@ class Fp8Dequantize(ConversionOps):
         else:
             s_fp32 = scales.to(torch.float32)
         original_shape = quantized_fp32.shape
+        padded_rows = scale_rows * block_m
+        padded_cols = scale_cols * block_n
+        if padded_rows != rows or padded_cols != cols:
+            quantized_fp32 = F.pad(quantized_fp32, (0, padded_cols - cols, 0, padded_rows - rows))
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
+        dequantized = (q * s).reshape(*original_shape[:-2], padded_rows, padded_cols)[..., :rows, :cols]
+        return dequantized.to(output_dtype).contiguous()
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
