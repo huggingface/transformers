@@ -34,6 +34,7 @@ from transformers import (
     DefaultFlowCallback,
     EarlyStoppingCallback,
     IntervalStrategy,
+    MoERouterHealthCallback,
     PrinterCallback,
     ProgressCallback,
     Trainer,
@@ -48,6 +49,10 @@ from transformers.trainer_callback import CallbackHandler, ExportableState, Trai
 
 
 if is_torch_available():
+    import torch
+    from torch.utils.data import Dataset
+
+    from transformers import Qwen2MoeConfig, Qwen2MoeForCausalLM
     from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .trainer_test_utils import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
@@ -165,6 +170,30 @@ class ModifyControlCallback(TrainerCallback):
         return control
 
 
+class LogRecorderCallback(TrainerCallback):
+    def __init__(self):
+        self.logged_entries = []
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        self.logged_entries.append(dict(logs))
+
+
+class TinyCausalLMDataset(Dataset):
+    def __init__(self, length=8, seq_length=8, vocab_size=32):
+        self.length = length
+        self.seq_length = seq_length
+        self.vocab_size = vocab_size
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        input_ids = torch.tensor(
+            [(index + offset) % self.vocab_size for offset in range(self.seq_length)], dtype=torch.long
+        )
+        return {"input_ids": input_ids, "labels": input_ids.clone()}
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -252,6 +281,72 @@ class TrainerCallbackTest(unittest.TestCase):
         actual = get_callback_names(trainer.callback_handler.callbacks)
 
         self.assertEqual(actual, expected)
+
+    def _run_qwen2_moe_logging_test(self, output_router_logits: bool):
+        config = Qwen2MoeConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            shared_expert_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_experts=4,
+            num_experts_per_tok=2,
+            max_position_embeddings=32,
+            output_router_logits=output_router_logits,
+        )
+        model = Qwen2MoeForCausalLM(config)
+        train_dataset = TinyCausalLMDataset(length=4, seq_length=8, vocab_size=config.vocab_size)
+
+        moe_callback = MoERouterHealthCallback()
+        recorder_callback = LogRecorderCallback()
+        args = TrainingArguments(
+            self.output_dir,
+            max_steps=1,
+            per_device_train_batch_size=2,
+            logging_steps=1,
+            save_strategy="no",
+            eval_strategy="no",
+            report_to=[],
+            disable_tqdm=True,
+        )
+        trainer = Trainer(
+            model=model,
+            args=args,
+            train_dataset=train_dataset,
+            callbacks=[moe_callback, recorder_callback],
+        )
+
+        trainer.train()
+
+        self.assertGreater(len(recorder_callback.logged_entries), 0)
+        return set().union(*(entry.keys() for entry in recorder_callback.logged_entries))
+
+    def test_moe_router_health_callback_logs_qwen2_moe_metrics_without_router_logits(self):
+        logged_keys = self._run_qwen2_moe_logging_test(output_router_logits=False)
+        self.assertIn("moe/global/mean_load_cv", logged_keys)
+        self.assertIn("moe/global/mean_dead_experts", logged_keys)
+        self.assertNotIn("moe/aux_loss", logged_keys)
+
+    def test_moe_router_health_callback_logs_qwen2_moe_aux_loss_when_available(self):
+        logged_keys = self._run_qwen2_moe_logging_test(output_router_logits=True)
+        self.assertIn("moe/global/mean_load_cv", logged_keys)
+        self.assertIn("moe/aux_loss", logged_keys)
+
+    def test_moe_router_health_callback_auto_reduction_skips_tensor_parallel_models(self):
+        callback = MoERouterHealthCallback(reduction_mode="auto")
+        args = TrainingArguments(self.output_dir, report_to=[])
+        state = TrainerState()
+        control = TrainerControl()
+
+        class DummyModel:
+            tp_size = 2
+            can_record_outputs = {}
+
+        callback.on_train_begin(args, state, control, model=DummyModel())
+        self.assertEqual(callback._resolved_reduction_mode, "none")
 
     def test_printer_callback_when_tqdm_disabled(self):
         """PrinterCallback should replace ProgressCallback when tqdm is disabled."""
