@@ -1714,6 +1714,8 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     # Prepare additional kwargs that may be needed to __init__ the cache layers
     layer_kwargs = {}
     if "sliding_attention" in layer_types or "hybrid_sliding" in layer_types:
+        if getattr(config, "sliding_windows", None) is not None:
+            layer_kwargs["sliding_windows"] = config.sliding_windows
         layer_kwargs["sliding_window"] = config.sliding_window
     if "chunked_attention" in layer_types:
         layer_kwargs["sliding_window"] = config.attention_chunk_size
@@ -1783,7 +1785,17 @@ class DynamicCache(Cache):
             decoder_config = config.get_text_config(decoder=True)
             layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
-            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+            sliding_windows = layer_kwargs.pop("sliding_windows", None)
+            layers = [
+                DYNAMIC_LAYER_TYPE_MAPPING[layer_type](
+                    **(
+                        layer_kwargs | {"sliding_window": sliding_windows[layer_idx]}
+                        if sliding_windows
+                        else layer_kwargs
+                    )
+                )
+                for layer_idx, layer_type in enumerate(layer_types)
+            ]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -1870,7 +1882,13 @@ class StaticCache(Cache):
         layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
         layer_kwargs["max_cache_len"] = max_cache_len
         # Dispatch the layer types
-        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
+        sliding_windows = layer_kwargs.pop("sliding_windows", None)
+        layers = [
+            STATIC_LAYER_TYPE_MAPPING[layer_type](
+                **(layer_kwargs | {"sliding_window": sliding_windows[layer_idx]} if sliding_windows else layer_kwargs)
+            )
+            for layer_idx, layer_type in enumerate(layer_types)
+        ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
 

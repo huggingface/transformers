@@ -1110,6 +1110,7 @@ def create_sliding_window_causal_mask(
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
     allow_is_causal_skip: bool = True,
+    sliding_window: int | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a sliding window causal mask based on the attention implementation used (stored in the config). This type
@@ -1150,6 +1151,8 @@ def create_sliding_window_causal_mask(
             Whether to allow returning `None` (and relying on `sdpa`'s `is_causal` argument) when the mask would be a
             plain causal mask. Set to `False` to always materialize the mask, e.g. when it is later concatenated with
             another mask. Defaults to `True`.
+        sliding_window (`int`, *optional*):
+            Sliding-window size to use instead of `config.sliding_window`.
     """
     # Power feature: if `is_causal` is False, then fallback to bi-directional mask for bi-directional attention
     # It allows to use decoder-only models with bi-directional attention as well
@@ -1177,7 +1180,8 @@ def create_sliding_window_causal_mask(
     if early_exit:
         return attention_mask
 
-    sliding_window = getattr(config, "sliding_window", None)
+    if sliding_window is None:
+        sliding_window = getattr(config, "sliding_window", None)
     if sliding_window is None:
         raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
 

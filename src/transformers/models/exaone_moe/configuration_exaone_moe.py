@@ -39,6 +39,9 @@ class ExaoneMoeConfig(PreTrainedConfig):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
+    sliding_windows (`list`, *optional*):
+        Sliding window sizes for each layer. 0 means full attention, otherwise must be positive integer.
+        Prioritized over `sliding_window` and `sliding_window_pattern`.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
@@ -46,6 +49,8 @@ class ExaoneMoeConfig(PreTrainedConfig):
                                                     \--k dense layers--/
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    swiglu_limits (`list`, *optional*):
+        Swiglu limits for each layer. 0 means no swiglu limit, otherwise must be positive float.
 
     Example:
 
@@ -109,6 +114,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+    sliding_windows: list[int] | None = None
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     moe_intermediate_size: int = 1024
@@ -119,12 +125,37 @@ class ExaoneMoeConfig(PreTrainedConfig):
     routed_scaling_factor: float = 2.5
     n_group: int = 1
     topk_group: int = 1
+    swiglu_limits: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = [
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
+
+        # Validate sliding windows
+        if self.sliding_windows is not None:
+            if len(self.sliding_windows) != self.num_hidden_layers:
+                raise ValueError(
+                    f"Number of sliding windows must be equal to the number of hidden layers ({self.num_hidden_layers}), but got {len(self.sliding_windows)}"
+                )
+            for layer_idx, (layer_type, window_size) in enumerate(zip(self.layer_types, self.sliding_windows)):
+                if window_size < 0:
+                    raise ValueError(
+                        f"Sliding window size must be greater than 0, but got {window_size} at layer {layer_idx}"
+                    )
+                if layer_type == "sliding_attention" and window_size == 0:
+                    raise ValueError(f"Found sliding window size 0 for layer {layer_idx}")
+
+        # Validate swiglu limits
+        if self.swiglu_limits is not None:
+            if len(self.swiglu_limits) != self.num_hidden_layers:
+                raise ValueError(
+                    f"Number of swiglu limits must be equal to the number of hidden layers ({self.num_hidden_layers}), but got {len(self.swiglu_limits)}"
+                )
+            for layer_idx, limit in enumerate(self.swiglu_limits):
+                if limit < 0:
+                    raise ValueError(f"Swiglu limit must be non-negative, but got {limit} at layer {layer_idx}")
         if self.sliding_window is None:
             self.sliding_window_pattern = 0
         if self.layer_types is None:
