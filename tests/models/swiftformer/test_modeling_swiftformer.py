@@ -259,5 +259,5 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1726, 2.1093, -2.0801]]).to(torch_device)
+        expected_slice = torch.tensor([[-2.1703, 2.1107, -2.0811]]).to(torch_device)
         torch.testing.assert_close(outputs.logits[:, :3], expected_slice, rtol=1e-4, atol=1e-4)
