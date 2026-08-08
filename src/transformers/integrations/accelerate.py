@@ -318,13 +318,18 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
+    min_zero_memory = int(1.25 * max(leave_modules_sizes.values(), default=0))
+
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
     gpus_idx_list = sorted(
         device_id for device_id, device_mem in max_memory.items() if isinstance(device_id, int) and device_mem > 0
     )
     # The last device is left with max_memory just in case the buffer is not enough.
     for idx in gpus_idx_list[:-1]:
-        max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
+        device_memory = max_memory[0] if low_zero and idx == 0 else per_gpu
+        if idx == 0 and not low_zero:
+            device_memory = max(device_memory, min_zero_memory)
+        max_memory[idx] = min(device_memory, max_memory[idx])
 
     if low_zero:
         min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
