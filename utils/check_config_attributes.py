@@ -254,6 +254,29 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # Per-stage lists consumed at config level (`_build_transformer_config`) to build the
+    # `MossAudioTokenizerTransformerConfig` objects the modeling code actually receives
+    "MossAudioTokenizerConfig": [
+        "hidden_sizes",
+        "input_hidden_sizes",
+        "intermediate_sizes",
+        "layer_scale_init_value",
+        "output_hidden_sizes",
+    ],
+    "MossAudioTokenizerDecoderConfig": [
+        "hidden_sizes",
+        "input_hidden_sizes",
+        "intermediate_sizes",
+        "layer_scale_init_value",
+        "output_hidden_sizes",
+    ],
+    "MossAudioTokenizerEncoderConfig": [
+        "hidden_sizes",
+        "input_hidden_sizes",
+        "intermediate_sizes",
+        "layer_scale_init_value",
+        "output_hidden_sizes",
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
