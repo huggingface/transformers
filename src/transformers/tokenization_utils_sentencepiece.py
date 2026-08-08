@@ -251,6 +251,11 @@ class SentencePieceBackend(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
+        # Same space-restoration rule as inside the loop: `sp_model.decode` drops the
+        # leading space marker of the first piece in a run, so if this trailing run
+        # follows a special token we must re-add it here too.
+        if not prev_is_special and current_sub_tokens:
+            out_string += " "
         out_string += self.sp_model.decode(current_sub_tokens)
 
         return out_string.strip()
