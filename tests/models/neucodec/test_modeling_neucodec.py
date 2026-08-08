@@ -23,7 +23,7 @@ from datasets import Audio, load_dataset
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor
 from tests.utils.test_audio_utils import compute_rmse
-from transformers import AutoFeatureExtractor, Xcodec2Config, Xcodec2Model
+from transformers import AutoFeatureExtractor, NeuCodecConfig, NeuCodecModel
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -35,17 +35,16 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import Xcodec2Model
-
 
 @require_torch
-class Xcodec2ModelTester:
+class NeuCodecModelTester:
     def __init__(
         self,
         parent,
         batch_size=2,
         num_channels=1,
-        sample_rate=16000,
+        input_sampling_rate=16000,
+        output_sampling_rate=24000,
         num_mel_bins=80,
         stride=2,
         encoder_hidden_size=8,
@@ -64,14 +63,15 @@ class Xcodec2ModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.sample_rate = sample_rate
+        self.input_sampling_rate = input_sampling_rate
+        self.output_sampling_rate = output_sampling_rate
         self.is_training = is_training
-        self.hop_length = int(np.prod(downsampling_ratios))
+        self.hop_length = int(np.prod(downsampling_ratios) * (output_sampling_rate / input_sampling_rate))
         self.num_samples = self.hop_length * 80  # feature extractor will pad to multiple of hop_length
         self.num_channels = num_channels
         self.num_mel_bins = num_mel_bins
         self.stride = stride
-        self.mel_hop_length = self.hop_length  # match acoustic encoder's downsampling ratio
+        self.mel_hop_length = int(np.prod(downsampling_ratios))
         self.encoder_hidden_size = encoder_hidden_size
         self.downsampling_ratios = downsampling_ratios
         self.hidden_size = hidden_size
@@ -113,12 +113,13 @@ class Xcodec2ModelTester:
             "output_hidden_size": self.semantic_hidden_size,
         }
 
-        return Xcodec2Config(
+        return NeuCodecConfig(
             encoder_hidden_size=self.encoder_hidden_size,
             downsampling_ratios=self.downsampling_ratios,
             hidden_size=self.hidden_size,
             semantic_model_config=semantic_model_config,
-            sampling_rate=self.sample_rate,
+            input_sampling_rate=self.input_sampling_rate,
+            output_sampling_rate=self.output_sampling_rate,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             num_hidden_layers=self.num_hidden_layers,
@@ -129,23 +130,25 @@ class Xcodec2ModelTester:
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
-        model = Xcodec2Model(config=config).to(torch_device).eval()
+        model = NeuCodecModel(config=config).to(torch_device).eval()
         input_values = inputs_dict["input_values"]
         input_features = inputs_dict["input_features"]
         result = model(input_values, input_features)
+        # output audio is resampled from `input_sampling_rate` (16kHz) to `output_sampling_rate` (24kHz)
+        expected_num_samples = int(self.num_samples * config.output_sampling_rate / config.input_sampling_rate)
         self.parent.assertEqual(
             result.audio_values.shape,
-            (self.batch_size, self.num_channels, self.num_samples),
+            (self.batch_size, self.num_channels, expected_num_samples),
         )
 
 
 @require_torch
-class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Xcodec2Model,) if is_torch_available() else ()
+class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (NeuCodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
     test_torch_exportable = False
-    pipeline_model_mapping = {"feature-extraction": Xcodec2Model} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": NeuCodecModel} if is_torch_available() else {}
     additional_model_inputs = ["input_features", "input_features_mask"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -158,10 +161,10 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = Xcodec2ModelTester(self)
+        self.model_tester = NeuCodecModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=Xcodec2Config,
+            config_class=NeuCodecConfig,
             encoder_hidden_size=8,
             hidden_size=32,
             common_properties=[],
@@ -187,42 +190,39 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_values", "input_features", "padding_mask"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip("XCodec2 does not have `inputs_embeds` logics")
+    @unittest.skip("NeuCodecModel does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("Xcodec2Model does not have the usual `attention` logic")
+    @unittest.skip("NeuCodecModel does not have the usual `attention` logic")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Xcodec2Model does not have the usual `attention` logic")
+    @unittest.skip(reason="NeuCodecModel does not have the usual `attention` logic")
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="Xcodec2Model does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="NeuCodecModel does not have the usual `hidden_states` logic")
     def test_hidden_states_output(self):
         pass
 
 
 @slow
 @require_torch
-class Xcodec2IntegrationTest(unittest.TestCase):
+class NeuCodecIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2"
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 
     def test_integration(self):
-        """
-        reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
-        """
-        results_path = self.fixtures_path / "expected_results_single.json"
+        results_path = self.fixtures_path / "expected_results.json"
         with open(results_path, "r") as f:
             raw_data = json.load(f)
-        exp_code = torch.tensor(raw_data["audio_codes"])
-        exp_recon = torch.tensor(raw_data["recon_wav"])
-        exp_codec_error = float(raw_data["codec_error"])
+        exp_code = torch.tensor(raw_data["audio_codes"][0])
+        exp_recon = torch.tensor(raw_data["recon_wavs"][0])
+        exp_codec_error = float(raw_data["codec_errors"][0])
 
-        model_id = "bezzam/xcodec2-hf"
-        model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
+        model_id = "neuphonic/neucodec"
+        model = NeuCodecModel.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -252,11 +252,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             self.assertTrue(torch.equal(dec[..., : enc_dec.shape[-1]], enc_dec))
 
     def test_batch_integration(self):
-        """
-        reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_batch-py
-        NOTE (ebezzam): PyPI model does not support batch inference but we compare against its per-sample results
-        """
-        results_path = self.fixtures_path / "expected_results_batch.json"
+        results_path = self.fixtures_path / "expected_results.json"
         with open(results_path, "r") as f:
             raw_data = json.load(f)
         num_samples = len(raw_data["audio_codes"])
@@ -264,8 +260,8 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         exp_recons = [torch.tensor(r) for r in raw_data["recon_wavs"]]
         exp_codec_errors = raw_data["codec_errors"]
 
-        model_id = "bezzam/xcodec2-hf"
-        model = Xcodec2Model.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
+        model_id = "neuphonic/neucodec"
+        model = NeuCodecModel.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
