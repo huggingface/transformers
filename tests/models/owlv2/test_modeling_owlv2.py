@@ -534,6 +534,16 @@ class Owlv2ForObjectDetectionTester:
         }
         return config, inputs_dict
 
+    def prepare_labels(self):
+        batch_size = self.vision_model_tester.batch_size
+        return [
+            {
+                "class_labels": torch.tensor([0], device=torch_device),
+                "boxes": torch.tensor([[0.5, 0.5, 0.2, 0.2]], device=torch_device),
+            }
+            for _ in range(batch_size)
+        ]
+
 
 @require_torch
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
@@ -551,6 +561,25 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_detection_loss(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values, input_ids, attention_mask = config_and_inputs
+        model = Owlv2ForObjectDetection(config).to(torch_device)
+        model.train()
+        labels = self.model_tester.prepare_labels()
+        result = model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+        )
+        self.assertIsNotNone(result.loss)
+        self.assertIsNotNone(result.loss_dict)
+        self.assertIn("loss_class", result.loss_dict)
+        self.assertIn("loss_bbox", result.loss_dict)
+        self.assertIn("loss_giou", result.loss_dict)
+        result.loss.backward()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
