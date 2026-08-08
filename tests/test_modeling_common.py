@@ -3834,6 +3834,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "kosmos-2",
                 "mllama",
                 "lighton_ocr",
+                "canary",
                 "parakeet_encoder",
                 "parakeet_ctc",
                 "pi0",
