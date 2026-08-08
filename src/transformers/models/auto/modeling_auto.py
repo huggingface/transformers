@@ -316,6 +316,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mimi", "MimiModel"),
         ("mimo_v2_flash", "MiMoV2FlashModel"),
         ("minicpm3", "MiniCPM3Model"),
+        ("minicpm4", "MiniCPM4Model"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
@@ -540,6 +541,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
+        ("voxcpm2", "VoxCPM2Model"),
         ("voxtral", "VoxtralModel"),
         ("voxtral_encoder", "VoxtralEncoder"),
         ("voxtral_realtime", "VoxtralRealtimeModel"),
@@ -779,6 +781,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mellum", "MellumForCausalLM"),
         ("mimo_v2_flash", "MiMoV2FlashForCausalLM"),
         ("minicpm3", "MiniCPM3ForCausalLM"),
+        ("minicpm4", "MiniCPM4ForCausalLM"),
         ("minimax", "MiniMaxForCausalLM"),
         ("minimax_m2", "MiniMaxM2ForCausalLM"),
         ("minimax_m3_vl_text", "MiniMaxM3VLForCausalLM"),
@@ -1412,6 +1415,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
         ("minicpm3", "MiniCPM3ForSequenceClassification"),
+        ("minicpm4", "MiniCPM4ForSequenceClassification"),
         ("minimax", "MiniMaxForSequenceClassification"),
         ("ministral", "MinistralForSequenceClassification"),
         ("ministral3", "Ministral3ForSequenceClassification"),
@@ -1834,6 +1838,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vits", "VitsModel"),
+        ("voxcpm2", "VoxCPM2Model"),
     ]
 )
 
