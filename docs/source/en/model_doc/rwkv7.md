@@ -135,6 +135,30 @@ otherwise hand a segment's first token the previous sequence's last hidden state
 A malformed boundary list raises rather than quietly restarting the recurrence in
 the wrong places.
 
+### Fine-tuning
+
+The projections a PEFT adapter would normally attach to are `receptance`, `key`,
+`value` and `output` in the time-mix, and `key` and `value` in the channel-mix.
+The last two share their names with the time-mix pair, so a bare
+`target_modules=["key", "value"]` attaches to both blocks, not just the time-mix:
+
+```python
+from peft import LoraConfig, get_peft_model
+
+# Six projections per layer. To attach to the time-mix alone, qualify the names:
+# ["att.receptance", "att.key", "att.value", "att.output"].
+config = LoraConfig(r=8, lora_alpha=16, target_modules=["receptance", "key", "value", "output"])
+model = get_peft_model(model, config)
+```
+
+Trainers that chunk the loss over the output projection may read the state back
+off the model output under an attention model's name. TRL's `SFTTrainer` defaults
+to `loss_type="chunked_nll"`, whose chunked head reads `outputs.past_key_values`;
+this model returns its recurrence in `state`, as `MambaOutput` returns its own in
+`cache_params`, and neither name is found. Pass `loss_type="nll"` on TRL versions
+where the chunked head still reads the field unconditionally; it skips that path
+entirely.
+
 ### Getting good decode throughput
 
 Single-stream decode is dominated by per-kernel launch overhead, so the compile mode
