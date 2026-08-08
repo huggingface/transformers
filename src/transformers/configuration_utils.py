@@ -1019,8 +1019,14 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PreTrainedConfig().to_dict()
 
-        # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        # get class specific config dict. The instance is only used to diff against, so we silence the
+        # validation warnings it triggers: they are about the class defaults, not about `self`
+        verbosity = logging.get_verbosity()
+        logging.set_verbosity_error()
+        try:
+            class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        finally:
+            logging.set_verbosity(verbosity)
 
         serializable_config_dict = {}
 
