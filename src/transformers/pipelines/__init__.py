@@ -793,9 +793,11 @@ def pipeline(
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `hf auth login`.
-        device (`int` or `str` or `torch.device`):
+        device (`int` or `str` or `torch.device`, *optional*):
             Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
-            pipeline will be allocated.
+            pipeline will be allocated. When left unset, the pipeline is automatically placed on the first available
+            accelerator (CUDA, MPS, XPU, ...) and only falls back to CPU when none is available; the model is moved
+            there for you. Pass `device="cpu"` (or `-1`) to force CPU. Cannot be used together with `device_map`.
         device_map (`str` or `dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
@@ -808,9 +810,10 @@ def pipeline(
 
             </Tip>
 
-        dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
+        dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
+            Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
+            model in the dtype it was saved in. Pass an explicit `torch.float16`, `torch.bfloat16`, `torch.float32`,
+            ... to override it.
         trust_remote_code (`bool`, *optional*, defaults to `False`):
             Whether or not to allow for custom code defined on the Hub in their own modeling, configuration,
             tokenization or even pipeline files. This option should only be set to `True` for repositories you trust
