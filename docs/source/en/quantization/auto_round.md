@@ -176,7 +176,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2, 4, and 8 bits. We recommend using the auto-round kernel (ark) backend for inference. PyTorch 2.8.0 or later is required when using ARK.
+Supports 2, 4, and 8 bits. We recommend using the AutoRound Kernel (ARK) backend for inference. PyTorch 2.8.0 or later is required with ARK.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
