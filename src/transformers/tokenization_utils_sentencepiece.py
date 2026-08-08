@@ -231,8 +231,29 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        # Special tokens must not be routed through `self.sp_model.decode`: SentencePiece treats
+        # unknown/control pieces specially (e.g. it silently drops pieces it doesn't recognize as
+        # part of its own vocabulary), so we keep them verbatim and only delegate the runs of
+        # ordinary (non-special) pieces to the SentencePiece model. This also ensures byte-fallback
+        # pieces such as "<0x0A>" or "<0xF0>" are correctly decoded back into their original
+        # characters instead of being left as literal hex placeholders.
+        all_special_tokens = set(self.all_special_tokens)
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            if token in all_special_tokens:
+                if not prev_is_special and current_sub_tokens:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+
+        return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
