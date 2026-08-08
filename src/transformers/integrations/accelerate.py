@@ -958,3 +958,27 @@ def force_accelerate_hooks(child_module_names: str | list[str]) -> Callable:
         return wrapped
 
     return decorator
+
+
+def device_map_uses_accelerator(device_map: dict | str | int | None) -> bool:
+    """Detect whether the device map contains any non-cpu device"""
+    if device_map is None:
+        return False
+
+    # Single device
+    if not isinstance(device_map, dict):
+        if isinstance(device_map, int):
+            return True
+        device = torch.device(device_map)
+        return device.type not in {"cpu", "meta"}
+
+    # Multi device
+    for target in device_map.values():
+        if target == "disk":
+            continue
+        if isinstance(target, int):
+            return True
+        if torch.device(target).type not in {"cpu", "meta"}:
+            return True
+
+    return False

@@ -98,9 +98,9 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             torch.tensor(sample["audio"]["array"]), 48_000, 16_000
         ).numpy()
 
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm", use_kernels=False
+        ).to(torch_device)
         processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
 
         input_values = processor(resampled_audio, return_tensors="pt").input_values

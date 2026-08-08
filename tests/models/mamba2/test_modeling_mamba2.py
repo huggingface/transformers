@@ -18,9 +18,9 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_kernels,
     require_torch,
     require_torch_accelerator,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -217,6 +217,10 @@ class Mamba2ModelTester:
         model.to(device)
         model.eval()
 
+        # Enable kernels path
+        if device != "cpu":
+            model.use_kernels = True
+
         input_ids = input_ids[:1].to(device)
         prefill_len = input_ids.shape[1] // 2 + 1
         prompt = input_ids[:, :prefill_len]
@@ -250,8 +254,9 @@ class Mamba2ModelTester:
             model.gradient_checkpointing_enable()
 
         token_emb = model.embeddings(input_ids)
-        outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
-        outputs_slow = model.layers[0].mixer.torch_forward(token_emb)
+        outputs_slow = model.layers[0].mixer(token_emb)
+        model.use_kernels = True
+        outputs_fast = model.layers[0].mixer(token_emb)
 
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
@@ -293,13 +298,13 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
-    @require_kernels
+    @scoped_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_chunked_prefill(*config_and_inputs, device=torch_device)
 
     @require_torch_accelerator
-    @require_kernels
+    @scoped_kernels
     def test_mamba2_slow_vs_fast_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
@@ -308,7 +313,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # creates a grouped SSD configuration in the mamba2 layers
     # See https://github.com/huggingface/transformers/pull/37533/
     @require_torch_accelerator
-    @require_kernels
+    @scoped_kernels
     def test_mamba2_slow_vs_fast_forward_grouped(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs[0].n_groups //= 2

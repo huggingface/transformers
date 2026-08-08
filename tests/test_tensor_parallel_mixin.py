@@ -98,8 +98,8 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
-    """Wrapper to set up distributed environment and run the test function."""
+def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs, use_hub_kernels):
+    """Wrapper to set up (distributed) environment and run the test function."""
 
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -107,6 +107,9 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
         os.environ["LOCAL_RANK"] = str(rank)
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = str(port)
+
+    # Kernelize is propogated via envs so we pass it to the child as well
+    os.environ["USE_HUB_KERNELS"] = use_hub_kernels
 
     world_size = tp
     setup_dist_env(rank, world_size, port)
@@ -120,14 +123,15 @@ def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
 
 
 def _init_distributed(tp: int, max_retries: int = 5, backend: str = "gloo"):
-    """Decorator to initialize distributed environment and spawn processes."""
+    """Decorator to initialize (distributed) environment and spawn processes."""
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
             world_size = tp
             for attempt in range(max_retries):
                 port = _find_free_port()
-                spawn_args = (func, tp, port, backend, args, kwargs)
+                use_hub_kernels = os.environ.get("USE_HUB_KERNELS", "NO")
+                spawn_args = (func, tp, port, backend, args, kwargs, use_hub_kernels)
                 try:
                     mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
                     return

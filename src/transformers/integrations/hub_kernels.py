@@ -24,9 +24,9 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
-from ..utils.generic import is_flash_attention_requested
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -57,8 +57,17 @@ _MISSING_KERNELS_MESSAGE = (
 )
 
 
-_TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
-_kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
+def _kernels_enabled() -> bool:
+    return os.environ.get("USE_HUB_KERNELS", "YES").upper() in ENV_VARS_TRUE_VALUES
+
+
+def _ensure_kernels_enabled() -> None:
+    if not _kernels_enabled():
+        value = os.environ.get("USE_HUB_KERNELS", "YES")
+        raise ValueError(
+            "Hub kernels are disabled through the environment variable "
+            f"`USE_HUB_KERNELS={value}`. Set `USE_HUB_KERNELS=YES` to enable them."
+        )
 
 
 # Maps from func name to the internal module path
@@ -95,37 +104,21 @@ if is_kernels_available():
     )
     from kernels import use_kernelized_func as _kernels_use_kernelized_func
 
+    # We change the strategy to prepare the metadata like kernels but the exchange
+    # at runtime can be determined by the env variable `USE_HUB_KERNELS`
     def use_kernel_forward_from_hub(layer_name: str):
-        if _kernels_enabled:
-            return _kernels_use_kernel_forward_from_hub(layer_name)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
+        return _kernels_use_kernel_forward_from_hub(layer_name)
 
     def use_kernelized_func(module_names: list[Callable] | Callable):
-        if _kernels_enabled:
-            if isinstance(module_names, Callable):
-                module_names = [module_names]
-            return _kernels_use_kernelized_func(*module_names)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
+        if isinstance(module_names, Callable):
+            module_names = [module_names]
+        return _kernels_use_kernelized_func(*module_names)
 
     def use_kernel_func_from_hub(layer_name: str):
-        if _kernels_enabled:
-            logger.warning_once(
-                "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
-            )
-            return _kernels_use_kernel_forward_from_hub(layer_name)
-        else:
-            logger.warning_once(
-                f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
-            )
-            return lambda cls: cls
+        logger.warning_once(
+            "`use_kernel_func_from_hub` is deprecated in transformers v5.16 and will be removed in the future. Please use `use_kernel_forward_from_hub` instead."
+        )
+        return _kernels_use_kernel_forward_from_hub(layer_name)
 
     # The default kernel mapping is built lazily (see `get_kernel_mapping_transformers`) so that simply
     # importing transformers (or `transformers.pipeline`) does not instantiate any `LayerRepository` /
@@ -515,14 +508,13 @@ if is_kernels_available():
         return _KERNEL_MAPPING_CACHE
 
     def register_kernel_mapping_transformers(mapping=None):
+        _ensure_kernels_enabled()
         if mapping is None:
             mapping = get_kernel_mapping_transformers()
         register_kernel_mapping(mapping)
 
 else:
-    _kernels_enabled = False
-
-    # Stub to make decorators in transformers work when `kernels`
+    # Stub to make decorators int transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
         def decorator(cls):
@@ -632,11 +624,7 @@ def load_and_register_attn_kernel(
 
     # create revision xor version
     rev = rev.strip() if rev else None
-    version = None
-    if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
-        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+    version = FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1) if rev is None else None
 
     # Load the kernel from hub
     try:
@@ -678,7 +666,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
-    if is_kernels_available() and _kernels_enabled:
+    if is_kernels_available() and _kernels_enabled():
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
@@ -725,6 +713,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
+    _ensure_kernels_enabled()
 
     def get_device(device_type):
         if device_type == "cuda" and is_rocm_platform():

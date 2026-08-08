@@ -27,8 +27,10 @@ from transformers import PerceiverConfig
 from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     require_torch,
+    require_torch_accelerator,
     require_torch_multi_gpu,
     require_vision,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -815,6 +817,28 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                             )
 
                     loss.backward()
+
+    @require_torch_accelerator
+    @scoped_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """Overriden to accomodate unique input preparation"""
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class=model_class.__name__):
+                config, inputs = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+
+                model = model_class(config).to(torch_device)
+                model.eval()
+                model.use_kernels = True
+
+                prepared_inputs = self._prepare_for_class(inputs, model_class)
+                prepared_inputs = {
+                    key: value.to(torch_device) if isinstance(value, torch.Tensor) else value
+                    for key, value in prepared_inputs.items()
+                }
+
+                with torch.no_grad():
+                    model(**prepared_inputs)
 
     @require_torch_multi_gpu
     @unittest.skip(
