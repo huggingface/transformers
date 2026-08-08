@@ -816,13 +816,19 @@ class InklingAudioModelEmbeddings(nn.Module):
         return inputs_embeds
 
 
+@auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
         self.norm = InklingRMSNorm(config.text_hidden_size, eps=1e-6)
 
-    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, audio_input_ids: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
+        r"""
+        audio_input_ids (`torch.Tensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
+            Mel-spectrogram frames of the input audios.
+        """
         hidden_states = self.embed_audio_tokens(audio_input_ids)
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPooling(
@@ -947,6 +953,7 @@ def plan_out_scales(
     return scales[idxs]
 
 
+@auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
@@ -979,7 +986,8 @@ class InklingVisionModel(InklingPreTrainedModel):
         self.final_norm = InklingRMSNorm(config.text_hidden_size)
         self.post_init()
 
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
         for layer in self.encoder_layers:
