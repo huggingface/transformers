@@ -880,6 +880,24 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    # The shard filename comes from an attacker-controlled `index.json` `weight_map` value
+    # when the repo is untrusted. Each entry must be a single relative basename (no path
+    # separators, no absolute path, no `..`) so `os.path.join` below cannot be tricked into
+    # loading a file outside the checkpoint directory (which would otherwise let a malicious
+    # repo silently load an arbitrary local/Hub-cache `.safetensors`/`.bin` file as model
+    # weights, bypassing the `use_safetensors`, `weights_only`, and `trust_remote_code`
+    # gates that the rest of the loader relies on).
+    for shard_filename in shard_filenames:
+        if (
+            shard_filename in ("", ".", "..")
+            or os.path.isabs(shard_filename)
+            or shard_filename != os.path.basename(shard_filename)
+        ):
+            raise ValueError(
+                f"Invalid shard filename in checkpoint index {index_filename!r}: {shard_filename!r}. "
+                "Shard filenames must be a relative basename (no path separators, no absolute path, "
+                "no '..')."
+            )
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
