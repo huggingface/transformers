@@ -370,6 +370,17 @@ class TextGenerationPipelineTests(unittest.TestCase):
         output = text_generator(prompt, stop_sequence=" fe")
         self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
+    def test_stop_strings_from_generation_config(self):
+        # `stop_strings` set on the pipeline's generation config requires the tokenizer to be forwarded to
+        # `generate`; otherwise it raises a ValueError. See https://github.com/huggingface/transformers/issues/34571
+        prompt = """Hello I believe in"""
+        text_generator = pipeline(
+            "text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5, do_sample=False
+        )
+        text_generator.generation_config.stop_strings = [" fe"]
+        output = text_generator(prompt)
+        self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
+
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
         tokenizer = text_generator.tokenizer
