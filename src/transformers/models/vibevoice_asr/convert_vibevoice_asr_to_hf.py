@@ -328,7 +328,7 @@ Usage:
 
 1) Download the original VibeVoice ASR model checkpoint:
 ```bash
-huggingface-cli download microsoft/VibeVoice-ASR --local-dir /path/to/vibevoice-asr
+hf download microsoft/VibeVoice-ASR --local-dir /path/to/vibevoice-asr
 ```
 
 2) Run conversion script (with optional `push_to_hub` argument):
