@@ -18,7 +18,7 @@ import typer
 import typer.main
 from click.testing import CliRunner
 
-import transformers.cli.transformers
+from transformers_cli.run import app
 
 
 @pytest.fixture
