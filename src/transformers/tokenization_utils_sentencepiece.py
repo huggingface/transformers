@@ -16,6 +16,7 @@ SentencePiece-based tokenization class for loading from sentencepiece.model file
 """
 
 import os
+import re
 from shutil import copyfile
 
 
@@ -39,6 +40,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
+_BYTE_FALLBACK_PIECE_RE = re.compile(r"^<0x[0-9A-Fa-f]{2}>$")
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
@@ -231,8 +233,31 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
+        # `self.sp_model.decode` is not a safe drop-in replacement for joining pieces in general:
+        # for pieces it does not cleanly recognize (e.g. hand-built or otherwise out-of-context
+        # piece sequences) it can behave inconsistently, including leaving literal SPIECE_UNDERLINE
+        # markers in its output. So we keep the original join-and-replace behavior for ordinary
+        # pieces, and only delegate contiguous runs of byte-fallback pieces (e.g. "<0x0A>", "<0xF0>")
+        # to `sp_model.decode`, since that is the one case plain string joining cannot handle: it
+        # decodes them back into their original characters instead of leaving literal hex
+        # placeholders.
+        out_pieces = []
+        current_byte_fallback_run = []
+
+        def flush_byte_fallback_run():
+            if current_byte_fallback_run:
+                out_pieces.append(self.sp_model.decode(current_byte_fallback_run))
+                current_byte_fallback_run.clear()
+
+        for token in tokens:
+            if _BYTE_FALLBACK_PIECE_RE.match(token):
+                current_byte_fallback_run.append(token)
+            else:
+                flush_byte_fallback_run()
+                out_pieces.append(token)
+        flush_byte_fallback_run()
+
+        return "".join(out_pieces).replace(SPIECE_UNDERLINE, " ").strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
