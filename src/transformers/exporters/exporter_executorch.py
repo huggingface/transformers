@@ -17,8 +17,8 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda` /
+   `prepare_for_qnn` move the model to the target device/dtype and build the partitioner list.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -139,20 +139,25 @@ class ExecutorchExporter(DynamoExporter):
         if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs, config)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
-            )
+            edge_program_manager: EdgeProgramManager = _lower_to_edge(exported_program, partitioner, config.backend)
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
 
         return executorch_programs_manager
+
+    def _quantize(self, exported_program, config, sample_inputs, dynamic_shapes):
+        # QnnQuantizer's annotation passes assume every node carries a schema and crash on the
+        # `wrap_with_set_grad_enabled` HOP `torch.export` emits; lower to inference IR to inline it away.
+        if config.backend == "qnn":
+            exported_program = exported_program.run_decompositions({})
+        return super()._quantize(exported_program, config, sample_inputs, dynamic_shapes)
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:
@@ -180,6 +185,29 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
             torch.ops.aten.searchsorted.Tensor,
             torch.ops.aten.unique_consecutive.default,
         ],
+    )
+
+
+def _lower_to_edge(exported_program, partitioner, backend):
+    """Lower an (optionally quantized) program to the edge dialect and delegate it to ``partitioner``.
+
+    QNN can't reuse the generic path: its HTP compiler needs its own edge-transform passes — notably
+    `FoldQDQ`, which folds the PT2E `quantize`/`dequantize` ops into HTP-native quant encodings. Without
+    them the raw dequantize ops reach the backend and graph finalization fails (`op validation ... 3110`).
+    Mirror `to_edge_transform_and_lower_to_qnn` for QNN; every other backend uses the plain path.
+    """
+    if backend == "qnn":
+        from executorch.backends.qualcomm._passes.qnn_pass_manager import QnnPassManager
+        from executorch.backends.qualcomm.utils.utils import qnn_edge_config
+
+        aten_program = QnnPassManager().transform_for_export_pipeline(exported_program)
+        transform_passes = QnnPassManager().get_to_edge_transform_passes(exported_program)
+        return to_edge_transform_and_lower(
+            aten_program, transform_passes=transform_passes, partitioner=partitioner, compile_config=qnn_edge_config()
+        )
+
+    return to_edge_transform_and_lower(
+        exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
     )
 
 
@@ -222,7 +250,7 @@ def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
     return torch.utils._pytree.tree_map_only(torch.Tensor, lambda t: t.contiguous(), sample_inputs)
 
 
-def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """CPU inference via XNNPACK.
 
     Moves the model to CPU: XNNPACK's partitioner/serializer and the edge-lowering passes all
@@ -240,7 +268,47 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+def prepare_for_qnn(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
+    """On-device inference via the Qualcomm QNN (HTP/NPU) backend.
+
+    Skipped in this repo's CI — the Qualcomm AI Engine Direct SDK isn't installed there (the
+    `executorch.backends.qualcomm` package won't even import without it). The SDK does install on a
+    plain x86 host, though, and the export path is verified against it (the `.pte` is built via the
+    SDK's HTP emulator, no Qualcomm device needed); see `test_qnn_export`.
+
+    The model is traced on CPU (like XNNPACK), then delegated to the HTP via `QnnPartitioner`. Pass a
+    `QnnQuantizer` through `config.quantizer` for HTP int8/16 (the generic PT2E step quantizes the graph
+    before this lowering); with no quantizer the HTP compiler spec runs fp16 (`use_fp16=True`). The
+    `executorch.backends.qualcomm` imports are local because that package raises on import without the
+    SDK — a module-level import would break the ExecuTorch exporter for the XNNPACK/CUDA backends too.
+    """
+    from executorch.backends.qualcomm.partition.qnn_partitioner import QnnPartitioner
+    from executorch.backends.qualcomm.serialization.qc_schema import QcomChipset
+    from executorch.backends.qualcomm.utils.utils import (
+        generate_htp_compiler_spec,
+        generate_qnn_executorch_compiler_spec,
+    )
+
+    model.requires_grad_(False)
+    model = model.to(device="cpu")
+
+    # The HTP has no rank-0 tensors, so QNN promotes scalars to rank-1 — but leaves mutable-buffer
+    # placeholders rank-0, so `StaticLayer.cumulative_length` (a scalar counter) fails its input-mutation
+    # writeback at `to_executorch`. Make it 1D up front (broadcast-equivalent) so the writeback matches.
+    for layer in getattr(sample_inputs.get("past_key_values"), "layers", ()):
+        cumulative_length = getattr(layer, "cumulative_length", None)
+        if isinstance(cumulative_length, torch.Tensor) and cumulative_length.ndim == 0:
+            layer.cumulative_length = cumulative_length.reshape(1)
+
+    backend_options = generate_htp_compiler_spec(use_fp16=config.quantizer is None)
+    compiler_specs = generate_qnn_executorch_compiler_spec(
+        soc_model=getattr(QcomChipset, config.soc_model), backend_options=backend_options
+    )
+    partitioner = [QnnPartitioner(compiler_specs)]
+    return model, _make_contiguous(sample_inputs), partitioner
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any], config: ExecutorchConfig):
     """GPU inference via the ExecuTorch CUDA backend, decoupled from the model's device.
 
     The backend requires bfloat16 (upcast here) and a visible GPU — it delegates ops to Triton
@@ -262,6 +330,7 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
 _BACKEND_PREPARE = {
     "xnnpack": prepare_for_xnnpack,
     "cuda": prepare_for_cuda,
+    "qnn": prepare_for_qnn,
 }
 
 
@@ -1109,6 +1178,33 @@ def _patch_squeeze_node_visitors(original):
         cls = original[key]
         new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
     return new
+
+
+@register_patch("executorch.qnn", "executorch.backends.qualcomm._passes.replace_inf_values.ReplaceInfValues.call")
+def _patch_replace_inf_values(original):
+    """QNN's ``ReplaceInfValues`` pass ``setattr``s every float buffer back onto the graph module by name,
+    which ``register_buffer`` rejects for nested (dotted) names such as ``model.rotary_emb.inv_freq``. The
+    pass already clamps ``inf`` in place, so clamp the dotted float buffers ourselves, hide them from the
+    pass's ``setattr``, and restore them afterwards.
+    """
+
+    def call(self, graph_module):
+        hidden = []
+        for name, buffer in list(graph_module.named_buffers()):
+            if "." in name and buffer.is_floating_point():
+                buffer[buffer == float("inf")] = 255
+                buffer[buffer == float("-inf")] = -255
+                parent_path, _, attr = name.rpartition(".")
+                parent = graph_module.get_submodule(parent_path)
+                hidden.append((parent, attr, buffer))
+                delattr(parent, attr)
+        try:
+            return original(self, graph_module)
+        finally:
+            for parent, attr, buffer in hidden:
+                parent.register_buffer(attr, buffer, persistent=False)
+
+    return call
 
 
 # ── Stage 4: FX program fixes ─────────────────────────────────────────────────
