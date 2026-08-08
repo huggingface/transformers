@@ -800,6 +800,86 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "step3p7": [
+            # ---- Pass 1: top-level prefix renames ----
+            WeightRenaming(source_patterns=r"^vision_model\.", target_patterns="model.vision_model."),
+            WeightRenaming(source_patterns=r"^vit_large_projector\.", target_patterns="model.multi_modal_projector."),
+            # model.{embed_tokens,layers,norm}.* → model.language_model.* (explicit to avoid
+            # negative lookaheads that break process_target_pattern during reverse mapping)
+            WeightRenaming(
+                source_patterns=r"^model\.embed_tokens\.", target_patterns="model.language_model.embed_tokens."
+            ),
+            WeightRenaming(source_patterns=r"^model\.layers\.", target_patterns="model.language_model.layers."),
+            WeightRenaming(source_patterns=r"^model\.norm\.", target_patterns="model.language_model.norm."),
+            # ---- Pass 2: MoE renames ----
+            WeightRenaming(source_patterns=r"\.moe\.gate\.weight$", target_patterns=".mlp.gate.weight"),
+            WeightRenaming(
+                source_patterns=r"\.moe\.router_bias$",
+                target_patterns=".mlp.gate.e_score_correction_bias",
+            ),
+            # A plain `WeightRenaming`, so FP8's `update_weight_conversions` won't auto-extend it
+            # with a `weight_scale_inv` sibling the way it does for the `gate_up_proj`
+            # `WeightConverter` below — the explicit rename right after this one covers that instead.
+            WeightRenaming(source_patterns=r"\.moe\.down_proj\.weight$", target_patterns=".mlp.experts.down_proj"),
+            # `down_proj`'s FP8 dequant scale; not auto-added since the rename above isn't a `WeightConverter`.
+            WeightRenaming(
+                source_patterns=r"\.moe\.down_proj\.weight_scale_inv$",
+                target_patterns=".mlp.experts.down_proj_scale_inv",
+            ),
+            WeightRenaming(source_patterns=r"\.share_expert\.", target_patterns=".mlp.shared_experts."),
+            # ---- Tensor operations (run after all renames) ----
+            # MoE gate_proj + up_proj → gate_up_proj (already stacked per layer, concat dim=1)
+            WeightConverter(
+                source_patterns=[r"moe.gate_proj.weight", r"moe.up_proj.weight"],
+                target_patterns=r"mlp.experts.gate_up_proj",
+                operations=[Concatenate(dim=1)],
+            ),
+        ],
+        # Scoped separately from "step3p7" above: bare substring patterns like `\.attn\.` -> `.self_attn.`
+        # would otherwise also match the text decoder's `language_model.layers.*.self_attn.*` keys.
+        "step3p5_vision": [
+            WeightRenaming(source_patterns=r"^conv1\.weight$", target_patterns="embeddings.patch_embedding.weight"),
+            WeightRenaming(
+                source_patterns=r"^positional_embedding$",
+                target_patterns="embeddings.position_embedding.weight",
+            ),
+            WeightRenaming(source_patterns=r"^transformer\.resblocks\.", target_patterns="layers."),
+            WeightRenaming(source_patterns=r"^ln_pre\.", target_patterns="pre_layernorm."),
+            WeightRenaming(source_patterns=r"^vit_downsampler1\.", target_patterns="downsampler1."),
+            WeightRenaming(source_patterns=r"^vit_downsampler2\.", target_patterns="downsampler2."),
+            WeightRenaming(source_patterns=r"\.ls_1\.gamma$", target_patterns=".lambda_1"),
+            WeightRenaming(source_patterns=r"\.ls_2\.gamma$", target_patterns=".lambda_2"),
+            WeightRenaming(source_patterns=r"\.mlp\.c_fc\.", target_patterns=".mlp.fc1."),
+            WeightRenaming(source_patterns=r"\.mlp\.c_proj\.", target_patterns=".mlp.fc2."),
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=".self_attn."),
+            WeightRenaming(source_patterns=r"\.ln_1\.", target_patterns=".layernorm_before."),
+            WeightRenaming(source_patterns=r"\.ln_2\.", target_patterns=".layernorm_after."),
+            # Unfuse qkv and apply rope permutation.
+            WeightConverter(
+                source_patterns=r"attn\.in_proj_weight",
+                target_patterns=[
+                    r"attn.q_proj.weight",
+                    r"attn.k_proj.weight",
+                    r"attn.v_proj.weight",
+                ],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
+            ),
+            WeightConverter(
+                source_patterns=r"attn\.in_proj_bias",
+                target_patterns=[
+                    r"attn.q_proj.bias",
+                    r"attn.k_proj.bias",
+                    r"attn.v_proj.bias",
+                ],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
+            ),
+        ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
         "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
