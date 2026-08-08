@@ -2554,15 +2554,23 @@ class PreTrainedModel(
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
-        # If the config does not specify any tying, return empty dict
-        # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
-        # modules do not have any word embeddings!
-        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
-        if not tie_word_embeddings:
-            return {}
         # If None, return empty dict
-        elif tied_mapping is None:
+        if tied_mapping is None:
             return {}
+        # `tie_word_embeddings` only gates the output embeddings (a `nn.Linear` head): aliases between input embeddings
+        # (e.g. `encoder.embed_tokens` and `shared` in T5) are structural, and must be tied in all cases.
+        if not getattr(self.config, "tie_word_embeddings", False):
+            modules = dict(self.named_modules(remove_duplicate=False))
+            # Regex/module-form entries do not resolve to a module here, so they are treated as head-tying and
+            # dropped. This is intended: no model currently combines them with `tie_word_embeddings=False`.
+            tied_mapping = {
+                target: source
+                for target, source in tied_mapping.items()
+                if isinstance(modules.get(target.rsplit(".", 1)[0]), nn.Embedding)
+                and isinstance(modules.get(source.rsplit(".", 1)[0]), nn.Embedding)
+            }
+            if not tied_mapping:
+                return {}
         # Short-cut for the most common cases: if the tied weights mapping only contains already expanded params,
         # return it directly (the regex matches names containing only letters, numbers, dots, and underscores to make
         # sure it does not contain a regex pattern, and finishing by "bias" or "weight" to make sure it's not a module)
