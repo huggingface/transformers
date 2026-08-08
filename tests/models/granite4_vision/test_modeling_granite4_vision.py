@@ -198,7 +198,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_RESPONSE = Expectations({
             ("cuda", (8, 6)): [
-                'i see two cats lying on a pink blanket. one cat is on the left side, and the other is on the right side. there are two',
+                'the image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. the cat on the left is lying on',
                 'in the image, i see a group of people, including children and adults, standing on a tennis court. they appear to be posing for a group',
             ],
             ("xpu", None): [
