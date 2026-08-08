@@ -351,6 +351,50 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
         self.assertEqual(set(topk_indices[0, -1].tolist()), {3, 4})
 
+    def test_dsa_indexer_requires_shared_4d_attention_mask(self):
+        config = get_tiny_config(use_dsa=True)
+        config.index_topk = 1
+        indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0).eval()
+        for parameter in indexer.parameters():
+            torch.nn.init.zeros_(parameter)
+
+        sequence_length = 4
+        hidden_states = torch.zeros(1, sequence_length, config.hidden_size)
+        q_lora = torch.zeros(1, sequence_length, config.q_lora_rank)
+        cos = torch.ones(1, sequence_length, config.qk_rope_head_dim // 2)
+        sin = torch.zeros_like(cos)
+        allowed = torch.eye(sequence_length, dtype=torch.bool).view(1, 1, sequence_length, sequence_length)
+
+        for attention_mask in (allowed, torch.where(allowed, 0.0, -10_000.0)):
+            with self.subTest(dtype=attention_mask.dtype):
+                topk_indices = indexer(
+                    hidden_states,
+                    q_lora,
+                    cos,
+                    sin,
+                    None,
+                    torch.arange(sequence_length),
+                    attention_mask=attention_mask,
+                )
+                torch.testing.assert_close(
+                    topk_indices.squeeze(0).squeeze(-1),
+                    torch.arange(sequence_length, dtype=torch.int32),
+                )
+
+        per_head_mask = allowed.expand(-1, config.num_attention_heads, -1, -1).clone()
+        per_head_mask[:, 1, :, 0] = False
+
+        with self.assertRaisesRegex(ValueError, "different per-head masks are not supported"):
+            indexer(
+                hidden_states,
+                q_lora,
+                cos,
+                sin,
+                None,
+                torch.arange(sequence_length),
+                attention_mask=per_head_mask,
+            )
+
     def test_dsa_sparse_attention_left_padding_uses_physical_cache_positions(self):
         query = torch.zeros(1, 1, 1, 2)
         key = torch.zeros(1, 1, 5, 2)
@@ -371,6 +415,41 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(actual, torch.tensor([[[[7.0]]]]))
+
+    def test_dsa_sparse_attention_zeroes_finite_fully_masked_rows(self):
+        actual, _ = dsa_sparse_attention_forward(
+            torch.nn.Identity().eval(),
+            query=torch.zeros(1, 1, 1, 2),
+            key=torch.zeros(1, 1, 2, 2),
+            value=torch.tensor([[[[2.0], [6.0]]]]),
+            attention_mask=torch.full((1, 1, 1, 2), -10_000.0),
+            indices=torch.tensor([[[0, 1]]], dtype=torch.int32),
+            cache_position=torch.tensor([1]),
+            scaling=1.0,
+        )
+
+        torch.testing.assert_close(actual, torch.zeros_like(actual))
+
+    def test_dsa_sdpa_zeroes_finite_fully_masked_rows(self):
+        config = get_tiny_config(use_dsa=True)
+        config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
+        config._attn_implementation = "sdpa"
+        model = Dots3NoteOmniTextModel(config).eval()
+        hidden_states = torch.randn(1, 2, config.hidden_size)
+        position_ids = torch.arange(2).unsqueeze(0)
+        cos, sin = model.rotary_emb(hidden_states, position_ids)
+
+        with torch.no_grad():
+            actual, _ = model.layers[0].self_attn(
+                hidden_states,
+                cos,
+                sin,
+                position_ids,
+                attention_mask=torch.full((1, 1, 2, 2), -10_000.0),
+                cache_position=torch.arange(2),
+            )
+
+        torch.testing.assert_close(actual, torch.zeros_like(actual))
 
     def test_dsa_chunked_prefill_matches_one_shot(self):
         config = get_tiny_config(use_dsa=True)
@@ -631,6 +710,31 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         self.assertEqual(outputs.audio_embeds.shape, (2, config.adapter_output_size))
         self.assertEqual(outputs.audio_token_lengths.tolist(), [2])
 
+    def test_audio_flash_attention_3_uses_requested_backend(self):
+        config = get_tiny_config().audio_config
+        config.attention_backend = "flash_attention_3"
+        model = Dots3NoteOmniAudioModel(config).eval()
+        requested_backends = []
+
+        def flash_attention_spy(query, key, value, *args, attn_implementation=None, **kwargs):
+            requested_backends.append(attn_implementation)
+            return query
+
+        with patch(
+            "transformers.models.dots3_note_omni.modeling_dots3_note_omni._flash_attention_forward",
+            side_effect=flash_attention_spy,
+        ):
+            with torch.no_grad():
+                outputs = model(
+                    input_features=torch.randn(1, config.feature_size, 16),
+                    chunk_sample_lengths=torch.tensor([64]),
+                    chunk_token_lengths=torch.tensor([2]),
+                    audio_chunk_counts=torch.tensor([1]),
+                )
+
+        self.assertEqual(requested_backends, ["flash_attention_3"] * config.whisper_config["encoder_layers"])
+        self.assertTrue(torch.isfinite(outputs.audio_embeds).all())
+
     def test_omni_image_and_audio_forward(self):
         config = get_tiny_config()
         model = Dots3NoteOmniForCausalLM(config).eval()
@@ -672,6 +776,67 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
             )
         self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.vocab_size))
         self.assertTrue(torch.isfinite(outputs.logits).all())
+
+    def test_omni_chunked_prefill_processes_cached_media(self):
+        torch.manual_seed(0)
+        config = get_tiny_config(use_dsa=True)
+        config.index_topk = config.max_position_embeddings
+        model = Dots3NoteOmniForCausalLM(config).eval()
+        prefix_ids = torch.tensor([[1, 5]])
+        patch_width = (
+            config.vision_config.num_channels
+            * config.vision_config.temporal_patch_size
+            * config.vision_config.patch_size**2
+        )
+        cases = {
+            "image": (
+                torch.tensor([[config.image_token_id, 7, 2]]),
+                {
+                    "pixel_values": torch.randn(4, patch_width),
+                    "image_grid_thw": torch.tensor([[1, 2, 2]]),
+                },
+            ),
+            "video": (
+                torch.tensor([[config.video_token_id, 7, 2]]),
+                {
+                    "pixel_values_videos": torch.randn(4, patch_width),
+                    "video_grid_thw": torch.tensor([[1, 2, 2]]),
+                },
+            ),
+            "audio": (
+                torch.tensor([[config.audio_token_id, config.audio_token_id, 7, 2]]),
+                {
+                    "input_features": torch.randn(1, config.audio_config.feature_size, 16),
+                    "chunk_sample_lengths": torch.tensor([64]),
+                    "chunk_token_lengths": torch.tensor([2]),
+                    "audio_chunk_counts": torch.tensor([1]),
+                    "audio_token_lengths": torch.tensor([2]),
+                },
+            ),
+        }
+
+        for modality, (suffix_ids, media_inputs) in cases.items():
+            with self.subTest(modality=modality):
+                input_ids = torch.cat((prefix_ids, suffix_ids), dim=-1)
+                attention_mask = torch.ones_like(input_ids)
+
+                with torch.no_grad():
+                    expected = model(
+                        input_ids,
+                        attention_mask=attention_mask,
+                        use_cache=False,
+                        **media_inputs,
+                    ).logits[:, -suffix_ids.shape[1] :]
+                    prefix = model(prefix_ids, attention_mask=torch.ones_like(prefix_ids), use_cache=True)
+                    actual = model(
+                        suffix_ids,
+                        attention_mask=attention_mask,
+                        past_key_values=prefix.past_key_values,
+                        use_cache=True,
+                        **media_inputs,
+                    ).logits
+
+                torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
 
     def test_expert_checkpoint_conversion_roundtrip(self):
         torch.manual_seed(13)

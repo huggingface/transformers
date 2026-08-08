@@ -32,6 +32,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -195,7 +196,7 @@ def _padding_mask_for_key_length(padding_mask, key_length):
 
 
 class Dots3NoteOmniTextIndexer(nn.Module):
-    """Lightning indexer used on the DSA/full-attention layers."""
+    """Inference-only Lightning indexer used on the DSA/full-attention layers."""
 
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -213,7 +214,30 @@ class Dots3NoteOmniTextIndexer(nn.Module):
         self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
 
     @torch.no_grad()
-    def forward(self, hidden_states, q_lora, cos, sin, padding_mask, cache_position, past_key_values=None):
+    def forward(
+        self,
+        hidden_states,
+        q_lora,
+        cos,
+        sin,
+        padding_mask,
+        cache_position,
+        past_key_values=None,
+        attention_mask=None,
+    ):
+        if attention_mask is not None:
+            if attention_mask.ndim == 4:
+                if attention_mask.shape[1] != 1:
+                    raise ValueError(
+                        "DSA requires an attention mask shared across heads with shape [batch, 1, query, key]; "
+                        f"different per-head masks are not supported, got shape {tuple(attention_mask.shape)}"
+                    )
+                attention_mask = attention_mask[:, 0]
+            elif attention_mask.ndim != 3:
+                raise ValueError(
+                    f"DSA attention_mask must be 3D or 4D after mask preparation, got {attention_mask.ndim}D"
+                )
+
         batch_size, seq_len, _ = hidden_states.shape
         query = self.wq_b(q_lora).view(batch_size, seq_len, self.n_heads, self.head_dim)
         key = self.k_norm(self.wk(hidden_states)).view(batch_size, seq_len, 1, self.head_dim)
@@ -253,11 +277,14 @@ class Dots3NoteOmniTextIndexer(nn.Module):
             causal = key_positions[None, None, :] > query_cache_positions[:, start:stop, None]
             index_scores.masked_fill_(causal, float("-inf"))
             if padding_mask is not None:
-                if padding_mask.ndim == 2:
-                    padding = _padding_mask_for_key_length(padding_mask, key.shape[1])[:, None]
-                    index_scores.masked_fill_(~padding, float("-inf"))
+                padding = _padding_mask_for_key_length(padding_mask, key.shape[1])[:, None]
+                index_scores.masked_fill_(~padding, float("-inf"))
+            if attention_mask is not None:
+                mask = attention_mask[:, start:stop, : key.shape[1]]
+                if mask.dtype == torch.bool:
+                    index_scores.masked_fill_(~mask, float("-inf"))
                 else:
-                    index_scores = index_scores + padding_mask[:, start:stop, : key.shape[1]]
+                    index_scores = index_scores + mask.float()
             topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
 
         return torch.cat(topk_indices, dim=1)
@@ -504,8 +531,7 @@ def dsa_sparse_attention_forward(
             probabilities = F.softmax(scores, dim=-1).to(query.dtype)
             fully_masked = ~head_valid.any(dim=-1, keepdim=True)
             if selected_mask is not None and selected_mask.dtype != torch.bool:
-                mask_min = torch.finfo(selected_mask.dtype).min
-                fully_masked = fully_masked | (selected_mask.amax(dim=-1, keepdim=True) <= mask_min / 2)
+                fully_masked = fully_masked | (selected_mask.amax(dim=-1, keepdim=True) < 0)
             probabilities.masked_fill_(fully_masked, 0)
             probabilities = F.dropout(probabilities, p=dropout, training=module.training)
             selected_value = value[batch_indices, head_indices, token_indices[:, None], :]
@@ -669,6 +695,7 @@ class Dots3NoteOmniTextAttention(nn.Module):
                 padding_mask,
                 cache_position,
                 past_key_values=past_key_value,
+                attention_mask=attention_mask,
             )
 
             sparse_fallback = (
@@ -728,6 +755,20 @@ class Dots3NoteOmniTextAttention(nn.Module):
             padding_mask=padding_mask,
             **kwargs,
         )
+
+        # SDPA treats a finite all-negative additive row as a bias rather than as fully masked.
+        # Match the eager and sparse DSA paths by explicitly zeroing those query/head outputs.
+        if attention_backend == "sdpa" and isinstance(attention_mask, torch.Tensor):
+            fully_masked = (
+                ~attention_mask.any(dim=-1) if attention_mask.dtype == torch.bool else attention_mask.amax(dim=-1) < 0
+            )
+            if fully_masked.ndim == 1:
+                fully_masked = fully_masked[:, None, None]
+            elif fully_masked.ndim == 2:
+                fully_masked = fully_masked[:, :, None]
+            else:
+                fully_masked = fully_masked.transpose(1, 2)
+            attn_output = attn_output.masked_fill(fully_masked.unsqueeze(-1), 0)
 
         # ---- output sigmoid gate ----
         if self.g_proj is not None:
@@ -1224,7 +1265,7 @@ class Dots3NoteOmniAudioAttention(nn.Module):
         max_sequence_length: int | None = None,
     ) -> torch.Tensor:
         if hidden_states.ndim == 2:
-            if self.backend != "flash_attention_2":
+            if self.backend not in {"flash_attention_2", "flash_attention_3"}:
                 raise ValueError("flattened audio attention requires the FlashAttention backend")
             if cumulative_lengths is None or max_sequence_length is None:
                 raise ValueError("flattened audio attention requires sequence metadata")
@@ -1249,7 +1290,7 @@ class Dots3NoteOmniAudioAttention(nn.Module):
 
         query, key, value = project(self.q_proj), project(self.k_proj), project(self.v_proj)
         query, key = _apply_rotary(query, key, cosine, sine)
-        if self.backend == "flash_attention_2":
+        if self.backend in {"flash_attention_2", "flash_attention_3"}:
             output = self._flash_attention(query, key, value, attention_mask)
         else:
             sdpa_mask = None if attention_mask is None else attention_mask[:, None, None, :]
@@ -1272,41 +1313,21 @@ class Dots3NoteOmniAudioAttention(nn.Module):
         cumulative_lengths: torch.Tensor,
         max_sequence_length: int,
     ) -> torch.Tensor:
-        try:
-            from flash_attn_interface import flash_attn_varlen_func as fa3_varlen_func
-        except ImportError:
-            fa3_varlen_func = None
-        if fa3_varlen_func is not None:
-            return fa3_varlen_func(
-                q=query,
-                k=key,
-                v=value,
-                cu_seqlens_q=cumulative_lengths,
-                cu_seqlens_k=cumulative_lengths,
-                max_seqlen_q=max_sequence_length,
-                max_seqlen_k=max_sequence_length,
-                softmax_scale=self.scaling,
-                causal=False,
-                return_attn_probs=True,
-            )[0]
-        try:
-            from flash_attn import flash_attn_varlen_func
-        except ImportError as error:
-            raise ImportError(
-                "attention_backend='flash_attention_2' requires the optional flash-attn package"
-            ) from error
-        return flash_attn_varlen_func(
-            query,
-            key,
-            value,
+        return _flash_attention_forward(
+            query.unsqueeze(0),
+            key.unsqueeze(0),
+            value.unsqueeze(0),
+            attention_mask=None,
+            query_length=query.shape[0],
+            is_causal=False,
+            dropout=self.attention_dropout if self.training else 0.0,
+            softmax_scale=self.scaling,
             cu_seqlens_q=cumulative_lengths,
             cu_seqlens_k=cumulative_lengths,
-            max_seqlen_q=max_sequence_length,
-            max_seqlen_k=max_sequence_length,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            softmax_scale=self.scaling,
-            causal=False,
-        )
+            max_length_q=max_sequence_length,
+            max_length_k=max_sequence_length,
+            attn_implementation=self.backend,
+        ).squeeze(0)
 
     def _flash_attention(
         self,
@@ -1315,67 +1336,20 @@ class Dots3NoteOmniAudioAttention(nn.Module):
         value: torch.Tensor,
         attention_mask: torch.Tensor | None,
     ) -> torch.Tensor:
-        try:
-            from flash_attn import flash_attn_func, flash_attn_varlen_func
-        except ImportError as error:
-            raise ImportError(
-                "attention_backend='flash_attention_2' requires the optional flash-attn package"
-            ) from error
-
         query = query.transpose(1, 2)
         key = key.transpose(1, 2)
         value = value.transpose(1, 2)
-        if attention_mask is None:
-            output = flash_attn_func(
-                query,
-                key,
-                value,
-                dropout_p=self.attention_dropout if self.training else 0.0,
-                softmax_scale=self.scaling,
-                causal=False,
-            )
-        else:
-            sequence_lengths = attention_mask.sum(dim=-1, dtype=torch.int32)
-            cumulative_lengths = F.pad(
-                sequence_lengths.cumsum(dim=0, dtype=torch.int32),
-                (1, 0),
-            )
-            query_flat = query[attention_mask]
-            key_flat = key[attention_mask]
-            value_flat = value[attention_mask]
-            max_sequence_length = int(sequence_lengths.max().item())
-            try:
-                from flash_attn_interface import flash_attn_varlen_func as fa3_varlen_func
-            except ImportError:
-                fa3_varlen_func = None
-            if fa3_varlen_func is not None:
-                output_flat = fa3_varlen_func(
-                    q=query_flat,
-                    k=key_flat,
-                    v=value_flat,
-                    cu_seqlens_q=cumulative_lengths,
-                    cu_seqlens_k=cumulative_lengths,
-                    max_seqlen_q=max_sequence_length,
-                    max_seqlen_k=max_sequence_length,
-                    softmax_scale=self.scaling,
-                    causal=False,
-                    return_attn_probs=True,
-                )[0]
-            else:
-                output_flat = flash_attn_varlen_func(
-                    query_flat,
-                    key_flat,
-                    value_flat,
-                    cu_seqlens_q=cumulative_lengths,
-                    cu_seqlens_k=cumulative_lengths,
-                    max_seqlen_q=max_sequence_length,
-                    max_seqlen_k=max_sequence_length,
-                    dropout_p=self.attention_dropout if self.training else 0.0,
-                    softmax_scale=self.scaling,
-                    causal=False,
-                )
-            output = torch.zeros_like(query)
-            output[attention_mask] = output_flat
+        output = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask=attention_mask,
+            query_length=query.shape[1],
+            is_causal=False,
+            dropout=self.attention_dropout if self.training else 0.0,
+            softmax_scale=self.scaling,
+            attn_implementation=self.backend,
+        )
         return output.transpose(1, 2)
 
 
@@ -1553,7 +1527,7 @@ class Dots3NoteOmniSpeechEncoder(nn.Module):
         positions = torch.arange(max_valid_length, device=hidden_states.device)[None, :]
         cosine, sine = self.rotary_embedding(positions, hidden_states.dtype)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        if self.attention_backend == "flash_attention_2":
+        if self.attention_backend in {"flash_attention_2", "flash_attention_3"}:
             sequence_lengths = input_seq_lens.to(device=hidden_states.device, dtype=torch.int32)
             cumulative_lengths = torch.zeros(
                 sequence_lengths.shape[0] + 1,
@@ -2162,9 +2136,8 @@ class Dots3NoteOmniForCausalLM(Dots3NoteOmniTextForCausalLM):
         **kwargs,
     ) -> CausalLMOutputWithPast | tuple:
         del chunk_audio_indices
-        is_prefill = past_key_values is None or past_key_values.get_seq_length() == 0
         has_multimodal_inputs = any(value is not None for value in (pixel_values, pixel_values_videos, input_features))
-        if has_multimodal_inputs and is_prefill:
+        if has_multimodal_inputs:
             if input_ids is None or inputs_embeds is not None:
                 raise ValueError("multimodal inputs require input_ids and do not accept inputs_embeds")
             inputs_embeds = self.get_input_embeddings()(input_ids)

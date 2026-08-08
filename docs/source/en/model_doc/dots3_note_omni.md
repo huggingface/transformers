@@ -24,6 +24,10 @@ into the language model's hidden space before autoregressive text generation.
 Dots3-Note Omni checkpoints are available with BF16 weights or with fine-grained FP8 language-model weights and BF16
 vision, audio, and language-model-head weights. Both formats load through the standard Transformers APIs.
 
+> [!NOTE]
+> Dots3-Note Omni support is inference-only. In particular, the DSA indexer's discrete FP8 top-k selection runs under
+> `torch.no_grad()`, so its parameters do not receive gradients and training or fine-tuning is not supported.
+
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
