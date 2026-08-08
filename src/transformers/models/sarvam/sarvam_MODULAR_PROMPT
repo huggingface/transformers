@@ -1,0 +1,22 @@
+Create `/fsx/ita_zaporozhets/transformers/src/transformers/models/sarvam/modular_sarvam.py` for the `sarvam` model.
+
+Top matched model for class inheritance:
+- `sarvam_backup`: 11 matched classes (100.0%), matched classes [MoEGate, SarvamMLAAttention, SarvamMLADecoderLayer, SarvamMLAForCausalLM, SarvamMLAMLP, SarvamMLAMoE, SarvamMLAModel, SarvamMLAPreTrainedModel, SarvamMLARMSNorm, SarvamMLARotaryEmbedding, SarvamMLAYarnRotaryEmbedding]
+
+For the matched classes listed above, inherit from `sarvam_backup` and only override what differs. See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `modeling_sarvam.py` without inheriting from `sarvam_backup`. Also copy any module-level helper functions they depend on.
+The copied and inherited classes must remain mutually compatible: method signatures, parameter names, and return types must match what each side expects when they call into one another.
+
+Matched classes:
+- `SarvamMLARMSNorm` → inherit from `sarvam_backup`
+- `SarvamMLARotaryEmbedding` → inherit from `sarvam_backup`
+- `SarvamMLAYarnRotaryEmbedding` → inherit from `sarvam_backup`
+- `SarvamMLAMLP` → inherit from `sarvam_backup`
+- `MoEGate` → inherit from `sarvam_backup`
+- `SarvamMLAMoE` → inherit from `sarvam_backup`
+- `SarvamMLAAttention` → inherit from `sarvam_backup`
+- `SarvamMLADecoderLayer` → inherit from `sarvam_backup`
+- `SarvamMLAPreTrainedModel` → inherit from `sarvam_backup`
+- `SarvamMLAModel` → inherit from `sarvam_backup`
+- `SarvamMLAForCausalLM` → inherit from `sarvam_backup`
