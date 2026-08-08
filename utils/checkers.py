@@ -54,7 +54,7 @@ import itertools
 import json
 import os
 import shutil
-import subprocess
+
 import sys
 import threading
 import time
@@ -289,7 +289,7 @@ class CheckerCache:
 
 
 def _file_md5(path):
-    return hashlib.md5(path.read_bytes()).hexdigest()
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 # ANSI helpers
