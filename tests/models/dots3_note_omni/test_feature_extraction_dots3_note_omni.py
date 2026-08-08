@@ -48,20 +48,30 @@ class Dots3NoteOmniFeatureExtractorTest(unittest.TestCase):
                     expected_tokens,
                 )
 
-    def test_first_channel_chunking_and_lengths(self):
+    def test_mono_chunking_and_lengths(self):
         extractor = self.get_feature_extractor()
-        channel_zero = torch.linspace(-0.25, 0.25, 65)
-        channel_one = torch.ones_like(channel_zero)
+        mono_output = extractor(torch.linspace(-0.25, 0.25, 65), sampling_rate=32)
 
-        stereo_output = extractor(torch.stack((channel_zero, channel_one)), sampling_rate=32)
-        mono_output = extractor(channel_zero, sampling_rate=32)
+        self.assertEqual(mono_output.input_features.shape, (2, 8, 16))
+        self.assertEqual(mono_output.chunk_sample_lengths.tolist(), [64, 1])
+        self.assertEqual(mono_output.chunk_token_lengths.tolist(), [2, 1])
+        self.assertEqual(mono_output.audio_token_lengths.tolist(), [3])
+        self.assertEqual(mono_output.audio_chunk_counts.tolist(), [2])
 
-        self.assertEqual(stereo_output.input_features.shape, (2, 8, 16))
-        self.assertEqual(stereo_output.chunk_sample_lengths.tolist(), [64, 1])
-        self.assertEqual(stereo_output.chunk_token_lengths.tolist(), [2, 1])
-        self.assertEqual(stereo_output.audio_token_lengths.tolist(), [3])
-        self.assertEqual(stereo_output.audio_chunk_counts.tolist(), [2])
-        torch.testing.assert_close(stereo_output.input_features, mono_output.input_features)
+    def test_rejects_multichannel_waveform(self):
+        with self.assertRaisesRegex(ValueError, "must be mono"):
+            self.get_feature_extractor()(torch.zeros(2, 64), sampling_rate=32)
+
+    def test_sglang_log_mel_numerical_golden(self):
+        extractor = Dots3NoteOmniFeatureExtractor()
+        waveform = ((torch.arange(960_001, dtype=torch.int32) % 257) - 128).to(torch.float32) / 128.0
+        output = extractor(waveform, sampling_rate=16_000)
+
+        self.assertEqual(output.input_features.shape, (2, 128, 6000))
+        positions = [(0, 0, 0), (0, 0, 1), (0, 63, 123), (0, 127, 5999), (1, 0, 0), (1, 64, 10)]
+        selected = torch.stack([output.input_features[index] for index in positions])
+        expected = torch.tensor([1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5])
+        torch.testing.assert_close(selected, expected, rtol=1e-5, atol=1e-6)
 
     def test_batch_tracks_chunk_ownership(self):
         extractor = self.get_feature_extractor()

@@ -28,6 +28,13 @@ vision, audio, and language-model-head weights. Both formats load through the st
 > Dots3-Note Omni support is inference-only. In particular, the DSA indexer's discrete FP8 top-k selection runs under
 > `torch.no_grad()`, so its parameters do not receive gradients and training or fine-tuning is not supported.
 
+> [!NOTE]
+> Loading encoded audio or video sources requires the optional `torchcodec` dependency. Native video preprocessing
+> follows the training-time sampling pipeline and expands each video into timestamped image blocks with interleaved
+> audio blocks. The `<|video_pad|>` marker is only an external prompt placeholder and is removed before tokenization;
+> it is never passed to the model. Decoded frame arrays are supported as visual-only inputs because their original
+> audio track is absent.
+
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
@@ -102,6 +109,14 @@ print(processor.batch_decode(output_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] Dots3NoteOmniProcessor
     - __call__
+
+## Dots3NoteOmniImageProcessor
+
+[[autodoc]] Dots3NoteOmniImageProcessor
+
+## Dots3NoteOmniVideoProcessor
+
+[[autodoc]] Dots3NoteOmniVideoProcessor
 
 ## Dots3NoteOmniFeatureExtractor
 

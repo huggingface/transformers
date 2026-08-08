@@ -15,16 +15,11 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import math
-from io import BytesIO
-from pathlib import Path
-from urllib.request import urlopen
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank
+from ...audio_utils import load_audio, mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, logging
@@ -67,7 +62,7 @@ def _pad_or_trim(waveform: torch.Tensor, length: int) -> torch.Tensor:
 
 @requires(backends=("torch",))
 class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
-    """Convert 16 kHz channel-first waveforms into Dots3 log-mel chunks."""
+    """Convert 16 kHz mono waveforms into Dots3 log-mel chunks."""
 
     model_input_names = [
         "input_features",
@@ -132,42 +127,14 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
             token_stride=self.token_stride,
         )
 
-    @staticmethod
-    def _resolve_audio_source(source: str):
-        if source.startswith(("http://", "https://")):
-            with urlopen(source, timeout=30) as response:
-                return BytesIO(response.read())
-        if source.startswith("data:"):
-            try:
-                _, payload = source.split(",", 1)
-            except ValueError as error:
-                raise ValueError("invalid data URI audio input") from error
-            return BytesIO(base64.b64decode(payload))
-        path = Path(source)
-        if path.is_file():
-            return str(path)
-        try:
-            return BytesIO(base64.b64decode(source, validate=True))
-        except (ValueError, binascii.Error) as error:
-            raise ValueError("audio string must be a path, URL, data URI, or base64 payload") from error
-
     def fetch_audio(self, audio_url_or_urls, sampling_rate: int | None = None):
-        """Decode with torchaudio and preserve the serving path's channel-0 rule."""
+        """Decode to the mono waveform used by the SGLang serving path."""
         if isinstance(audio_url_or_urls, (list, tuple)) and audio_url_or_urls:
             if not isinstance(audio_url_or_urls[0], (int, float, np.integer, np.floating)):
                 return [self.fetch_audio(item, sampling_rate=sampling_rate) for item in audio_url_or_urls]
         if not isinstance(audio_url_or_urls, str):
             return audio_url_or_urls
-
-        import torchaudio
-
-        target_rate = sampling_rate or self.sampling_rate
-        waveform, source_rate = torchaudio.load(self._resolve_audio_source(audio_url_or_urls))
-        if waveform.shape[-1] <= 0 or source_rate <= 0:
-            raise ValueError(f"invalid decoded audio: samples={waveform.shape[-1]}, sample_rate={source_rate}")
-        if source_rate != target_rate:
-            waveform = torchaudio.functional.resample(waveform, orig_freq=source_rate, new_freq=target_rate)
-        return waveform[0].to(torch.float32).cpu().numpy()
+        return load_audio(audio_url_or_urls, sampling_rate=sampling_rate or self.sampling_rate, backend="torchcodec")
 
     def _extract_log_mel(self, waveforms: torch.Tensor, device: str) -> torch.Tensor:
         waveforms = waveforms.to(device=device, dtype=torch.float32)
@@ -199,13 +166,11 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
         raise TypeError(f"unsupported audio input type: {type(raw_speech)}")
 
     @staticmethod
-    def _select_first_channel(clip) -> torch.Tensor:
+    def _normalize_audio(clip) -> torch.Tensor:
         waveform = clip if isinstance(clip, torch.Tensor) else torch.as_tensor(np.asarray(clip))
-        waveform = waveform.to(torch.float32)
-        if waveform.ndim == 2:
-            waveform = waveform[0]
-        elif waveform.ndim != 1:
-            raise ValueError(f"audio input must be 1-D or channel-first 2-D, got {tuple(waveform.shape)}")
+        waveform = waveform.to(torch.float32).squeeze()
+        if waveform.ndim != 1:
+            raise ValueError(f"Dots3-Note audio must be mono, got shape={tuple(waveform.shape)}")
         if waveform.numel() == 0:
             raise ValueError("audio waveform must contain at least one sample")
         return waveform.contiguous()
@@ -226,7 +191,7 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is None:
             logger.warning_once("Pass sampling_rate=16000 to avoid silent audio errors.")
 
-        clips = [self._select_first_channel(clip) for clip in self._as_clips(raw_speech)]
+        clips = [self._normalize_audio(clip) for clip in self._as_clips(raw_speech)]
         chunks = []
         chunk_sample_lengths = []
         chunk_token_lengths = []
