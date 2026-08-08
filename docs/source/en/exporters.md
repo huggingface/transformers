@@ -721,10 +721,12 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 ## Quantization
 
 Every export config accepts a `quantizer`. Set it to any PT2E
-[`Quantizer`](https://docs.pytorch.org/ao/stable/) and the exporter runs post-training quantization on
+[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on
 the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program is returned or
 lowered. Quantization happens on the graph rather than the modeling code, so a single `quantizer` works
 across every backend and architecture without per-model handling.
+
+Quantize through [`~HfExporter.export_for_generation`], which exports the decomposed generation components. Their attention mask is a precomputed graph input, which keeps PT2E away from the in-graph mask construction that trips its `make_fx` retrace on a full model forward.
 
 ```python
 from transformers import LlamaForCausalLM
@@ -744,9 +746,7 @@ exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize
 
 ### Choosing a quantizer
 
-Each target runtime expects its own quantizer. The quantized graph then runs on inductor (int8),
-translates to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), or lowers to an
-ExecuTorch `.pte`.
+Each target runtime expects its own quantizer. Whichever you pass, the quantized graph is portable from there. It runs on inductor as int8, translates to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), or lowers to an ExecuTorch `.pte`.
 
 | Where you'll run | Quantizer to pass |
 | --- | --- |
@@ -760,10 +760,7 @@ ExecuTorch `.pte`.
 observer statistics. Omit it and the exporter falls back to a single pass over the export's own sample
 inputs, with a warning (one sample can skew the observed ranges).
 
-For generative models, give the dataset to [`~HfExporter.export_for_generation`] instead of the
-exporter directly. You pass one generate-style dataset; it runs through a short `generate` to capture
-each component's real inputs, and `prefill` / `decode` / the encoders are each calibrated on their own
-captured activations.
+For generative models, set `calibration_dataset` on the config you pass to [`~HfExporter.export_for_generation`] and give it generate-style kwargs. Each sample runs through a short `generate`, and every component (`prefill`, `decode`, the encoders) is calibrated on the activations captured for it.
 
 ### A different recipe per component
 
