@@ -299,6 +299,28 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
      images_kwargs: Gemma4ImageProcessorKwargs
 ```
 
+### TRF020
+
+In model directories whose configuration declares `kv_lora_rank` (Multi-head Latent Attention), checks the attention class that owns the KV LoRA expansion projection (conventionally `kv_b_proj`, or any `nn.Linear(config.kv_lora_rank, ...)`). The expansion must not be applied inside `forward()`; it must live in a dedicated method (e.g. `expand_kv`) that `forward()` calls. External backends (vLLM/SGLang) override the KV LoRA expansion so they can store and consume the compressed KV cache directly instead of the materialized key/value states. When the expansion is inlined in `forward()`, there is no single method to override and the backend is forced to materialize the full cache, losing the memory savings that MLA exists to provide.
+
+```diff
++    def expand_kv(self, k_nope, k_pe):
++        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
++        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
++        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
++        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
++        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        return key_states, value_states
++
+     def forward(self, hidden_states, ...):
+         ...
+-        k_nope = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
+-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+-        k_pe = k_rot.expand(*k_nope.shape[:-1], -1)
+-        key_states = torch.cat((k_nope, k_pe), dim=-1)
++        key_states, value_states = self.expand_kv(k_pass, k_rot)
+```
+
 <!-- END RULES REFERENCE -->
 
 ## Suppressing violations
