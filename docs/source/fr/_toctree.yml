@@ -13,8 +13,8 @@
     title: Chargement d'instances pré-entraînées avec une AutoClass
   - local: in_translation
     title: Préparation des données
-  - local: in_translation
-    title: Fine-tune un modèle pré-entraîné
+  - local: training
+    title: Fine-tuning
   - local: run_scripts_fr
     title: Entraînement avec un script
   - local: in_translation
