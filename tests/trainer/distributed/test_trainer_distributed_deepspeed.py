@@ -924,6 +924,40 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             trainer.train()
             trainer.evaluate()
 
+    @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
+    def test_evaluate_before_train(self, stage):
+        """evaluate() before train() should work for all ZeRO stages."""
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(
+                deepspeed=self.get_config_dict(stage),
+                bf16=True,
+                output_dir=self.get_auto_remove_tmp_dir(),
+            )
+            trainer.evaluate()
+            trainer.train()
+
+    def test_config_preserved_after_evaluate(self):
+        """DS optimizer config and scheduler auto values should survive evaluate()."""
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(
+                deepspeed=self.get_config_dict(ZERO3),
+                bf16=True,
+                output_dir=self.get_auto_remove_tmp_dir(),
+            )
+            live_config = trainer.accelerator.state.deepspeed_plugin.hf_ds_config.config
+            self.assertIn("optimizer", live_config)
+            sched_total = live_config.get("scheduler", {}).get("params", {}).get("total_num_steps")
+
+            trainer.evaluate()
+
+            self.assertIn("optimizer", live_config, "optimizer config permanently deleted by evaluate()")
+            if sched_total == "auto":
+                self.assertEqual(
+                    live_config["scheduler"]["params"]["total_num_steps"],
+                    "auto",
+                    "scheduler total_num_steps 'auto' was replaced with 0 by evaluate()",
+                )
+
     @require_optuna
     def test_hyperparameter_search(self):
         """Run Optuna hyperparameter search with DeepSpeed ZeRO-3."""
