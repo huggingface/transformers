@@ -32,7 +32,7 @@ import datasets
 from parameterized import parameterized
 
 import transformers
-from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers import AutoConfig, AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
     is_deepspeed_available,
@@ -83,6 +83,7 @@ set_seed(42)
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
+GEMMA3_TINY = "hf-internal-testing/tiny-random-Gemma3ForConditionalGeneration"
 
 # Accelerate config paths
 DS_ZERO2_CONFIG_FILE = os.path.join(CONFIGS_DIR, "deepspeed_zero2.yaml")
@@ -1328,6 +1329,22 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
                 f"baseline_std={baseline_std:.6f}, zero3_std={zero3_std:.6f}, ratio={ratio:.4f}"
             ),
         )
+
+    def test_from_config_zero3_composite_model(self):
+        # test that a composite model initializes its sub-models under zero3. Their weights are partitioned into empty
+        # shards, so they have to be gathered before being initialized, exactly like the ones of a single model
+        import deepspeed
+
+        ds_config = self._get_zero3_ds_config()
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            dschf = HfDeepSpeedConfig(ds_config)  # noqa: F841 — prevent GC of weak-ref config
+            config = AutoConfig.from_pretrained(GEMMA3_TINY)
+            model = AutoModel.from_config(config)
+
+            embeddings = model.get_input_embeddings()
+            with deepspeed.zero.GatheredParameters(embeddings.weight, modifier_rank=None):
+                self.assertEqual(embeddings.weight.shape[0], config.get_text_config().vocab_size)
 
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
