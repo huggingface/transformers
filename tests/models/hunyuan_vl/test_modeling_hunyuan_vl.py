@@ -146,7 +146,7 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanVLVisionText2TextModelTester
     test_all_params_have_gradient = False
-    test_torch_exportable = False
+    test_torch_exportable = True
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
 

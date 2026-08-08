@@ -602,6 +602,13 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
+def is_cache_object(value: Any) -> bool:
+    """Whether ``value`` is a cache — a [`Cache`] instance or a model-specific class following
+    the ``*Cache`` naming convention (e.g. ``xLSTMCache``, ``MimiConv1dPaddingCache``), matching
+    what [`register_cache_pytrees_for_model`] registers as pytree nodes."""
+    return isinstance(value, Cache) or type(value).__name__.endswith("Cache")
+
+
 def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses

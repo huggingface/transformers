@@ -2484,7 +2484,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     return per_pos_features
 
 
-def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
+def build_linear_positions(index_dims, output_range=(-1.0, 1.0), device=None):
     """
     Generate an array of position indices for an N-D input array.
 
@@ -2493,13 +2493,17 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         The shape of the index dimensions of the input array.
       output_range (`tuple[float]`, *optional*, defaults to `(-1.0, 1.0)`):
         The min and max values taken by each input index dimension.
+      device (`torch.device`, *optional*):
+        Device on which to allocate the linspace/stack. Defaults to CPU (torch default).
 
     Returns:
       `torch.FloatTensor` of shape `(index_dims[0], index_dims[1], .., index_dims[-1], N)`.
     """
 
     def _linspace(n_xels_per_dim):
-        return torch.linspace(start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32)
+        return torch.linspace(
+            start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32, device=device
+        )
 
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
     array_index_grid = torch.meshgrid(*dim_ranges, indexing="ij")
@@ -2578,7 +2582,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
         return position_embeddings
 
 
-def _check_or_build_spatial_positions(pos, index_dims, batch_size):
+def _check_or_build_spatial_positions(pos, index_dims, batch_size, device=None):
     """
     Checks or builds spatial position features (x, y, ...).
 
@@ -2589,12 +2593,14 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
         An iterable giving the spatial/index size of the data to be featurized.
       batch_size (`int`):
         The batch size of the data to be featurized.
+      device (`torch.device`, *optional*):
+        Device to build the spatial positions on when ``pos`` is ``None``.
 
     Returns:
         `torch.FloatTensor` of shape `(batch_size, prod(index_dims))` an array of position features.
     """
     if pos is None:
-        pos = build_linear_positions(index_dims)
+        pos = build_linear_positions(index_dims, device=device)
         # equivalent to `torch.broadcast_to(pos[None], (batch_size,) + pos.shape)`
         # but `torch.broadcast_to` cannot be converted to ONNX
         pos = pos[None].expand((batch_size,) + pos.shape)
@@ -2641,14 +2647,14 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         dtype: torch.dtype,
         pos: torch.FloatTensor | None = None,
     ) -> torch.FloatTensor:
-        pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
+        pos = _check_or_build_spatial_positions(pos, index_dims, batch_size, device=device)
         fourier_pos_enc = generate_fourier_features(
             pos,
             num_bands=self.num_bands,
             max_resolution=self.max_resolution,
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
-        ).to(device=device, dtype=dtype)
+        ).to(dtype=dtype)
         return fourier_pos_enc
 
 
@@ -3262,8 +3268,8 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
             if modality in self.mask_probs:
                 mask_token = self.mask[modality].expand(batch_size, -1, -1)
                 mask_prob = self.mask_probs[modality]
-                mask = torch.bernoulli(torch.full([batch_size, num_samples], mask_prob))
-                mask = torch.unsqueeze(mask, dim=2).to(mask_token.device)
+                mask = torch.bernoulli(torch.full([batch_size, num_samples], mask_prob, device=mask_token.device))
+                mask = torch.unsqueeze(mask, dim=2)
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
             padded[modality] = output_padded
