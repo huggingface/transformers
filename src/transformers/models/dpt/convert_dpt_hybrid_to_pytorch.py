@@ -234,6 +234,11 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
+    # The first fusion layer never consumes a residual, so its source checkpoint parameters are intentionally unused.
+    first_fusion_residual_prefix = "neck.fusion_stage.layers.0.residual_layer1."
+    for key in tuple(state_dict):
+        if key.startswith(first_fusion_residual_prefix):
+            state_dict.pop(key)
     # read in qkv matrices
     read_in_q_k_v(state_dict, config)
 
