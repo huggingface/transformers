@@ -315,7 +315,7 @@ def get_balanced_memory(
         buffer = max(module_sizes[k] for k in all_no_split_modules)
 
     mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
-    buffer = int(1.25 * max(buffer, mean_leaves))
+    buffer = int(1.25 * max(buffer, mean_leaves, max(leave_modules_sizes.values(), default=0)))
     per_gpu += buffer
 
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
