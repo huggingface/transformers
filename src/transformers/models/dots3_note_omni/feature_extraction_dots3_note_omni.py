@@ -57,7 +57,6 @@ def compute_audio_token_length(
     )
 
 
-@requires(backends=("torch",))
 def _pad_or_trim(waveform: torch.Tensor, length: int) -> torch.Tensor:
     if waveform.shape[-1] > length:
         waveform = waveform[..., :length]
