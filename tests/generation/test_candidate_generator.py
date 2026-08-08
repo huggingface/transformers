@@ -4,7 +4,7 @@ import weakref
 from unittest.mock import MagicMock
 
 import torch
-
+import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
