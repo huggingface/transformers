@@ -696,6 +696,12 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         )
         self.post_init()
 
+    def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
+        # `next_sequence_length` is ignored: CpmAnt prepends its soft prompt and rebuilds the mask and
+        # position bias from the whole sequence, dropping the cached prefix itself, so it can only be
+        # fed the full `input_ids`. Slicing down to the new tokens makes the position bias mismatch.
+        return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
+
     @auto_docstring
     def forward(
         self,
@@ -750,7 +756,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
         # Only compute necessary logits
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Drop the soft-prompt rows the head inherits from the tied embedding: they are never
+        # decoding targets, and `generate` expects `config.vocab_size` wide logits.
+        logits = self.lm_head(hidden_states[:, slice_indices, :])[..., : self.config.vocab_size]
 
         loss = None
         if labels is not None:
