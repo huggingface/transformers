@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Import Utilities
+# Importing utilities
 
 This page goes through the transformers utilities to enable lazy and fast object import.
 While we strive for minimal dependencies, some models have specific dependencies requirements that cannot be
