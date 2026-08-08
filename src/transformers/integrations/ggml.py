@@ -337,6 +337,31 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "deepseek2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": "qk_rope_head_dim",
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        # NOTE: llama.cpp exports MLA as MQA (`attention.head_count_kv` == 1) with the true head dims in the
+        # `*_mla` keys; `head_count_kv` is therefore not mapped and is fixed up in `load_gguf_checkpoint`.
+        "attention.value_length_mla": "v_head_dim",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.q_lora_rank": "q_lora_rank",
+        "attention.kv_lora_rank": "kv_lora_rank",
+        "vocab_size": "vocab_size",
+        "expert_count": "n_routed_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "expert_shared_count": "n_shared_experts",
+        "expert_feed_forward_length": "moe_intermediate_size",
+        "expert_weights_scale": "routed_scaling_factor",
+        "expert_weights_norm": "norm_topk_prob",
+        "expert_group_count": "n_group",
+        "expert_group_used_count": "topk_group",
+        "leading_dense_block_count": "first_k_dense_replace",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -375,6 +400,15 @@ GGUF_CONFIG_DEFAULTS_MAPPING = {
         # but this is not stored in GGUF metadata. Set it as default so the model weights
         # (which include e_score_correction_bias tensors) are loaded correctly.
         "use_routing_bias": True,
+    },
+    "deepseek2": {
+        # NOTE: llama.cpp omits these keys when the feature is disabled, while the transformers defaults
+        # are DeepSeek-V3-671B values (e.g. Moonlight-16B has no query compression and no grouped routing).
+        "q_lora_rank": None,
+        "n_group": 1,
+        "topk_group": 1,
+        "norm_topk_prob": False,
+        "routed_scaling_factor": 1.0,
     },
 }
 
@@ -824,6 +858,7 @@ GGUF_TO_FAST_CONVERTERS = {
     "deci": GGUFLlamaConverter,
     "decilm": GGUFLlamaConverter,
     "minimax_m2": GGUFQwen2Converter,
+    "deepseek_v3": GGUFGPTConverter,
 }
 
 
