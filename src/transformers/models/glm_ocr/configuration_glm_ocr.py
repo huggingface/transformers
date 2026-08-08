@@ -71,6 +71,11 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 @strict
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
+
     Example:
 
     ```python
@@ -119,6 +124,11 @@ class GlmOcrTextConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     rope_parameters: RopeParameters | dict | None = None
     pad_token_id: int | None = None
+
+    attribute_map = {
+        "num_mtp_layers": "num_nextn_predict_layers",
+    }
+    num_mtp_layers: int = 1
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
