@@ -88,15 +88,18 @@ class RadioPatchEmbeddings(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
         self.patch_size = config.patch_size
-        self.embed_dim = config.hidden_size
-        self.num_cls_tokens = config.num_cls_tokens
-        self.num_registers = config.num_registers
 
         self.max_rows = config.max_img_size // config.patch_size
         self.max_cols = config.max_img_size // config.patch_size
         num_positions = self.max_rows * self.max_cols
 
         self.patch_projection = nn.Linear(config.num_channels * config.patch_size**2, config.hidden_size, bias=False)
+        if config.video_temporal_patch_size is not None:
+            self.video_patch_projection = nn.Linear(
+                config.video_temporal_patch_size * config.num_channels * config.patch_size**2,
+                config.hidden_size,
+                bias=False,
+            )
         self.position_embedding = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
         self.cls_register_token = nn.Parameter(
             torch.zeros(config.num_cls_tokens + config.num_registers, config.hidden_size)
@@ -122,8 +125,9 @@ class RadioPatchEmbeddings(nn.Module):
             pos = F.interpolate(pos.float(), size=tuple(input_dims), mode="bilinear", align_corners=False).to(dtype)
         return pos.flatten(2).permute(0, 2, 1)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        patches = self.patch_projection(self._image_to_patches(pixel_values))
+    def forward(self, pixel_values: torch.Tensor, use_video_patch_projection: bool = False) -> torch.Tensor:
+        projection = self.video_patch_projection if use_video_patch_projection else self.patch_projection
+        patches = projection(self._image_to_patches(pixel_values))
         input_dims = (pixel_values.shape[-2] // self.patch_size, pixel_values.shape[-1] // self.patch_size)
         patches = patches + self._interpolate_position_embedding(input_dims, patches.dtype)
         prefix = self.cls_register_token.unsqueeze(0).expand(patches.shape[0], -1, -1)
@@ -226,9 +230,19 @@ class RadioModel(RadioPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> RadioModelOutput:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        use_video_patch_projection: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> RadioModelOutput:
+        r"""
+        use_video_patch_projection (`bool`, *optional*, defaults to `False`):
+            Use the `video_patch_projection` for temporally-packed video patches instead of the image
+            `patch_projection`. Requires `config.video_temporal_patch_size` to be set.
+        """
         pixel_values = self.input_conditioner(pixel_values)
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values, use_video_patch_projection=use_video_patch_projection)
         encoder_outputs: BaseModelOutput = self.encoder(hidden_states, **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state
 
