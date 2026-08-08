@@ -83,6 +83,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
+    "Param2MoEConfig": ["scoring_func"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
