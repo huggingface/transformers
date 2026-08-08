@@ -258,6 +258,52 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+    @require_torch
+    @slow
+    def test_batch_processing_returns_all_results(self):
+        """
+        Test that batch processing returns results for ALL images, not just the first one.
+        This test specifically addresses the bug reported in issue #31356 where only
+        the first image's detections were returned when using batch_size > 1.
+        
+        Regression test for: https://github.com/huggingface/transformers/issues/31356
+        """
+        model_id = "facebook/detr-resnet-50"
+        object_detector = pipeline("object-detection", model=model_id)
+        
+        # Create a batch with 3 identical images
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        batch = [url, url, url]
+        
+        # Process with batch_size=2 (this triggers the batching logic)
+        outputs = object_detector(batch, threshold=0.5, batch_size=2)
+        
+        # CRITICAL: We should get results for ALL 3 images
+        self.assertEqual(len(outputs), 3, 
+                        "Batch processing should return results for all images, not just the first one")
+        
+        # Each result should be a list of detections
+        for i, result in enumerate(outputs):
+            self.assertIsInstance(result, list, 
+                                f"Result {i} should be a list of detections")
+            self.assertGreater(len(result), 0, 
+                             f"Result {i} should contain at least one detection")
+            
+            # Verify structure of each detection
+            for detection in result:
+                self.assertIn("score", detection)
+                self.assertIn("label", detection)
+                self.assertIn("box", detection)
+                self.assertIsInstance(detection["box"], dict)
+                self.assertIn("xmin", detection["box"])
+                self.assertIn("ymin", detection["box"])
+                self.assertIn("xmax", detection["box"])
+                self.assertIn("ymax", detection["box"])
+        
+        # Verify all results have similar number of detections (since same image)
+        detection_counts = [len(result) for result in outputs]
+        self.assertTrue(all(count == detection_counts[0] for count in detection_counts),
+                       "All images should have similar detection counts since they're identical")
 
     @require_torch
     @slow
