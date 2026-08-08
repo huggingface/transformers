@@ -253,6 +253,7 @@ from .import_utils import (
     is_torchdynamo_exporting,
     is_torchvision_available,
     is_torchvision_greater_or_equal,
+    is_torchvision_image_decoder_available,
     is_torchvision_v2_available,
     is_tracing,
     is_training_run_on_sagemaker,
