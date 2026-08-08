@@ -92,10 +92,6 @@ tokenizer.decode(predictions).split()
 
 [[autodoc]] LongformerTokenizer
 
-## LongformerTokenizerFast
-
-[[autodoc]] LongformerTokenizerFast
-
 ## Longformer specific outputs
 
 [[autodoc]] models.longformer.modeling_longformer.LongformerBaseModelOutput

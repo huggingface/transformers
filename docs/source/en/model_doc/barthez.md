@@ -79,6 +79,3 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] BarthezTokenizer
 
-## BarthezTokenizerFast
-
-[[autodoc]] BarthezTokenizerFast

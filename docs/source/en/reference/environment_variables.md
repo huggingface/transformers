@@ -14,45 +14,39 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Environment Variables
+# Environment variables
 
-## HF_ENABLE_PARALLEL_LOADING
+Boolean variables accept `1`, `on`, `yes`, or `true` in any capitalization. Anything else, including unset, is false. Set them before importing Transformers.
 
-By default, this option is disabled. When enabled, it allows Torch and Safetensors weight files to be loaded in parallel during model initialization. This can significantly reduce the time required to load large, multi-shard models, often resulting in speedups of around ~50% in supported environments.
+Caching and Hub access are configured by the `HF_*` variables [huggingface_hub](https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables) owns, such as `HF_HOME` and `HF_HUB_OFFLINE`. See [Installation](../installation#offline-mode) for the offline workflow.
 
-Can be set to a string equal to `"false"` or `"true"`. e.g. `os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"`.
+## Logging
 
-e.g. `facebook/opt-30b` on an AWS EC2 g4dn.metal instance can be made to load in ~30s with this enabled vs ~55s without it.
+Transformers logs at `warning`. [Logging](../main_classes/logging) documents the equivalent Python API, including [`logging.set_verbosity`].
 
-Profile before committing to using this environment variable, this will not produce speed ups for smaller models.
+| Variable | Values | Description |
+|---|---|---|
+| `TRANSFORMERS_VERBOSITY` | `detail`, `debug`, `info`, `warning`, `error`, `critical` | Library log level. `detail` matches `debug` and adds the filename and line number to each message. An unrecognized value warns and falls back to `warning`. |
+| `TRANSFORMERS_NO_ADVISORY_WARNINGS` | boolean | Silences advisory warnings, the best-practice hints that don't indicate a problem. |
 
-```py
-import os
+## Model loading
 
-os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"
+Checkpoint shards load in parallel by default.
 
-from transformers import pipeline
+| Variable | Values | Description |
+|---|---|---|
+| `HF_DEACTIVATE_ASYNC_LOAD` | boolean | Loads shards on the main thread instead of a thread pool. Slower, but peak memory is easier to reason about. Loading is already sequential when a `device_map` offloads to disk or when quantizing on the fly, so this only affects otherwise parallel loads. |
+| `DISABLE_SAFETENSORS_CONVERSION` | boolean | Stops Transformers from asking the Hub conversion bot for a safetensors version of a repository that ships only PyTorch `.bin` weights. Worth setting in CI, where the request adds latency and network flakiness. |
 
-model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
-```
+## Kernels and backends
 
-## HF_PARALLEL_LOADING_WORKERS
+Optimized kernels are downloaded from the Hub when [kernels](https://github.com/huggingface/kernels) is installed and the hardware supports them. Disable them to isolate a numerical difference or a crash.
 
-Determines how many threads should be used when parallel loading is enabled. Default is `8`.
+| Variable | Values | Description |
+|---|---|---|
+| `USE_HUB_KERNELS` | boolean, enabled by default | Set to a false value to fall back to the reference implementations. |
+| `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR` | `1` | Forces the Triton fallback instead of DeepGEMM for FP8 linear layers in finegrained FP8 quantization. |
+| `TRANSFORMERS_DISABLE_TORCH_CHECK` | `1` | Skips the minimum PyTorch version check at import. |
 
-If the number of files that are being loaded is less than the number of threads specified, the number that is actually spawned will be equal to the number of files.
-
-e.g. If you specify 8 workers, and there are only 2 files, only 2 workers will be spawned.
-
-Tune as you see fit.
-
-```py
-import os
-
-os.environ["HF_ENABLE_PARALLEL_LOADING"] = "true"
-os.environ["HF_PARALLEL_LOADING_WORKERS"] = "4"
-
-from transformers import pipeline
-
-model = pipeline(task="text-generation", model="facebook/opt-30b", device_map="auto")
-```
+> [!WARNING]
+> `TRANSFORMERS_DISABLE_TORCH_CHECK` removes a guard rather than changing behavior. On an unsupported PyTorch version you get import errors or silently wrong results instead of a clear message.

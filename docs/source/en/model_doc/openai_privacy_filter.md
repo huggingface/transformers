@@ -76,7 +76,7 @@ print(predicted_token_classes)
 - Shared by: OpenAI
 - Model type: Bidirectional token classification model for privacy span detection
 - Language(s): Primarily English; selected multilingual robustness evaluation reported
-- License: [Apache 2.0](LICENSE)
+- License: [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 - Source repository: https://github.com/openai/privacy-filter
 - Model weights: https://huggingface.co/openai/privacy-filter

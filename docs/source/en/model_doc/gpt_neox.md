@@ -178,10 +178,6 @@ following speedups during training and inference.
 
 [[autodoc]] GPTNeoXTokenizer
 
-## GPTNeoXTokenizerFast
-
-[[autodoc]] GPTNeoXTokenizerFast
-
 ## GPTNeoXModel
 
 [[autodoc]] GPTNeoXModel
