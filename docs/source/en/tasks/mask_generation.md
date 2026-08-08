@@ -497,7 +497,7 @@ import torch
 
 num_epochs = 30
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 model.to(device)
 
 model.train()
