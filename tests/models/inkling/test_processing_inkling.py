@@ -23,7 +23,14 @@ from parameterized import parameterized
 from safetensors.torch import load_file
 
 from transformers import AutoProcessor, InklingProcessor, is_torch_available
-from transformers.testing_utils import get_tests_dir, require_librosa, require_vision, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_librosa,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
@@ -209,6 +216,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 
 @slow
+@require_torch_accelerator
 class InklingProcessingIntegrationTest(unittest.TestCase):
     """
     Check against sglang reference..
@@ -262,22 +270,27 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
         return torch.cat(per_audio, dim=0)
 
     def _assert_matches_sglang(self, case: str, messages: list, has_audio: bool = False):
-        inputs = self.processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
         expected = self._load_expected(case)
+        for device in ["cpu", torch_device]:
+            processor_kwargs = {} if device == "cpu" else {"audio_kwargs": {"device": device}}
+            inputs = self.processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs=processor_kwargs,
+            ).to(device)
 
-        input_ids = inputs["input_ids"][0]
-        expected_input_ids = self._remap_sentinels(expected["input_ids"].to(torch.int64))
-        torch.testing.assert_close(input_ids, expected_input_ids, rtol=0, atol=0)
+            input_ids = inputs["input_ids"][0]
+            expected_input_ids = self._remap_sentinels(expected["input_ids"].to(torch.int64)).to(device)
+            torch.testing.assert_close(input_ids, expected_input_ids, rtol=0, atol=0)
 
-        if has_audio:
-            dmel = self._expected_dmel_from_inputs(inputs)
-            torch.testing.assert_close(dmel, expected["audio_dmel"].to(torch.int32), rtol=0, atol=0)
+            if has_audio:
+                dmel = self._expected_dmel_from_inputs(inputs)
+                torch.testing.assert_close(
+                    dmel, expected["audio_dmel"].to(dtype=torch.int32, device=device), rtol=0, atol=0
+                )
 
     def test_apply_chat_template_text(self):
         messages = [{"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}]
