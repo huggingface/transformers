@@ -419,17 +419,18 @@ to the `kernels` package, this is becoming rare).
 
 ## Tensor parallelism
 
-For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with `tp_plan="auto"` and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
+For models too large to fit on a single GPU, shard the weights across devices with tensor parallelism. Load the model with a [`~distributed.DistributedConfig`] and continuous batching reads the tensor parallel size from the model to size the paged KV cache per shard. See [Tensor parallelism](./tensor_parallelism) for the list of supported architectures and how sharding works.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
 from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-32B",
     attn_implementation="paged|flash_attention_2",
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=4),
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-32B")
 
@@ -448,7 +449,7 @@ torchrun --nproc-per-node 4 cb_tp.py
 The tensor parallel size must divide the model's `num_key_value_heads` (check the model config). The paged cache raises an error at startup otherwise, so choose an appropriate `--nproc-per-node`.
 
 > [!WARNING]
-> Don't set `device_map` with `tp_plan`. The two conflict because `device_map` places whole modules on specific GPUs, while `tp_plan` shards those same parameters across all GPUs.
+> Don't set `device_map` with a [`~distributed.DistributedConfig`]. The two conflict because `device_map` places whole modules on specific GPUs, while tensor parallelism shards those same parameters across all GPUs.
 
 ## Sliding window attention
 

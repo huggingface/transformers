@@ -20,10 +20,10 @@ You can control which accelerators (CUDA, XPU, MPS, HPU, etc.) PyTorch sees and 
 
 ## Order of accelerators
 
-Use the hardware-specific environment variable to select accelerators and set their order. Set it on the command line per run, or add it to `~/.bashrc` or another startup config file.
+Use the hardware-specific environment variable to select accelerators and set their order.
 
 > [!WARNING]
-> Avoid exporting environment variables because if you forget how an environment variable was set up, you may silently train on the wrong accelerators. Set the environment variable on the same command line as the training run.
+> Set the *selection* variables (`CUDA_VISIBLE_DEVICES`, `ZE_AFFINITY_MASK`) on the same command line as the training run rather than exporting them. An exported selection you've forgotten about silently trains on the wrong accelerators. The *ordering* variables below are safe to export, since they only change how the visible devices are numbered.
 
 For example, to select accelerators 0 and 2 out of four:
 
@@ -83,3 +83,9 @@ For more on device enumeration and sorting on Intel XPU, see the [Level Zero](ht
 
 </hfoption>
 </hfoptions>
+
+## Next steps
+
+- See [Choosing a strategy](./distributed_overview) to pick a parallelism strategy for the devices you selected.
+- See [DDP](./ddp) for data-parallel training across those devices.
+- See [Debugging](./debugging) if the devices you selected can't communicate.

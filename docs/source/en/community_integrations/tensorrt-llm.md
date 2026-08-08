@@ -25,7 +25,7 @@ cd examples/auto_deploy
 python build_and_run_ad.py --model meta-llama/Llama-3.2-1B
 ```
 
-Under the hood, AutoDeploy creates an [LLM](https://nvidia.github.io/TensorRT-LLM/llm-api/reference.html#tensorrt_llm.llmapi.LLM) class. It loads the model configuration with [`AutoConfig.from_pretrained`] and extracts any parallelism metadata stored in `tp_plan`. [`AutoModelForCausalLM.from_pretrained`] loads the model with the config and enables Transformers' built-in tensor parallelism.
+Under the hood, AutoDeploy creates an [LLM](https://nvidia.github.io/TensorRT-LLM/llm-api/reference.html#tensorrt_llm.llmapi.LLM) class. It loads the model configuration with [`AutoConfig.from_pretrained`] and extracts any parallelism metadata stored in `base_model_tp_plan`. [`AutoModelForCausalLM.from_pretrained`] loads the model with the config and enables Transformers' built-in tensor parallelism.
 
 ```py
 from tensorrt_llm._torch.auto_deploy import LLM

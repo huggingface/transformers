@@ -84,6 +84,7 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
 
 
 model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
@@ -92,8 +93,7 @@ model_name = "baidu/ERNIE-4.5-21B-A3B-PT"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    device_map="auto",
-    tp_plan="auto",
+    distributed_config=DistributedConfig(tp_size=4),
 )
 
 # prepare the model input

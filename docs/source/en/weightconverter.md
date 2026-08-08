@@ -52,7 +52,7 @@ Checkpoint File → from_pretrained() → convert_and_load_state_dict_in_model()
 |------|-------------------|
 | Dynamic loading | Always, for all models |
 | Conversion mapping | Only when the model's class or `model_type` is registered in `_MODEL_TO_CONVERSION_PATTERN` |
-| TP sharding | Only when `tp_plan="auto"` and model has `base_model_tp_plan` |
+| TP sharding | Only when `distributed_config` sets `tp_size` and the model has `base_model_tp_plan` |
 | Dequantization/deserialization | Only when loading a pre-quantized checkpoint |
 | Quantization | Only when a quantization config is provided and weights are not pre-quantized |
 

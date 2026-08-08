@@ -96,7 +96,7 @@ accelerate launch --num_processes 4 train.py
 <hfoption id="Accelerate config file">
 
 > [!NOTE]
-> Accelerate ignores the [`deepspeed`] argument in [`TrainingArguments`].
+> Accelerate ignores the `deepspeed` argument in [`TrainingArguments`].
 
 Run the [accelerate config](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-config) command and answer questions about your hardware and training setup to create a `default_config.yaml` file in your cache.
 
@@ -273,21 +273,25 @@ The following fields are important for customizing training.
 
 ## Checkpoints
 
-DeepSpeed saves checkpoints in a sharded format that can't be loaded directly with [`~PreTrainedModel.from_pretrained`]. Set [`~TrainingArguments.load_best_model_at_end`] to `True` to have Trainer track and reload the best checkpoint at the end of training.
+DeepSpeed writes checkpoints in a sharded format that [`~PreTrainedModel.from_pretrained`] can't read.
+
+To write one, call [`~Trainer.save_model`] after training. With ZeRO-3, also set `stage3_gather_16bit_weights_on_model_save` so DeepSpeed reconstructs the full tensors from their shards first. Without it there are no consolidated weights to write.
 
 ```py
-from transformers import TrainingArguments, Trainer
+from transformers import Trainer, TrainingArguments
 
 args = TrainingArguments(
     deepspeed="ds_config_zero3.json",
     load_best_model_at_end=True,
     ...
 )
-# after training, save a normal transformers checkpoint
+trainer.train()
 trainer.save_model("./best-model")
 ```
 
-Setting `save_only_model=True` skips saving the full optimizer state, which means you can't reload the best model at the end of training. Also set `stage3_gather_16bit_weights_on_model_save: true` to reconstruct full weights from their shards. This is required for saving a consolidated 16-bit model artifact or 16-bit state dict with ZeRO-3. Transformers raises an error when `save_only_model=True` is combined with `load_best_model_at_end=True`.
+[`~TrainingArguments.load_best_model_at_end`] makes [`Trainer`] track the best checkpoint during training and reload it before you save, so `save_model` writes the best weights rather than the last ones.
+
+Reloading needs the optimizer and scheduler state, which is exactly what [`~TrainingArguments.save_only_model`] discards. Combining the two raises a `ValueError`, so pick only one.
 
 > [!TIP]
 > For resuming across different parallelism configurations, see DeepSpeed's [Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) guide.

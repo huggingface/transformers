@@ -19,14 +19,14 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument.
+Enable expert parallelism with the [`~distributed.DistributedConfig`] class and the `enable_expert_parallel` argument. See [DistributedConfig](./distributed_config) for the full set of sharding fields.
 
 ```py
 import os
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.distributed.configuration_utils import DistributedConfig
+from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),
@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 > [!TIP]
 > Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
 
-This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`~integrations.tensor_parallel.GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 

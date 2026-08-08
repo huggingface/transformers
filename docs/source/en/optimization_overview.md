@@ -123,14 +123,18 @@ outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_imp
 
 [Parallelism](./perf_infer_gpu_multi) distributes a model across devices so models too big for one device run fast. This approach uses more memory due to sharding overhead and communication to sync results.
 
-[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Set `tp_plan="auto"` in [`~PreTrainedModel.from_pretrained`] to enable it.
+[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Pass a [`~distributed.DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to enable it.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.distributed import DistributedConfig
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", tp_plan="auto")
-print(model._tp_plan)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    distributed_config=DistributedConfig(tp_size=4),
+)
+print(model.tp_plan)
 ```
 
 ## Continuous batching
