@@ -1559,7 +1559,6 @@ def convert_and_load_state_dict_in_model(
     tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
-    dtype = load_config.dtype
     device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
@@ -1618,7 +1617,7 @@ def convert_and_load_state_dict_in_model(
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
-            empty_param = meta_model_state_dict.get(renamed_key)
+            empty_param = meta_model_state_dict[renamed_key]
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
@@ -1629,7 +1628,6 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
-            # 3. Handle dtype casting
             needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
@@ -1638,29 +1636,28 @@ def convert_and_load_state_dict_in_model(
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
-            _dtype = dtype
+            # 3. Handle dtype casting
+            # If we load pre-quantized weights that we want to dequantize (they don't have the same name), and the weight is not
+            # floating point, we need to respect the original dtype to correctly dequantize later
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
-                and (
-                    original_key != renamed_key
-                    or not (
-                        tensor.get_dtype().startswith(("F", "BF"))
-                        if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
-                    )
+                and original_key != renamed_key
+                and not (
+                    tensor.get_dtype().startswith(("F", "BF"))
+                    if hasattr(tensor, "get_dtype")
+                    else tensor.is_floating_point()
                 )
             ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
-                # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
                 _dtype = None
+            # Check for `_keep_in_fp_32`/`_keep_in_fp_32_strict`
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            # Usual case, the model was initialized with the correct required dtype
+            else:
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
