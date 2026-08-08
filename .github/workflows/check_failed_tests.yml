@@ -385,7 +385,7 @@ jobs:
 
       - name: Send processed report
         if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels
