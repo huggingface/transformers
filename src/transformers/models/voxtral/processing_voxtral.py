@@ -351,9 +351,6 @@ class VoxtralProcessor(ProcessorMixin):
                     f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})"
                 )
 
-            if not is_soundfile_available():
-                raise ImportError("Please install `soundfile` to encode audio arrays with VoxtralProcessor.")
-
             audio_buffers = []
             for array, f in zip(audio, format):
                 # Create new BytesIO object and write audio data to it
