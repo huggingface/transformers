@@ -353,8 +353,22 @@ class GgufModelTests(unittest.TestCase):
     q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
     gpt_oss_model_id = "unsloth/gpt-oss-20b-GGUF"
     gpt_oss_gguf_file = "gpt-oss-20b-Q5_K_M.gguf"
+    phi2_model_id = "TheBloke/phi-2-GGUF"
+    q2_k_phi2_model_id = "phi-2.Q2_K.gguf"
 
     example_text = "Hello"
+
+    def test_phi2_q2_k(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.phi2_model_id, gguf_file=self.q2_k_phi2_model_id)
+        model = AutoModelForCausalLM.from_pretrained(self.phi2_model_id, gguf_file=self.q2_k_phi2_model_id).to(
+            torch_device
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=12, do_sample=False)
+
+        EXPECTED_TEXT = "Hello, my name is John. Nice to meet you.\n"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_mistral_q4_0(self):
         tokenizer = AutoTokenizer.from_pretrained(self.mistral_model_id, gguf_file=self.q4_0_mistral_model_id)
