@@ -143,6 +143,13 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "fun_asr_nano": [
+            WeightRenaming(r"^model\.multi_modal_projector\.blocks\.", r"model.audio_adaptor.blocks."),
+            WeightRenaming(r"\.fsmn\.", ".feedforward_sequential_memory."),
+        ],
+        "fun_asr_nano_encoder": [
+            WeightRenaming(r"\.fsmn\.", ".feedforward_sequential_memory."),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
