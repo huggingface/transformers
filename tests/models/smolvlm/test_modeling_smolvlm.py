@@ -50,6 +50,7 @@ if is_torch_available():
         SmolVLMForConditionalGeneration,
         SmolVLMModel,
     )
+    from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionEmbeddings
 
 if is_vision_available():
     from PIL import Image
@@ -192,6 +193,53 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Compile not yet supported in SmolVLM models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_vision_position_ids_are_dtype_invariant(self):
+        config = self.model_tester.get_config().vision_config
+        embeddings = SmolVLMVisionEmbeddings(config).to(torch_device)
+        embeddings.eval()
+
+        def patch_embedding(pixel_values):
+            return torch.zeros(
+                pixel_values.shape[0],
+                config.hidden_size,
+                pixel_values.shape[2] // config.patch_size,
+                pixel_values.shape[3] // config.patch_size,
+                device=pixel_values.device,
+            )
+
+        embeddings.patch_embedding.forward = patch_embedding
+        expected_position_ids = torch.arange(embeddings.num_positions, device=torch_device).unsqueeze(0)
+        patch_attention_mask = torch.ones(
+            1,
+            config.image_size // config.patch_size,
+            config.image_size // config.patch_size,
+            dtype=torch.bool,
+            device=torch_device,
+        )
+
+        for dtype in (torch.float32, torch.float16):
+            captured_position_ids = []
+
+            def capture_position_ids(module, inputs):
+                captured_position_ids.append(inputs[0].detach())
+
+            hook = embeddings.position_embedding.register_forward_pre_hook(capture_position_ids)
+            try:
+                pixel_values = torch.zeros(
+                    1,
+                    getattr(config, "num_channels", 3),
+                    config.image_size,
+                    config.image_size,
+                    dtype=dtype,
+                    device=torch_device,
+                )
+                embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
+            finally:
+                hook.remove()
+
+            self.assertEqual(len(captured_position_ids), 1)
+            self.assertTrue(torch.equal(captured_position_ids[0], expected_position_ids))
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):

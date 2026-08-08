@@ -134,9 +134,6 @@ class Idefics2VisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(
-            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
-        )
         position_ids = torch.full(
             size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
         )
@@ -144,25 +141,17 @@ class Idefics2VisionEmbeddings(nn.Module):
         nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
         nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
-        step_h = 1.0 / nb_patches_h  # (batch_size,)
-        step_w = 1.0 / nb_patches_w  # (batch_size,)
-
         max_patches_h = patch_attention_mask.size(1)
         max_patches_w = patch_attention_mask.size(2)
-        h_indices = torch.arange(max_patches_h, device=position_ids.device, dtype=torch.float32)
-        w_indices = torch.arange(max_patches_w, device=position_ids.device, dtype=torch.float32)
+        h_indices = torch.arange(max_patches_h, device=position_ids.device)
+        w_indices = torch.arange(max_patches_w, device=position_ids.device)
 
-        fractional_coords_h = h_indices[None, :] * step_h[:, None]
-        fractional_coords_w = w_indices[None, :] * step_w[:, None]
-
-        fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
-        fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
-
-        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
-
-        bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-        bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+        bucket_coords_h = (h_indices[None, :] * self.num_patches_per_side // nb_patches_h[:, None]).clamp(
+            max=self.num_patches_per_side - 1
+        )
+        bucket_coords_w = (w_indices[None, :] * self.num_patches_per_side // nb_patches_w[:, None]).clamp(
+            max=self.num_patches_per_side - 1
+        )
 
         pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
         pos_ids = pos_ids.reshape(batch_size, -1)
