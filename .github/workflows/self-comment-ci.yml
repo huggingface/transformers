@@ -89,9 +89,9 @@ jobs:
           PR_COMMENT: ${{ github.event.comment.body }}
         run: |
           python -m pip install GitPython
-          python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt
+          printf '%s' "$PR_COMMENT" | python utils/pr_slow_ci_models.py --message-stdin | tee output.txt
           echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
-          python utils/pr_slow_ci_models.py --message "$PR_COMMENT" --quantization | tee output2.txt
+          printf '%s' "$PR_COMMENT" | python utils/pr_slow_ci_models.py --message-stdin --quantization | tee output2.txt
           echo "quantizations=$(tail -n 1 output2.txt)" >> $GITHUB_ENV
 
       - name: Show models to test
