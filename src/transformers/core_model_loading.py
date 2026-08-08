@@ -767,6 +767,7 @@ class WeightTransform:
         "_was_used",
         "scope_prefix",
         "base_model_prefix",
+        "from_quantizer",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -784,6 +785,10 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
+
+        # Whether the quantizer introduced this transform, i.e. it renames or collects raw quantized data.
+        # Set in `get_model_conversion_mapping`; loading uses it to keep those tensors at their checkpoint dtype.
+        self.from_quantizer = False
 
         # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
@@ -1396,7 +1401,7 @@ def rename_source_key(
     base_model_prefix: str | None = None,
     meta_state_dict: dict | None = None,
     reverse: bool = False,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, bool]:
     """
     Rename a checkpoint key by first applying all `WeightRenaming`s, then at most one `WeightConverter`.
     This means that the `WeightConverter` must specify the final name for the key, but some `WeightRenaming`s can act on other
@@ -1422,10 +1427,12 @@ def rename_source_key(
             This specifies if we are reverting all the `WeightTransform`s (saving back original format).
 
     Returns:
-        `tuple[str, str | None]`: The renamed key and the matched converter's source pattern
-        (or `None` if no converter matched).
+        `tuple[str, str | None, bool]`: The renamed key, the matched converter's source pattern (or `None` if no
+        converter matched), and whether one of the transforms that acted on the key came from the quantizer, i.e.
+        the key holds raw quantized data (see `WeightTransform.from_quantizer`).
     """
     renamed_key = source_key
+    is_transformed_quantized_key = False
     converter_source_pattern = None
     # 1. If `reverse` is False: apply all renamings in turns (if multiple match, it's the responsibility of the mappings to make sure
     # they are coherent).
@@ -1433,6 +1440,8 @@ def rename_source_key(
     first_iterable = weight_renamings if not reverse else weight_converters
     for transform in first_iterable:
         renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        if source_pattern is not None:
+            is_transformed_quantized_key |= transform.from_quantizer
         # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is True
         if reverse and source_pattern is not None:
             converter_source_pattern = source_pattern
@@ -1444,6 +1453,8 @@ def rename_source_key(
     second_iterable = weight_converters if not reverse else weight_renamings
     for transform in second_iterable:
         renamed_key, source_pattern = transform.rename_source_key(renamed_key)
+        if source_pattern is not None:
+            is_transformed_quantized_key |= transform.from_quantizer
         # Only break after match is we are using the `WeightConverter`s here, i.e. `reverse` is False
         if not reverse and source_pattern is not None:
             converter_source_pattern = source_pattern
@@ -1459,7 +1470,7 @@ def rename_source_key(
         elif meta_state_dict.get(f"{base_model_prefix}.{renamed_key}") is not None:
             renamed_key = f"{base_model_prefix}.{renamed_key}"
 
-    return renamed_key, converter_source_pattern
+    return renamed_key, converter_source_pattern, is_transformed_quantized_key
 
 
 def convert_and_load_state_dict_in_model(
@@ -1559,7 +1570,6 @@ def convert_and_load_state_dict_in_model(
     tp_plan = tp_plan or {}
     device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
-    dtype = load_config.dtype
     device_mesh = load_config.device_mesh
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
@@ -1607,18 +1617,18 @@ def convert_and_load_state_dict_in_model(
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
-        renamed_key, source_pattern = rename_source_key(
+        renamed_key, source_pattern, is_transformed_quantized_key = rename_source_key(
             original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
-            renamed_key, source_pattern = rename_source_key(
+            renamed_key, source_pattern, is_transformed_quantized_key = rename_source_key(
                 original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
-            empty_param = meta_model_state_dict.get(renamed_key)
+            empty_param = meta_model_state_dict[renamed_key]
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
@@ -1629,7 +1639,6 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
-            # 3. Handle dtype casting
             needs_quantization = (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
@@ -1638,12 +1647,12 @@ def convert_and_load_state_dict_in_model(
             if needs_quantization:
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
-            _dtype = dtype
+            # 3. Handle dtype casting
             if (
                 hf_quantizer
                 and hf_quantizer.pre_quantized
                 and (
-                    original_key != renamed_key
+                    is_transformed_quantized_key
                     or not (
                         tensor.get_dtype().startswith(("F", "BF"))
                         if hasattr(tensor, "get_dtype")
@@ -1651,16 +1660,15 @@ def convert_and_load_state_dict_in_model(
                     )
                 )
             ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
-                # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
+                # Raw quantized data (packed integers, fp8 weights, scales, quantization states...): keep the
+                # checkpoint dtype, the quantizer op is the one returning the dtype the model expects. Casting
+                # here would corrupt it
                 _dtype = None
-            elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
-                matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
-                if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif dtype_plan != {} and (matched_dtype_pattern := dtype_policy_alt.search(renamed_key)) is not None:
+                # Check for `_keep_in_fp32_modules`/`_keep_in_fp32_modules_strict`
+                _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
+            else:
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
@@ -1792,7 +1800,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
+        renamed_key, source_pattern, _ = rename_source_key(original_key, renamings, converters, reverse=True)
         if source_pattern is not None:
             new_converter = deepcopy(pattern_to_converter[source_pattern])
             # each target key gets its own converter instance
