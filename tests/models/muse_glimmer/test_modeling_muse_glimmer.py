@@ -17,7 +17,13 @@ import copy
 import os
 import unittest
 
-from transformers import MuseGlimmerConfig, is_torch_available
+from transformers import (
+    AutoProcessor,
+    MuseGlimmerConfig,
+    MuseGlimmerForConditionalGeneration,
+    MuseGlimmerModel,
+    is_torch_available,
+)
 from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
     cleanup,
@@ -27,6 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -34,23 +41,17 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoProcessor,
-        MuseGlimmerForConditionalGeneration,
-        MuseGlimmerModel,
-    )
 
-
-MUSE_GLIMMER_CHECKPOINT_DIR = os.environ.get("MUSE_GLIMMER_CHECKPOINT_DIR", "/raid/pablo/muse_glimmer_early/muse_glimmer-hf")
+# TODO UPDATE WHEN WE HAVE FINAL REPO NAME!
+MODEL_ID = os.environ.get("MUSE_GLIMMER_TEST_CHECKPOINT", "someorgtoo-hf/muse-glimmer")
 
 
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = MuseGlimmerModel
-        config_class = MuseGlimmerConfig
-        text_config_class = MuseGlimmerTextConfig
-        vision_config_class = MuseGlimmerVisionConfig
-        conditional_generation_class = MuseGlimmerForConditionalGeneration
+    base_model_class = MuseGlimmerModel
+    config_class = MuseGlimmerConfig
+    text_config_class = MuseGlimmerTextConfig
+    vision_config_class = MuseGlimmerVisionConfig
+    conditional_generation_class = MuseGlimmerForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
@@ -129,9 +130,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model_and_processor(cls):
         model = MuseGlimmerForConditionalGeneration.from_pretrained(
-            MUSE_GLIMMER_CHECKPOINT_DIR, dtype=torch.bfloat16, device_map=torch_device
+            MODEL_ID, dtype=torch.bfloat16, device_map=torch_device
         )
-        processor = AutoProcessor.from_pretrained(MUSE_GLIMMER_CHECKPOINT_DIR)
+        processor = AutoProcessor.from_pretrained(MODEL_ID)
         return model, processor
 
     def test_text_generation_matches_reference(self):
@@ -150,14 +151,10 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
     def test_image_generation_matches_reference(self):
         # The reference implementation tokenizes image completions as
         # [bos] + [patch] * num_vision_tokens + encode(prompt), with no image start/end wrappers.
-        from PIL import Image
-
         model, processor = self.get_model_and_processor()
         tokenizer = processor.tokenizer
 
-        image = Image.open(os.path.join(os.path.dirname(MUSE_GLIMMER_CHECKPOINT_DIR), "test_images", "cats.jpg")).convert(
-            "RGB"
-        )
+        image = load_coco_image("000000039769.jpg").convert("RGB")
         image_inputs = processor.image_processor(images=[image], return_tensors="pt")
         image_grid_thw = image_inputs["image_grid_thw"]
         self.assertEqual(image_grid_thw.tolist(), [[1, 34, 46]])
