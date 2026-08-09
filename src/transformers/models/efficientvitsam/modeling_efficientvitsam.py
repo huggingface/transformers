@@ -1523,7 +1523,9 @@ class EfficientViTSamModel(EfficientViTSamPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.vision_encoder.get_input_embeddings()
+        raise NotImplementedError(
+            "`EfficientViTSamModel` does not expose a single input embeddings module."
+        )
 
     def get_image_wide_positional_embeddings(self):
         size = self.config.prompt_encoder_config.image_embedding_size

@@ -1069,6 +1069,11 @@ class EfficientViTSamModel(SamModel):
         self.mask_decoder = EfficientViTSamMaskDecoder(config.mask_decoder_config)
         self.post_init()
 
+    def get_input_embeddings(self):
+        raise NotImplementedError(
+            "`EfficientViTSamModel` does not expose a single input embeddings module."
+        )
+
 
 class EfficientViTSamImageProcessor(SamImageProcessor):
     size = {"longest_edge": 512}
