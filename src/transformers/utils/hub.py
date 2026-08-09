@@ -15,7 +15,6 @@
 Hub utilities: utilities related to download and cache models
 """
 
-import errno
 import json
 import os
 import re
@@ -485,11 +484,6 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
-        elif isinstance(e, OSError) and e.errno == errno.EROFS:
-            # Read-only filesystem: do NOT silently fall back to the stale cache.
-            # Re-raise so the caller (e.g. conftest's _with_tmpdir_cache_fallback) can
-            # retry the download against a writable tmp cache dir.
-            raise
         elif isinstance(e, ValueError):
             raise OSError(f"{e}") from e
 
