@@ -43,7 +43,7 @@ class EfficientViTSamImagesKwargs(ImagesKwargs, total=False):
         in the original image space. Points are normalized to the target image size before being passed to the model.
     input_labels (`NestedList`, *optional*):
         Labels for the input points, indicating whether each point is a foreground (1) or background (0) point.
-        Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the efficientvitsame
+        Should be a nested list with structure `[image_level, object_level, point_level]`. Must have the same
         structure as `input_points` (excluding the coordinate dimension).
     input_boxes (`NestedList`, *optional*):
         Bounding boxes for prompt-based segmentation. Should be a nested list with structure
@@ -156,7 +156,7 @@ class EfficientViTSamProcessor(ProcessorMixin):
                     self._normalize_coordinates(self.target_size, point, original_size)
                     for point, original_size in zip(input_points, original_sizes)
                 ]
-            # check that all arrays have the efficientvitsame shape
+            # check that all arrays have the same shape
             if not all(point.shape == input_points[0].shape for point in input_points):
                 if input_labels is not None:
                     input_points, input_labels = self._pad_points_and_labels(

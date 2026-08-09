@@ -410,7 +410,7 @@ class EfficientViTSamTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`EfficientViTSamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -1726,9 +1726,9 @@ class EfficientViTSamModel(EfficientViTSamPreTrainedModel):
 
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
-                "The batch size of the image embeddings and the input points must be the efficientvitsame. ",
+                "The batch size of the image embeddings and the input points must be the same. ",
                 f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
-                " if you want to pass multiple points for the efficientvitsame image, make sure that you passed ",
+                " if you want to pass multiple points for the same image, make sure that you passed ",
                 " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
                 " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
             )

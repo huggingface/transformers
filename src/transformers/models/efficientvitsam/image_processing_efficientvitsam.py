@@ -657,7 +657,7 @@ class EfficientViTSamImageProcessor(TorchvisionBackend):
         masks = masks.flatten(0, 1)
 
         if masks.shape[0] != iou_scores.shape[0]:
-            raise ValueError("masks and iou_scores must have the efficientvitsame batch size.")
+            raise ValueError("masks and iou_scores must have the same batch size.")
 
         if masks.device != iou_scores.device:
             iou_scores = iou_scores.to(masks.device)
