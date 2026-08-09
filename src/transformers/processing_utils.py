@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,8 +63,17 @@ from .utils import (
     is_torch_available,
     list_repo_templates,
     logging,
+    to_py_obj,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import (
+    _get_template_variables,
+    neutralize_special_tokens,
+    render_jinja_template,
+    replace_placeholders_in_sequences,
+)
+from .utils.chat_template_utils import (
+    escape_special_tokens as _escape_special_tokens,
+)
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -1986,6 +1996,7 @@ class ProcessorMixin(PushToHubMixin):
         return_tensors: str | TensorType | None = None,
         return_dict: bool = False,
         load_audio_from_video: bool = False,
+        escape_special_tokens: bool = True,
         processor_kwargs: dict | None = None,
         **kwargs,
     ) -> str:
@@ -2013,6 +2024,10 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            escape_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether to neutralize special tokens contained in the user-supplied conversation, tools and
+                documents so that they cannot be turned into control tokens by the template. Set to `False` to
+                restore the legacy (unsafe) behaviour where user text is tokenized as-is.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2098,6 +2113,25 @@ class ProcessorMixin(PushToHubMixin):
         else:
             is_batched = False
             conversations = [conversation]
+
+        # Escape special tokens in user-supplied content so they cannot be turned into control tokens
+        # by the chat template. No-op when escape_special_tokens is False or there are no special tokens.
+        placeholder_to_token: dict[str, str] = {}
+        if escape_special_tokens:
+            all_special_tokens = list(
+                dict.fromkeys(self.tokenizer.all_special_tokens + list(self.tokenizer.added_tokens_decoder.values()))
+            )
+            if all_special_tokens:
+                nonce = uuid.uuid4().hex
+                conversations, placeholder_to_token = _escape_special_tokens(
+                    conversations, all_special_tokens, nonce=nonce
+                )
+                if tools:
+                    tools, tool_placeholders = _escape_special_tokens(tools, all_special_tokens, nonce=nonce)
+                    placeholder_to_token.update(tool_placeholders)
+                if documents:
+                    documents, doc_placeholders = _escape_special_tokens(documents, all_special_tokens, nonce=nonce)
+                    placeholder_to_token.update(doc_placeholders)
 
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
@@ -2217,6 +2251,60 @@ class ProcessorMixin(PushToHubMixin):
                 **processor_kwargs,
             )
 
+            # Restore escaped special tokens by replacing placeholder IDs with the original
+            # special token IDs. The processor cannot do segment-based encoding (the __call__
+            # path is opaque), so we rely on id-level replacement. When the tokenizer encodes
+            # a placeholder differently in context vs standalone (e.g. Metaspace/SentencePiece),
+            # replacement may fail; we raise explicitly rather than silently leaving placeholder
+            # IDs in the output.
+            if placeholder_to_token:
+                replacement_specs = []
+                for placeholder, token in placeholder_to_token.items():
+                    target_ids = self.tokenizer.encode(placeholder, add_special_tokens=False)
+                    replacement_ids = self.tokenizer.encode(token, add_special_tokens=False, split_special_tokens=True)
+                    replacement_specs.append((target_ids, replacement_ids))
+
+                # The output may hold framework tensors, whose rows cannot be resized in place, so we work on
+                # plain Python lists and convert back at the end.
+                input_ids = [to_py_obj(row) for row in out["input_ids"]]
+                attention_mask = out.get("attention_mask")
+                attention_mask = None if attention_mask is None else [to_py_obj(row) for row in attention_mask]
+                any_found = False
+
+                for i in range(len(input_ids)):
+                    am = attention_mask[i] if attention_mask is not None else None
+                    for target_ids, replacement_ids in replacement_specs:
+                        input_ids[i], am, _, found = replace_placeholders_in_sequences(
+                            input_ids[i], am, None, target_ids, replacement_ids
+                        )
+                        if found:
+                            any_found = True
+                    if attention_mask is not None:
+                        attention_mask[i] = am
+
+                if not any_found:
+                    raise ValueError(
+                        "Failed to restore escaped special tokens in processor output. "
+                        "This may happen when the tokenizer's tokenization of a placeholder "
+                        "differs between standalone and in-context encoding. "
+                        "Try setting escape_special_tokens=False to disable escaping."
+                    )
+
+                out["input_ids"] = input_ids
+                if attention_mask is not None:
+                    out["attention_mask"] = attention_mask
+                if return_tensors:
+                    try:
+                        out.convert_to_tensors(tensor_type=return_tensors)
+                    except ValueError as exc:
+                        # Restoring escaped tokens changes sequence lengths, which can break a previously
+                        # rectangular batch. Fail loudly with an actionable message instead of a raw error.
+                        raise ValueError(
+                            "Failed to build tensors after restoring escaped special tokens: sequences no "
+                            "longer share the same length. Use `return_tensors=None` and pad afterwards, or "
+                            "set `escape_special_tokens=False` to disable escaping."
+                        ) from exc
+
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
@@ -2248,6 +2336,11 @@ class ProcessorMixin(PushToHubMixin):
                 return out
             else:
                 return out["input_ids"]
+        else:
+            # tokenize=False: neutralize any escaped special tokens so they remain visually
+            # identical but cannot be re-tokenized as control tokens by a downstream call.
+            if placeholder_to_token:
+                prompt = neutralize_special_tokens(prompt, placeholder_to_token)
         return prompt
 
     def parse_response(

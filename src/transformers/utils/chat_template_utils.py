@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import inspect
 import json
 import re
 import types
+import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
@@ -27,6 +29,7 @@ from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no
 from packaging import version
 
 from . import logging
+from .generic import to_py_obj
 from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
 
@@ -504,7 +507,7 @@ def render_jinja_template(
     continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
     **kwargs,
-) -> str:
+) -> tuple[list[str], list[list[tuple[int, int]]]]:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
         logger.warning_once(
             "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
@@ -629,3 +632,225 @@ class Chat:
             if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         self.messages = messages
+
+
+def escape_special_tokens(
+    data: Any, special_tokens: list[str], nonce: str | None = None
+) -> tuple[Any, dict[str, str]]:
+    """
+    Escapes special tokens in user data (conversations, tools, documents) to prevent special token injection attacks.
+
+    Args:
+        data (`Any`): The conversation messages, tools, or documents structure to escape.
+        special_tokens (`list[str]`): List of special token strings to escape.
+        nonce (`str`, *optional*): An optional pre-generated random nonce string.
+
+    Returns:
+        `tuple[Any, dict[str, str]]`: A tuple containing the escaped data structure and a mapping of
+        placeholder strings back to the original special token strings.
+    """
+    if not special_tokens or not data:
+        return data, {}
+
+    valid_tokens = sorted(
+        [t for t in special_tokens if isinstance(t, str) and t],
+        key=len,
+        reverse=True,
+    )
+    if not valid_tokens:
+        return data, {}
+
+    if nonce is None:
+        nonce = uuid.uuid4().hex
+    prefix = f"__HF_ESC_{nonce}_"
+
+    token_to_placeholder = {}
+    for i, token in enumerate(valid_tokens):
+        token_to_placeholder[token] = f"{prefix}{i}__"
+
+    # Only the placeholders that were actually substituted are reported back, so that callers can
+    # take the plain (and much cheaper) code path when the payload contains no special token at all.
+    placeholder_to_token: dict[str, str] = {}
+
+    def _escape_val(val: Any) -> Any:
+        if isinstance(val, str):
+            res = val
+            if prefix in res:
+                res = res.replace(prefix, f"__SAN_{nonce}_")
+            for token, placeholder in token_to_placeholder.items():
+                if token in res:
+                    res = res.replace(token, placeholder)
+                    placeholder_to_token[placeholder] = token
+            return res
+        elif hasattr(val, "messages"):
+            escaped_messages = _escape_val(val.messages)
+            try:
+                val_copy = copy.copy(val)
+                val_copy.messages = escaped_messages
+                return val_copy
+            except (AttributeError, TypeError):
+                return Chat(escaped_messages)
+        elif isinstance(val, dict):
+            return {k: _escape_val(v) for k, v in val.items()}
+        elif isinstance(val, list):
+            return [_escape_val(v) for v in val]
+        elif isinstance(val, tuple):
+            return tuple(_escape_val(v) for v in val)
+        return val
+
+    escaped = _escape_val(data)
+    return escaped, placeholder_to_token
+
+
+def unpack_special_tokens(rendered_text: str | list[str], placeholder_to_token: dict[str, str]) -> str | list[str]:
+    """
+    Unpacks escaped special token placeholders back to their original literal special token string representations.
+
+    Args:
+        rendered_text (`Union[str, list[str]]`): Rendered Jinja template string or list of rendered strings.
+        placeholder_to_token (`dict[str, str]`): Mapping from placeholder strings to original special tokens.
+
+    Returns:
+        `Union[str, list[str]]`: Unpacked rendered text with original special token strings restored.
+    """
+    if not placeholder_to_token or not rendered_text:
+        return rendered_text
+
+    if isinstance(rendered_text, str):
+        res = rendered_text
+        for placeholder, token in placeholder_to_token.items():
+            res = res.replace(placeholder, token)
+        return res
+    elif isinstance(rendered_text, list):
+        return [unpack_special_tokens(item, placeholder_to_token) for item in rendered_text]
+    return rendered_text
+
+
+def split_on_placeholders(
+    rendered_text: str, placeholder_to_token: dict[str, str]
+) -> list[tuple[str, bool, int, int]]:
+    """
+    Splits a rendered template string into segments on escaped special token placeholders.
+
+    Args:
+        rendered_text (`str`): Rendered Jinja template string, possibly containing placeholders.
+        placeholder_to_token (`dict[str, str]`): Mapping from placeholder strings to original special tokens.
+
+    Returns:
+        `list[tuple[str, bool, int, int]]`: A list of `(text, is_user_content, start, end)` segments, where `start`
+        and `end` are the character offsets of the segment inside `rendered_text` (i.e. offsets of the placeholder
+        itself for user content). Segments with `is_user_content=True` contain the original special token text that
+        came from user input and must be encoded with `split_special_tokens=True` so that they cannot become
+        control tokens. Concatenating all segment texts reproduces the rendered text with placeholders substituted
+        back.
+    """
+    if not placeholder_to_token or not rendered_text:
+        return [(rendered_text, False, 0, len(rendered_text))]
+
+    # Longest first so that no placeholder is a prefix of another during matching
+    pattern = re.compile("|".join(re.escape(p) for p in sorted(placeholder_to_token, key=len, reverse=True)))
+
+    segments = []
+    pos = 0
+    for match in pattern.finditer(rendered_text):
+        if match.start() > pos:
+            segments.append((rendered_text[pos : match.start()], False, pos, match.start()))
+        segments.append((placeholder_to_token[match.group(0)], True, match.start(), match.end()))
+        pos = match.end()
+    if pos < len(rendered_text):
+        segments.append((rendered_text[pos:], False, pos, len(rendered_text)))
+    return segments or [("", False, 0, 0)]
+
+
+def neutralize_special_tokens(rendered_text: str | list[str], placeholder_to_token: dict[str, str]) -> str | list[str]:
+    """
+    Replaces escaped placeholders with a neutralized rendering of the original special token.
+
+    A zero-width space (`U+200B`) is inserted after the first character of the token so that it remains visually
+    identical while no longer matching the tokenizer's special token vocabulary. This is used on the
+    `tokenize=False` path, where returning the literal token text would let user content be re-tokenized as
+    control tokens by any downstream call.
+
+    Args:
+        rendered_text (`Union[str, list[str]]`): Rendered Jinja template string or list of rendered strings.
+        placeholder_to_token (`dict[str, str]`): Mapping from placeholder strings to original special tokens.
+
+    Returns:
+        `Union[str, list[str]]`: Rendered text with placeholders replaced by neutralized special tokens.
+    """
+    if not placeholder_to_token or not rendered_text:
+        return rendered_text
+
+    if isinstance(rendered_text, list):
+        return [neutralize_special_tokens(item, placeholder_to_token) for item in rendered_text]
+
+    res = rendered_text
+    for placeholder, token in placeholder_to_token.items():
+        neutralized = f"{token[:1]}\u200b{token[1:]}" if token else token
+        res = res.replace(placeholder, neutralized)
+    return res
+
+
+def replace_placeholders_in_sequences(
+    sequence: list[int],
+    attention_mask: list[int] | None,
+    assistant_mask: list[int] | None,
+    target_ids: list[int],
+    replacement_ids: list[int],
+) -> tuple[list[int], list[int] | None, list[int] | None, bool]:
+    """
+    Replaces occurrences of target_ids with replacement_ids in sequence, while maintaining
+    positional alignment with attention_mask and assistant_mask.
+
+    Args:
+        sequence (`list[int]`): The input token ID sequence.
+        attention_mask (`list[int]`, *optional*): The attention mask sequence.
+        assistant_mask (`list[int]`, *optional*): The assistant token mask sequence.
+        target_ids (`list[int]`): The target sub-sequence of token IDs to replace.
+        replacement_ids (`list[int]`): The replacement sub-sequence of token IDs.
+
+    Returns:
+        `tuple[list[int], list[int] | None, list[int] | None, bool]`: A tuple containing the updated sequence,
+        updated attention_mask, updated assistant_mask, and whether at least one match was replaced. The returned
+        sequences are always plain Python lists, even when the inputs were framework tensors.
+    """
+    # The inputs may be framework tensors (e.g. when `return_tensors` was passed to the processor), for which
+    # slice comparison would return an elementwise tensor instead of a bool. Work on plain lists instead.
+    sequence = to_py_obj(sequence)
+    attention_mask = to_py_obj(attention_mask) if attention_mask is not None else None
+    assistant_mask = to_py_obj(assistant_mask) if assistant_mask is not None else None
+    target_ids = to_py_obj(target_ids)
+    replacement_ids = to_py_obj(replacement_ids)
+
+    if not target_ids or len(target_ids) > len(sequence):
+        return sequence, attention_mask, assistant_mask, False
+
+    found = False
+    res_sequence = []
+    res_attention = [] if attention_mask is not None else None
+    res_assistant = [] if assistant_mask is not None else None
+    i = 0
+    seq_len = len(sequence)
+    target_len = len(target_ids)
+    rep_len = len(replacement_ids)
+
+    while i < seq_len:
+        if sequence[i : i + target_len] == target_ids:
+            found = True
+            res_sequence.extend(replacement_ids)
+            if attention_mask is not None:
+                att_val = attention_mask[i] if i < len(attention_mask) else 1
+                res_attention.extend([att_val] * rep_len)
+            if assistant_mask is not None:
+                ast_val = assistant_mask[i] if i < len(assistant_mask) else 0
+                res_assistant.extend([ast_val] * rep_len)
+            i += target_len
+        else:
+            res_sequence.append(sequence[i])
+            if attention_mask is not None:
+                res_attention.append(attention_mask[i] if i < len(attention_mask) else 1)
+            if assistant_mask is not None:
+                res_assistant.append(assistant_mask[i] if i < len(assistant_mask) else 0)
+            i += 1
+
+    return res_sequence, res_attention, res_assistant, found

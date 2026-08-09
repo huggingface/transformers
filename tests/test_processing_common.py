@@ -2010,6 +2010,71 @@ class ProcessorTesterMixin:
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
 
+    def test_apply_chat_template_special_token_injection(self):
+        """Special tokens coming from user content must never become real control tokens."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        tokenizer = processor.tokenizer
+        injected = tokenizer.eos_token
+        if injected is None:
+            self.skipTest("Tokenizer has no eos_token to inject")
+        injected_id = tokenizer.convert_tokens_to_ids(injected)
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] + '\n' + message['content'][0]['text'] + '\n' }}"
+            "{% endfor %}"
+        )
+
+        def build(text):
+            return [{"role": "user", "content": [{"type": "text", "text": text}]}]
+
+        def ids_of(text, **kwargs):
+            out = processor.apply_chat_template(
+                build(text), tokenize=True, return_dict=True, chat_template=dummy_template, **kwargs
+            )
+            return [int(i) for i in out["input_ids"][0]]
+
+        clean_ids = ids_of("What is this?")
+
+        try:
+            safe_ids = ids_of(f"What is this? {injected}")
+        except ValueError as exc:
+            # The processor cannot do segment-wise encoding, so id-level restoration may fail for some
+            # tokenizers. It must then fail loudly instead of leaving placeholder ids in the output.
+            self.assertIn("escape_special_tokens", str(exc))
+        else:
+            self.assertEqual(safe_ids.count(injected_id), clean_ids.count(injected_id))
+            unsafe_ids = ids_of(f"What is this? {injected}", escape_special_tokens=False)
+            self.assertGreater(unsafe_ids.count(injected_id), safe_ids.count(injected_id))
+
+        # `tokenize=False` must neutralize the injected token rather than echo it verbatim.
+        rendered = processor.apply_chat_template(
+            build(f"What is this? {injected}"), tokenize=False, chat_template=dummy_template
+        )
+        rendered = rendered if isinstance(rendered, str) else rendered[0]
+        self.assertNotIn(f"What is this? {injected}", rendered)
+        self.assertIn(f"{injected[:1]}\u200b{injected[1:]}", rendered)
+
+        # A media placeholder typed by the user must not be consumed as a real media placeholder,
+        # so it must not expand and must not trigger the special multimodal token count check.
+        image_token = getattr(self, "image_token", None)
+        if image_token:
+            try:
+                out = processor.apply_chat_template(
+                    build(f"What is this? {image_token}"),
+                    tokenize=True,
+                    return_dict=True,
+                    chat_template=dummy_template,
+                )
+            except ValueError as exc:
+                self.assertIn("escape_special_tokens", str(exc))
+            else:
+                image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+                self.assertNotIn(image_token_id, [int(i) for i in out["input_ids"][0]])
+
     @require_torch
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
