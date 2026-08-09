@@ -41,6 +41,8 @@ class MuseGlimmerImageProcessorKwargs(ImagesKwargs, total=False):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    max_image_tokens (`int`, *optional*, defaults to 4096):
+        The maximum number of merged image tokens produced for one image.
     """
 
     patch_size: int

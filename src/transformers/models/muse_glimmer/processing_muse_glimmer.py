@@ -29,11 +29,15 @@ class MuseGlimmerProcessor(ProcessorMixin):
         **kwargs,
     ):
         self.image_token = "<|patch|>"
+        self.image_start_token = "<|image_start|>"
+        self.image_end_token = "<|image_end|>"
         self.video_token = "<|video|>"
         self.video_sep_token = "<|vid_frame_separator|>"
         self.video_start_token = "<|vid_start|>"
         self.video_end_token = "<|vid_end|>"
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
         super().__init__(
@@ -64,10 +68,9 @@ class MuseGlimmerProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        # Reference format is [bos] + <|patch|>*n + text (no image start/end wrappers), matched here.
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
-        return self.image_token * num_image_tokens
+        return self.image_start_token + self.image_token * num_image_tokens + self.image_end_token
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2

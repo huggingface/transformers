@@ -149,24 +149,21 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
         self.assertEqual(completion[: len(self.EXPECTED_TEXT_PREFIX)], self.EXPECTED_TEXT_PREFIX)
 
     def test_image_generation_matches_reference(self):
-        # The reference implementation tokenizes image completions as
-        # [bos] + [patch] * num_vision_tokens + encode(prompt), with no image start/end wrappers.
         model, processor = self.get_model_and_processor()
         tokenizer = processor.tokenizer
 
         image = load_coco_image("000000039769.jpg").convert("RGB")
-        image_inputs = processor.image_processor(images=[image], return_tensors="pt")
+        image_inputs = processor(text="<|patch|>In this photo we can see", images=[image], return_tensors="pt")
         image_grid_thw = image_inputs["image_grid_thw"]
         self.assertEqual(image_grid_thw.tolist(), [[1, 34, 46]])
 
         num_vision_tokens = int(image_grid_thw.prod(dim=-1).sum() // processor.image_processor.merge_size**2)
         self.assertEqual(num_vision_tokens, 391)
 
-        prompt_ids = tokenizer("In this photo we can see", add_special_tokens=False).input_ids
-        input_ids = torch.tensor(
-            [[tokenizer.bos_token_id] + [model.config.image_token_id] * num_vision_tokens + prompt_ids],
-            device=torch_device,
-        )
+        input_ids = image_inputs["input_ids"].to(torch_device)
+        self.assertEqual((input_ids == processor.image_start_token_id).sum().item(), 1)
+        self.assertEqual((input_ids == model.config.image_token_id).sum().item(), num_vision_tokens)
+        self.assertEqual((input_ids == processor.image_end_token_id).sum().item(), 1)
 
         output = model.generate(
             input_ids=input_ids,

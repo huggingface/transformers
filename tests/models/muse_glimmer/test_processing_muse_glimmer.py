@@ -34,12 +34,14 @@ VOCAB = {
     "<|vid_start|>": 6,
     "<|vid_end|>": 7,
     "<|vid_frame_separator|>": 8,
-    "lower": 9,
-    "newer": 10,
-    "upper": 11,
-    "older": 12,
-    "longer": 13,
-    "string": 14,
+    "<|image_start|>": 9,
+    "<|image_end|>": 10,
+    "lower": 11,
+    "newer": 12,
+    "upper": 13,
+    "older": 14,
+    "longer": 15,
+    "string": 16,
 }
 
 
@@ -66,6 +68,8 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "<|vid_start|>",
                 "<|vid_end|>",
                 "<|vid_frame_separator|>",
+                "<|image_start|>",
+                "<|image_end|>",
             ],
         )
 
@@ -83,3 +87,26 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("The processor consumes `video_metadata`, so its output cannot be equal to the raw one")
     def test_video_processor_defaults(self):
         pass
+
+    def test_image_boundary_tokens(self):
+        processor = self.get_processor()
+        images = self.prepare_image_inputs(batch_size=2)
+        text = f"{processor.image_token}lower{processor.image_token}upper"
+
+        inputs = processor(text=text, images=images)
+        num_tokens = [int(grid.prod()) // processor.image_processor.merge_size**2 for grid in inputs.image_grid_thw]
+        expanded_text = (
+            processor.image_start_token
+            + processor.image_token * num_tokens[0]
+            + processor.image_end_token
+            + "lower"
+            + processor.image_start_token
+            + processor.image_token * num_tokens[1]
+            + processor.image_end_token
+            + "upper"
+        )
+
+        self.assertEqual(inputs.input_ids[0], processor.tokenizer(expanded_text).input_ids)
+        self.assertEqual(inputs.input_ids[0].count(processor.image_start_token_id), 2)
+        self.assertEqual(inputs.input_ids[0].count(processor.image_end_token_id), 2)
+        self.assertEqual(inputs.input_ids[0].count(processor.image_token_id), sum(num_tokens))
