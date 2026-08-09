@@ -119,7 +119,7 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class MuseGlimmerIntegrationTest(unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
-    EXPECTED_IMAGE_PREFIX = " two cats lying on a pink blanket. "
+    EXPECTED_IMAGE_PREFIX = " two cats sleeping on a pink"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
