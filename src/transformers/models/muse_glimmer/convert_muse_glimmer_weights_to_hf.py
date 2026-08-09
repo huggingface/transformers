@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert an Onyx checkpoint to a Hugging Face transformers checkpoint.
+"""Convert an MuseGlimmer checkpoint to a Hugging Face transformers checkpoint.
 
 Usage:
-    python src/transformers/models/onyx/convert_onyx_weights_to_hf.py \\
+    python src/transformers/models/muse_glimmer/convert_muse_glimmer_weights_to_hf.py \\
         --checkpoint_path        pytorch_weights/llm/mp_1/model_0.pt \\
         --vision_checkpoint_path pytorch_weights/encoder/mp_1/<name>.pt \\
         --tokenizer_path         pytorch_weights/tokenizer/l4_200k_base \\
-        --output_path            onyx-hf-converted
+        --output_path            muse_glimmer-hf-converted
 """
 
 import argparse
@@ -29,13 +29,13 @@ import torch
 from tokenizers import processors
 
 from transformers import (
-    OnyxConfig,
-    OnyxForConditionalGeneration,
-    OnyxImageProcessor,
-    OnyxProcessor,
-    OnyxTextConfig,
-    OnyxVideoProcessor,
-    OnyxVisionConfig,
+    MuseGlimmerConfig,
+    MuseGlimmerForConditionalGeneration,
+    MuseGlimmerImageProcessor,
+    MuseGlimmerProcessor,
+    MuseGlimmerTextConfig,
+    MuseGlimmerVideoProcessor,
+    MuseGlimmerVisionConfig,
     TokenizersBackend,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
@@ -52,7 +52,7 @@ from transformers.utils.hub import cached_file
 # the ``hf/`` subfolder alongside the other HF assets.
 # TODO: before release, update to the final public repo and load ``chat_template.jinja``
 # from the repo root (drop the ``hf/`` prefix).
-ONYX_MM_CHAT_TEMPLATE = Path(cached_file("someorgtoo/onyx_early_v2", "hf/chat_template.jinja")).read_text(
+MUSE_GLIMMER_MM_CHAT_TEMPLATE = Path(cached_file("someorgtoo/onyx_early_v2", "hf/chat_template.jinja")).read_text(
     encoding="utf-8"
 )
 
@@ -90,7 +90,7 @@ def _ordered_special_tokens() -> list[str]:
 
 
 def build_config():
-    text_config = OnyxTextConfig(
+    text_config = MuseGlimmerTextConfig(
         vocab_size=202_048,
         hidden_size=6656,
         intermediate_size=19968,
@@ -117,7 +117,7 @@ def build_config():
         post_norm_eps=1e-8,
     )
 
-    vision_config = OnyxVisionConfig(
+    vision_config = MuseGlimmerVisionConfig(
         hidden_size=1536,
         num_hidden_layers=50,
         num_attention_heads=16,
@@ -133,7 +133,7 @@ def build_config():
         layer_norm_eps=1e-5,
     )
 
-    return OnyxConfig(
+    return MuseGlimmerConfig(
         text_config=text_config,
         vision_config=vision_config,
         image_token_id=200_092,
@@ -211,7 +211,7 @@ VISION_TOP_LEVEL_RENAMES = {
     "vision_adapter.c_proj.weight": "model.vision_adapter.fc2.weight",
 }
 
-# Per-block renames — targets match the Kimi_K25 vision layout OnyxVisionEncoderLayer now inherits.
+# Per-block renames — targets match the Kimi_K25 vision layout MuseGlimmerVisionEncoderLayer now inherits.
 VISION_LAYER_RENAMES = {
     "attn.wv.weight": "attn.v_proj.weight",
     "attn.wv.bias": "attn.v_proj.bias",
@@ -281,7 +281,7 @@ def convert_vision_state_dict(source: dict[str, torch.Tensor], config) -> dict[s
 # regex-based -- while an explicit region (reasoning / content) is open the parser only
 # watches that region's close, so an ``<atem:invoke>`` echoed inside reasoning or the
 # final answer is body text, never a spurious tool call.
-ONYX_RESPONSE_TEMPLATE = {
+MUSE_GLIMMER_RESPONSE_TEMPLATE = {
     "defaults": {"role": "assistant"},
     # The chat template's generation prompt is a bare ``<|start|>assistant``; the model
     # then picks a channel (``to=self`` reasoning, ``to=<tool>`` for a call, ``to=user``
@@ -324,7 +324,7 @@ ONYX_RESPONSE_TEMPLATE = {
 }
 
 
-class OnyxTokenizerConverter(TikTokenConverter):
+class MuseGlimmerTokenizerConverter(TikTokenConverter):
     def __init__(self, vocab_file: str):
         super().__init__(vocab_file, pattern=O200K_PATTERN)
         self.additional_special_tokens = _ordered_special_tokens()
@@ -338,11 +338,11 @@ class OnyxTokenizerConverter(TikTokenConverter):
         self.converted_tokenizer.bos_token = "<|begin_of_text|>"
         self.converted_tokenizer.eos_token = "<|end_of_text|>"
         self.converted_tokenizer.pad_token = "<|finetune_right_pad|>"
-        self.converted_tokenizer.chat_template = ONYX_MM_CHAT_TEMPLATE
+        self.converted_tokenizer.chat_template = MUSE_GLIMMER_MM_CHAT_TEMPLATE
         # Bake the output-side parser so ``tokenizer.parse_response`` can turn generated
         # XML_ATEM output back into a structured message. Persisted into
         # tokenizer_config.json on save (PreTrainedTokenizerBase.save_pretrained).
-        self.converted_tokenizer.response_template = ONYX_RESPONSE_TEMPLATE
+        self.converted_tokenizer.response_template = MUSE_GLIMMER_RESPONSE_TEMPLATE
 
         bos_id = self.converted_tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
         self.converted_tokenizer._tokenizer.post_processor = processors.TemplateProcessing(
@@ -353,7 +353,7 @@ class OnyxTokenizerConverter(TikTokenConverter):
 
 
 def convert_tokenizer(tokenizer_path: Path, output_dir: Path) -> None:
-    converter = OnyxTokenizerConverter(str(tokenizer_path))
+    converter = MuseGlimmerTokenizerConverter(str(tokenizer_path))
     tokenizer = converter.converted_tokenizer
 
     expected_ids = {name: NUM_BASE_TOKENS + i for i, name in enumerate(_ordered_special_tokens())}
@@ -363,11 +363,11 @@ def convert_tokenizer(tokenizer_path: Path, output_dir: Path) -> None:
         if got != want:
             raise RuntimeError(f"Special-token id mismatch for {name!r}: got {got}, want {want}")
 
-    processor = OnyxProcessor(
-        image_processor=OnyxImageProcessor(),
-        video_processor=OnyxVideoProcessor(return_metadata=True),
+    processor = MuseGlimmerProcessor(
+        image_processor=MuseGlimmerImageProcessor(),
+        video_processor=MuseGlimmerVideoProcessor(return_metadata=True),
         tokenizer=tokenizer,
-        chat_template=ONYX_MM_CHAT_TEMPLATE,
+        chat_template=MUSE_GLIMMER_MM_CHAT_TEMPLATE,
     )
     processor.save_pretrained(output_dir)
 
@@ -437,9 +437,9 @@ def main():
     vision_state = torch.load(args.vision_checkpoint_path, map_location="cpu", weights_only=True)
     state_dict.update(convert_vision_state_dict(vision_state, config))
 
-    print(f"Materialising {OnyxForConditionalGeneration.__name__} on meta device...")
+    print(f"Materialising {MuseGlimmerForConditionalGeneration.__name__} on meta device...")
     with torch.device("meta"):
-        model = OnyxForConditionalGeneration(config)
+        model = MuseGlimmerForConditionalGeneration(config)
     model = model.to_empty(device="cpu")
     missing, unexpected = model.load_state_dict(state_dict, strict=True, assign=True)
     if missing:

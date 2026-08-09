@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -111,11 +111,11 @@ def smart_resize(
     return patches_height * patch_size, patches_width * patch_size
 
 
-class OnyxImageProcessorKwargs(Glm4vImageProcessorKwargs):
+class MuseGlimmerImageProcessorKwargs(Glm4vImageProcessorKwargs):
     max_image_tokens: int
 
 
-class OnyxImageProcessor(Glm4vImageProcessor):
+class MuseGlimmerImageProcessor(Glm4vImageProcessor):
     resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -124,7 +124,7 @@ class OnyxImageProcessor(Glm4vImageProcessor):
     max_image_tokens = 4096
 
     def _validate_preprocess_kwargs(self, **kwargs):
-        # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
+        # MuseGlimmer uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
         # the base validation doesn't raise an error
         kwargs["do_resize"] = False
@@ -276,7 +276,7 @@ class OnyxImageProcessor(Glm4vImageProcessor):
         return grid_h * grid_w
 
 
-class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
+class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
     patch_size (`int`, *optional*):
         The spatial patch size of the vision encoder, in pixels.
@@ -295,7 +295,7 @@ class OnyxVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 @auto_docstring
-class OnyxVideoProcessor(BaseVideoProcessor):
+class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -312,14 +312,14 @@ class OnyxVideoProcessor(BaseVideoProcessor):
     fps = 2.0
     do_sample_frames = True
 
-    valid_kwargs = OnyxVideoProcessorInitKwargs
+    valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[OnyxVideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[MuseGlimmerVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
-        # Onyx uses aspect_ratio_preserving_resize driven by patch_size,
+        # MuseGlimmer uses aspect_ratio_preserving_resize driven by patch_size,
         # not the standard `size` parameter. Temporarily disable do_resize so
         # the base validation doesn't raise an error
         kwargs["do_resize"] = False
@@ -495,17 +495,17 @@ class OnyxVideoProcessor(BaseVideoProcessor):
         )
 
 
-class OnyxModelOutputWithPast(Gemma3ModelOutputWithPast):
+class MuseGlimmerModelOutputWithPast(Gemma3ModelOutputWithPast):
     pass
 
 
-class OnyxCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
+class MuseGlimmerCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
     pass
 
 
-@auto_docstring
+@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
 @strict
-class OnyxVisionConfig(Kimi_K25VisionConfig):
+class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     r"""
     pos_emb_height (`int`, *optional*):
         Initial position embedding height.
@@ -517,7 +517,7 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         Kernel size for patch merging.
     """
 
-    model_type = "onyx_vision"
+    model_type = "muse_glimmer_vision"
 
     hidden_size: int = 1536
     num_hidden_layers: int = 50
@@ -542,11 +542,11 @@ class OnyxVisionConfig(Kimi_K25VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
 @strict
-class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
+class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
-    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+    final_logit_softcapping (`float`, *optional*, defaults to 20.0):
         scaling factor when applying tanh softcapping on the logits.
     qk_scale_factor (`float`, *optional*, defaults to 3.87):
         Multiplier applied to Q after the scaleless QK-norm, on top of the standard `1/sqrt(head_dim)`
@@ -562,7 +562,7 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
         counted backward from the last, which is NoPE.
     """
 
-    model_type = "onyx_text"
+    model_type = "muse_glimmer_text"
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -589,13 +589,13 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
     eos_token_id: int | list[int] | None = 200_001
     pad_token_id: int | None = None
     sliding_window: int | None = 2048
-    final_logit_softcapping: float | None = 20.0
+    final_logit_softcapping: float = 20.0
     layer_types: list[str] | None = None
     query_pre_attn_scalar = AttributeError()
     attn_logit_softcapping = AttributeError()
     use_bidirectional_attention = AttributeError()
 
-    # Onyx-specific fields
+    # MuseGlimmer-specific fields
     qk_scale_factor: float = 3.87
     output_multiplier: float = 0.19611613513818404
     post_norm_eps: float = 1e-8
@@ -620,9 +620,10 @@ class OnyxTextConfig(Gemma2Config, PreTrainedConfig):
             ]
 
 
-@auto_docstring
+# TODO: point at the final repo name once it exists
+@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
 @strict
-class OnyxConfig(PreTrainedConfig):
+class MuseGlimmerConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 6144):
         Output dimension of the vision encoder after patch merging (input width of the multimodal projection).
@@ -632,20 +633,20 @@ class OnyxConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OnyxForConditionalGeneration, OnyxConfig
+    >>> from transformers import MuseGlimmerForConditionalGeneration, MuseGlimmerConfig
 
-    >>> # Initializing an Onyx style configuration
-    >>> configuration = OnyxConfig()
+    >>> # Initializing an MuseGlimmer style configuration
+    >>> configuration = MuseGlimmerConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = OnyxForConditionalGeneration(configuration)
+    >>> model = MuseGlimmerForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "onyx"
-    sub_configs = {"text_config": OnyxTextConfig, "vision_config": OnyxVisionConfig}
+    model_type = "muse_glimmer"
+    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -657,43 +658,43 @@ class OnyxConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:
-            self.text_config = OnyxTextConfig()
-            logger.info("text_config is None, using default OnyxTextConfig text config.")
+            self.text_config = MuseGlimmerTextConfig()
+            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
         elif isinstance(self.text_config, dict):
-            self.text_config = OnyxTextConfig(**self.text_config)
+            self.text_config = MuseGlimmerTextConfig(**self.text_config)
 
         if isinstance(self.vision_config, dict):
-            self.vision_config = OnyxVisionConfig(**self.vision_config)
+            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = OnyxVisionConfig()
-            logger.info("vision_config is None, using default OnyxVisionConfig vision config.")
+            self.vision_config = MuseGlimmerVisionConfig()
+            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
 
         super().__post_init__(**kwargs)
 
 
-class OnyxRMSNorm(Gemma4RMSNorm):
+class MuseGlimmerRMSNorm(Gemma4RMSNorm):
     def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
 
 
-class OnyxTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
     pass
 
 
-class OnyxTextMLP(Gemma2MLP):
+class MuseGlimmerTextMLP(Gemma2MLP):
     pass
 
 
-class OnyxTextRotaryEmbedding(Gemma2RotaryEmbedding):
+class MuseGlimmerTextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class OnyxTextAttention(AfmoeAttention):
-    def __init__(self, config: OnyxTextConfig, layer_idx: int):
+class MuseGlimmerTextAttention(AfmoeAttention):
+    def __init__(self, config: MuseGlimmerTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.q_norm
         del self.k_norm
-        self.qk_norm = OnyxRMSNorm(eps=config.rms_norm_eps, with_scale=False)
+        self.qk_norm = MuseGlimmerRMSNorm(eps=config.rms_norm_eps, with_scale=False)
         self.qk_scale_factor = config.qk_scale_factor
 
     def forward(
@@ -744,53 +745,53 @@ class OnyxTextAttention(AfmoeAttention):
         return attn_output, attn_weights
 
 
-class OnyxTextDecoderLayer(Gemma2DecoderLayer):
-    def __init__(self, config: OnyxTextConfig, layer_idx: int):
+class MuseGlimmerTextDecoderLayer(Gemma2DecoderLayer):
+    def __init__(self, config: MuseGlimmerTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = OnyxTextMLP(config)
-        self.self_attn = OnyxTextAttention(config=config, layer_idx=layer_idx)
-        self.input_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.pre_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = OnyxTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.mlp = MuseGlimmerTextMLP(config)
+        self.self_attn = MuseGlimmerTextAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = MuseGlimmerTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MuseGlimmerTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
+        self.pre_feedforward_layernorm = MuseGlimmerTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = MuseGlimmerTextCenteredRMSNorm(config.hidden_size, eps=config.post_norm_eps)
 
 
-class OnyxPreTrainedModel(Gemma2PreTrainedModel):
-    _no_split_modules = ["OnyxTextDecoderLayer", "OnyxVisionEncoderLayer"]
+class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
+    _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
-    def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!
-        raise NotImplementedError("No need to inherit, we can use the base one")
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
 
 
-class OnyxTextNormedEmbedding(nn.Embedding):
+class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         # Weight-less norm applied on top of the embeddings - cannot be merged to the embedding matrix, as Dflash implem needs
         # to embed without the norm
-        self.embed_norm = OnyxRMSNorm(eps=norm_eps, with_scale=False)
+        self.embed_norm = MuseGlimmerRMSNorm(eps=norm_eps, with_scale=False)
 
     def forward(self, input_ids: torch.Tensor):
         return self.embed_norm(super().forward(input_ids))
 
 
-class OnyxTextModel(Gemma2Model):
-    config: OnyxTextConfig
+class MuseGlimmerTextModel(Gemma2Model):
+    config: MuseGlimmerTextConfig
     _can_record_outputs = {
-        "hidden_states": OnyxTextDecoderLayer,
-        "attentions": OnyxTextAttention,
+        "hidden_states": MuseGlimmerTextDecoderLayer,
+        "attentions": MuseGlimmerTextAttention,
     }
 
-    def __init__(self, config: OnyxTextConfig):
+    def __init__(self, config: MuseGlimmerTextConfig):
         super().__init__(config)
-        self.embed_tokens = OnyxTextNormedEmbedding(
+        self.embed_tokens = MuseGlimmerTextNormedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
         self.layers = nn.ModuleList(
-            [OnyxTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MuseGlimmerTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.rotary_emb = OnyxTextRotaryEmbedding(config)
-        self.norm = OnyxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MuseGlimmerTextRotaryEmbedding(config)
+        self.norm = MuseGlimmerRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
 
     @merge_with_config_defaults
@@ -855,21 +856,21 @@ class OnyxTextModel(Gemma2Model):
         )
 
 
-class OnyxVisionAttention(Kimi_K25VisionAttention):
+class MuseGlimmerVisionAttention(Kimi_K25VisionAttention):
     pass
 
 
-class OnyxVisionMLP(Kimi_K25VisionMLP):
+class MuseGlimmerVisionMLP(Kimi_K25VisionMLP):
     pass
 
 
-class OnyxVisionEncoderLayer(Kimi_K25VisionEncoderLayer):
+class MuseGlimmerVisionEncoderLayer(Kimi_K25VisionEncoderLayer):
     pass
 
 
-# override the fn from `vision_utils.py` since onyx uses `F.grid_sample` in ref
+# override the fn from `vision_utils.py` since muse_glimmer uses `F.grid_sample` in ref
 # and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
-# export-friendly code used in onyx, thus kept in model file
+# export-friendly code used in muse_glimmer, thus kept in model file
 def get_vision_bilinear_indices_and_weights(
     grid_thw: torch.Tensor,
     num_grid_per_side: int,
@@ -943,9 +944,9 @@ def get_vision_bilinear_indices_and_weights(
     return bilinear_indices, bilinear_weights
 
 
-class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
-    def __init__(self, config: OnyxVisionConfig):
-        nn.Module.__init__()
+class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
+    def __init__(self, config: MuseGlimmerVisionConfig):
+        nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
         self.patch_size = config.patch_temporal * 3 * config.patch_size**2
@@ -989,9 +990,9 @@ class OnyxVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         return embeddings
 
 
-class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+class MuseGlimmerVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in Onyx
+        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in MuseGlimmer
         inv_freq_expanded = (
             self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
         )
@@ -1009,22 +1010,23 @@ class OnyxVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
-class OnyxVisionModel(OnyxPreTrainedModel):
-    config: OnyxVisionConfig
+class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
+    config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _can_record_outputs = {
-        "hidden_states": OnyxVisionEncoderLayer,
-        "attentions": OnyxVisionAttention,
+        "hidden_states": MuseGlimmerVisionEncoderLayer,
+        "attentions": MuseGlimmerVisionAttention,
     }
 
-    def __init__(self, config: OnyxVisionConfig):
+    def __init__(self, config: MuseGlimmerVisionConfig):
         super().__init__(config)
-        self.patch_embedder = OnyxVisionPatchEmbedder(config)
-        self.rotary_emb = OnyxVisionRotaryEmbedding(config)
+        self.patch_embedder = MuseGlimmerVisionPatchEmbedder(config)
+        self.rotary_emb = MuseGlimmerVisionRotaryEmbedding(config)
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layers = nn.ModuleList([OnyxVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MuseGlimmerVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         factor = self.config.merge_size
@@ -1111,8 +1113,8 @@ class OnyxVisionModel(OnyxPreTrainedModel):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
-class OnyxVisionAdapter(nn.Module):
-    def __init__(self, config: OnyxConfig) -> None:
+class MuseGlimmerVisionAdapter(nn.Module):
+    def __init__(self, config: MuseGlimmerConfig) -> None:
         super().__init__()
         self.fc1 = nn.Linear(config.out_hidden_size, config.projector_hidden_size, bias=False)
         self.act = ACT2FN[config.projector_hidden_act]
@@ -1122,13 +1124,13 @@ class OnyxVisionAdapter(nn.Module):
         return self.act(self.fc2(self.act(self.fc1(x))))
 
 
-class OnyxModel(Kimi_K25Model):
-    def __init__(self, config: OnyxConfig):
+class MuseGlimmerModel(Kimi_K25Model):
+    def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
-        self.vision_adapter = OnyxVisionAdapter(config)
+        self.vision_adapter = MuseGlimmerVisionAdapter(config)
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
-        self.perception_emb_norm = OnyxRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
+        self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
     def get_image_features(
         self,
@@ -1149,7 +1151,7 @@ class OnyxModel(Kimi_K25Model):
         return vision_outputs
 
 
-class OnyxForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1184,19 +1186,18 @@ class OnyxForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        # Onyx pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
+        # MuseGlimmer pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
         logits = logits * self.config.text_config.output_multiplier
-        if self.config.text_config.final_logit_softcapping is not None:
-            logits = logits / self.config.text_config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.text_config.final_logit_softcapping
+        logits = logits / self.config.text_config.final_logit_softcapping
+        logits = torch.tanh(logits)
+        logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **kwargs)
 
-        return OnyxCausalLMOutputWithPast(
+        return MuseGlimmerCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1207,14 +1208,14 @@ class OnyxForConditionalGeneration(Kimi_K25ForConditionalGeneration):
 
 
 __all__ = [
-    "OnyxTextConfig",
-    "OnyxVisionConfig",
-    "OnyxConfig",
-    "OnyxPreTrainedModel",
-    "OnyxTextModel",
-    "OnyxVisionModel",
-    "OnyxModel",
-    "OnyxForConditionalGeneration",
-    "OnyxImageProcessor",
-    "OnyxVideoProcessor",
+    "MuseGlimmerTextConfig",
+    "MuseGlimmerVisionConfig",
+    "MuseGlimmerConfig",
+    "MuseGlimmerPreTrainedModel",
+    "MuseGlimmerTextModel",
+    "MuseGlimmerVisionModel",
+    "MuseGlimmerModel",
+    "MuseGlimmerForConditionalGeneration",
+    "MuseGlimmerImageProcessor",
+    "MuseGlimmerVideoProcessor",
 ]

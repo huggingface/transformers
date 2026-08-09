@@ -16,14 +16,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-08-06.*
+*This model was contributed to Hugging Face Transformers on 2026-08-09.*
 
 
-# Onyx
+# MuseGlimmer
 
 ## Overview
 
-The Onyx model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The MuseGlimmer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -41,50 +41,50 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 <INSERT SOME NICE EXAMPLES HERE>
 
-## OnyxConfig
+## MuseGlimmerConfig
 
-[[autodoc]] OnyxConfig
+[[autodoc]] MuseGlimmerConfig
 
-## OnyxTextConfig
+## MuseGlimmerTextConfig
 
-[[autodoc]] OnyxTextConfig
+[[autodoc]] MuseGlimmerTextConfig
 
-## OnyxVisionConfig
+## MuseGlimmerVisionConfig
 
-[[autodoc]] OnyxVisionConfig
+[[autodoc]] MuseGlimmerVisionConfig
 
-## OnyxImageProcessor
+## MuseGlimmerImageProcessor
 
-[[autodoc]] OnyxImageProcessor
+[[autodoc]] MuseGlimmerImageProcessor
 
-## OnyxVideoProcessor
+## MuseGlimmerVideoProcessor
 
-[[autodoc]] OnyxVideoProcessor
+[[autodoc]] MuseGlimmerVideoProcessor
 
-## OnyxProcessor
+## MuseGlimmerProcessor
 
-[[autodoc]] OnyxProcessor
+[[autodoc]] MuseGlimmerProcessor
 
-## OnyxPreTrainedModel
+## MuseGlimmerPreTrainedModel
 
-[[autodoc]] OnyxPreTrainedModel
+[[autodoc]] MuseGlimmerPreTrainedModel
 
-## OnyxTextModel
+## MuseGlimmerTextModel
 
-[[autodoc]] OnyxTextModel
+[[autodoc]] MuseGlimmerTextModel
     - forward
 
-## OnyxVisionModel
+## MuseGlimmerVisionModel
 
-[[autodoc]] OnyxVisionModel
+[[autodoc]] MuseGlimmerVisionModel
     - forward
 
-## OnyxModel
+## MuseGlimmerModel
 
-[[autodoc]] OnyxModel
+[[autodoc]] MuseGlimmerModel
     - forward
 
-## OnyxForConditionalGeneration
+## MuseGlimmerForConditionalGeneration
 
-[[autodoc]] OnyxForConditionalGeneration
+[[autodoc]] MuseGlimmerForConditionalGeneration
     - forward

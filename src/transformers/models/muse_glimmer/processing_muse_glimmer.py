@@ -19,7 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-class OnyxProcessor(ProcessorMixin):
+class MuseGlimmerProcessor(ProcessorMixin):
     def __init__(
         self,
         image_processor=None,
@@ -78,15 +78,15 @@ class OnyxProcessor(ProcessorMixin):
         metadata = video_inputs["video_metadata"][video_idx]
         if metadata.fps is None:
             logger.warning_once(
-                "Onyx requires frame timestamps to construct prompts, but the `fps` of the "
+                "MuseGlimmer requires frame timestamps to construct prompts, but the `fps` of the "
                 "input video could not be inferred. Defaulting to `fps=24`. Please provide "
                 "`video_metadata` for more accurate results."
             )
             metadata.fps = 24
 
-        pt = self.video_processor.patch_temporal
-        # one timestamp per temporal group -- stride by patch_temporal, pad by repeating last
-        timestamps = list(metadata.timestamps[::pt])[:n_frames]
+        temporal_patch_size = self.video_processor.temporal_patch_size
+        # one timestamp per temporal group, pad by repeating the last
+        timestamps = list(metadata.timestamps[::temporal_patch_size])[:n_frames]
         while len(timestamps) < n_frames:
             timestamps.append(timestamps[-1] if timestamps else 0.0)
 
@@ -97,4 +97,4 @@ class OnyxProcessor(ProcessorMixin):
         return replacement_str
 
 
-__all__ = ["OnyxProcessor"]
+__all__ = ["MuseGlimmerProcessor"]

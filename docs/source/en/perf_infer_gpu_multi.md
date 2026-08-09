@@ -261,10 +261,12 @@ Transformers implements tensor parallelism in a framework-agnostic way. It relie
 `DeviceMesh` creates a multi-dimensional grid of devices that communicate together. Different parallelization strategies require different communication patterns. Create a `DeviceMesh` with multiple sub-meshes to handle these patterns.
 
 ```python
+import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-# Create a 1D mesh of 4 GPUs
-device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
+# Create a 1D mesh of 4 accelerators
+device_type = torch.accelerator.current_accelerator().type
+device_mesh = init_device_mesh(device_type, (4,), mesh_dim_names=["tp"])
 ```
 
 Most `torch.distributed` parallelization strategies apply to the mesh itself or its sub-mesh. The mesh automatically handles communication patterns.
