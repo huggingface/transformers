@@ -84,7 +84,10 @@ def get_config(model_name):
     else:
         raise ValueError(f"Unknown model name {model_name}")
 
-    prompt_encoder_config = EfficientViTSamPromptEncoderConfig(image_size=vision_config.image_size)
+    prompt_encoder_config = EfficientViTSamPromptEncoderConfig(
+        image_size=vision_config.image_size,
+        image_embedding_size=vision_config.image_size // (16 if "xl" in model_name else 8),
+    )
     config = EfficientViTSamConfig(
         vision_config=vision_config,
         prompt_encoder_config=prompt_encoder_config,

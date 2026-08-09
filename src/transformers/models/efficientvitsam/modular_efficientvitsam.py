@@ -1070,9 +1070,7 @@ class EfficientViTSamModel(SamModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        raise NotImplementedError(
-            "`EfficientViTSamModel` does not expose a single input embeddings module."
-        )
+        raise NotImplementedError("`EfficientViTSamModel` does not expose a single input embeddings module.")
 
 
 class EfficientViTSamImageProcessor(SamImageProcessor):
