@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert an Onyx Drafter checkpoint to a Hugging Face transformers checkpoint.
+"""Convert a Muse Glimmer Assistant checkpoint to a Hugging Face transformers checkpoint.
 
 Usage:
-    python src/transformers/models/onyx/convert_onyx_weights_to_hf.py \\
+    python src/transformers/models/muse_glimmer_assistant/convert_muse_glimmer_assistant_weight_to_hf.py \\
         --checkpoint_path        pytorch_weights/dflash/head.pt \\
-        --output_path            onyx-assistant-hf-converted
+        --output_path            muse-glimmar-assistant-hf-converted
 """
 
 import argparse
@@ -24,11 +24,11 @@ from pathlib import Path
 
 import torch
 
-from transformers import OnyxAssistantConfig, OnyxAssistantModel
+from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
 
 
 def build_config():
-    return OnyxAssistantConfig(
+    return MuseGlimmerAssistantConfig(
         hidden_size=6656,
         intermediate_size=19968,
         num_hidden_layers=5,
@@ -151,9 +151,9 @@ def main():
     loaded_state = torch.load(args.checkpoint_path, map_location="cpu", weights_only=True)
     state_dict: dict[str, torch.Tensor] = convert_state_dict(loaded_state, config)
 
-    print(f"Materialising {OnyxAssistantModel.__name__} on meta device...")
+    print(f"Materialising {MuseGlimmerAssistantModel.__name__} on meta device...")
     with torch.device("meta"):
-        model = OnyxAssistantModel(config)
+        model = MuseGlimmerAssistantModel(config)
     model = model.to_empty(device="cpu")
     missing, unexpected = model.load_state_dict(state_dict, strict=True, assign=True)
     if missing:

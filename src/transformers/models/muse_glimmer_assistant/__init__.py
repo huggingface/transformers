@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_onyx_assistant import *
-    from .modeling_onyx_assistant import *
+    from .configuration_muse_glimmer_assistant import *
+    from .modeling_muse_glimmer_assistant import *
 else:
     import sys
 

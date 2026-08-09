@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch OnyxAssistant model."""
+"""Testing suite for the PyTorch MuseGlimmerAssistant model."""
 
 import unittest
 
@@ -27,10 +27,10 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import OnyxAssistantConfig, OnyxAssistantModel
+    from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
 
 
-class OnyxAssistantModelTester:
+class MuseGlimmerAssistantModelTester:
     def __init__(
         self,
         parent,
@@ -82,7 +82,7 @@ class OnyxAssistantModelTester:
         return config, input_embeds, context_embeds, input_mask
 
     def get_config(self):
-        return OnyxAssistantConfig(
+        return MuseGlimmerAssistantConfig(
             head_dim=self.head_dim,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -110,8 +110,8 @@ class OnyxAssistantModelTester:
 
 
 @require_torch
-class OnyxAssistantModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (OnyxAssistantModel,) if is_torch_available() else ()
+class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MuseGlimmerAssistantModel,) if is_torch_available() else ()
     additional_model_inputs = ["context_hidden_states"]
 
     # model has no embedding table of its own
@@ -119,7 +119,7 @@ class OnyxAssistantModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_position_embeddings = False
 
     def setUp(self):
-        self.model_tester = OnyxAssistantModelTester(self)
+        self.model_tester = MuseGlimmerAssistantModelTester(self)
 
     @unittest.skip("We need more than 2 layers to test `target-layer-ids`")
     def test_num_layers_is_small(self):

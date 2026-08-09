@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="TODO")
 @strict
-class OnyxAssistantConfig(PreTrainedConfig):
+class MuseGlimmerAssistantConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*):
         The block size of noise inputs that will be denoised.
@@ -36,19 +36,19 @@ class OnyxAssistantConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OnyxAssistantConfig, OnyxAssistantModel
+    >>> from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
 
-    >>> # Initializing an Onyx Assistant config similar to TODO.
-    >>> configuration = OnyxAssistantConfig(text_config)
+    >>> # Initializing a Muse Glimmer Assistant config similar to TODO.
+    >>> configuration = MuseGlimmerAssistantConfig(text_config)
 
     >>> # Initializing a model from the TODO configuration.
-    >>> model = OnyxAssistantModel(configuration)
+    >>> model = MuseGlimmerAssistantModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "onyx_assistant"
+    model_type = "muse_glimmer_assistant"
     default_theta = 500000.0
 
     hidden_size: int = 6656
@@ -80,4 +80,4 @@ class OnyxAssistantConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["OnyxAssistantConfig"]
+__all__ = ["MuseGlimmerAssistantConfig"]
