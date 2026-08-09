@@ -486,9 +486,7 @@ def cached_files(
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
         elif isinstance(e, OSError) and e.errno == errno.EROFS:
-            # Read-only filesystem (EROFS): hf_hub_download does not handle this error itself —
-            # it surfaces here after failing to write the new snapshot pointer or blob.
-            # Unlike PermissionError (EACCES, errno 13), which Python maps to its own subclass,
+            # Unlike EACCES (errno 13), which Python maps to PermissionError,
             # EROFS (errno 30) is a plain OSError that does NOT match `isinstance(e, PermissionError)`.
             # Without this guard it would fall through to the stale-cache recovery block below,
             # silently returning an old cached file even when a newer revision exists on the Hub.
