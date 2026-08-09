@@ -65,7 +65,7 @@ UNROLL_KWARGS_CLASSES = {
     "BaseImageProcessor",
     "ProcessorMixin",
 }
-BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]
 
 # Short indicator added to unrolled kwargs to distinguish them from regular args
 KWARGS_INDICATOR = ", *kwargs*"
@@ -111,14 +111,6 @@ class ImageProcessorArgs:
         "description": """
     Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
     passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-    """,
-        "shape": None,
-    }
-
-    videos = {
-        "description": """
-    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
     """,
         "shape": None,
     }
@@ -287,6 +279,62 @@ class ImageProcessorArgs:
         "description": """
     Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
     for the complete list of supported arguments.
+    """,
+        "shape": None,
+    }
+
+
+# Can inherit as they share common set of kwargs
+class VideoProcessorArgs(ImageProcessorArgs):
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
+    }
+
+    device = {
+        "description": """
+    The device to process the videos on. If unset, the device is inferred from the input videos.
+    """,
+        "shape": None,
+    }
+
+    fps = {
+        "description": """
+    Target frames to sample per second when `do_sample_frames=True`.
+    """,
+        "shape": None,
+    }
+
+    num_frames = {
+        "description": """
+    Maximum number of frames to sample when `do_sample_frames=True`.
+    """,
+        "shape": None,
+    }
+
+    do_sample_frames = {
+        "description": """
+    Whether to sample frames from the video before processing or to process the whole video.
+    """,
+        "shape": None,
+    }
+
+    video_metadata = {
+        "description": """
+    Metadata of the video containing information about total duration, fps and total number of frames. It will be
+    used to sample frames from video or compute timestamps. Don't pass any metadata unless you are trying to decode
+    the video manually before processing
+    """,
+        "shape": None,
+    }
+
+    return_metadata = {
+        "description": """
+    Whether to return video metadata or not. Video metadats is an object containing info about video duration, fps,
+    decoding backend, etc.
     """,
         "shape": None,
     }
@@ -1732,6 +1780,18 @@ class ConfigArgs:
     """,
     }
 
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+    }
+
     mamba_d_state = state_size
     mamba_num_heads = mamba_n_heads
     mamba_head_dim = mamba_d_head
@@ -1840,6 +1900,20 @@ class ConfigArgs:
 
 
 class ModelArgs:
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+        "shape": "of shape `(num_images, 3)`",
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     labels = {
         "description": """
     Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2472,7 +2546,7 @@ class ClassDocstring:
     """
 
     TextModel = r"""
-    The bare {model_name} Text Model outputting raw hidden-states without any specific head on to.
+    The bare {model_name} Text Model outputting raw hidden-states without any specific head on top.
     """
 
     ForSequenceClassification = r"""
@@ -3278,9 +3352,11 @@ def _process_regular_parameters(
     # Use appropriate args source based on whether it's a processor or not
     if source_args_dict is None:
         if is_processor:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
+            )
         else:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
+            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs])
 
     missing_args = {}
 
@@ -3416,7 +3492,9 @@ def _is_image_processor_class(func, parent_class):
 
     # Multimodal processors are implemented in processing_*.py modules
     # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
-    return filename.startswith("image_processing_") and filename.endswith(".py")
+    return (
+        filename.startswith("image_processing_") or filename.startswith("video_processing_")
+    ) and filename.endswith(".py")
 
 
 def _is_processor_class(func, parent_class):
@@ -3458,13 +3536,13 @@ def _is_processor_class(func, parent_class):
     filename = os.path.basename(source_file)
 
     # Multimodal processors are implemented in processing_*.py modules
-    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    # (single-modality processors use image_processing_*, video_processing_*, etc.).
     return filename.startswith("processing_") and filename.endswith(".py")
 
 
 # Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
 # Order matters: check ImageProcessorKwargs before ProcessorKwargs.
-_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "VideosKwargs", "ProcessingKwargs", "TextKwargs", "AudioKwargs"})
 _BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
 
 
@@ -3548,6 +3626,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     """
     docstring = ""
     kwargs_summary = ""
+    needs_kwarg_summary = True
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs and parent_class is not None:
@@ -3565,9 +3644,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
 
     # Use appropriate args source based on whether it's a processor or not
     if is_processor:
-        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs])
     elif is_image_processor:
-        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs])
     else:
         raise ValueError(
             f"Unrolling kwargs is not supported for {func.__name__} of {parent_class.__name__ if parent_class else 'None'} class"
@@ -3589,7 +3668,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         ):
             continue
 
-        if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
+        kwargs_type = _get_base_kwargs_class(kwarg_param.annotation.__args__[0])
+        if kwargs_type.__name__ in BASIC_KWARGS_TYPES:
+            needs_kwarg_summary = False
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
@@ -3613,10 +3694,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                                 actual_type = arg
                                 type_name = getattr(arg, "__name__", None)
                                 break
-
-                    # Skip only if it's one of the basic kwargs types
-                    if type_name in BASIC_KWARGS_TYPES:
-                        continue
 
                     # Otherwise, unroll the custom typed kwargs
                     # Get the nested TypedDict's annotations
@@ -3693,8 +3770,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
-                if documented_kwargs and param_name not in documented_kwargs:
-                    continue
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
@@ -3729,19 +3804,17 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     undocumented_parameters.append(
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
-
-        # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
-        kwargs_annot_cls = kwarg_param.annotation.__args__[0]
-        kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
-        kwargs_info = source_args_dict.get("__kwargs__", {})
-        kwargs_description = kwargs_info.get(
-            "description",
-            "Additional keyword arguments. Model-specific parameters are listed above.",
-        )
-        kwargs_summary = set_min_indent(
-            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
-            indent_level + 8,
-        )
+        if needs_kwarg_summary or is_processor:
+            # Build **kwargs summary line if we couldn't unpack them
+            kwargs_info = source_args_dict.get("__kwargs__", {})
+            kwargs_description = kwargs_info.get(
+                "description",
+                "Additional keyword arguments. Model-specific parameters are listed above.",
+            )
+            kwargs_summary = set_min_indent(
+                f"**kwargs ([`{kwargs_type.__name__}`], *optional*):{kwargs_description}",
+                indent_level + 8,
+            )
 
     return docstring, kwargs_summary
 
@@ -3775,7 +3848,7 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
         source_args_dict = (
             get_args_doc_from_source(ProcessorArgs)
             if is_processor_call
-            else get_args_doc_from_source(ImageProcessorArgs)
+            else get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs])
         )
         return_tensors_info = source_args_dict["return_tensors"]
         param_type = return_tensors_info.get("type", "`str` or [`~utils.TensorType`]")
@@ -4186,6 +4259,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     is_processor = False
     is_config = False
     is_image_processor = False
+    is_video_processor = False
     docstring_init = ""
     docstring_args = ""
     if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
@@ -4199,7 +4273,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
-            source_args_dict=get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]),
+            source_args_dict=get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
+            ),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
         # We have a data class
@@ -4233,6 +4309,16 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             custom_args=custom_args,
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
+        ).__doc__
+    # has to come before checking `BaseImageProcessor in mro` as video classes inherit from image classes
+    elif any("BaseVideoProcessor" in x.__name__ for x in cls.__mro__):
+        is_video_processor = True
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source(VideoProcessorArgs),
         ).__doc__
     elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
         is_image_processor = True
@@ -4294,12 +4380,27 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
 
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
+    if (
+        name == []
+        and custom_intro is None
+        and not is_dataclass
+        and not is_processor
+        and not is_image_processor
+        and not is_video_processor
+    ):
         raise ValueError(
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
+    if (
+        name != []
+        or custom_intro is not None
+        or is_config
+        or is_dataclass
+        or is_processor
+        or is_image_processor
+        or is_video_processor
+    ):
         name = name[0] if name else None
         formatting_kwargs = {"model_name": model_name_title}
         if name == "Config":
@@ -4316,6 +4417,11 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 pre_block = format_args_docstring(pre_block, model_name_lowercase)
         elif is_image_processor:
             pre_block = r"Constructs a {image_processor_class} image processor."
+            if pre_block:
+                pre_block = equalize_indent(pre_block, indent_level)
+                pre_block = format_args_docstring(pre_block, model_name_lowercase)
+        elif is_video_processor:
+            pre_block = r"Constructs a {video_processor_class} video processor."
             if pre_block:
                 pre_block = equalize_indent(pre_block, indent_level)
                 pre_block = format_args_docstring(pre_block, model_name_lowercase)

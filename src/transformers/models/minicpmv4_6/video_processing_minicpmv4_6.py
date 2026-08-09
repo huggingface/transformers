@@ -27,8 +27,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torch_available, logging
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
     VideoMetadata,
@@ -80,10 +80,7 @@ class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
     use_image_id: bool
 
 
-@add_start_docstrings(
-    "Constructs a MiniCPM-V 4.6 video processor.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     do_resize = True
@@ -294,9 +291,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
         return patches
 
-    @add_start_docstrings(
-        BASE_VIDEO_PROCESSOR_DOCSTRING,
-    )
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,
