@@ -70,7 +70,7 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          uv pip install tblib pqdm
+          uv pip install tblib pqdm open-clip-torch==2.32.0
 
       - name: Patch vLLM gpu_memory_utilization for CPU
         run: |
@@ -174,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     steps:
       - name: Checkout Transformers
@@ -220,7 +220,7 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          uv pip install tblib pqdm pytest-shard
+          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0
 
       - name: Patch vLLM gpu_memory_utilization for CPU
         run: |
@@ -233,4 +233,4 @@ jobs:
         run: |
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
-            --num-shards=4 --shard-id=${{ matrix.shard }}
+            --num-shards=10 --shard-id=${{ matrix.shard }}
