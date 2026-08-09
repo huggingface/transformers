@@ -534,7 +534,7 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             model(pixel_values=pixel_values, image_embeddings=model.get_image_embeddings(pixel_values))
         with self.assertRaisesRegex(ValueError, "input_points must be a 4D tensor"):
             model(pixel_values=pixel_values, input_points=input_points[:, 0])
-        with self.assertRaisesRegex(ValueError, "input_points must be a 3D tensor"):
+        with self.assertRaisesRegex(ValueError, "input_boxes must be a 3D tensor"):
             model(pixel_values=pixel_values, input_boxes=input_boxes.unsqueeze(1))
         with self.assertRaisesRegex(ValueError, "as many bounding boxes as input points"):
             model(pixel_values=pixel_values, input_points=input_points, input_boxes=input_boxes[:, :1])

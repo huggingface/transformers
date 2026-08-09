@@ -555,7 +555,7 @@ class EfficientViTSamFeedForward(nn.Module):
 
         hidden_states = self.proj_out(hidden_states)
         if self.sigmoid_output:
-            hidden_states = F.sigmoid(hidden_states)
+            hidden_states = torch.sigmoid(hidden_states)
         return hidden_states
 
 
@@ -1667,8 +1667,8 @@ class EfficientViTSamModel(EfficientViTSamPreTrainedModel):
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
-        >>> model = AutoModel.from_pretrained("facebook/efficientvitsam-vit-base")
-        >>> processor = AutoProcessor.from_pretrained("facebook/efficientvitsam-vit-base")
+        >>> model = AutoModel.from_pretrained("mit-han-lab/efficientvit-sam-l1")
+        >>> processor = AutoProcessor.from_pretrained("mit-han-lab/efficientvit-sam-l1")
 
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/efficientvitsam-car.png"
         >>> with httpx.stream("GET", url) as response:
@@ -1693,13 +1693,13 @@ class EfficientViTSamModel(EfficientViTSamPreTrainedModel):
 
         if input_points is not None and len(input_points.shape) != 4:
             raise ValueError(
-                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                f" got {input_points.shape}.",
+                "The input_points must be a 4D tensor of shape "
+                f"(batch_size, point_batch_size, nb_points_per_image, 2). Got {input_points.shape}."
             )
         if input_boxes is not None and len(input_boxes.shape) != 3:
             raise ValueError(
-                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                f" got {input_boxes.shape}.",
+                "The input_boxes must be a 3D tensor of shape "
+                f"(batch_size, nb_boxes, 4). Got {input_boxes.shape}."
             )
         if input_points is not None and input_boxes is not None:
             point_batch_size = input_points.shape[1]
@@ -1728,11 +1728,11 @@ class EfficientViTSamModel(EfficientViTSamPreTrainedModel):
 
         if input_points is not None and image_embeddings.shape[0] != input_points.shape[0]:
             raise ValueError(
-                "The batch size of the image embeddings and the input points must be the same. ",
-                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively.",
-                " if you want to pass multiple points for the same image, make sure that you passed ",
-                " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
-                " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
+                "The batch size of the image embeddings and the input points must be the same. "
+                f"Got {image_embeddings.shape[0]} and {input_points.shape[0]} respectively. "
+                "If you want to pass multiple points for the same image, make sure you passed "
+                "input_points of shape (batch_size, point_batch_size, num_points_per_image, 2) and "
+                "input_labels of shape (batch_size, point_batch_size, num_points_per_image)."
             )
 
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
