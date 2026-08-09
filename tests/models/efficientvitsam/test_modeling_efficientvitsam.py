@@ -310,6 +310,22 @@ class EfficientViTSamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.assertIsInstance(config.prompt_encoder_config, EfficientViTSamPromptEncoderConfig)
         self.assertIsInstance(config.mask_decoder_config, EfficientViTSamMaskDecoderConfig)
 
+    def test_converted_model_embedding_sizes(self):
+        from transformers.models.efficientvitsam.convert_efficientvitsam_to_hf import get_config
+
+        expected_embedding_sizes = {
+            "efficientvit-sam-l0": 64,
+            "efficientvit-sam-l1": 64,
+            "efficientvit-sam-l2": 64,
+            "efficientvit-sam-xl0": 64,
+            "efficientvit-sam-xl1": 64,
+        }
+
+        for model_name, expected_size in expected_embedding_sizes.items():
+            with self.subTest(model_name=model_name):
+                config = get_config(model_name)
+                self.assertEqual(config.prompt_encoder_config.image_embedding_size, expected_size)
+
         config = EfficientViTSamConfig.from_dict(config.to_dict())
         self.assertIsInstance(config.vision_config, EfficientViTSamVisionConfig)
         self.assertIsInstance(config.prompt_encoder_config, EfficientViTSamPromptEncoderConfig)
