@@ -40,6 +40,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.remote_url import validate_remote_url
 
 
 if is_vision_available():
@@ -698,6 +699,7 @@ def load_video(
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
     elif video.startswith("http://") or video.startswith("https://"):
+        validate_remote_url(video)
         file_obj = BytesIO(httpx.get(video, follow_redirects=True).content)
     elif os.path.isfile(video):
         file_obj = video

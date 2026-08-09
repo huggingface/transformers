@@ -40,6 +40,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import retry
+from .utils.remote_url import validate_remote_url
 
 
 if TYPE_CHECKING:
@@ -66,6 +67,7 @@ AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["t
 @retry(exceptions=(httpx.HTTPError,))
 def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     """Fetch audio bytes from a URL with automatic retry and exponential backoff."""
+    validate_remote_url(url)
     response = httpx.get(url, follow_redirects=True, timeout=timeout)
     response.raise_for_status()
     return response.content
