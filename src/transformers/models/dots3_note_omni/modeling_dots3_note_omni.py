@@ -830,7 +830,7 @@ def _is_sparse_layer(config, layer_idx):
     if isinstance(moe_layer_freq, (list, tuple)):
         return bool(moe_layer_freq[layer_idx])
     if isinstance(moe_layer_freq, int):
-        return (layer_idx - first_k_dense_replace) % moe_layer_freq == 0
+        return layer_idx % moe_layer_freq == 0
     return True
 
 
@@ -1823,7 +1823,7 @@ class Dots3NoteOmniVisionMoE(nn.Module):
             weights = routing_weights[token_idx, top_idx]
             output[token_idx] += expert(hidden_states[token_idx]) * weights.unsqueeze(-1)
             weight_sum[token_idx] += weights
-        output = output / weight_sum.clamp_min(torch.finfo(output.dtype).eps).unsqueeze(-1)
+        output = output / (weight_sum.unsqueeze(-1) + 1e-9)
         return output.reshape(shape)
 
 
@@ -2020,7 +2020,9 @@ class Dots3NoteOmniVisionModel(Dots3NoteOmniVisionPreTrainedModel):
         self.blocks = nn.ModuleList(
             [Dots3NoteOmniVisionBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.post_trunk_norm = Dots3NoteOmniVisionRMSNorm(config.embed_dim, eps=config.rms_norm_eps)
+        self.post_trunk_norm = (
+            Dots3NoteOmniVisionRMSNorm(config.embed_dim, eps=config.rms_norm_eps) if config.post_norm else None
+        )
         self.adapter = Dots3NoteOmniVisionAdapter(config)
         self.gradient_checkpointing = False
         self.post_init()
@@ -2057,7 +2059,8 @@ class Dots3NoteOmniVisionModel(Dots3NoteOmniVisionPreTrainedModel):
             )
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-        hidden_states = self.post_trunk_norm(hidden_states)
+        if self.post_trunk_norm is not None:
+            hidden_states = self.post_trunk_norm(hidden_states)
         merged_hidden_states = self.adapter(hidden_states)
         if not return_dict:
             output = (hidden_states, merged_hidden_states)

@@ -430,9 +430,9 @@ def preprocess_dots3_note_video(
             output.append(Dots3NoteOmniVideoPart("image", image))
         return output
 
-    video_id = hashlib.sha1(video_bytes).hexdigest()
-    record_key = hashlib.sha1(f"{video_id}|{question}".encode()).hexdigest()
-    seed = hashlib.sha1(f"42|flatten|{record_key}".encode()).hexdigest()
+    video_id = hashlib.sha1(video_bytes, usedforsecurity=False).hexdigest()
+    record_key = hashlib.sha1(f"{video_id}|{question}".encode(), usedforsecurity=False).hexdigest()
+    seed = hashlib.sha1(f"42|flatten|{record_key}".encode(), usedforsecurity=False).hexdigest()
     rng = random.Random(int(seed[:8], 16))
     bounds = _group_bounds(len(frames), audio_duration, k_mode, rng)
     output = []

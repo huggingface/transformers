@@ -100,6 +100,12 @@ class Dots3NoteOmniVisionConfig(PreTrainedConfig):
             raise ValueError("adapter_merge_size must match spatial_merge_size")
         if self.router_scoring_func not in {"sigmoid", "softmax"}:
             raise ValueError("router_scoring_func must be 'sigmoid' or 'softmax'")
+        if self.temporal_patch_size != 1:
+            raise ValueError("Dots3-Note vision preprocessing requires temporal_patch_size=1")
+        if self.is_causal:
+            raise ValueError("Dots3-Note vision attention requires is_causal=False")
+        if not self.pre_pixel_shuffle or self.adapter_type != "patch_merger":
+            raise ValueError("Dots3-Note requires pre_pixel_shuffle=True and adapter_type='patch_merger'")
         super().__post_init__(**kwargs)
 
 
@@ -215,8 +221,14 @@ class Dots3NoteOmniAudioConfig(PreTrainedConfig):
             raise ValueError("audio sampling and feature dimensions must be positive")
         if self.chunk_seconds <= 0 or self.merge_factor <= 0:
             raise ValueError("chunk_seconds and merge_factor must be positive")
+        if self.encoder_type != "dots":
+            raise ValueError("Dots3-Note only supports encoder_type='dots'")
         if not self.use_conv2d_stem:
             raise ValueError("the released Dots3-Note audio encoder requires use_conv2d_stem=True")
+        if not self.use_rope or self.use_causal:
+            raise ValueError("Dots3-Note audio inference requires use_rope=True and use_causal=False")
+        if self.whisper_config.get("activation_function") != "swiglu":
+            raise ValueError("the released Dots3-Note audio encoder requires activation_function='swiglu'")
         if self.adapter_input_size != self.whisper_config["d_model"]:
             raise ValueError("adapter_input_size must match whisper_config.d_model")
         if self.attention_backend not in {"sdpa", "flash_attention_2", "flash_attention_3"}:
@@ -428,6 +440,14 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        if self.num_key_value_heads != self.num_attention_heads:
+            raise ValueError("Dots3-Note requires num_key_value_heads to match num_attention_heads")
+        if self.swa_num_key_value_heads != self.swa_num_attention_heads:
+            raise ValueError("Dots3-Note requires swa_num_key_value_heads to match swa_num_attention_heads")
+        if self.attention_gate_type not in {"headwise", "elementwise"}:
+            raise ValueError(f"Unsupported attention_gate_type: {self.attention_gate_type!r}")
+        if self.swa_attention_gate_type not in {"headwise", "elementwise"}:
+            raise ValueError(f"Unsupported swa_attention_gate_type: {self.swa_attention_gate_type!r}")
         if self.sliding_window is None:
             self.sliding_window = self.sliding_window_size
         if self.k_rope_only_layernorm is None:
