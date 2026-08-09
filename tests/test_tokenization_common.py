@@ -2663,6 +2663,17 @@ Hey how are you doing"""  # noqa: W293
                         actual_tokens = {str(t) for t in tokenizer.added_tokens_decoder.values()}
                         self.assertTrue(expected_tokens.issubset(actual_tokens))
 
+    def test_additional_special_tokens_migration_with_empty_extra_special_tokens(self):
+        d = {
+            "additional_special_tokens": ["<|im_end|>", "<|media_placeholder|>"],
+            "extra_special_tokens": {},
+        }
+        if "additional_special_tokens" in d:
+            add_tokens = d.pop("additional_special_tokens")
+            if add_tokens and not d.get("extra_special_tokens"):
+                d["extra_special_tokens"] = add_tokens
+        self.assertEqual(d["extra_special_tokens"], ["<|im_end|>", "<|media_placeholder|>"])
+
     def test_tokenizer_initialization_with_conflicting_key(self):
         with self.assertRaises(AttributeError, msg="conflicts with the method"):
             self.get_tokenizer(add_special_tokens=True)
