@@ -43,7 +43,7 @@ if is_torch_available():
 
 
 # TODO UPDATE WHEN WE HAVE FINAL REPO NAME!
-MODEL_ID = os.environ.get("MUSE_GLIMMER_TEST_CHECKPOINT", "someorgtoo-hf/muse-glimmer")
+MODEL_ID = os.environ.get("MUSE_GLIMMER_TEST_CHECKPOINT", "someorgtoo-hf/Muse-Glimmer-30B")
 
 
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
