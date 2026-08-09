@@ -307,10 +307,8 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         try:
             super().check_training_gradient_checkpointing(gradient_checkpointing_kwargs)
         except AssertionError as e:
-            # The QA head bias has mathematically zero gradient because it is applied identically to all 
-            # sequence positions before taking a softmax over the sequence dimension.
-            # Due to numerical noise with gradient checkpointing, it might be exactly 0 in the normal run 
-            # but slightly non-zero in the checkpointed run, causing the set comparison to fail.
+            # qa_outputs.bias gets zero grad normally, but numerical noise from gradient
+            # checkpointing makes it non-zero. ignore it to avoid test failures.
             error_msg = str(e)
             if "qa_outputs.bias" in error_msg and len(error_msg.splitlines()) == 2:
                 pass
