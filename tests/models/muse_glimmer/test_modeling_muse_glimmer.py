@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Onyx model."""
+"""Testing suite for the PyTorch MuseGlimmer model."""
 
 import copy
 import os
 import unittest
 
-from transformers import OnyxConfig, is_torch_available
-from transformers.models.onyx.configuration_onyx import OnyxTextConfig, OnyxVisionConfig
+from transformers import MuseGlimmerConfig, is_torch_available
+from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -36,21 +36,21 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
-        OnyxForConditionalGeneration,
-        OnyxModel,
+        MuseGlimmerForConditionalGeneration,
+        MuseGlimmerModel,
     )
 
 
-ONYX_CHECKPOINT_DIR = os.environ.get("ONYX_CHECKPOINT_DIR", "/raid/pablo/onyx_early/onyx-hf")
+MUSE_GLIMMER_CHECKPOINT_DIR = os.environ.get("MUSE_GLIMMER_CHECKPOINT_DIR", "/raid/pablo/muse_glimmer_early/muse_glimmer-hf")
 
 
-class OnyxVision2TextModelTester(VLMModelTester):
+class MuseGlimmerVision2TextModelTester(VLMModelTester):
     if is_torch_available():
-        base_model_class = OnyxModel
-        config_class = OnyxConfig
-        text_config_class = OnyxTextConfig
-        vision_config_class = OnyxVisionConfig
-        conditional_generation_class = OnyxForConditionalGeneration
+        base_model_class = MuseGlimmerModel
+        config_class = MuseGlimmerConfig
+        text_config_class = MuseGlimmerTextConfig
+        vision_config_class = MuseGlimmerVisionConfig
+        conditional_generation_class = MuseGlimmerForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
@@ -89,16 +89,16 @@ class OnyxVision2TextModelTester(VLMModelTester):
 
 
 @require_torch
-class OnyxVision2TextModelTest(VLMModelTest, unittest.TestCase):
-    model_tester_class = OnyxVision2TextModelTester
+class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = MuseGlimmerVision2TextModelTester
 
     def test_reverse_loading_mapping(self):
         # The vendor checkpoint layout is defined relative to the `model.` prefix, which the base
-        # OnyxModel serializes without.
+        # MuseGlimmerModel serializes without.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
     def test_mismatching_num_image_tokens(self):
-        # Overwritten -- Onyx packs patches along the first `pixel_values` dim, so removing an image
+        # Overwritten -- MuseGlimmer packs patches along the first `pixel_values` dim, so removing an image
         # means dropping its patch rows and its `image_grid_thw` row together.
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         patches_per_image = input_dict["pixel_values"].shape[0] // input_dict["image_grid_thw"].shape[0]
@@ -116,7 +116,7 @@ class OnyxVision2TextModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class OnyxIntegrationTest(unittest.TestCase):
+class MuseGlimmerIntegrationTest(unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
     EXPECTED_IMAGE_PREFIX = " two cats lying on a pink blanket. "
 
@@ -128,10 +128,10 @@ class OnyxIntegrationTest(unittest.TestCase):
 
     @classmethod
     def get_model_and_processor(cls):
-        model = OnyxForConditionalGeneration.from_pretrained(
-            ONYX_CHECKPOINT_DIR, dtype=torch.bfloat16, device_map=torch_device
+        model = MuseGlimmerForConditionalGeneration.from_pretrained(
+            MUSE_GLIMMER_CHECKPOINT_DIR, dtype=torch.bfloat16, device_map=torch_device
         )
-        processor = AutoProcessor.from_pretrained(ONYX_CHECKPOINT_DIR)
+        processor = AutoProcessor.from_pretrained(MUSE_GLIMMER_CHECKPOINT_DIR)
         return model, processor
 
     def test_text_generation_matches_reference(self):
@@ -155,7 +155,7 @@ class OnyxIntegrationTest(unittest.TestCase):
         model, processor = self.get_model_and_processor()
         tokenizer = processor.tokenizer
 
-        image = Image.open(os.path.join(os.path.dirname(ONYX_CHECKPOINT_DIR), "test_images", "cats.jpg")).convert(
+        image = Image.open(os.path.join(os.path.dirname(MUSE_GLIMMER_CHECKPOINT_DIR), "test_images", "cats.jpg")).convert(
             "RGB"
         )
         image_inputs = processor.image_processor(images=[image], return_tensors="pt")

@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.onyx.image_processing_onyx import smart_resize
+    from transformers.models.muse_glimmer.image_processing_muse_glimmer import smart_resize
 
 
-class OnyxImageProcessingTester:
+class MuseGlimmerImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -124,10 +124,10 @@ class OnyxImageProcessingTester:
 
 @require_torch
 @require_vision
-class OnyxImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class MuseGlimmerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = OnyxImageProcessingTester(self)
+        self.image_processor_tester = MuseGlimmerImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):

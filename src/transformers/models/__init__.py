@@ -300,6 +300,7 @@ if TYPE_CHECKING:
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .muse_glimmer import *
     from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
@@ -320,7 +321,6 @@ if TYPE_CHECKING:
     from .olmoe import *
     from .omdet_turbo import *
     from .oneformer import *
-    from .onyx import *
     from .openai import *
     from .openai_privacy_filter import *
     from .opt import *

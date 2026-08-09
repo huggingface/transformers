@@ -19,11 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_onyx import *
-    from .image_processing_onyx import *
-    from .modeling_onyx import *
-    from .processing_onyx import *
-    from .video_processing_onyx import *
+    from .configuration_muse_glimmer import *
+    from .image_processing_muse_glimmer import *
+    from .modeling_muse_glimmer import *
+    from .processing_muse_glimmer import *
+    from .video_processing_muse_glimmer import *
 else:
     import sys
 
