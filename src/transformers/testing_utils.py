@@ -816,6 +816,21 @@ def require_torchvision(test_case):
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
+
+
 def require_torchcodec(test_case):
     """
     Decorator marking a test that requires Torchcodec.
@@ -3475,30 +3490,6 @@ def patch_torch_compile_force_graph():
             return orig_method(*args, **kwargs)
 
         torch.compile = patched
-
-
-def patch_psutil_cpu_memory(limit_bytes: int):
-    """
-    Patch `psutil.virtual_memory` to cap the reported CPU memory to `limit_bytes`.
-
-    In K8S instance-sharing CI, each runner sees the full machine's CPU RAM (~750 GB) even though it only
-    owns a fraction. This causes `device_map="auto"` to overfill GPU+CPU with nothing offloaded to disk,
-    leading to GPU OOM at runtime. Calling this function caps `total`, `available`, `used`, and `percent`
-    so the entire test session sees a realistic per-runner memory budget.
-    """
-    import psutil
-
-    _original_virtual_memory = psutil.virtual_memory
-
-    def _capped_virtual_memory():
-        mem = _original_virtual_memory()
-        total = min(mem.total, limit_bytes)
-        available = min(mem.available, limit_bytes)
-        used = min(mem.used, total)
-        percent = 100 * used / total if total > 0 else 0.0
-        return mem._replace(total=total, available=available, used=used, percent=percent)
-
-    psutil.virtual_memory = _capped_virtual_memory
 
 
 def _get_test_info():
