@@ -88,6 +88,7 @@ from .hub import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_file,
+    check_shard_filenames,
     define_sagemaker_information,
     extract_commit_hash,
     has_file,

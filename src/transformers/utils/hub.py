@@ -848,6 +848,19 @@ def convert_file_size_to_int(size: int | str):
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
+def check_shard_filenames(shard_filenames, index_filename):
+    """
+    Check the shard file names read from a checkpoint index. They are always written as plain file names sitting next
+    to the index, so anything with a directory component would resolve outside the checkpoint folder once joined to it.
+    """
+    for shard_filename in shard_filenames:
+        if shard_filename in ("", ".", "..") or shard_filename != os.path.basename(shard_filename):
+            raise ValueError(
+                f"Invalid shard file name {shard_filename!r} in {index_filename}: shard file names must not "
+                "contain any directory component."
+            )
+
+
 def get_checkpoint_shard_files(
     pretrained_model_name_or_path,
     index_filename,
@@ -880,6 +893,7 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    check_shard_filenames(shard_filenames, index_filename)
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()

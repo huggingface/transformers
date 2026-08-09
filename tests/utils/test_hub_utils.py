@@ -22,6 +22,7 @@ from huggingface_hub import constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils.hub import get_checkpoint_shard_files
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -195,6 +196,27 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class GetCheckpointShardFilesTests(unittest.TestCase):
+    def write_index(self, model_dir, shard_name):
+        index_file = os.path.join(model_dir, "model.safetensors.index.json")
+        with open(index_file, "w") as f:
+            json.dump({"metadata": {"total_size": 0}, "weight_map": {"weight": shard_name}}, f)
+        return index_file
+
+    def test_shard_names_pointing_outside_the_model_folder(self):
+        for shard_name in ["../weights.safetensors", "/etc/passwd", "sub/../../weights.safetensors", ".."]:
+            with self.subTest(shard_name=shard_name), tempfile.TemporaryDirectory() as tmp_dir:
+                index_file = self.write_index(tmp_dir, shard_name)
+                with self.assertRaisesRegex(ValueError, "must not contain any directory component"):
+                    get_checkpoint_shard_files(tmp_dir, index_file)
+
+    def test_plain_shard_names_are_resolved(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            index_file = self.write_index(tmp_dir, "model-00001-of-00001.safetensors")
+            shard_files, _ = get_checkpoint_shard_files(tmp_dir, index_file)
+            self.assertEqual(shard_files, [os.path.join(tmp_dir, "model-00001-of-00001.safetensors")])
 
 
 class OfflineModeTests(unittest.TestCase):

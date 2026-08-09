@@ -38,6 +38,7 @@ from .utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     WEIGHTS_INDEX_NAME,
     ExplicitEnum,
+    check_shard_filenames,
     check_torch_load_is_safe,
     is_peft_available,
     is_psutil_available,
@@ -1095,6 +1096,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         index = json.load(f)
 
     shard_files = list(set(index["weight_map"].values()))
+    check_shard_filenames(shard_files, load_index)
 
     # If strict=True, error before loading any of the state dicts.
     # TODO: Here, update the weight map with the config.dynamic_weight_conversion

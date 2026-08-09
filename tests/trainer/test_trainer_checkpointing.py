@@ -21,6 +21,7 @@ push/tags/revision integration.
 """
 
 import dataclasses
+import json
 import math
 import os
 import re
@@ -79,11 +80,12 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     get_last_checkpoint,
+    load_sharded_checkpoint,
     rotate_checkpoints,
     set_seed,
     sort_checkpoints,
 )
-from transformers.utils import SAFE_WEIGHTS_NAME, logging
+from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, logging
 
 from .trainer_test_utils import (
     PATH_SAMPLE_TEXT,
@@ -108,6 +110,16 @@ if is_torch_available():
 # ---------------------------------------------------------------------------
 # Checkpoint save/load tests
 # ---------------------------------------------------------------------------
+
+
+@require_torch
+class LoadShardedCheckpointTest(unittest.TestCase):
+    def test_shard_names_pointing_outside_the_checkpoint_folder(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME), "w") as f:
+                json.dump({"metadata": {}, "weight_map": {"weight": "../weights.safetensors"}}, f)
+            with self.assertRaisesRegex(ValueError, "must not contain any directory component"):
+                load_sharded_checkpoint(nn.Linear(2, 2), tmp_dir)
 
 
 @require_torch
