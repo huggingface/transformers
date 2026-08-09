@@ -1,0 +1,2390 @@
+# Copyright 2021 Google Research The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch BigBirdPegasus model."""
+
+import math
+from collections.abc import Callable
+
+import numpy as np
+import torch
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+    Seq2SeqQuestionAnsweringModelOutput,
+    Seq2SeqSequenceClassifierOutput,
+)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_compilable_check,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from .configuration_bigbird_pegasus import BigBirdPegasusConfig
+
+
+logger = logging.get_logger(__name__)
+
+_EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
+class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__(num_embeddings, embedding_dim)
+
+    def forward(
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
+    ):
+        """`input_ids' shape is expected to be [bsz x seqlen]."""
+
+        if position_ids is None:
+            bsz, seq_len = input_ids_shape[:2]
+            position_ids = torch.arange(
+                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            )
+        return super().forward(position_ids)
+
+
+# Copied from transformers.models.bart.modeling_bart.BartScaledWordEmbedding with Bart->BigBirdPegasus
+class BigBirdPegasusScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
+# Copied from transformers.models.big_bird.modeling_big_bird.BigBirdSelfAttention with BigBird->BigBirdPegasus
+class BigBirdPegasusSelfAttention(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.is_decoder = config.is_decoder
+        self.layer_idx = layer_idx
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        is_cross_attention = encoder_hidden_states is not None
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+        if is_cross_attention and past_key_values is not None and past_key_values.get_seq_length(self.layer_idx) > 0:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_values.layers[self.layer_idx].keys
+            value_layer = past_key_values.layers[self.layer_idx].values
+        else:
+            kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                # save all key/value_layer to cache to be re-used for fast auto-regressive generation
+                key_layer, value_layer = past_key_values.update(
+                    key_layer,
+                    value_layer,
+                    self.layer_idx,
+                )
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BigBirdPegasusModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
+# Copied from transformers.models.big_bird.modeling_big_bird.BigBirdBlockSparseAttention with BigBird->BigBirdPegasus
+class BigBirdPegasusBlockSparseAttention(nn.Module):
+    def __init__(self, config, seed=None):
+        super().__init__()
+
+        self.max_seqlen = config.max_position_embeddings
+        self.seed = seed
+
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.num_random_blocks = config.num_random_blocks
+        self.block_size = config.block_size
+
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+
+    def forward(
+        self,
+        hidden_states,
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        batch_size, seqlen, _ = hidden_states.size()
+        to_seq_length = from_seq_length = seqlen
+        from_block_size = to_block_size = self.block_size
+
+        if from_seq_length % from_block_size != 0:
+            raise ValueError("Query sided sequence length must be multiple of block size")
+
+        if to_seq_length % to_block_size != 0:
+            raise ValueError("Key/Value sided sequence length must be multiple of block size")
+
+        query_layer = (
+            self.query(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        key_layer = (
+            self.key(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+        value_layer = (
+            self.value(hidden_states)
+            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+        )
+
+        context_layer, attention_probs = self.bigbird_block_sparse_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            band_mask,
+            from_mask,
+            to_mask,
+            from_blocked_mask,
+            to_blocked_mask,
+            self.num_attention_heads,
+            self.num_random_blocks,
+            self.attention_head_size,
+            from_block_size,
+            to_block_size,
+            batch_size,
+            from_seq_length,
+            to_seq_length,
+            seed=self.seed,
+            plan_from_length=None,
+            plan_num_rand_blocks=None,
+        )
+
+        context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
+        return context_layer, attention_probs
+
+    def bigbird_block_sparse_attention(
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        band_mask,
+        from_mask,
+        to_mask,
+        from_blocked_mask,
+        to_blocked_mask,
+        n_heads,
+        n_rand_blocks,
+        attention_head_size,
+        from_block_size,
+        to_block_size,
+        batch_size,
+        from_seq_len,
+        to_seq_len,
+        seed,
+        plan_from_length,
+        plan_num_rand_blocks,
+    ):
+        # BigBirdPegasus block-sparse attention as suggested in paper
+
+        # ITC:
+        #     global tokens: 2 x block_size
+        #     window tokens: 3 x block_size
+        #     random tokens: num_rand_tokens x block_size
+
+        # ETC:
+        #     global tokens: extra_globals_tokens + 2 x block_size
+        #     window tokens: 3 x block_size
+        #     random tokens: num_rand_tokens x block_size
+
+        # Note:
+        #     1) Currently, ETC is not supported.
+        #     2) Window size is fixed to 3 blocks & it can be changed only by
+        #     changing `block_size`.
+        #     3) Number of global blocks are fixed (2 blocks here) & global tokens can be
+        #     controlled only by `block_size`.
+
+        # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of shifting tokens (for calculating sliding attention)
+        # hence following code can be divided into 5 parts.
+
+        if from_seq_len // from_block_size != to_seq_len // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
+
+        rsqrt_d = 1 / math.sqrt(attention_head_size)
+        bsz = batch_size
+        attn_mask_penalty = -10000.0
+
+        # generate random attention and corresponding masks
+        np.random.seed(seed)
+        if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
+            rand_attn = [
+                self._bigbird_block_rand_mask(
+                    self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
+                )[: (from_seq_len // from_block_size - 2)]
+                for _ in range(n_heads)
+            ]
+        else:
+            if plan_from_length is None:
+                plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
+                    from_seq_len, from_block_size, n_rand_blocks
+                )
+
+            rand_attn = self._bigbird_block_rand_mask_with_head(
+                from_seq_length=from_seq_len,
+                to_seq_length=to_seq_len,
+                from_block_size=from_block_size,
+                to_block_size=to_block_size,
+                num_heads=n_heads,
+                plan_from_length=plan_from_length,
+                plan_num_rand_blocks=plan_num_rand_blocks,
+            )
+
+        rand_attn = np.stack(rand_attn, axis=0)
+        rand_attn = torch.tensor(rand_attn, device=query_layer.device, dtype=torch.long)
+        rand_attn = rand_attn.unsqueeze(0).expand(batch_size, *rand_attn.shape).contiguous()
+
+        rand_mask = self._create_rand_mask_from_inputs(
+            from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, bsz, from_seq_len, from_block_size
+        )
+
+        blocked_query_matrix = query_layer.view(bsz, n_heads, from_seq_len // from_block_size, from_block_size, -1)
+        blocked_key_matrix = key_layer.view(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
+        blocked_value_matrix = value_layer.view(bsz, n_heads, to_seq_len // to_block_size, to_block_size, -1)
+
+        # preparing block for randn attn
+        gathered_key = self.torch_gather_b2(blocked_key_matrix, rand_attn)
+        gathered_key = gathered_key.view(
+            bsz, n_heads, to_seq_len // to_block_size - 2, n_rand_blocks * to_block_size, -1
+        )  # [bsz, n_heads, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
+        gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
+        gathered_value = gathered_value.view(
+            bsz, n_heads, to_seq_len // to_block_size - 2, n_rand_blocks * to_block_size, -1
+        )  # [bsz, n_heads, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
+
+        # 1st PART
+        # 1st block (global block) attention scores
+        # q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
+        first_product = torch.matmul(blocked_query_matrix[:, :, 0], key_layer.transpose(-1, -2))
+
+        first_product = first_product * rsqrt_d
+        first_product += (1.0 - to_mask) * attn_mask_penalty
+        first_attn_weights = nn.functional.softmax(
+            first_product, dim=-1
+        )  # [bsz, n_heads, from_block_size, to_seq_len]
+
+        # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
+        first_context_layer = torch.matmul(first_attn_weights, value_layer)
+        first_context_layer.unsqueeze_(2)
+
+        # 2nd PART
+        # 2nd block attention scores
+        # q[1] x (sliding_keys, random_keys, global_keys)
+        # sliding key blocks -> 2nd, 3rd blocks
+        # global key blocks -> 1st block
+
+        second_key_mat = torch.cat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, 1],
+                blocked_key_matrix[:, :, 2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, 0],
+            ],
+            dim=2,
+        )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+        second_value_mat = torch.cat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, 1],
+                blocked_value_matrix[:, :, 2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, 0],
+            ],
+            dim=2,
+        )  # [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1]
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_product = torch.matmul(blocked_query_matrix[:, :, 1], second_key_mat.transpose(-1, -2))
+        second_seq_pad = torch.cat(
+            [
+                to_mask[:, :, :, : 3 * to_block_size],
+                to_mask[:, :, :, -to_block_size:],
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+            ],
+            dim=3,
+        )
+        second_rand_pad = torch.cat(
+            [
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask[:, :, 0],
+            ],
+            dim=3,
+        )
+        second_product = second_product * rsqrt_d
+        second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
+        second_attn_weights = nn.functional.softmax(
+            second_product, dim=-1
+        )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+
+        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        second_context_layer = torch.matmul(second_attn_weights, second_value_mat)
+
+        second_context_layer.unsqueeze_(2)
+
+        # 3rd PART
+        # Middle blocks attention scores
+        # q[-2:2] x (sliding_keys, random_keys, global_keys)
+        # sliding attn is calculated using special trick of shifting tokens as discussed in paper
+        # random keys are generated by taking random indices as per `rand_attn`
+        # global keys -> 1st & last block
+
+        exp_blocked_key_matrix = torch.cat(
+            [blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2], blocked_key_matrix[:, :, 3:-1]], dim=3
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        exp_blocked_value_matrix = torch.cat(
+            [blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2], blocked_value_matrix[:, :, 3:-1]],
+            dim=3,
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
+
+        # sliding attention scores for q[-2:2]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [b, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        inner_band_product = torch.matmul(middle_query_matrix, exp_blocked_key_matrix.transpose(-1, -2))
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size]
+        inner_band_product = inner_band_product * rsqrt_d
+
+        # randn attention scores for q[-2:2]
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        rand_band_product = torch.matmul(middle_query_matrix, gathered_key[:, :, 1:-1].transpose(-1, -2))
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
+        rand_band_product = rand_band_product * rsqrt_d
+
+        # Including 1st block (since it's global)
+        first_band_product = torch.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        first_band_product = first_band_product * rsqrt_d
+
+        # Including last block (since it's global)
+        last_band_product = torch.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        last_band_product = last_band_product * rsqrt_d
+
+        # masking padded tokens
+        inner_band_product += (1.0 - band_mask) * attn_mask_penalty
+        first_band_product += (1.0 - to_mask[:, :, :, :to_block_size].unsqueeze(3)) * attn_mask_penalty
+        last_band_product += (1.0 - to_mask[:, :, :, -to_block_size:].unsqueeze(3)) * attn_mask_penalty
+        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * attn_mask_penalty
+
+        # completing attention scores matrix for all q[-2:2]
+        band_product = torch.cat(
+            [first_band_product, inner_band_product, rand_band_product, last_band_product], dim=-1
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+
+        # safely doing softmax since attention matrix is completed
+        attn_weights = nn.functional.softmax(
+            band_product, dim=-1
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+
+        # contribution of sliding keys
+        # [bsz, n_heads, m//from_block_size-4, from_block_size, 3*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        context_layer = torch.matmul(
+            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size], exp_blocked_value_matrix
+        )
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # adding contribution of random keys
+        # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [bsz, n_heads, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        context_layer += torch.matmul(
+            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size], gathered_value[:, :, 1:-1]
+        )
+        #     ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # adding contribution of global keys
+        context_layer += torch.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :to_block_size], blocked_value_matrix[:, :, 0]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+        context_layer += torch.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -to_block_size:], blocked_value_matrix[:, :, -1]
+        )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
+
+        # 4th PART
+        # last 2nd token attention scores
+        # q[-2] x (sliding_keys, random_keys, global_keys)
+        # sliding key blocks -> last 3 blocks
+        # global key block -> 1st block
+        # random key block -> based on indices stored in `randn_attn`
+
+        second_last_key_mat = torch.cat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, -3],
+                blocked_key_matrix[:, :, -2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, -1],
+            ],
+            dim=2,
+        )  # [bsz, n_heads, (4+n_random_blocks)*to_block_size, -1]
+        second_last_value_mat = torch.cat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, -3],
+                blocked_value_matrix[:, :, -2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, -1],
+            ],
+            dim=2,
+        )  # [bsz, n_heads, (4+r)*to_block_size, -1]
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_last_product = torch.matmul(blocked_query_matrix[:, :, -2], second_last_key_mat.transpose(-1, -2))
+        second_last_seq_pad = torch.cat(
+            [
+                to_mask[:, :, :, :to_block_size],
+                to_mask[:, :, :, -3 * to_block_size :],
+                to_mask.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
+            ],
+            dim=3,
+        )
+        second_last_rand_pad = torch.cat(
+            [
+                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
+                rand_mask[:, :, -1],
+            ],
+            dim=3,
+        )
+        second_last_product = second_last_product * rsqrt_d
+        second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
+        second_last_attn_weights = nn.functional.softmax(
+            second_last_product, dim=-1
+        )  # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size]
+
+        # [bsz, n_heads, from_block_size, (4+n_rand_blocks)*to_block_size] x [bsz, n_heads, (4+n_rand_blocks)*to_block_size, -1] ==> [bsz, n_heads, from_block_size, -1]
+        second_last_context_layer = torch.matmul(second_last_attn_weights, second_last_value_mat)
+        second_last_context_layer.unsqueeze_(2)
+
+        # 5th PART
+        # last block (global) attention scores
+        # q[-1] x (k[0], k[1], k[2], k[3], .... )
+
+        # [bsz, n_heads, from_block_size, -1] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, to_seq_len]
+        last_product = torch.matmul(blocked_query_matrix[:, :, -1], key_layer.transpose(-1, -2))
+        last_product = last_product * rsqrt_d
+        last_product += (1.0 - to_mask) * attn_mask_penalty
+        last_attn_weights = nn.functional.softmax(last_product, dim=-1)  # [bsz, n_heads, from_block_size, n]
+
+        # [bsz, n_heads, from_block_size, to_seq_len] x [bsz, n_heads, to_seq_len, -1] ==> [bsz, n_heads, from_block_size, -1]
+        last_context_layer = torch.matmul(last_attn_weights, value_layer)
+        last_context_layer.unsqueeze_(2)
+
+        # combining representations of all tokens
+        context_layer = torch.cat(
+            [first_context_layer, second_context_layer, context_layer, second_last_context_layer, last_context_layer],
+            dim=2,
+        )
+        context_layer = context_layer.view((bsz, n_heads, from_seq_len, -1)) * from_mask
+        context_layer = torch.transpose(context_layer, 1, 2)
+
+        # Reassemble the full (bsz, n_heads, from_seq_len, to_seq_len) attention-probability
+        # matrix from the per-block weights. Block-sparse stores values only for the
+        # global / sliding / random positions that were actually attended to; everything else
+        # stays zero. The original implementation scatter-assigned into a zeros tensor through
+        # four nested per-batch / per-head / per-q-block Python loops; the equivalent below uses
+        # bulk slice-assigns plus four `scatter_` calls with broadcast indices so there's no
+        # host-side per-element work.
+        attention_probs = torch.zeros(
+            bsz, n_heads, from_seq_len, to_seq_len, dtype=context_layer.dtype, device=context_layer.device
+        )
+        num_q_blocks = from_seq_len // from_block_size
+        num_k_blocks = to_seq_len // to_block_size
+        num_middle = num_q_blocks - 4
+
+        # Global rows that are independent of `rand_attn` — direct slice assigns.
+        attention_probs[:, :, :from_block_size, :] = first_attn_weights  # q[0] attends to all keys
+        attention_probs[:, :, from_block_size : 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
+            :, :, :, : 3 * to_block_size
+        ]  # q[1] sliding (k[0:3])
+        attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
+            :, :, :, 3 * to_block_size : 4 * to_block_size
+        ]  # q[1] global (k[-1])
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
+            :, :, :, :, :to_block_size
+        ].view(bsz, n_heads, -1, to_block_size)  # q[2:-2] global (k[0])
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
+            :, :, :, :, -to_block_size:
+        ].view(bsz, n_heads, -1, to_block_size)  # q[2:-2] global (k[-1])
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
+            :, :, :, :to_block_size
+        ]  # q[-2] global (k[0])
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
+            second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
+        )  # q[-2] sliding (k[-3:])
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # q[-1] attends to all keys
+
+        view = attention_probs.view(bsz, n_heads, num_q_blocks, from_block_size, num_k_blocks, to_block_size)
+
+        # q[1] random keys — scatter `n_rand_blocks` blocks along the k-block axis using
+        # `rand_attn[:, :, 0]` as the per-(batch, head) target k-block indices.
+        q1_rand_vals = second_attn_weights[:, :, :, 4 * to_block_size :].view(
+            bsz, n_heads, from_block_size, n_rand_blocks, to_block_size
+        )
+        q1_rand_idx = rand_attn[:, :, 0, :, None].expand(-1, -1, -1, to_block_size)
+        q1_rand_idx = q1_rand_idx[:, :, None].expand(-1, -1, from_block_size, -1, -1)
+        view[:, :, 1].scatter_(3, q1_rand_idx, q1_rand_vals)
+
+        # q[2:-2] sliding keys — diagonal scatter: middle q-block `i` attends to k-blocks
+        # `i, i+1, i+2` in the `k[1:-1]` window (k-axis indices `i+1, i+2, i+3` in full view).
+        sliding_vals = attn_weights[:, :, :, :, to_block_size : 4 * to_block_size].view(
+            bsz, n_heads, num_middle, from_block_size, 3, to_block_size
+        )
+        q_grid = torch.arange(num_middle, device=attention_probs.device)
+        k_diag = q_grid[:, None] + torch.arange(3, device=attention_probs.device)[None, :]
+        k_diag = k_diag[None, None, :, None, :, None].expand(
+            bsz, n_heads, num_middle, from_block_size, 3, to_block_size
+        )
+        view[:, :, 2:-2, :, 1:-1, :].scatter_(4, k_diag, sliding_vals)
+
+        # q[2:-2] random keys — for each middle q-block `i`, scatter `n_rand_blocks` blocks at
+        # `rand_attn[:, :, i + 1]` along the k-block axis.
+        mid_rand_vals = attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size].view(
+            bsz, n_heads, num_middle, from_block_size, n_rand_blocks, to_block_size
+        )
+        mid_rand_idx = (
+            rand_attn[:, :, 1:-1, :, None, None]
+            .expand(bsz, n_heads, num_middle, n_rand_blocks, from_block_size, to_block_size)
+            .transpose(3, 4)
+        )
+        view[:, :, 2:-2].scatter_(4, mid_rand_idx, mid_rand_vals)
+
+        # q[-2] random keys — same pattern as q[1], using `rand_attn[:, :, -1]`.
+        qm2_rand_vals = second_last_attn_weights[:, :, :, 4 * to_block_size :].view(
+            bsz, n_heads, from_block_size, n_rand_blocks, to_block_size
+        )
+        qm2_rand_idx = rand_attn[:, :, -1, :, None].expand(-1, -1, -1, to_block_size)
+        qm2_rand_idx = qm2_rand_idx[:, :, None].expand(-1, -1, from_block_size, -1, -1)
+        view[:, :, -2].scatter_(3, qm2_rand_idx, qm2_rand_vals)
+
+        return context_layer, attention_probs
+
+    @staticmethod
+    def torch_gather_b2(params, indices):
+        """Gather block rows from `params` along dim 2 using per-(batch, head) `indices`.
+
+        `params`: `(bsz, n_heads, num_blocks, block_size, head_dim)`.
+        `indices`: `(bsz, n_heads, num_windows, n_rand_blocks)` — random block ids per window.
+        Returns `(bsz, n_heads, num_windows * n_rand_blocks, block_size, head_dim)`.
+        """
+        if params.shape[:2] != indices.shape[:2]:
+            raise ValueError(
+                "Make sure that the first two dimensions of params and indices are identical,                 but"
+                f" they are params: {params.shape[:2]} vs. indices: {indices.shape[:2]}"
+            )
+        flat_indices = indices.reshape(*indices.shape[:2], -1)
+        gather_idx = flat_indices[..., None, None].expand(-1, -1, -1, params.shape[3], params.shape[4])
+        return torch.gather(params, 2, gather_idx)
+
+    @staticmethod
+    def _create_rand_mask_from_inputs(
+        from_blocked_mask,
+        to_blocked_mask,
+        rand_attn,
+        num_attention_heads,
+        num_rand_blocks,
+        batch_size,
+        from_seq_length,
+        from_block_size,
+    ):
+        """
+        Create 3D attention mask from a 2D tensor mask.
+
+        Args:
+            from_blocked_mask: 2D Tensor of shape [batch_size,
+            from_seq_length//from_block_size, from_block_size].
+            to_blocked_mask: int32 Tensor of shape [batch_size,
+            to_seq_length//to_block_size, to_block_size].
+            rand_attn: [batch_size, num_attention_heads,
+            from_seq_length//from_block_size-2, num_rand_blocks]
+            num_attention_heads: int. Number of attention heads.
+            num_rand_blocks: int. Number of random chunks per row.
+            batch_size: int. Batch size for computation.
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+
+        Returns:
+            float Tensor of shape [batch_size, num_attention_heads, from_seq_length//from_block_size-2,
+            from_block_size, num_rand_blocks*to_block_size].
+        """
+        num_windows = from_seq_length // from_block_size - 2
+        # Vectorised replacement of `torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])`.
+        # Flatten the random-block indices to `(batch_size, n_heads * num_windows * num_rand_blocks)` and gather
+        # the corresponding rows from `to_blocked_mask` (`(batch_size, num_to_blocks, from_block_size)`) along dim 1.
+        flat_indices = rand_attn.reshape(batch_size, -1)
+        rand_mask = torch.gather(to_blocked_mask, 1, flat_indices.unsqueeze(-1).expand(-1, -1, from_block_size))
+        rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
+        rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
+        return rand_mask
+
+    @staticmethod
+    def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
+        """
+        Gives the plan of where to put random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+
+        Returns:
+            plan_from_length: ending location of from block plan_num_rand_blocks: number of random ending location for
+            each block
+        """
+
+        plan_from_length = []
+        plan_num_rand_blocks = []
+        if (2 * num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((2 * num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(0)
+        elif (num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks // 2)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks - (num_rand_blocks // 2))
+        else:
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks)
+
+        return plan_from_length, plan_num_rand_blocks
+
+    def _bigbird_block_rand_mask(
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+    ):
+        """
+        Create adjacency list of random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+            last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
+
+        Returns:
+            adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
+        """
+        # using this method when from_seq_length in [1024, 3072, 4096]
+
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
+
+        rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
+        # During inference (eval) no randomness
+        if not self.training:
+            return rand_attn
+        middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
+        last = to_seq_length // to_block_size - 1
+        if last_idx > (2 * to_block_size):
+            last = (last_idx // to_block_size) - 1
+
+        r = num_rand_blocks  # shorthand
+        for i in range(1, from_seq_length // from_block_size - 1):
+            start = i - 2
+            end = i
+            if i == 1:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[2:last])[:r]
+            elif i == 2:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[3:last])[:r]
+            elif i == from_seq_length // from_block_size - 3:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+            # Missing -3: should have been sliced till last-3
+            elif i == from_seq_length // from_block_size - 2:
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
+            # Missing -4: should have been sliced till last-4
+            else:
+                if start > last:
+                    start = last
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                elif (end + 1) == last:
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                else:
+                    rand_attn[i - 1, :] = np.random.permutation(
+                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    )[:r]
+        return rand_attn
+
+    def _bigbird_block_rand_mask_with_head(
+        self,
+        from_seq_length,
+        to_seq_length,
+        from_block_size,
+        to_block_size,
+        num_heads,
+        plan_from_length,
+        plan_num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_top=1,
+        global_block_bottom=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
+        """
+        Create adjacency list of random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_heads: int. total number of heads.
+            plan_from_length: list. plan from length where num_random_blocks are chosen from.
+            plan_num_rand_blocks: list. number of rand blocks within the plan.
+            window_block_left: int. number of blocks of window to left of a block.
+            window_block_right: int. number of blocks of window to right of a block.
+            global_block_top: int. number of blocks at the top.
+            global_block_bottom: int. number of blocks at the bottom.
+            global_block_left: int. Number of blocks globally used to the left.
+            global_block_right: int. Number of blocks globally used to the right.
+
+        Returns:
+            adjacency list of size num_head where each element is of size from_seq_length//from_block_size-2 by
+            num_rand_blocks
+        """
+        # using this method when from_seq_length not in [1024, 3072, 4096]
+
+        if from_seq_length // from_block_size != to_seq_length // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
+
+        if from_seq_length not in plan_from_length:
+            raise ValueError("Error from sequence length not in plan!")
+
+        # Total number of blocks in the mmask
+        num_blocks = from_seq_length // from_block_size
+        # Number of blocks per plan
+        plan_block_length = np.array(plan_from_length) // from_block_size
+        # till when to follow plan
+        max_plan_idx = plan_from_length.index(from_seq_length)
+
+        # Random Attention adjacency list
+        rand_attn = [
+            np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
+            for i in range(num_heads)
+        ]
+        # During inference (eval) no randomness
+        if not self.training:
+            for nh in range(num_heads):
+                rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+            return rand_attn
+
+        # We will go iteratively over the plan blocks and pick random number of
+        # Attention blocks from the legally allowed blocks
+        for plan_idx in range(max_plan_idx + 1):
+            rnd_r_cnt = 0
+            if plan_idx > 0:
+                # set the row for all from_blocks starting from 0 to
+                # plan_block_length[plan_idx-1]
+                # column index start from plan_block_length[plan_idx-1] and ends at
+                # plan_block_length[plan_idx]
+                if plan_num_rand_blocks[plan_idx] > 0:
+                    rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
+                    curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+                    for blk_rw_idx in range(global_block_top, plan_block_length[plan_idx - 1]):
+                        for h in range(num_heads):
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=plan_block_length[plan_idx - 1],
+                                to_end_block_id=plan_block_length[plan_idx],
+                                num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
+
+                for pl_id in range(plan_idx):
+                    if plan_num_rand_blocks[pl_id] == 0:
+                        continue
+                    for blk_rw_idx in range(plan_block_length[plan_idx - 1], plan_block_length[plan_idx]):
+                        rnd_r_cnt = 0
+                        to_start_block_id = 0
+                        if pl_id > 0:
+                            rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:pl_id]))
+                            to_start_block_id = plan_block_length[pl_id - 1]
+                        curr_r_cnt = int(np.sum(plan_num_rand_blocks[: pl_id + 1]))
+                        for h in range(num_heads):
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=to_start_block_id,
+                                to_end_block_id=plan_block_length[pl_id],
+                                num_rand_blocks=plan_num_rand_blocks[pl_id],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
+
+            if plan_num_rand_blocks[plan_idx] == 0:
+                continue
+            curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+            from_start_block_id = global_block_top
+            to_start_block_id = 0
+            if plan_idx > 0:
+                rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
+                from_start_block_id = plan_block_length[plan_idx - 1]
+                to_start_block_id = plan_block_length[plan_idx - 1]
+
+            for blk_rw_idx in range(from_start_block_id, plan_block_length[plan_idx]):
+                for h in range(num_heads):
+                    rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                        block_id=blk_rw_idx,
+                        to_start_block_id=to_start_block_id,
+                        to_end_block_id=plan_block_length[plan_idx],
+                        num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                        window_block_left=window_block_left,
+                        window_block_right=window_block_right,
+                        global_block_left=global_block_left,
+                        global_block_right=global_block_right,
+                    )
+
+        for nh in range(num_heads):
+            rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+
+        return rand_attn
+
+    @staticmethod
+    def _get_single_block_row_attention(
+        block_id,
+        to_start_block_id,
+        to_end_block_id,
+        num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
+        """
+        For a single row block get random row attention.
+
+        Args:
+            block_id: int. block id of row.
+            to_start_block_id: int. random attention column start id.
+            to_end_block_id: int. random attention column end id.
+            num_rand_blocks: int. number of random blocks to be selected.
+            window_block_left: int. number of blocks of window to left of a block.
+            window_block_right: int. number of blocks of window to right of a block.
+            global_block_left: int. Number of blocks globally used to the left.
+            global_block_right: int. Number of blocks globally used to the right.
+
+        Returns:
+            row containing the random attention vector of size num_rand_blocks.
+        """
+        # list of to_blocks from which to choose random attention
+        to_block_list = np.arange(to_start_block_id, to_end_block_id, dtype=np.int32)
+        # permute the blocks
+        perm_block = np.random.permutation(to_block_list)
+
+        # illegal blocks for the current block id, using window
+        illegal_blocks = list(range(block_id - window_block_left, block_id + window_block_right + 1))
+
+        # Add blocks at the start and at the end
+        illegal_blocks.extend(list(range(global_block_left)))
+        illegal_blocks.extend(list(range(to_end_block_id - global_block_right, to_end_block_id)))
+
+        # The second from_block cannot choose random attention on second last to_block
+        if block_id == 1:
+            illegal_blocks.append(to_end_block_id - 2)
+
+        # The second last from_block cannot choose random attention on second to_block
+        if block_id == to_end_block_id - 2:
+            illegal_blocks.append(1)
+
+        selected_random_blocks = []
+
+        for i in range(to_end_block_id - to_start_block_id):
+            if perm_block[i] not in illegal_blocks:
+                selected_random_blocks.append(perm_block[i])
+            if len(selected_random_blocks) == num_rand_blocks:
+                break
+        return np.array(selected_random_blocks, dtype=np.int32)
+
+
+class BigBirdPegasusEncoderAttention(nn.Module):
+    def __init__(self, config, seed=None):
+        super().__init__()
+        self.config = config
+        self.seed = seed
+
+        self.attention_type = config.attention_type
+
+        if self.attention_type == "original_full":
+            self.self = BigBirdPegasusSelfAttention(config)
+        elif self.attention_type == "block_sparse":
+            self.self = BigBirdPegasusBlockSparseAttention(config, seed)
+        else:
+            raise ValueError(
+                f"attention_type can either be original_full or block_sparse, but is {self.config.attention_type}"
+            )
+
+        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=config.use_bias)
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+
+        if value == "original_full":
+            # copy all weights to new full attention class
+            attn_weights = BigBirdPegasusSelfAttention(self.config)
+        else:
+            # copy all weights to new sparse attention class
+            attn_weights = BigBirdPegasusBlockSparseAttention(self.config, self.seed)
+
+        attn_weights.query = self.self.query
+        attn_weights.value = self.self.value
+        attn_weights.key = self.self.key
+        self.self = attn_weights
+        self.attention_type = value
+
+        if not self.training:
+            self.self.eval()
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        if self.attention_type == "original_full":
+            context_layer, attention_probs = self.self(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+        else:
+            context_layer, attention_probs = self.self(
+                hidden_states,
+                band_mask,
+                from_mask,
+                to_mask,
+                from_blocked_mask,
+                to_blocked_mask,
+                **kwargs,
+            )
+
+        attention_output = self.output(context_layer)
+        return attention_output, attention_probs
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights.to(value.dtype), value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+# Copied from transformers.models.bart.modeling_bart.BartAttention with BartConfig->BigBirdPegasusConfig, Bart->BigBirdPegasusDecoder
+class BigBirdPegasusDecoderAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+        is_causal: bool = False,
+        config: BigBirdPegasusConfig | None = None,
+        layer_idx: int | None = None,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        self.config = config
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+        self.is_causal = is_causal
+        self.layer_idx = layer_idx
+        if layer_idx is None and self.is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        # determine input shapes
+        input_shape = hidden_states.shape[:-1]
+
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # get query proj
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
+                else:
+                    curr_past_key_values = past_key_values.self_attention_cache
+            else:
+                curr_past_key_values = past_key_values
+
+        current_states = key_value_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
+        else:
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class BigBirdPegasusEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: BigBirdPegasusConfig, seed=None):
+        super().__init__()
+        self.attention_type = config.attention_type
+        self.embed_dim = config.d_model
+        self.self_attn = BigBirdPegasusEncoderAttention(config, seed=seed)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        hidden_states, _ = self.self_attn(
+            hidden_states,
+            attention_mask=attention_mask,
+            band_mask=band_mask,
+            from_mask=from_mask,
+            to_mask=to_mask,
+            from_blocked_mask=from_blocked_mask,
+            to_blocked_mask=to_blocked_mask,
+            **kwargs,
+        )
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        if hidden_states.dtype == torch.float16 and not torch.isfinite(hidden_states).all():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        self.self_attn.set_attention_type(value)
+
+
+class BigBirdPegasusDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: BigBirdPegasusConfig, layer_idx: int | None = None):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = BigBirdPegasusDecoderAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+            bias=config.use_bias,
+            config=config,
+            layer_idx=layer_idx,
+        )
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn = BigBirdPegasusDecoderAttention(
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+            bias=config.use_bias,
+            config=config,
+            layer_idx=layer_idx,
+        )
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+
+    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = True,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
+            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            past_key_values (`Cache`): cached past key and value projection states
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        # Cross-Attention Block
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+            hidden_states, _ = self.encoder_attn(
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->BigBirdPegasus
+class BigBirdPegasusClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        inner_dim: int,
+        num_classes: int,
+        pooler_dropout: float,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
+
+
+@auto_docstring
+class BigBirdPegasusPreTrainedModel(PreTrainedModel):
+    config: BigBirdPegasusConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BigBirdPegasusForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
+
+    @property
+    def dummy_inputs(self):
+        pad_token = self.config.pad_token_id
+        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
+        dummy_inputs = {
+            "attention_mask": input_ids.ne(pad_token),
+            "input_ids": input_ids,
+        }
+        return dummy_inputs
+
+
+class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`BigBirdPegasusEncoderLayer`].
+
+    Args:
+        config: BigBirdPegasusConfig
+        embed_tokens (nn.Embedding): output embedding
+    """
+
+    _can_record_outputs = {
+        "hidden_states": BigBirdPegasusEncoderLayer,
+        "attentions": BigBirdPegasusEncoderAttention,
+    }
+
+    def __init__(self, config: BigBirdPegasusConfig):
+        super().__init__(config)
+
+        self.attention_type = config.attention_type
+        self.block_size = config.block_size
+
+        self.dropout = config.dropout
+        self.layerdrop = config.encoder_layerdrop
+
+        embed_dim = config.d_model
+        self.padding_idx = config.pad_token_id
+        self.max_source_positions = config.max_position_embeddings
+        embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+
+        self.embed_tokens = BigBirdPegasusScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
+
+        self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            embed_dim,
+        )
+        self.layers = nn.ModuleList([BigBirdPegasusEncoderLayer(config, seed=i) for i in range(config.encoder_layers)])
+        self.layernorm_embedding = nn.LayerNorm(embed_dim)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        input_shape = inputs_embeds.size()[:-1]
+        embed_pos = self.embed_positions(input_shape)
+        embed_pos = embed_pos.to(inputs_embeds.device)
+
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=hidden_states.device)
+        attention_mask = attention_mask.long()
+
+        # in order to use block_sparse attention, sequence_length has to be at least
+        # bigger than all global attentions: 2 * block_size
+        # + sliding tokens: 3 * block_size
+        # + random tokens: 2 * num_random_blocks * block_size
+        max_tokens_to_attend = (5 + 2 * self.config.num_random_blocks) * self.config.block_size
+        if self.attention_type == "block_sparse" and input_shape[1] <= max_tokens_to_attend:
+            # change attention_type from block_sparse to original_full
+            sequence_length = input_shape[1]
+            logger.warning(
+                "Attention type 'block_sparse' is not possible if sequence_length: "
+                f"{sequence_length} <= num global tokens: 2 * config.block_size "
+                "+ min. num sliding tokens: 3 * config.block_size "
+                "+ config.num_random_blocks * config.block_size "
+                "+ additional buffer: config.num_random_blocks * config.block_size "
+                f"= {max_tokens_to_attend} with config.block_size "
+                f"= {self.config.block_size}, config.num_random_blocks "
+                f"= {self.config.num_random_blocks}. "
+                "Changing attention type to 'original_full'..."
+            )
+            self.set_attention_type("original_full")
+
+        if self.attention_type == "block_sparse":
+            padding_len, hidden_states, attention_mask = self._pad_to_block_size(hidden_states, attention_mask)
+        else:
+            padding_len = 0
+
+        # expand attention_mask
+        if self.attention_type == "original_full":
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
+            blocked_encoder_mask = band_mask = from_mask = to_mask = None
+        elif self.attention_type == "block_sparse":
+            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
+                attention_mask, self.block_size
+            )
+            attention_mask = None
+        else:
+            raise ValueError(
+                f"attention_type can either be original_full or block_sparse, but is {self.attention_type}"
+            )
+
+        for idx, encoder_layer in enumerate(self.layers):
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if not to_drop:
+                hidden_states = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    band_mask=band_mask,
+                    from_mask=from_mask,
+                    to_mask=to_mask,
+                    from_blocked_mask=blocked_encoder_mask,
+                    to_blocked_mask=blocked_encoder_mask,
+                    **kwargs,
+                )
+
+        hidden_states = self.layernorm_embedding(hidden_states)
+
+        if padding_len > 0:
+            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
+            hidden_states = hidden_states[:, :-padding_len]
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+        )
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        for layer in self.layers:
+            layer.set_attention_type(value)
+
+    @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
+    def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
+        batch_size, seq_length = attention_mask.size()
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block"
+                f" size is {block_size}."
+            )
+
+        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
+            """
+            Create 3D attention mask from a 2D tensor mask.
+
+            Args:
+                from_blocked_mask: 2D Tensor of shape [batch_size,
+                from_seq_length//from_block_size, from_block_size].
+                to_blocked_mask: int32 Tensor of shape [batch_size,
+                to_seq_length//to_block_size, to_block_size].
+
+            Returns:
+                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4, from_block_size,
+                3*to_block_size].
+            """
+            exp_blocked_to_pad = torch.cat(
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
+            )
+            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+            band_mask.unsqueeze_(1)
+            return band_mask
+
+        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
+        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
+
+        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
+        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
+
+        return blocked_encoder_mask, band_mask, from_mask, to_mask
+
+    def _pad_to_block_size(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor):
+        """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
+        # padding
+        block_size = self.config.block_size
+        batch_size, seq_len = hidden_states.shape[:2]
+
+        padding_len = (block_size - seq_len % block_size) % block_size
+        if padding_len > 0:
+            logger.warning_once(
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.block_size`: {block_size}"
+            )
+            pad_id = self.config.pad_token_id
+            device = hidden_states.device
+            input_ids_padding = torch.ones((batch_size, padding_len), dtype=torch.long, device=device) * pad_id
+            inputs_embeds_padding = self.embed_tokens(input_ids_padding)
+            hidden_states = torch.cat([hidden_states, inputs_embeds_padding], dim=-2)
+
+            attention_mask = nn.functional.pad(
+                attention_mask, (0, padding_len), value=0
+            )  # no attention on the padding tokens
+
+        return padding_len, hidden_states, attention_mask
+
+
+class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`BigBirdPegasusDecoderLayer`]
+
+    Args:
+        config: BigBirdPegasusConfig
+        embed_tokens (nn.Embedding): output embedding
+    """
+
+    _can_record_outputs = {
+        "hidden_states": BigBirdPegasusDecoderLayer,
+        "attentions": OutputRecorder(BigBirdPegasusDecoderAttention, index=1, layer_name="self_attn"),
+        "cross_attentions": OutputRecorder(BigBirdPegasusDecoderAttention, index=1, layer_name="encoder_attn"),
+    }
+
+    def __init__(self, config: BigBirdPegasusConfig):
+        super().__init__(config)
+        self.dropout = config.dropout
+        self.layerdrop = config.decoder_layerdrop
+        self.padding_idx = config.pad_token_id
+        self.max_target_positions = config.max_position_embeddings
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+
+        self.embed_tokens = BigBirdPegasusScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
+
+        self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.d_model,
+        )
+        self.layers = nn.ModuleList(
+            [BigBirdPegasusDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)]
+        )
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        # initialize `past_key_values`
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
+
+        batch_size, seq_length = inputs_embeds.size()[:-1]
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+
+        if attention_mask is None and not is_torchdynamo_compiling():
+            # required mask seq length can be calculated via length of past cache
+            mask_seq_length = past_key_values_length + seq_length
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+
+        self_attn_cache = (
+            past_key_values.self_attention_cache
+            if isinstance(past_key_values, EncoderDecoderCache)
+            else past_key_values
+        )
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=self_attn_cache,
+        )
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+
+        # embed positions
+        positions = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
+        positions = positions.to(inputs_embeds.device)
+
+        hidden_states = inputs_embeds + positions
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        for idx, decoder_layer in enumerate(self.layers):
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
+
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.layernorm_embedding(hidden_states)
+
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
+
+
+@auto_docstring
+class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
+
+    def __init__(self, config: BigBirdPegasusConfig):
+        super().__init__(config)
+
+        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.shared = BigBirdPegasusScaledWordEmbedding(
+            vocab_size, config.d_model, padding_idx, embed_scale=embed_scale
+        )
+
+        self.encoder = BigBirdPegasusEncoder(config)
+        self.decoder = BigBirdPegasusDecoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Seq2SeqModelOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
+        """
+        # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            if input_ids is None:
+                raise ValueError(
+                    "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
+                    "passed, `input_ids` cannot be `None`. Please pass either "
+                    "`input_ids` or `decoder_input_ids` or `decoder_inputs_embeds`."
+                )
+
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
+        if encoder_outputs is None:
+            encoder_outputs: BaseModelOutput = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                **kwargs,
+            )
+        elif not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The BigBirdPegasus Model with a language modeling head. Can be used for summarization.
+    """
+)
+class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, GenerationMixin):
+    base_model_prefix = "model"
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
+
+    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration.__init__ with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
+    def __init__(self, config: BigBirdPegasusConfig):
+        super().__init__(config)
+        self.model = BigBirdPegasusModel(config)
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
+        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration.resize_token_embeddings with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
+    def resize_token_embeddings(
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
+    ) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        self._resize_final_logits_bias(new_embeddings.weight.shape[0])
+        return new_embeddings
+
+    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._resize_final_logits_bias with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
+    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
+        old_num_tokens = self.final_logits_bias.shape[-1]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = self.final_logits_bias[:, :new_num_tokens]
+        else:
+            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
+        self.final_logits_bias = nn.Buffer(new_bias)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Seq2SeqLMOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example summarization:
+
+        ```python
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForConditionalGeneration
+
+        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+
+        >>> ARTICLE_TO_SUMMARIZE = (
+        ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
+        ...     "networks in an encoder-decoder configuration. The best performing models also connect the encoder "
+        ...     "and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, "
+        ...     "based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. "
+        ...     "Experiments on two machine translation tasks show these models to be superior in quality "
+        ...     "while being more parallelizable and requiring significantly less time to train."
+        ... )
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors="pt", truncation=True)
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=15)
+        >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        'dominant sequence models are based on recurrent or convolutional neural networks .'
+        ```
+        """
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
+        outputs: Seq2SeqModelOutput = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        lm_logits = self.lm_head(outputs[0])
+        lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
+
+        masked_lm_loss = None
+        if labels is not None:
+            labels = labels.to(lm_logits.device)
+            loss_fct = CrossEntropyLoss()
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return Seq2SeqLMOutput(
+            loss=masked_lm_loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration.prepare_decoder_input_ids_from_labels with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
+
+@auto_docstring(
+    custom_intro="""
+    BigBirdPegasus model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
+    """
+)
+class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
+    def __init__(self, config: BigBirdPegasusConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = BigBirdPegasusModel(config)
+        self.classification_head = BigBirdPegasusClassificationHead(
+            config.d_model,
+            config.d_model,
+            config.num_labels,
+            config.classifier_dropout,
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Seq2SeqSequenceClassifierOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        if labels is not None:
+            use_cache = False
+
+        if input_ids is None and inputs_embeds is not None:
+            raise NotImplementedError(
+                f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
+            )
+
+        outputs: Seq2SeqModelOutput = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        hidden_states = outputs[0]  # last hidden state
+
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
+
+        torch_compilable_check(
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
+            "All examples must have the same number of <eos> tokens.",
+        )
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
+        logits = self.classification_head(sentence_representation)
+
+        loss = None
+        if labels is not None:
+            labels = labels.to(logits.device)
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        return Seq2SeqSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+@auto_docstring
+class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        config.num_labels = 2
+        self.num_labels = config.num_labels
+
+        self.model = BigBirdPegasusModel(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Seq2SeqQuestionAnsweringModelOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_bigbird_pegasus._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in
+            [the paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
+        """
+        if start_positions is not None and end_positions is not None:
+            use_cache = False
+
+        outputs: Seq2SeqModelOutput = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
+
+        total_loss = None
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            total_loss = (start_loss + end_loss) / 2
+
+        return Seq2SeqQuestionAnsweringModelOutput(
+            loss=total_loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
+# Copied from transformers.models.pegasus.modeling_pegasus.PegasusDecoderWrapper with Pegasus->BigBirdPegasus
+class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the [`EncoderDecoderModel`] framework.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.decoder = BigBirdPegasusDecoder(config)
+        self.post_init()
+
+    def forward(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
+
+
+class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
+    def __init__(self, config):
+        config.is_decoder = True
+        config.is_encoder_decoder = False
+        super().__init__(config)
+        self.model = BigBirdPegasusDecoderWrapper(config)
+
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.decoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForCausalLM
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> model = BigBirdPegasusForCausalLM.from_pretrained(
+        ...     "google/bigbird-pegasus-large-arxiv"
+        ... )
+        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        ```"""
+
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.model.decoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            labels = labels.to(logits.device)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+
+__all__ = [
+    "BigBirdPegasusForCausalLM",
+    "BigBirdPegasusForConditionalGeneration",
+    "BigBirdPegasusForQuestionAnswering",
+    "BigBirdPegasusForSequenceClassification",
+    "BigBirdPegasusModel",
+    "BigBirdPegasusPreTrainedModel",
+]

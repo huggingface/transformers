@@ -1,0 +1,80 @@
+name: Build docker images (Nightly CI)
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+  push:
+    branches:
+      - build_nightly_ci_docker_image*
+
+concurrency:
+  group: docker-images-builds
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  latest-with-torch-nightly-docker:
+    name: "Nightly PyTorch"
+    if: inputs.job == 'latest-with-torch-nightly-docker' || inputs.job == ''
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      -
+        name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./docker/transformers-all-latest-gpu
+          build-args: |
+            REF=main
+            PYTORCH=pre
+          push: true
+          tags: huggingface/transformers-all-latest-torch-nightly-gpu
+
+  nightly-torch-deepspeed-docker:
+    name: "Nightly PyTorch + DeepSpeed"
+    if: inputs.job == 'nightly-torch-deepspeed-docker' || inputs.job == ''
+    runs-on:
+      group: aws-g4dn-2xlarge-cache
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      -
+        name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-nightly-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-nightly-gpu

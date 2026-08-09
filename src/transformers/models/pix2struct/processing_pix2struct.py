@@ -1,0 +1,109 @@
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for Pix2Struct.
+"""
+
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import auto_docstring, logging
+
+
+class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "max_patches": 2048,
+        },
+    }
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
+class Pix2StructProcessor(ProcessorMixin):
+    def __init__(self, image_processor, tokenizer):
+        tokenizer.return_token_type_ids = False
+        super().__init__(image_processor, tokenizer)
+
+    @auto_docstring
+    def __call__(
+        self,
+        images=None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[Pix2StructProcessorKwargs],
+    ) -> BatchEncoding | BatchFeature:
+        if images is None and text is None:
+            raise ValueError("You have to specify either images or text.")
+
+        output_kwargs = self._merge_kwargs(
+            Pix2StructProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        add_special_tokens = output_kwargs["text_kwargs"].pop("add_special_tokens", None)
+        # Get only text
+        if images is None and not self.image_processor.is_vqa:
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else True
+            )
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            return text_encoding
+
+        if not self.image_processor.is_vqa:
+            # add pixel_values
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+        else:
+            # add pixel_values and bbox
+            output_kwargs["images_kwargs"].setdefault("header_text", text)
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+
+        if text is not None and not self.image_processor.is_vqa:
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else False
+            )
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+
+            if "attention_mask" in text_encoding:
+                text_encoding["decoder_attention_mask"] = text_encoding.pop("attention_mask")
+            if "input_ids" in text_encoding:
+                text_encoding["decoder_input_ids"] = text_encoding.pop("input_ids")
+        else:
+            text_encoding = None
+
+        if text_encoding is not None:
+            encoding_image_processor.update(text_encoding)
+
+        return encoding_image_processor
+
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        decoder_ids = ["decoder_attention_mask", "decoder_input_ids"]
+        return image_processor_input_names + decoder_ids
+
+
+__all__ = ["Pix2StructProcessor"]

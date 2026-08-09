@@ -1,0 +1,518 @@
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Zamba model."""
+
+import math
+import unittest
+
+from transformers import AutoTokenizer, ZambaConfig, is_torch_available
+from transformers.testing_utils import (
+    require_torch,
+    slow,
+    torch_device,
+)
+
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import ZambaForCausalLM, ZambaForSequenceClassification, ZambaModel
+
+
+class ZambaModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=64,
+        mamba_dt_rank=32,
+        num_hidden_layers=5,
+        attn_layer_offset=1,
+        attn_layer_period=8,
+        num_attention_heads=4,
+        num_key_value_heads=4,
+        n_mamba_heads=2,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_mamba_act="silu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.mamba_dt_rank = mamba_dt_rank
+        self.num_hidden_layers = num_hidden_layers
+        self.attn_layer_offset = attn_layer_offset
+        self.attn_layer_period = attn_layer_period
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.n_mamba_heads = n_mamba_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_mamba_act = hidden_mamba_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.scope = scope
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        sequence_labels = None
+        token_labels = None
+        choice_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+
+        config = self.get_config()
+
+        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return ZambaConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            mamba_dt_rank=self.mamba_dt_rank,
+            num_hidden_layers=self.num_hidden_layers,
+            attn_layer_offset=self.attn_layer_offset,
+            attn_layer_period=self.attn_layer_period,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            n_mamba_heads=self.n_mamba_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_mamba_act=self.hidden_mamba_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=True,
+            initializer_range=self.initializer_range,
+            use_mamba_kernels=False,
+        )
+
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        config.is_decoder = True
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
+
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+        model = ZambaModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_for_causal_lm(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = ZambaForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids, labels=token_labels)
+        result = model(input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = ZambaForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = ZambaForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
+
+
+@require_torch
+class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            ZambaModel,
+            ZambaForCausalLM,
+            ZambaForSequenceClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ZambaModel,
+            "text-classification": ZambaForSequenceClassification,
+            "text-generation": ZambaForCausalLM,
+            "zero-shot": ZambaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    model_split_percents = [0.5, 0.8, 0.9]
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, intermediate_size, config.mamba_d_conv)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
+
+    def setUp(self):
+        self.model_tester = ZambaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=32)
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        "Zamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
+        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "
+        "the split-vs-single comparison diverges regardless of padding masking — the scenario is out of "
+        "Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        r"""
+        Overriding the test_attention_outputs test as the Zamba model outputs attention only for its attention layers
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        expected_num_attentions = (
+            math.ceil(
+                (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
+                / self.model_tester.attn_layer_period
+            )
+            + 1
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+
+    def _get_input_ids_and_config(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        return config, input_ids, input_mask
+
+    @unittest.skip(
+        "Zamba's shared attention uses tied weights excluded from bnb 4-bit quantization, causing a dtype mismatch with FA2 fp16 output."
+    )
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+
+@require_torch
+class ZambaModelIntegrationTest(unittest.TestCase):
+    model = None
+    tokenizer = None
+
+    @classmethod
+    @slow
+    def setUpClass(cls):
+        model_id = "Zyphra/Zamba-7B-v1"
+        cls.model = ZambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, use_mamba_kernels=False)
+        cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+    @slow
+    def test_simple_generate(self):
+        self.model.to(torch_device)
+
+        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
+            "input_ids"
+        ].to(torch_device)
+        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(out[0, :])
+        self.assertEqual(
+            output_sentence,
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+        )
+
+        with torch.no_grad():
+            logits = self.model(input_ids=input_ids).logits
+
+        EXPECTED_LOGITS_NO_GRAD = torch.tensor(
+            [
+                -7.9375,  8.1875,  1.3984, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7500, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_simple_batched_generate_with_padding(self):
+        self.model.to(torch_device)
+        self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        self.model.resize_token_embeddings(len(self.tokenizer))
+
+        inputs = self.tokenizer(
+            ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
+        ).to(torch_device)
+        out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        output_sentences = self.tokenizer.batch_decode(out)
+        self.assertEqual(
+            output_sentences[0],
+            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+        )
+        self.assertEqual(
+            output_sentences[1],
+            "[PAD][PAD][PAD][PAD][PAD][PAD]<s> Tell me a story about a time when you were in a difficult situation",
+        )
+
+        with torch.no_grad():
+            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits
+
+        EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
+            [
+                -7.9375,  8.1250,  1.3594, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375,  2.7344, 13.0625, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
+                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
+            [
+               -6.3750,  3.4219,  0.6719, -5.0312, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000,  2.0625, 10.3750, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
+               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000
+            ]
+            , dtype=torch.float32)  # fmt: skip
+
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)

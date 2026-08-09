@@ -1,0 +1,450 @@
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import inspect
+import os
+import re
+
+from transformers.configuration_utils import PreTrainedConfig
+from transformers.utils import direct_transformers_import
+
+
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "cache_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
+# All paths are set with the intent you should run this script from the root of the repo with the command
+# python utils/check_config_docstrings.py
+PATH_TO_TRANSFORMERS = "src/transformers"
+
+
+# This is to make sure the transformers module imported is the one in the repo.
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
+
+CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
+
+# Usually of small list of allowed attrs, but can be True to allow all
+SPECIAL_CASES_TO_ALLOW = {
+    # EP related refactor that also relies on correct naming for FP8/4 conventions
+    "DeepseekV3Config": ["n_routed_experts"],
+    "Glm4MoeConfig": ["n_routed_experts"],
+    "Glm4MoeLiteConfig": ["n_routed_experts"],
+    "Glm4vMoeTextConfig": ["n_routed_experts"],
+    "Mistral4Config": ["n_routed_experts"],
+    "SolarOpenConfig": ["n_routed_experts"],
+    "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
+    "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
+    "Gemma4UnifiedVisionConfig": [
+        "patch_size",
+        "pooling_kernel_size",
+    ],  # Used as meta data for other attributes/properties
+    "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
+    "MiniCPMV4_6Config": ["drop_vision_last_layer"],
+    "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
+    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "HYV3Config": ["output_router_logits"],
+    "NougatConfig": ["decoder", "encoder"],
+    "PI0Config": ["vlm_projection_dim"],
+    "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
+    "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
+    "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Lfm2Config": ["full_attn_idxs"],
+    "DiaConfig": ["delay_pattern"],
+    "BambaConfig": ["attn_layer_indices"],
+    "Dots1Config": ["max_window_layers", "n_routed_experts"],
+    "JambaConfig": [
+        "attn_layer_offset",
+        "attn_layer_period",
+        "expert_layer_offset",
+        "expert_layer_period",
+        "use_mamba_kernels",
+    ],
+    "JetMoeConfig": ["output_router_logits"],
+    "Phi3Config": ["embd_pdrop"],
+    "EncodecConfig": ["overlap"],
+    "XcodecConfig": ["sample_rate", "audio_channels"],
+    "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
+    "MambaConfig": ["expand"],
+    "InklingTextConfig": [
+        # Consumed by config logic (build `layer_types`) or carried for checkpoint round-trip (MTP/MoE block),
+        # not referenced directly by the modeling forward.
+        "local_layer_ids",
+        "mtp_local_layer_ids",
+        "chain_hidden_post_norm",
+        "mtp_hidden_states_first",
+        "rms_norm_eps_moe_gate",
+        "shared_expert_sink",
+    ],
+    "FalconMambaConfig": ["expand"],
+    "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
+    "GPTNeoConfig": ["attention_types"],
+    "BlenderbotConfig": ["encoder_no_repeat_ngram_size"],
+    "EsmConfig": ["is_folding_model"],
+    "Mask2FormerConfig": ["ignore_value"],
+    "OneFormerConfig": ["ignore_value", "norm"],
+    "T5Config": ["feed_forward_proj"],
+    "MT5Config": ["feed_forward_proj", "tokenizer_class"],
+    "UMT5Config": ["feed_forward_proj", "tokenizer_class"],
+    "LongT5Config": ["feed_forward_proj"],
+    "Pop2PianoConfig": ["feed_forward_proj"],
+    "BioGptConfig": ["layer_norm_eps"],
+    "GLPNConfig": ["layer_norm_eps"],
+    "SegformerConfig": ["layer_norm_eps"],
+    "CvtConfig": ["layer_norm_eps"],
+    "PerceiverConfig": ["layer_norm_eps"],
+    "InformerConfig": ["num_static_real_features", "num_time_features"],
+    "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
+    "AutoformerConfig": ["num_static_real_features", "num_time_features"],
+    "SamVisionConfig": ["mlp_ratio"],
+    "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
+    "Sam3VisionConfig": ["backbone_feature_sizes"],
+    "SamHQVisionConfig": ["mlp_ratio"],
+    "ClapAudioConfig": ["num_classes"],
+    "ClvpDecoderConfig": ["add_cross_attention"],
+    "SpeechT5HifiGanConfig": ["sampling_rate"],
+    "UdopConfig": ["feed_forward_proj"],
+    "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
+    "MllamaVisionConfig": ["supported_aspect_ratios"],
+    "LEDConfig": ["classifier_dropout"],
+    "GPTNeoXConfig": ["rotary_emb_base"],
+    "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
+    "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertConfig": ["local_attention", "reference_compile"],
+    "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
+    "SmolLM3Config": ["no_rope_layer_interval"],
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
+    "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
+    "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "HunYuanVLConfig": ["im_end_id", "im_newline_id", "im_start_id"],
+    "HunYuanVLTextConfig": [
+        "attention_head_dim",
+        "enable_lm_head_fp32",
+        "org_vocab_size",
+        "pad_id",
+        "rope_scaling",
+        "use_cla",
+        "use_qk_norm",
+    ],
+    "HunYuanVLVisionConfig": [
+        "img_max_token_num",
+        "learnable_mlp_pooling_size",
+        "max_vit_seq_len",
+        "out_hidden_size",
+        "remove_prenorm",
+        "resize_resolution",
+        "temporal_patch_size",
+    ],
+    "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
+    "DeepseekV2Config": ["norm_topk_prob"],
+    "DeepseekV4Config": [
+        # All BC / config-compat surface that the modeling code never reads but
+        # checkpoints in the wild expose (so we keep accepting them in `__init__`):
+        # `attention_bias` — V4 has no bias on any linear; kept for parity with V3 configs.
+        # `n_shared_experts` — V4 always builds exactly one shared MLP; the count
+        #   isn't read because there's no loop over shared experts.
+        # `norm_topk_prob` — V3 router knob; V4's `DeepseekV4TopKRouter` always normalises.
+        # `num_key_value_heads` — V4 is shared-KV MQA (always 1); not read at runtime.
+        # `num_nextn_predict_layers` — MTP layer count from upstream checkpoints; the
+        #   MTP head isn't instantiated by transformers' V4 implementation.
+        # `router_jitter_noise` — inherited from Mixtral; V4 routers don't apply jitter.
+        "attention_bias",
+        "n_shared_experts",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "router_jitter_noise",
+    ],
+    "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
+    "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
+    "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],
+    "SeamlessM4TConfig": True,
+    "SeamlessM4Tv2Config": True,
+    "ConditionalDetrConfig": True,
+    "DabDetrConfig": True,
+    "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
+    "DetrConfig": True,
+    "DFineConfig": True,
+    "Deimv2Config": True,  # Mixed encoder variants (hybrid/lite) + DFine inheritance
+    "GroundingDinoConfig": True,
+    "MMGroundingDinoConfig": True,
+    "RTDetrConfig": True,
+    "RTDetrV2Config": True,
+    "YolosConfig": True,
+    "Llama4TextConfig": True,
+    "DPRConfig": True,
+    "FuyuConfig": True,
+    "LayoutXLMConfig": True,
+    "CLIPSegConfig": True,
+    "DeformableDetrConfig": True,
+    "DinatConfig": True,
+    "DonutSwinConfig": True,
+    "FastSpeech2ConformerConfig": True,
+    "LayoutLMv2Config": True,
+    "MaskFormerSwinConfig": True,
+    "MptConfig": True,
+    "MptAttentionConfig": True,
+    "RagConfig": True,
+    "SpeechT5Config": True,
+    "SwinConfig": True,
+    "Swin2SRConfig": True,
+    "Swinv2Config": True,
+    "TableTransformerConfig": True,
+    "TapasConfig": True,
+    "UniSpeechConfig": True,
+    "UniSpeechSatConfig": True,
+    "WavLMConfig": True,
+    "WhisperConfig": True,
+    "JukeboxPriorConfig": True,
+    "Pix2StructTextConfig": True,
+    "IdeficsConfig": True,
+    "IdeficsVisionConfig": True,
+    "IdeficsPerceiverConfig": True,
+    "GptOssConfig": True,
+    "LwDetrConfig": True,
+    "NemotronHConfig": True,
+    # RfDetr config attributes only used in loss code
+    "RfDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "class_loss_coefficient",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_class_loss_coefficient",
+        "mask_dice_loss_coefficient",
+        "mask_loss_coefficient",
+        "mask_point_sample_ratio",
+    ],
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
+    "GlmgaConfig": ["vision_config"],
+    "Sapiens2Config": [
+        "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_key_value_attention_heads",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
+        "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
+    ],
+}
+
+# Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
+ATTRIBUTES_TO_ALLOW = (
+    # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
+    "chunk_size_feed_forward",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+    "tokenizer_class",
+    "is_encoder_decoder",
+    "output_hidden_states",
+    "return_dict",
+    # Inits related
+    "initializer_range",
+    "init_std",
+    "initializer_factor",
+    "tie_word_embeddings",
+    # Special tokens
+    "bos_index",
+    "eos_index",
+    "pad_index",
+    "unk_index",
+    "mask_index",
+    r".+_token_id",
+    r".+_token_index",
+    # Processors
+    "image_seq_length",
+    "video_seq_length",
+    "image_size",
+    "text_config",  # may appear as `get_text_config()`
+    "use_cache",
+    "out_features",
+    "out_indices",
+    "sampling_rate",
+    # backbone related arguments passed to load_backbone
+    "use_pretrained_backbone",
+    "backbone",
+    "backbone_config",
+    "use_timm_backbone",
+    "backbone_kwargs",
+    # rope attributes may not appear directly in the modeling but are used
+    "rope_theta",
+    "partial_rotary_factor",
+    "max_position_embeddings",
+    "pretraining_tp",
+    "use_sliding_window",
+    "max_window_layers",
+    # vision attributes that may be used indirectly via merge_with_config_defaults
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
+    "num_mtp_layers",  # for MTP, not used by main model architecture
+    # used by GenericForTokenClassification in modeling_layers.py via getattr
+    "token_classification_bias",
+)
+
+
+def check_attribute_being_used(config_class, attributes, default_value, source_strings):
+    """Check if any name in `attributes` is used in one of the strings in `source_strings`
+
+    Args:
+        config_class (`type`):
+            The configuration class for which the arguments in its `__init__` will be checked.
+        attributes (`List[str]`):
+            The name of an argument (or attribute) and its variant names if any.
+        default_value (`Any`):
+            A default value for the attribute in `attributes` assigned in the `__init__` of `config_class`.
+        source_strings (`List[str]`):
+            The python source code strings in the same modeling directory where `config_class` is defined. The file
+            containing the definition of `config_class` should be excluded.
+    """
+    # If we can find the attribute used, then it's all good
+    for attribute in attributes:
+        for modeling_source in source_strings:
+            # check if we can find `config.xxx`, `getattr(config, "xxx", ...)` or `getattr(self.config, "xxx", ...)`
+            if (
+                f"config.{attribute}" in modeling_source
+                or f'getattr(config, "{attribute}"' in modeling_source
+                or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
+            ):
+                return True
+            # Deal with multi-line cases
+            elif (
+                re.search(
+                    rf'getattr[ \t\v\n\r\f]*\([ \t\v\n\r\f]*(self\.)?config,[ \t\v\n\r\f]*"{attribute}"',
+                    modeling_source,
+                )
+                is not None
+            ):
+                return True
+
+    # Special cases to be allowed even if not found as used
+    for attribute in attributes:
+        # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
+            return True
+        # General exceptions for all models
+        elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):
+            return True
+        # Model-specific exceptions
+        elif config_class.__name__ in SPECIAL_CASES_TO_ALLOW:
+            model_exceptions = SPECIAL_CASES_TO_ALLOW[config_class.__name__]
+            # Can be true to allow all attributes, or a list of specific allowed attributes
+            if (isinstance(model_exceptions, bool) and model_exceptions) or attribute in model_exceptions:
+                return True
+
+    return False
+
+
+def check_config_attributes_being_used(config_class):
+    """Check the arguments in `__init__` of `config_class` are used in the modeling files in the same directory
+
+    Args:
+        config_class (`type`):
+            The configuration class for which the arguments in its `__init__` will be checked.
+    """
+    # Get the parameters in `__init__` of the configuration class, and the default values if any
+    signature = dict(inspect.signature(config_class.__init__).parameters)
+    parameter_names = [x for x in list(signature.keys()) if x not in ["self", "kwargs"]]
+    parameter_defaults = [signature[param].default for param in parameter_names]
+
+    # If `attribute_map` exists, an attribute can have different names to be used in the modeling files, and as long
+    # as one variant is used, the test should pass
+    reversed_attribute_map = {}
+    if len(config_class.attribute_map) > 0:
+        reversed_attribute_map = {v: k for k, v in config_class.attribute_map.items()}
+
+    # Get the path to modeling source files
+    config_source_file = inspect.getsourcefile(config_class)
+    model_dir = os.path.dirname(config_source_file)
+    modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
+
+    # Get the source code strings
+    modeling_sources = []
+    for path in modeling_paths:
+        if os.path.isfile(path):
+            with open(path, encoding="utf8") as fp:
+                modeling_sources.append(fp.read())
+
+    unused_attributes = []
+    for config_param, default_value in zip(parameter_names, parameter_defaults):
+        # `attributes` here is all the variant names for `config_param`
+        attributes = [config_param]
+        # some configuration classes have non-empty `attribute_map`, and both names could be used in the
+        # corresponding modeling files. As long as one of them appears, it is fine.
+        if config_param in reversed_attribute_map:
+            attributes.append(reversed_attribute_map[config_param])
+
+        if not check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
+            unused_attributes.append(attributes[0])
+
+    return sorted(unused_attributes)
+
+
+def check_config_attributes():
+    """Check the arguments in `__init__` of all configuration classes are used in python files"""
+    configs_with_unused_attributes = {}
+    for _config_class in list(CONFIG_MAPPING.values()):
+        # Skip deprecated models
+        if "models.deprecated" in _config_class.__module__:
+            continue
+        # Some config classes are not in `CONFIG_MAPPING` (e.g. `CLIPVisionConfig`, `Blip2VisionConfig`, etc.)
+        config_classes_in_module = [
+            cls
+            for name, cls in inspect.getmembers(
+                inspect.getmodule(_config_class),
+                lambda x: inspect.isclass(x)
+                and issubclass(x, PreTrainedConfig)
+                and inspect.getmodule(x) == inspect.getmodule(_config_class),
+            )
+        ]
+        for config_class in config_classes_in_module:
+            unused_attributes = check_config_attributes_being_used(config_class)
+            if len(unused_attributes) > 0:
+                configs_with_unused_attributes[config_class.__name__] = unused_attributes
+
+    if len(configs_with_unused_attributes) > 0:
+        error = "The following configuration classes contain unused attributes in the corresponding modeling files:\n"
+        for name, attributes in configs_with_unused_attributes.items():
+            error += f"{name}: {attributes}\n"
+
+        raise ValueError(error)
+
+
+if __name__ == "__main__":
+    check_config_attributes()
