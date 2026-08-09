@@ -748,11 +748,11 @@ exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize
 
 Each target runtime expects its own quantizer. Whichever you pass, the quantized graph is portable from there. It runs on inductor as int8, translates to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), or lowers to an ExecuTorch `.pte`.
 
-| Where you'll run | Quantizer to pass |
-| --- | --- |
-| PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` (torchao) |
-| ExecuTorch XNNPACK backend | `XNNPACKQuantizer` |
-| ExecuTorch QNN backend (Qualcomm HTP) | `QnnQuantizer` |
+| Where you'll run | Quantizer to pass | Import from |
+| --- | --- | --- |
+| PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+| ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
+| ExecuTorch QNN backend (Qualcomm HTP) | `QnnQuantizer` | `executorch.backends.qualcomm.quantizer.quantizer` |
 
 ### Calibration
 
