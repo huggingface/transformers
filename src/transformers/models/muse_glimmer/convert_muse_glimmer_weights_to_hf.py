@@ -42,17 +42,8 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.utils.hub import cached_file
 
 
-# Canonical home of the chat template. Following the HF convention (cf. the Gemma
-# release, which reads ``chat_template.jinja`` from its model repo via ``cached_file``),
-# the template's source of truth is the ``chat_template.jinja`` file in the model repo
-# on the Hub, not an inline Python string. The converter downloads it from here and
-# bakes it into the converted checkpoint.
-#
-# NOTE: this points at the temporary early-release repo, where the template lives under
-# the ``hf/`` subfolder alongside the other HF assets.
-# TODO: before release, update to the final public repo and load ``chat_template.jinja``
-# from the repo root (drop the ``hf/`` prefix).
-MUSE_GLIMMER_MM_CHAT_TEMPLATE = Path(cached_file("someorgtoo/onyx_early_v2", "hf/chat_template.jinja")).read_text(
+# Canonical home of the chat template.
+MUSE_GLIMMER_MM_CHAT_TEMPLATE = Path(cached_file("meta-models/Muse-Glimmer-30B", "chat_template.jinja")).read_text(
     encoding="utf-8"
 )
 
