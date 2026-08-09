@@ -84,9 +84,9 @@ class MuseGlimmerProcessor(ProcessorMixin):
             )
             metadata.fps = 24
 
-        pt = self.video_processor.patch_temporal
-        # one timestamp per temporal group -- stride by patch_temporal, pad by repeating last
-        timestamps = list(metadata.timestamps[::pt])[:n_frames]
+        temporal_patch_size = self.video_processor.temporal_patch_size
+        # one timestamp per temporal group, pad by repeating the last
+        timestamps = list(metadata.timestamps[::temporal_patch_size])[:n_frames]
         while len(timestamps) < n_frames:
             timestamps.append(timestamps[-1] if timestamps else 0.0)
 
