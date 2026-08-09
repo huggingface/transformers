@@ -29,6 +29,7 @@ from transformers.testing_utils import require_torch
 
 from ...test_processing_common import ProcessorTesterMixin
 
+a = 1
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
