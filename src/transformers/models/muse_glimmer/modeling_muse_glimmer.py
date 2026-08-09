@@ -432,6 +432,10 @@ class MuseGlimmerPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
 
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
@@ -897,6 +901,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MuseGlimmerVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         factor = self.config.merge_size
@@ -1274,10 +1279,9 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
         # MuseGlimmer pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
         logits = logits * self.config.text_config.output_multiplier
-        if self.config.text_config.final_logit_softcapping is not None:
-            logits = logits / self.config.text_config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.text_config.final_logit_softcapping
+        logits = logits / self.config.text_config.final_logit_softcapping
+        logits = torch.tanh(logits)
+        logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:

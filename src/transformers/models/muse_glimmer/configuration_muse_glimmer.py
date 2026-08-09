@@ -72,7 +72,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
 @strict
 class MuseGlimmerTextConfig(PreTrainedConfig):
     r"""
-    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+    final_logit_softcapping (`float`, *optional*, defaults to 20.0):
         scaling factor when applying tanh softcapping on the logits.
     qk_scale_factor (`float`, *optional*, defaults to 3.87):
         Multiplier applied to Q after the scaleless QK-norm, on top of the standard `1/sqrt(head_dim)`
@@ -127,7 +127,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     attention_dropout: int | float | None = 0.0
     sliding_window: int | None = 2048
     layer_types: list[str] | None = None
-    final_logit_softcapping: float | None = 20.0
+    final_logit_softcapping: float = 20.0
 
     # MuseGlimmer-specific fields
     qk_scale_factor: float = 3.87

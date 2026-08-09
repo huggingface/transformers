@@ -31,7 +31,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -546,7 +546,7 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
 @strict
 class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
-    final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+    final_logit_softcapping (`float`, *optional*, defaults to 20.0):
         scaling factor when applying tanh softcapping on the logits.
     qk_scale_factor (`float`, *optional*, defaults to 3.87):
         Multiplier applied to Q after the scaleless QK-norm, on top of the standard `1/sqrt(head_dim)`
@@ -589,7 +589,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     eos_token_id: int | list[int] | None = 200_001
     pad_token_id: int | None = None
     sliding_window: int | None = 2048
-    final_logit_softcapping: float | None = 20.0
+    final_logit_softcapping: float = 20.0
     layer_types: list[str] | None = None
     query_pre_attn_scalar = AttributeError()
     attn_logit_softcapping = AttributeError()
@@ -760,8 +760,8 @@ class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
-    def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!
-        raise NotImplementedError("No need to inherit, we can use the base one")
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
 
 
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
@@ -946,7 +946,7 @@ def get_vision_bilinear_indices_and_weights(
 
 class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
     def __init__(self, config: MuseGlimmerVisionConfig):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
         self.patch_size = config.patch_temporal * 3 * config.patch_size**2
@@ -1026,6 +1026,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MuseGlimmerVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
 
     def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         factor = self.config.merge_size
@@ -1188,10 +1189,9 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         # MuseGlimmer pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.
         logits = logits * self.config.text_config.output_multiplier
-        if self.config.text_config.final_logit_softcapping is not None:
-            logits = logits / self.config.text_config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.text_config.final_logit_softcapping
+        logits = logits / self.config.text_config.final_logit_softcapping
+        logits = torch.tanh(logits)
+        logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
