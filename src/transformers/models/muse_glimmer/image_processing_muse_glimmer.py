@@ -48,6 +48,7 @@ class MuseGlimmerImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
+
     max_image_tokens: int
 
 
