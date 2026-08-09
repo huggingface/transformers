@@ -508,8 +508,8 @@ def read_video_pyav(
     return video, metadata
 
 
-# `torchvision.io.read_video` was deprecated in `torchvision==0.22` and removed in `torchvision==0.26`, which ships
-# with `torch==2.11`. As `transformers` supports `torch>=2.5`, we cannot rely on the pinned version and have to check
+# `torchvision.io.read_video` removed in `torchvision==0.26` (https://github.com/pytorch/vision/releases#release-v0.26.0),
+# which ships with `torch==2.11`. As `transformers` supports `torch>=2.5`, we cannot rely on the pinned version and have to check
 # it at runtime instead. Once the minimum supported `torch` version is bumped to 2.11, the whole `torchvision` video
 # decoding backend can be deleted.
 TORCHVISION_VIDEO_DECODING_REMOVED_VERSION = "0.26.0"
