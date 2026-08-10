@@ -22,9 +22,9 @@ generated as outputs.
 
 Vision tokenization is implemented in this module by `Apertus1p5VisionTokenizerModel`, an encode-only port of the
 encoder, quantizer, and codebook-scoring path from BAAI's EMU3.5 Vision Tokenizer. It intentionally omits the
-EMU3.5 decoder and backbone. Audio tokenization is provided by WavTokenizer,
-which is implemented separately as a standalone Transformers model rather than reimplemented here; it is loaded
-from `audio_config`. Both tokenizers must run in float32 for stable code assignment.
+EMU3.5 decoder and backbone. Audio tokenization uses the encoder and quantizer of WavTokenizer, which is implemented
+separately as a standalone Transformers model rather than reimplemented here. Both tokenizers must run in float32
+for stable code assignment.
 """
 
 from dataclasses import dataclass
@@ -50,7 +50,7 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
 )
-from ..wavtokenizer import WavTokenizerConfig, WavTokenizerModel
+from ..wavtokenizer import WavTokenizerConfig, WavTokenizerEncoderModel
 
 
 def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Tensor:
@@ -677,7 +677,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = WavTokenizerModel(config.audio_config)
+        self.audio_tokenizer = WavTokenizerEncoderModel(config.audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -760,7 +760,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         vocab_ids_list = []
         for clip, length in zip(input_features, audio_lengths):
             clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
-            codes = self.audio_tokenizer.encode(clip).audio_codes
+            codes = self.audio_tokenizer.encode(clip, return_dict=True).audio_codes
             vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
         return torch.cat(vocab_ids_list)
 
