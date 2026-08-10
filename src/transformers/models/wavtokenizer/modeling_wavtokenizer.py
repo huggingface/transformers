@@ -496,7 +496,7 @@ class WavTokenizerISTFTHead(nn.Module):
 @auto_docstring
 class WavTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: WavTokenizerConfig
-    base_model_prefix = "wavtokenizer"
+    base_model_prefix = "encoder_model"
     main_input_name = "input_values"
     input_modalities = ("audio",)
 
@@ -534,21 +534,20 @@ class WavTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
 
 @auto_docstring(
     custom_intro="""
-    Inference-only, single-codebook WavTokenizer neural audio codec.
+    Encoder and quantizer of WavTokenizer for converting audio waveforms to discrete codes.
     """
 )
-class WavTokenizerModel(WavTokenizerPreTrainedModel):
+class WavTokenizerEncoderModel(WavTokenizerPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [
+        r"^backbone\.",
+        r"^head\.",
+    ]
+
     def __init__(self, config: WavTokenizerConfig):
         super().__init__(config)
-        self.config = config
         self.hop_length = config.hop_length
-
         self.encoder = WavTokenizerEncoder(config)
         self.quantizer = WavTokenizerVectorQuantization(config)
-        self.backbone = WavTokenizerVocosBackbone(config)
-        self.head = WavTokenizerISTFTHead(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -564,7 +563,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
             Input audio waveform. Arbitrary non-zero lengths are supported; the encoder pads internally and emits
             `ceil(sequence_length / hop_length)` codes.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
-            Padding mask used to pad `input_values`; used to compute `audio_codes_mask`.
+            Mask describing padding in `input_values`; used to compute `audio_codes_mask`.
         """
         embeddings = self.encoder(input_values)
         audio_codes = self.quantizer.encode(embeddings)
@@ -587,6 +586,56 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         return WavTokenizerEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
     @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | WavTokenizerEncoderOutput:
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
+            Padding mask used to compute `audio_codes_mask`.
+        """
+        return self.encode(input_values, padding_mask=padding_mask, **kwargs)
+
+
+@auto_docstring(
+    custom_intro="""
+    Inference-only, single-codebook WavTokenizer neural audio codec.
+    """
+)
+class WavTokenizerModel(WavTokenizerPreTrainedModel):
+    def __init__(self, config: WavTokenizerConfig):
+        super().__init__(config)
+        self.hop_length = config.hop_length
+
+        self.encoder_model = WavTokenizerEncoderModel(config)
+        self.backbone = WavTokenizerVocosBackbone(config)
+        self.head = WavTokenizerISTFTHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
+    @can_return_tuple
+    def encode(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | WavTokenizerEncoderOutput:
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+            Input audio waveform. Arbitrary non-zero lengths are supported; the encoder pads internally and emits
+            `ceil(sequence_length / hop_length)` codes.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
+            Mask describing padding in `input_values`; used to compute `audio_codes_mask`.
+        """
+        return self.encoder_model.encode(input_values, padding_mask=padding_mask, **kwargs)
+
+    @auto_docstring
     @can_return_tuple
     def decode(
         self,
@@ -601,7 +650,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         bandwidth_id (`int`, *optional*, defaults to 0):
             Condition embedding id of the decoder's adaptive layer norms. Always 0 at inference.
         """
-        quantized = self.quantizer.decode(audio_codes.squeeze(1))
+        quantized = self.encoder_model.quantizer.decode(audio_codes.squeeze(1))
         bandwidth_id = torch.tensor([bandwidth_id], device=audio_codes.device)
         hidden_states = self.backbone(quantized, bandwidth_id)
         audio_values = self.head(hidden_states)
@@ -631,4 +680,4 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         )
 
 
-__all__ = ["WavTokenizerModel", "WavTokenizerPreTrainedModel"]
+__all__ = ["WavTokenizerEncoderModel", "WavTokenizerModel", "WavTokenizerPreTrainedModel"]

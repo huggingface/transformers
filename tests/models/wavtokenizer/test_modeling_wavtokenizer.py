@@ -15,6 +15,7 @@
 import inspect
 import math
 import os
+import tempfile
 import unittest
 
 from transformers import WavTokenizerConfig
@@ -33,7 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import WavTokenizerFeatureExtractor, WavTokenizerModel
+    from transformers import WavTokenizerEncoderModel, WavTokenizerFeatureExtractor, WavTokenizerModel
 
 
 def randomize_codebook(model, seed=0):
@@ -41,7 +42,8 @@ def randomize_codebook(model, seed=0):
     Randomize it deterministically so encode tests exercise real code assignment."""
     with torch.no_grad():
         generator = torch.Generator(device="cpu").manual_seed(seed)
-        model.quantizer.codebook.embed.copy_(torch.randn(model.quantizer.codebook.embed.shape, generator=generator))
+        codebook = model.base_model.quantizer.codebook.embed
+        codebook.copy_(torch.randn(codebook.shape, generator=generator))
     return model
 
 
@@ -120,7 +122,7 @@ class WavTokenizerModelTester:
 
 @require_torch
 class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (WavTokenizerModel,) if is_torch_available() else ()
+    all_model_classes = (WavTokenizerEncoderModel, WavTokenizerModel) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent control flow in `_pad1d` (`if length <= max_pad`)
@@ -153,6 +155,57 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_encoder_model_matches_full_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        full_model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
+        encoder_model = full_model.encoder_model
+
+        self.assertIsInstance(encoder_model, WavTokenizerEncoderModel)
+        self.assertIs(full_model.base_model, encoder_model)
+
+        padding_mask = torch.ones(inputs_dict["input_values"].shape[0], inputs_dict["input_values"].shape[-1])
+        padding_mask[0, -self.model_tester.hop_length :] = 0
+        input_values = inputs_dict["input_values"].to(torch_device)
+        padding_mask = padding_mask.to(torch_device)
+        with torch.no_grad():
+            full_output = full_model.encode(input_values, padding_mask=padding_mask)
+            encoder_output = encoder_model(input_values, padding_mask=padding_mask)
+
+        torch.testing.assert_close(encoder_output.audio_codes, full_output.audio_codes, rtol=0, atol=0)
+        torch.testing.assert_close(encoder_output.audio_codes_mask, full_output.audio_codes_mask, rtol=0, atol=0)
+        self.assertFalse(hasattr(encoder_model, "backbone"))
+        self.assertFalse(hasattr(encoder_model, "head"))
+
+    def test_checkpoint_key_layout(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        full_model = WavTokenizerModel(config)
+        encoder_model = WavTokenizerEncoderModel(config)
+
+        full_keys = set(full_model.state_dict())
+        self.assertTrue(any(key.startswith("encoder_model.encoder.") for key in full_keys))
+        self.assertTrue(any(key.startswith("encoder_model.quantizer.") for key in full_keys))
+        self.assertFalse(any(key.startswith(("encoder.", "quantizer.")) for key in full_keys))
+        encoder_keys = set(encoder_model.state_dict())
+        self.assertTrue(any(key.startswith("encoder.") for key in encoder_keys))
+        self.assertTrue(any(key.startswith("quantizer.") for key in encoder_keys))
+        self.assertFalse(any(key.startswith("encoder_model.") for key in encoder_keys))
+
+    def test_encoder_model_loads_full_checkpoint(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        full_model = randomize_codebook(WavTokenizerModel(config)).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+            encoder_model, loading_info = WavTokenizerEncoderModel.from_pretrained(tmp_dir, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
+        with torch.no_grad():
+            expected = full_model.encode(inputs_dict["input_values"]).audio_codes
+            actual = encoder_model(inputs_dict["input_values"]).audio_codes
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -197,7 +250,7 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # the randomized codebook must assign diverse codes to diverse embeddings (argmin is not degenerate)
         generator = torch.Generator(device="cpu").manual_seed(1)
         embeddings = torch.randn(1, config.hidden_size, 50, generator=generator).to(torch_device)
-        quantizer_codes = model.quantizer.encode(embeddings)
+        quantizer_codes = model.encoder_model.quantizer.encode(embeddings)
         self.assertGreater(quantizer_codes.unique().numel(), 1)
 
     def test_decode_output_length(self):
@@ -362,9 +415,11 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
 
     def test_real_checkpoint_encode_decode(self):
         model = WavTokenizerModel.from_pretrained(self.checkpoint).to(torch_device).eval()
+        encoder_model = WavTokenizerEncoderModel.from_pretrained(self.checkpoint).to(torch_device).eval()
         waveform = self._sine().to(torch_device)
         with torch.no_grad():
             codes = model.encode(waveform).audio_codes
+            encoder_codes = encoder_model(waveform).audio_codes
             audio = model.decode(codes).audio_values
 
         num_expected = math.ceil(waveform.shape[-1] / model.config.hop_length)
@@ -373,6 +428,7 @@ class WavTokenizerIntegrationTest(unittest.TestCase):
         self.assertEqual(codes.dtype, torch.long)
         self.assertGreaterEqual(codes.min().item(), 0)
         self.assertLess(codes.max().item(), model.config.codebook_size)
+        torch.testing.assert_close(encoder_codes, codes, rtol=0, atol=0)
 
         if self.checkpoint_variant == "large-unify-40" and self.EXPECTED_FIRST_CODES is not None:
             self.assertEqual(codes[0, 0, :10].cpu().tolist(), self.EXPECTED_FIRST_CODES)
