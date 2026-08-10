@@ -582,6 +582,14 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
 
+# Attention kernel repos that are pinned to a specific major version. Repos that are not listed here default
+# to `_DEFAULT_ATTN_KERNEL_VERSION`.
+_ATTN_KERNEL_VERSION_MAPPING: dict[str, int] = {
+    # v3 is the first version shipping the Torch stable ABI (CUDA) and Torch 2.13 builds (incl. XPU).
+    "kernels-community/flash-attn2": 3,
+}
+_DEFAULT_ATTN_KERNEL_VERSION = 1
+
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 
@@ -634,9 +642,9 @@ def load_and_register_attn_kernel(
     rev = rev.strip() if rev else None
     version = None
     if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
+        # FA4 is still in beta -> redirect to v0, else use the pinned version of the repo (defaults to v1)
         is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+        version = 0 if is_fa4 else _ATTN_KERNEL_VERSION_MAPPING.get(repo_id, _DEFAULT_ATTN_KERNEL_VERSION)
 
     # Load the kernel from hub
     try:
