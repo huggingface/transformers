@@ -20,9 +20,9 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import scipy.sparse as sp
 import torch
 from torch import nn
 
@@ -32,9 +32,18 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_flex_attn_available,
+    requires_backends,
+)
 from .configuration_weathernext2 import WeatherNext2Config
-from .geometry_weathernext2 import WeatherNext2Geometry, build_geometry_cached
+
+
+if TYPE_CHECKING:
+    from .geometry_weathernext2 import WeatherNext2Geometry
 
 
 if is_torch_flex_attn_available():
@@ -439,8 +448,8 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
             module.register_output_activation_buffers()
 
 
-@dataclass
 @auto_docstring(custom_intro="Latent representation of the atmosphere on the lat/lon grid.")
+@dataclass
 class WeatherNext2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_grid_points, hidden_size)`):
@@ -453,8 +462,8 @@ class WeatherNext2ModelOutput(ModelOutput):
     mesh_hidden_state: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="A single forecast step.")
+@dataclass
 class WeatherNext2ForecastOutput(ModelOutput):
     r"""
     prediction (`torch.FloatTensor` of shape `(batch_size, num_output_channels, num_latitudes, num_longitudes)`):
@@ -470,13 +479,15 @@ class WeatherNext2ForecastOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
 
 
-def build_banded_attention_mask(geometry: WeatherNext2Geometry) -> torch.Tensor:
+def build_banded_attention_mask(geometry: "WeatherNext2Geometry") -> torch.Tensor:
     """Rewrites the k-hop mask as `[num_blocks, 1, block_size, 3 * block_size]`.
 
     After the reverse Cuthill-McKee permutation every non-zero of the mask lies within
     `geometry.attention_bandwidth` of the diagonal, so a block of that many consecutive nodes can
     only reach itself and its two neighbours.
     """
+    import scipy.sparse as sp
+
     block_size = min(geometry.attention_bandwidth, geometry.num_mesh_nodes)
     num_blocks = -(-geometry.num_mesh_nodes // block_size)
     padded_size = num_blocks * block_size
@@ -523,6 +534,10 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         None of this is learned, and all of it follows deterministically from the mesh refinement
         level and the grid, so it lives in non-persistent buffers rather than in the checkpoint.
         """
+        # scipy is only needed to build the mesh and the sparse adjacency, never at inference.
+        requires_backends(self, ["scipy"])
+        from .geometry_weathernext2 import build_geometry_cached
+
         config = self.config
         latitudes = np.linspace(-90.0, 90.0, config.grid_latitudes)
         longitudes = np.arange(config.grid_longitudes) * (360.0 / config.grid_longitudes)

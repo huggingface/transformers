@@ -83,7 +83,7 @@ class WeatherNext2Config(PreTrainedConfig):
     configuration with the defaults will yield a configuration similar to the 0.25 degree
     [google/weathernext2](https://huggingface.co/google/weathernext2) architecture.
 
-    WeatherNext 2 is a Functional Generative Network (FGN): an encode-process-decode graph network over an icosahedral
+    WeatherNext 2 is a Functional Generative Network (FGN, https://huggingface.co/papers/2506.10772): an encode-process-decode graph network over an icosahedral
     mesh, made probabilistic by a single global noise vector that modulates every normalization layer. One forward pass
     advances the global atmospheric state by `time_step`; ensembles are produced by drawing several noise vectors.
 

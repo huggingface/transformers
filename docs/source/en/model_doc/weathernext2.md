@@ -16,8 +16,8 @@ rendered properly in your Markdown viewer.
 
 # WeatherNext 2
 
-[WeatherNext 2](https://arxiv.org/abs/2506.10772) is a global medium-range weather forecasting model from Google
-DeepMind and Google Research. It advances the state of the atmosphere by 6 hours per forward pass, on a 0.25° latitude/
+[WeatherNext 2](https://huggingface.co/papers/2506.10772) is a global medium-range weather forecasting model
+from Google DeepMind and Google Research. It advances the state of the atmosphere by 6 hours per forward pass, on a 0.25° latitude/
 longitude grid (or 1° for the mini checkpoints), and predicts 13 pressure levels of temperature, geopotential, wind and
 humidity along with surface fields, precipitation and a set of tropical-cyclone diagnostics.
 
