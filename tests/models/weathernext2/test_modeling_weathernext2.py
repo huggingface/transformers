@@ -312,13 +312,12 @@ class WeatherNext2GeometryTest(unittest.TestCase):
 @require_torch
 @slow
 class WeatherNext2ModelIntegrationTest(unittest.TestCase):
-    """End-to-end check against the released 0.25 degree checkpoint.
+    """End-to-end check against the released 1 degree Mini checkpoint.
 
-    Marked slow: it downloads ~700 MB of weights and builds the 0.25 degree mesh, which needs a few
-    minutes and tens of GB the first time.
+    Marked slow: it downloads ~230 MB of weights and builds the icosahedral mesh on first run.
     """
 
-    checkpoint = "kashif/weathernext-cyclones"
+    checkpoint = "kashif/weathernext2-mini"
 
     def test_inference_shapes_and_determinism(self):
         from transformers import WeatherNext2Processor

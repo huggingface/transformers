@@ -35,6 +35,18 @@ the batch dimension.
 This model was contributed by the Hugging Face team. The original code can be found
 [here](https://github.com/google-deepmind/weathernext).
 
+Released checkpoints, all sharing this architecture:
+
+| Checkpoint | Resolution | Params | Notes |
+|---|---|---|---|
+| [kashif/weathernext2-mini](https://huggingface.co/kashif/weathernext2-mini) | 1° | 56.7M | runs on modest hardware; `main` and `<2023` revisions |
+| [kashif/weathernext2](https://huggingface.co/kashif/weathernext2) | 0.25° | 183.8M | also predicts 100m winds |
+| [kashif/weathernext-cyclones](https://huggingface.co/kashif/weathernext-cyclones) | 0.25° | 183.8M | operational cyclone model; `main`, `<2024`, `<2023` revisions |
+
+The 0.25° repositories hold all four independently trained ensemble members: member 1 at the root and the rest in
+`model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects one. The examples below
+use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly 50 GB per ensemble member.
+
 ## Usage
 
 The model itself works in a normalized space, and [`WeatherNext2Processor`] owns everything physical: the per-variable
@@ -46,8 +58,8 @@ import numpy as np
 import torch
 from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Processor
 
-model = WeatherNext2ForWeatherForecasting.from_pretrained("google/weathernext2-mini").eval()
-processor = WeatherNext2Processor.from_pretrained("google/weathernext2-mini")
+model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini").eval()
+processor = WeatherNext2Processor.from_pretrained("kashif/weathernext2-mini")
 
 # `state` maps each input variable to its values. Time-varying variables are
 # [batch, num_input_timesteps, (levels,) lat, lon]; static ones are [lat, lon].
@@ -59,7 +71,7 @@ with torch.no_grad():
     outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
 
 forecast = processor.postprocess(outputs.prediction, state)
-print(forecast["2m_temperature"].shape)
+print(forecast["2m_temperature"].shape)  # (1, 181, 360)
 ```
 
 ### Ensembles

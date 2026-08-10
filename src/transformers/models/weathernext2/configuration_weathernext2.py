@@ -74,14 +74,14 @@ DEFAULT_FORCING_VARIABLES = ("year_progress_sin", "year_progress_cos", "day_prog
 DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="kashif/weathernext2")
 @strict
 class WeatherNext2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`WeatherNext2Model`]. It is used to instantiate a
     WeatherNext 2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a configuration similar to the 0.25 degree
-    [google/weathernext2](https://huggingface.co/google/weathernext2) architecture.
+    [kashif/weathernext2](https://huggingface.co/kashif/weathernext2) architecture.
 
     WeatherNext 2 is a Functional Generative Network (FGN, https://huggingface.co/papers/2506.10772): an encode-process-decode graph network over an icosahedral
     mesh, made probabilistic by a single global noise vector that modulates every normalization layer. One forward pass
