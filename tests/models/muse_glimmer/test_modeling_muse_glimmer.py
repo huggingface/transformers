@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch MuseGlimmer model."""
 
 import copy
-import os
 import unittest
 
 from transformers import (
@@ -40,10 +39,6 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 if is_torch_available():
     import torch
-
-
-# TODO UPDATE WHEN WE HAVE FINAL REPO NAME!
-MODEL_ID = os.environ.get("MUSE_GLIMMER_TEST_CHECKPOINT", "someorgtoo-hf/Muse-Glimmer-30B")
 
 
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
@@ -130,9 +125,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model_and_processor(cls):
         model = MuseGlimmerForConditionalGeneration.from_pretrained(
-            MODEL_ID, dtype=torch.bfloat16, device_map=torch_device
+            "meta-models/Muse-Glimmer-30B", dtype=torch.bfloat16, device_map=torch_device
         )
-        processor = AutoProcessor.from_pretrained(MODEL_ID)
+        processor = AutoProcessor.from_pretrained("meta-models/Muse-Glimmer-30B")
         return model, processor
 
     def test_text_generation_matches_reference(self):

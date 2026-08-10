@@ -514,7 +514,7 @@ class MuseGlimmerCausalLMOutputWithPast(Gemma3CausalLMOutputWithPast):
     pass
 
 
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     r"""
@@ -553,7 +553,7 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
@@ -631,8 +631,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
             ]
 
 
-# TODO: point at the final repo name once it exists
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerConfig(PreTrainedConfig):
     r"""

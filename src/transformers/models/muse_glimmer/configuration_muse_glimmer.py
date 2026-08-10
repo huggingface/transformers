@@ -27,7 +27,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerVisionConfig(PreTrainedConfig):
     r"""
@@ -68,7 +68,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerTextConfig(PreTrainedConfig):
     r"""
@@ -162,8 +162,7 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
             )
 
 
-# TODO: point at the final repo name once it exists
-@auto_docstring(checkpoint="someorgtoo-hf/Muse-Glimmer-30B")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B")
 @strict
 class MuseGlimmerConfig(PreTrainedConfig):
     r"""
