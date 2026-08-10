@@ -68,8 +68,10 @@
 #
 #     .overlay/pr-sync.sh verify-strip
 #
-#   For the full slow suite including the inherited mixin tests, run pytest directly:
-#     RUN_SLOW=1 python -m pytest tests/models/apertus1p5 tests/models/wavtokenizer -n auto
+#   For the full slow suite including the inherited mixin tests, run pytest directly.
+#   Do not use -n auto on a many-core GPU node: one worker per core opens one CUDA
+#   context each and the GPUs run out of memory. PRSYNC_PYTEST_WORKERS overrides the cap.
+#     RUN_SLOW=1 python -m pytest tests/models/apertus1p5 tests/models/wavtokenizer -n 8
 #
 # END USAGE
 
@@ -87,6 +89,9 @@ GLOBAL_PY=/usr/bin/python
 STATE_DIR=$HOME/.cache/pr-sync
 TEST_PATHS=(tests/models/apertus1p5 tests/models/wavtokenizer)
 TIERS=(checks fast-pr fast slow ap)
+# `-n auto` would spawn one worker per core (288 here); each opens a CUDA context and the
+# GPUs OOM. Cap it well below the GPU count times a small factor.
+PYTEST_WORKERS=${PRSYNC_PYTEST_WORKERS:-8}
 
 ONLY_TIER=""
 
@@ -524,7 +529,7 @@ cmd_run_tests() {
                 run_tier checks "$WORKTREE" env PATH="$(dirname "$PY"):$PATH" make check-repo &
                 local checks_pid=$!
             fi
-            wanted fast-pr && run_tier fast-pr "$WORKTREE" "$PY" -m pytest "${TEST_PATHS[@]}" -q -n auto
+            wanted fast-pr && run_tier fast-pr "$WORKTREE" "$PY" -m pytest "${TEST_PATHS[@]}" -q -n "$PYTEST_WORKERS"
             [ -n "${checks_pid:-}" ] && wait "$checks_pid"
         else
             skip checks "worktree missing or stale, run 'pr-sync strip-to-pr'"
@@ -532,7 +537,7 @@ cmd_run_tests() {
     fi
 
     if [ "$(current_branch)" = "$DEV_BRANCH" ]; then
-        tier_ok fast && run_tier fast "$ROOT" "$PY" -m pytest "${TEST_PATHS[@]}" -q -n auto
+        tier_ok fast && run_tier fast "$ROOT" "$PY" -m pytest "${TEST_PATHS[@]}" -q -n "$PYTEST_WORKERS"
         tier_ok slow && run_tier slow "$ROOT" env RUN_SLOW=1 "$PY" -m pytest "${TEST_PATHS[@]}" -q -k Integration
         if tier_ok ap; then
             log "ap_testcase"
