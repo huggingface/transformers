@@ -1675,7 +1675,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             candidate_ids = input_ids
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                next_token_logits = self.logits_processor(
+                    candidate_ids, candidate_logits[:, i, :].to(candidate_ids.device).float()
+                )
                 if self.do_sample:
                     probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
@@ -1691,7 +1693,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
 
         return candidate_ids, candidate_logits
 
