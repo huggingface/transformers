@@ -93,8 +93,8 @@ class EsmcConfig(LlamaConfig):
     num_hidden_layers: int = 80
     num_attention_heads: int = 40
     pad_token_id: int | None = 1
-    bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
 
     # ESMC-specific fields.
     mask_token_id: int | None = 32
@@ -111,6 +111,12 @@ class EsmcConfig(LlamaConfig):
     def __post_init__(self, **kwargs):
         if self.intermediate_size is None:
             self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
+        # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles
+        # as BOS, `<eos>`=2); configs saved before these fields existed carry explicit nulls.
+        if self.bos_token_id is None:
+            self.bos_token_id = 0
+        if self.eos_token_id is None:
+            self.eos_token_id = 2
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

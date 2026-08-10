@@ -1554,8 +1554,9 @@ class EsmFold2ConfidenceHead(nn.Module):
 
             is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
             inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
-            near_contact = (rep_distances < 8).float()
+            near_contact = (rep_distances < 8).float()  # 8 Å: the conventional interface-contact cutoff
             interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
+            # Ligand tokens always count, at double weight; polymer tokens count only at an interface.
             iplddt_weight = torch.where(
                 is_ligand.bool(),
                 torch.full_like(interface_per_token, 2.0),
@@ -1588,10 +1589,11 @@ class EsmFold2ConfidenceHead(nn.Module):
     ) -> tuple[Tensor, Tensor, Tensor]:
         """pTM / ipTM / per-chain-pair ipTM derived from the PAE logits (reported metrics only)."""
         num_bins = pae_logits.shape[-1]
-        bin_width = 32.0 / num_bins
+        bin_width = 32.0 / num_bins  # the PAE bins span 0-32 Å
         bin_centers = torch.arange(0.5 * bin_width, 32.0, bin_width, device=pae_logits.device)
         mask_float = token_mask.float()
         num_residues = mask_float.sum(dim=-1, keepdim=True)
+        # TM-score length normalization d0(L) (Zhang & Skolnick, 2004); flooring L keeps d0 positive.
         d0 = 1.24 * (num_residues.clamp(min=19) - 15) ** (1 / 3) - 1.8
         tm_per_bin = 1 / (1 + (bin_centers / d0) ** 2)
         pae_probs = F.softmax(pae_logits, dim=-1, dtype=torch.float32)
@@ -1675,7 +1677,8 @@ class EsmFold2ConfidenceHead(nn.Module):
 
         pae_logits = self.pae_head(self.pae_layernorm(pair_states))
         pde_logits = self.pde_head(self.pde_layernorm(pair_states))
-        # Expected-value pae/pde are reported metrics; only the logits are trained.
+        # Expected-value pae/pde are reported metrics; only the logits are trained. Both bin families
+        # span 0-32 Å.
         with torch.no_grad():
             pae = _categorical_mean(pae_logits, start=0.0, end=32.0)
             pde = _categorical_mean(pde_logits, start=0.0, end=32.0)
@@ -1903,7 +1906,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         asym_id: Tensor,
         residue_index: Tensor,
         mol_type: Tensor,
-        token_mask: Tensor,
+        attention_mask: Tensor,
     ) -> Tensor:
         """Run ESMC with BOS/EOS wrapping; returns hidden states
         ``[batch_size, num_tokens, num_esmc_layers + 1, lm_hidden_size]``.
@@ -1914,7 +1917,9 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         """
         batch_size, num_tokens = input_ids.shape
         device = input_ids.device
-        protein_mask = (mol_type == 0) & token_mask
+        esmc_config = self.config.esmc_config
+        bos_id, eos_id, pad_id = esmc_config.bos_token_id, esmc_config.eos_token_id, esmc_config.pad_token_id
+        protein_mask = (mol_type == 0) & attention_mask
 
         lm_input_list = []
         lm_lengths = []
@@ -1946,7 +1951,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
             chain_ids = asym_collapsed.unique(sorted=True)
             max_chains = max(max_chains, len(chain_ids))
             # [BOS] chain1 [EOS BOS] chain2 ... [EOS]
-            parts: list[Tensor] = [torch.tensor([0], device=device, dtype=ids_row.dtype)]
+            parts: list[Tensor] = [torch.tensor([bos_id], device=device, dtype=ids_row.dtype)]
             # Per-chain LM positions accumulate; track them for the expand map.
             per_token_lm_pos = torch.empty(num_unique_residues, device=device, dtype=torch.long)
             cursor = 1  # position 0 is the leading BOS
@@ -1958,9 +1963,9 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
                 )
                 cursor += in_chain.shape[0]
                 if i < len(chain_ids) - 1:
-                    parts.append(torch.tensor([2, 0], device=device, dtype=ids_row.dtype))
+                    parts.append(torch.tensor([eos_id, bos_id], device=device, dtype=ids_row.dtype))
                     cursor += 2  # EOS + BOS
-            parts.append(torch.tensor([2], device=device, dtype=ids_row.dtype))
+            parts.append(torch.tensor([eos_id], device=device, dtype=ids_row.dtype))
             lm_seq = torch.cat(parts)
             lm_input_list.append(lm_seq)
             lm_lengths.append(lm_seq.shape[0])
@@ -1973,13 +1978,13 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
 
         # Pad to the longest LM input.
         max_len = max(lm_lengths)
-        lm_input_ids = torch.full((batch_size, max_len), 1, device=device, dtype=input_ids.dtype)  # PAD=1
+        lm_input_ids = torch.full((batch_size, max_len), pad_id, device=device, dtype=input_ids.dtype)
         for b in range(batch_size):
             lm_input_ids[b, : lm_lengths[b]] = lm_input_list[b]
 
         # sequence_id for chain-aware attention; PAD tokens get -1 (no attention).
-        sequence_id = (lm_input_ids == 0).cumsum(dim=1) - 1  # BOS=0
-        sequence_id = sequence_id.masked_fill(lm_input_ids == 1, -1)  # PAD=1
+        sequence_id = (lm_input_ids == bos_id).cumsum(dim=1) - 1  # each BOS starts a new chain
+        sequence_id = sequence_id.masked_fill(lm_input_ids == pad_id, -1)
 
         # Chain-aware masking is only needed when a row holds more than one chain. With a single
         # chain the two spellings agree wherever it matters: ``sequence_id`` equality gives
@@ -2012,6 +2017,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         return result
 
     def _init_pair_state(self, reference: Tensor) -> Tensor:
+        # "SmallInit" scaling, Var = 2 / (5 * width) (Nguyen & Salazar, 2019).
         std = math.sqrt(2.0 / (5.0 * reference.shape[-1]))
         state = torch.empty_like(reference, dtype=torch.float32)
         nn.init.trunc_normal_(state, mean=0.0, std=std, a=-3 * std, b=3 * std)
@@ -2020,7 +2026,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
     def _prepare_features(
         self,
         res_type: Tensor,
-        token_mask: Tensor,
+        attention_mask: Tensor,
         msa: Tensor | None,
         msa_attention_mask: Tensor | None,
         deletion_mean: Tensor | None,
@@ -2036,7 +2042,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         """
         if res_type.dim() == 2:
             res_type_one_hot = F.one_hot(res_type, num_classes=self.config.num_res_types).float()
-            res_type_one_hot = res_type_one_hot * token_mask.unsqueeze(-1).float()
+            res_type_one_hot = res_type_one_hot * attention_mask.unsqueeze(-1).float()
         else:
             res_type_one_hot = res_type.float()
 
@@ -2078,7 +2084,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         msa_attention_mask: Tensor | None,
         has_deletion: Tensor | None,
         deletion_value: Tensor | None,
-        token_mask: Tensor,
+        attention_mask: Tensor,
         single_inputs: Tensor,
     ) -> dict | None:
         """Assemble the transposed/padded one-hot MSA tensors the MSA encoder consumes."""
@@ -2089,7 +2095,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         msa_mask = (
             msa_attention_mask.permute(0, 2, 1).float()
             if msa_attention_mask is not None
-            else token_mask[:, :, None].expand(-1, -1, msa_depth).float()
+            else attention_mask[:, :, None].expand(-1, -1, msa_depth).float()
         )
         # Bias-free EsmFold2MSAEncoder.embed requires zeroed padding.
         msa_one_hot = msa_one_hot * msa_mask.unsqueeze(-1)
@@ -2243,14 +2249,13 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         num_loops (`int`, *optional*):
             Number of trunk refinement loops. Defaults to `config.num_loops`.
         """
-        token_mask = attention_mask
         num_loops = num_loops if num_loops is not None else self.config.num_loops
         total_steps = max(1, num_loops + 1)
 
         res_type_one_hot, profile, deletion_mean, ref_element_one_hot, ref_atom_name_chars_one_hot, atom_to_token = (
             self._prepare_features(
                 res_type=res_type,
-                token_mask=token_mask,
+                attention_mask=attention_mask,
                 msa=msa,
                 msa_attention_mask=msa_attention_mask,
                 deletion_mean=deletion_mean,
@@ -2279,7 +2284,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
             position_embeddings=position_embeddings,
             atom_mask=atom_attention_mask,
             atom_to_token=atom_to_token,
-            num_tokens=token_mask.shape[1],
+            num_tokens=attention_mask.shape[1],
         )[0]
         # Fold the fp32 input features into the atom encoding's dtype, so single_inputs is one dtype.
         dtype = atom_encoding.dtype
@@ -2308,26 +2313,28 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         initial_pair_states = initial_pair_states + relative_position_encoding + token_bonds_encoding
 
         if lm_hidden_states is None and input_ids is not None:
-            lm_hidden_states = self._compute_lm_hidden_states(input_ids, asym_id, residue_index, mol_type, token_mask)
+            lm_hidden_states = self._compute_lm_hidden_states(
+                input_ids, asym_id, residue_index, mol_type, attention_mask
+            )
         lm_pair_states: Tensor | None = None
         if lm_hidden_states is not None:
             lm_pair_states = self.language_model(lm_hidden_states)
         del lm_hidden_states
 
-        pair_mask = token_mask[:, :, None].float() * token_mask[:, None, :].float()
+        pair_mask = attention_mask[:, :, None].float() * attention_mask[:, None, :].float()
 
         pair_states = self._init_pair_state(initial_pair_states)
 
         state_decay, input_matrix = self.parcae.discretize()
-        state_decay = state_decay.view(1, 1, 1, -1).to(device=pair_states.device, dtype=pair_states.dtype)
-        input_matrix = input_matrix.to(device=pair_states.device, dtype=pair_states.dtype)
+        state_decay = state_decay.view(1, 1, 1, -1).to(pair_states.dtype)
+        input_matrix = input_matrix.to(pair_states.dtype)
 
         msa_kwargs = self._build_msa_kwargs(
             msa=msa,
             msa_attention_mask=msa_attention_mask,
             has_deletion=has_deletion,
             deletion_value=deletion_value,
-            token_mask=token_mask,
+            attention_mask=attention_mask,
             single_inputs=single_inputs,
         )
 

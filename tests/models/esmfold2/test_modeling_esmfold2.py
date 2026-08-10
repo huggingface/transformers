@@ -230,7 +230,7 @@ class EsmFold2ModelTest(unittest.TestCase):
         model = self._build()
         _res, _profile, _deletion, ref_element_oh, ref_chars_oh, atom_to_token = model._prepare_features(
             res_type=features["res_type"],
-            token_mask=features["attention_mask"],
+            attention_mask=features["attention_mask"],
             msa=None,
             msa_attention_mask=None,
             deletion_mean=None,
