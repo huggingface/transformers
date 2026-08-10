@@ -19,7 +19,8 @@ Assemble a self-contained Apertus 1.5 checkpoint from three converted sources:
 2. The encode-only EMU3.5 vision tokenizer, converted from `BAAI/Emu3.5-VisionTokenizer` by
    `convert_apertus1p5_vision_tokenizer_to_hf.py` (the original weights with `decoder.*`/`post_quant_conv.*`
    dropped, saved with `save_pretrained`).
-3. A WavTokenizer checkpoint produced by `convert_wavtokenizer_checkpoint.py`.
+3. A WavTokenizer checkpoint produced by `convert_wavtokenizer_checkpoint.py`. Only its encoder and quantizer are
+   retained; the reconstruction decoder is not used by Apertus.
 
 Both tokenizer sources must already be in Transformers format. This script assembles, it does not convert
 them: pointing it at a raw `BAAI/Emu3.5-VisionTokenizer` or an original-format WavTokenizer `.ckpt` fails.
@@ -29,7 +30,8 @@ Weights are mapped into `Apertus1p5ForConditionalGeneration` as follows:
 
 - backbone `model.X` -> `model.language_model.X`; `lm_head.weight` remains at the top level
 - vision `X` -> `model.vision_tokenizer.X`
-- audio `X` -> `model.audio_tokenizer.X`
+- audio `encoder_model.encoder.X`/`encoder_model.quantizer.X` ->
+  `model.audio_tokenizer.encoder.X`/`model.audio_tokenizer.quantizer.X`
 
 For a tied backbone without `lm_head.weight`, the tie setting is copied to the composite config. The output
 contains all three weight sets in source-grouped safetensor shards, the merged config, and the processor stack
@@ -186,6 +188,8 @@ def build_config(
         source=audio_tokenizer_checkpoint,
         converter="convert_wavtokenizer_checkpoint.py",
     )
+    audio_config.pop("architectures", None)
+    audio_config.pop("transformers_version", None)
     # token ids and offsets: the Apertus1p5Config defaults are the verified values of the Apertus 1.5 tokenizer.
     # tie_word_embeddings must live on the composite's top-level config: it gates the lm_head <-> embed_tokens
     # tie, and tied backbones ship no `lm_head.weight` tensor.
@@ -296,7 +300,17 @@ def remapped_sources(apertus_checkpoint: str, vision_tokenizer_checkpoint: str, 
         yield "vision_tokenizer", shard, {f"model.vision_tokenizer.{key}": value for key, value in state_dict.items()}
     for shard, state_dict in iter_source_shards(audio_tokenizer_checkpoint):
         _check_fp32_tokenizer_source("audio tokenizer", state_dict)
-        yield "wavtokenizer", shard, {f"model.audio_tokenizer.{key}": value for key, value in state_dict.items()}
+        remapped = {}
+        for key, value in state_dict.items():
+            if key.startswith("encoder_model."):
+                encoder_key = key.removeprefix("encoder_model.")
+                if not encoder_key.startswith(("encoder.", "quantizer.")):
+                    raise ValueError(f"Unexpected key in the WavTokenizer encoder model: {key}")
+                remapped[f"model.audio_tokenizer.{encoder_key}"] = value
+            elif not key.startswith(("backbone.", "head.")):
+                raise ValueError(f"Unexpected key in the WavTokenizer checkpoint: {key}")
+        if remapped:
+            yield "wavtokenizer", shard, remapped
 
 
 def verify(composite_dir: str, max_new_tokens: int = 12):
@@ -504,6 +518,17 @@ def convert(
             weight_map[key] = out_shard
             total_size += value.numel() * value.element_size()
         logger.info(f"wrote {out_shard}: {len(remapped)} tensors")
+
+    missing_audio_components = [
+        component
+        for component in ("encoder", "quantizer")
+        if not any(key.startswith(f"model.audio_tokenizer.{component}.") for key in weight_map)
+    ]
+    if missing_audio_components:
+        raise ValueError(
+            "The WavTokenizer source did not provide the required audio "
+            f"{', '.join(missing_audio_components)} weights."
+        )
 
     if not config.tie_word_embeddings and "lm_head.weight" not in weight_map:
         raise ValueError(

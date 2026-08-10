@@ -55,8 +55,9 @@ The model composes three parts:
   ([Emu3.5: Native Multimodal Models are World Learners](https://huggingface.co/papers/2510.26583), with
   [IBQ](https://huggingface.co/papers/2412.02692) quantization): 16× spatial downsampling, one code per 16×16
   patch,
-- **[WavTokenizer](./wavtokenizer)** ([paper](https://huggingface.co/papers/2408.16532)) as the audio codec:
-  40 codes per second of 24 kHz mono audio.
+- the encoder and quantizer of **[WavTokenizer](./wavtokenizer)**
+  ([paper](https://huggingface.co/papers/2408.16532)) as the audio tokenizer: 40 codes per second of 24 kHz mono
+  audio. The reconstruction decoder is omitted from the joint checkpoint.
 
 > [!NOTE]
 > Consequences of the pruned output layer: with `labels`, the model computes the standard causal language
