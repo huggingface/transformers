@@ -340,6 +340,8 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": GPTBigCodeBlock,
         "attentions": OutputRecorder(GPTBigCodeAttention, index=1, layer_name="attn"),
@@ -380,8 +382,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
+        self.bias = nn.Buffer(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
         )
 
         self.gradient_checkpointing = False

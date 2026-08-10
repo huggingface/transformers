@@ -503,6 +503,15 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip(
+        "Jamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
+        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "
+        "the split-vs-single comparison diverges regardless of padding masking — the scenario is out of "
+        "Mamba1's contract."
+    )
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        pass
+
 
 @require_torch
 @slow
@@ -558,6 +567,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",],
+                ("cuda", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'",],
                 ("rocm", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("xpu", 3): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'"]
             }

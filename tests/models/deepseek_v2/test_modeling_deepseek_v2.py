@@ -13,9 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV2 model."""
 
+import math
 import unittest
 
-from transformers import BitsAndBytesConfig, Cache, is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -24,8 +25,11 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2Model
-    from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
+    from transformers import AutoTokenizer, DeepseekV2Config, DeepseekV2ForCausalLM, DeepseekV2Model
+    from transformers.models.deepseek_v2.modeling_deepseek_v2 import (
+        DeepseekV2Attention,
+        DeepseekV2RotaryEmbedding,
+    )
 
 
 class DeepseekV2ModelTester(CausalLMModelTester):
@@ -57,23 +61,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_model_rope_scaling_frequencies(self):
         """
@@ -216,3 +203,39 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, generated_text)
+
+
+@require_torch
+class DeepseekV2AttentionScalingTest(unittest.TestCase):
+    """`DeepseekV2Attention` must fold the yarn ``mscale`` into its softmax scale on
+    init. This is the canonical MLA scaling path -- every other MLA model imports
+    the same ``yarn_apply_mscale`` helper -- and it guards against the regression
+    where the fold was dropped, silently running the model at the wrong softmax
+    temperature.
+    """
+
+    def test_yarn_mscale_is_folded_into_attention_scale(self):
+        factor, mscale_all_dim = 40.0, 1.0
+        config = DeepseekV2Config(
+            rope_parameters={
+                "rope_type": "yarn",
+                "factor": factor,
+                "mscale_all_dim": mscale_all_dim,
+                "original_max_position_embeddings": 4096,
+            }
+        )
+        with torch.device("meta"):
+            attn = DeepseekV2Attention(config, layer_idx=0)
+
+        head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        # Independent of the helper's own implementation.
+        mscale = 0.1 * mscale_all_dim * math.log(factor) + 1.0
+        self.assertAlmostEqual(attn.scaling, head_dim**-0.5 * mscale * mscale, places=5)
+
+    def test_scale_untouched_without_yarn_mscale(self):
+        config = DeepseekV2Config(rope_parameters={"rope_type": "default", "rope_theta": 10000.0})
+        with torch.device("meta"):
+            attn = DeepseekV2Attention(config, layer_idx=0)
+
+        head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.assertAlmostEqual(attn.scaling, head_dim**-0.5, places=6)

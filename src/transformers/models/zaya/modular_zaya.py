@@ -224,7 +224,7 @@ class ZayaCCAProjection(nn.Module):
         qk_states = qk_states.transpose(1, 2)
         use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
         if use_precomputed_states:
-            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states
+            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states[0]
             qk_states = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))
@@ -246,7 +246,7 @@ class ZayaCCAProjection(nn.Module):
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
         if use_precomputed_states:
-            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states.unsqueeze(1)
+            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states[0].unsqueeze(1)
         else:
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
@@ -447,7 +447,7 @@ class ZayaRouter(nn.Module):
 
         self.router_mlp = ZayaRouterMLP(self.router_hidden_size, self.num_router_classes, config.rms_norm_eps)
 
-        self.register_buffer("balancing_biases", torch.zeros(self.num_router_classes, dtype=torch.float32))
+        self.balancing_biases = nn.Buffer(torch.zeros(self.num_router_classes, dtype=torch.float32))
         self.balancing_biases[-1] = -1.0
 
     def forward(
@@ -514,7 +514,7 @@ class ZayaSparseMoeBlock(nn.Module):
 
 class ZayaPreTrainedModel(LlamaPreTrainedModel):
     config: ZayaConfig
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(ZayaRouter, index=0),

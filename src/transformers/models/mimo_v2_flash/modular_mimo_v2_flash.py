@@ -25,6 +25,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
@@ -61,6 +62,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     """
 
     model_type = "mimo_v2_flash"
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -103,6 +105,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
     use_qk_norm = AttributeError()
+    num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
@@ -136,24 +139,16 @@ class MiMoV2FlashRMSNorm(MixtralRMSNorm):
 
 class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: MiMoV2FlashConfig, device=None):
-        super().__init__(config, device=device)
+        super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: MiMoV2FlashConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: MiMoV2FlashConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -168,12 +163,9 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
 
 class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
@@ -239,6 +231,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@no_inherit_decorator
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         # SWA layers double the kv heads vs full-attention and have attention sinks.

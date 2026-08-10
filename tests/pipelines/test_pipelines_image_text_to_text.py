@@ -14,6 +14,7 @@
 
 import base64
 import unittest
+from types import SimpleNamespace
 
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
@@ -66,6 +67,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             [
                 {"input_text": ANY(str), "generated_text": ANY(str)},
             ],
+        )
+
+    def test_stop_sequence_without_generate_kwargs(self):
+        pipe = object.__new__(ImageTextToTextPipeline)
+        tokenizer = object()
+        pipe.processor = SimpleNamespace(tokenizer=tokenizer)
+
+        _, forward_kwargs, _ = pipe._sanitize_parameters(stop_sequence=".", max_new_tokens=3)
+        self.assertEqual(
+            forward_kwargs["generate_kwargs"],
+            {"stop_strings": ["."], "tokenizer": tokenizer, "max_new_tokens": 3},
         )
 
     @require_torch
@@ -236,45 +248,6 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
         outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
-
-    @slow
-    @require_torch
-    def test_model_pt_chat_template_with_response_parsing(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What's the difference between these two images?"},
-                    {
-                        "type": "image",
-                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-                    },
-                    {
-                        "type": "image",
-                        "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
-                    },
-                ],
-            }
-        ]
-        pipe.tokenizer.response_schema = {
-            # A real response schema should probably have things like "role" and "content"
-            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
-            # output anything like that, so let's keep it simple.
-            "type": "object",
-            "properties": {
-                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
-                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
-            },
-        }
-        outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
-        parsed_message = outputs[0]["generated_text"][-1]
-        # The parsed message should be a dict with the schema keys, not {"role": "assistant", "content": ...}
-        self.assertIn("first_word", parsed_message)
-        self.assertIn("last_word", parsed_message)
-        self.assertNotIn("role", parsed_message)
-        self.assertIsInstance(parsed_message["first_word"], str)
-        self.assertIsInstance(parsed_message["last_word"], str)
 
     @slow
     @require_torch

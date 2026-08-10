@@ -86,6 +86,7 @@ jobs:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
             REF=main
+            CUDA=cu126
             PYTORCH=2.8.0
             TORCHCODEC=0.7.0
             FLASH_ATTN=yes
@@ -217,7 +218,7 @@ jobs:
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
     runs-on:
-      group: hfc-amd-mi300-1gpu
+      group: amd-mi300-1gpu
     steps:
       -
         name: Login to DockerHub
