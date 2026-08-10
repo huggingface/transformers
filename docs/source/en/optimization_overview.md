@@ -147,7 +147,7 @@ from transformers.generation import GenerationConfig
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="paged|sdpa",
-    device_map="cuda",
+    device_map="auto",
     torch_dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
