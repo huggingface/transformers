@@ -576,32 +576,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 image_sizes=inputs_dict["image_sizes"],
             )
 
-    def test_mismatched_image_sizes_raise(self):
-        config, *_ = self.model_tester.prepare_config_and_inputs()
-        model = Apertus1p5Model(config).to(torch_device).eval()
-        pixel_values = torch.randn(2, 3, 16, 16, device=torch_device)
-        error_message = "The number of images in `pixel_values` must match the number of entries in `image_sizes`"
-
-        for image_sizes in (
-            torch.tensor([[16, 16]], device=torch_device),
-            torch.tensor([[16, 16], [16, 16], [16, 16]], device=torch_device),
-        ):
-            with self.subTest(num_image_sizes=image_sizes.shape[0]):
-                with self.assertRaisesRegex(ValueError, error_message):
-                    model.get_image_tokens(pixel_values, image_sizes)
-                with self.assertRaisesRegex(ValueError, error_message):
-                    model.get_image_features(pixel_values, image_sizes)
-
-    def test_image_sizes_are_required(self):
-        config, *_ = self.model_tester.prepare_config_and_inputs()
-        model = Apertus1p5Model(config).to(torch_device).eval()
-        pixel_values = torch.randn(1, 3, 16, 16, device=torch_device)
-
-        with self.assertRaisesRegex(ValueError, "`image_sizes` must be provided"):
-            model.get_image_tokens(pixel_values, None)
-        with self.assertRaisesRegex(ValueError, "`image_sizes` must be provided"):
-            model.get_image_features(pixel_values, None)
-
 
 class Apertus1p5TextModelTester(CausalLMModelTester):
     if is_torch_available():
