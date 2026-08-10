@@ -1123,7 +1123,7 @@ JOB_TO_TEST_FILE = {
     "tests_torch": r"tests/models/.*/test_modeling_.*",
     "tests_generate": r"(tests/models/.*/test_modeling_.*|tests/generation/test_.*\.py)",
     "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
-    "tests_processors": r"tests/models/qwen3_asr/test_processing_qwen3_asr\.py",  # temporarily restricted for CI debugging
+    "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
