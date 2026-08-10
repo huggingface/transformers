@@ -20,19 +20,16 @@ import re
 from functools import reduce
 
 from ..distributed import DistributedConfig
-from ..distributed.utils import _torch_distributed_available
-from ..utils import is_torch_greater_or_equal, logging
+from ..distributed.utils import is_dtensor
+from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
     from torch import nn
-
-if _torch_distributed_available:
-    from torch.distributed.tensor import DTensor
 
 
 logger = logging.get_logger(__name__)
@@ -47,7 +44,7 @@ def to_local(t):
     path: backward rewraps the gradient as a DTensor matching each parameter's
     placements.
     """
-    if _torch_distributed_available and isinstance(t, DTensor):
+    if is_dtensor(t):
         return t.to_local()
     return t
 
@@ -64,9 +61,6 @@ def initialize_tensor_parallelism(
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
-
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
@@ -310,7 +304,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
     Extraction follows the pytorch `Shard` placement so that sharding and materializing back to full tensor follows `Shard` semantics.
     `Shard` follows torch.chunk style sharding of the tensor. We demonstrate some cases below on how sharding happens including some edge cases
-    such as some ranks having an empty tensor as shard. Below implementation is robut to all these cases.
+    such as some ranks having an empty tensor as shard. Below implementation is robust to all these cases.
 
     Case (1)
     empty_param                 (16, 5120, 8190)
@@ -1318,7 +1312,7 @@ class ParallelInterface(GeneralInterface):
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
         }
-        if _torch_distributed_available
+        if is_torch_distributed_available()
         else {}
     )
 
@@ -1521,7 +1515,7 @@ def shard_and_distribute_module(
     All process run this function, so they just load the partition of the tensor that they require.
 
     Main uses cases:
-    - column / rowise parallelism, you just shard all the weights of the layer (weight and bias)
+    - column / rowwise parallelism, you just shard all the weights of the layer (weight and bias)
     - packed layers: you slice the weights, then shard like above
     - custom operation:
         - you want to add an all-gather at the end of a local layer.

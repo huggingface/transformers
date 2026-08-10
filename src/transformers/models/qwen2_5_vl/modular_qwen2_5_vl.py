@@ -504,10 +504,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5_VLModelOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
@@ -589,14 +585,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5_VLCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
@@ -673,46 +661,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        second_per_grid_ts=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
