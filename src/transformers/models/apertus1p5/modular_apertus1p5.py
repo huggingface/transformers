@@ -728,40 +728,11 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @staticmethod
-    def _validate_image_inputs(pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor | None) -> None:
-        if pixel_values.shape[0] == 0:
-            raise ValueError("`pixel_values` contains no images; pass `pixel_values=None` when there are no images.")
-        if image_sizes is None:
-            raise ValueError("`image_sizes` must be provided when `pixel_values` are provided.")
-        if pixel_values.shape[0] != image_sizes.shape[0]:
-            raise ValueError(
-                "The number of images in `pixel_values` must match the number of entries in `image_sizes`, but got "
-                f"{pixel_values.shape[0]} images and {image_sizes.shape[0]} size entries."
-            )
-
-    @staticmethod
-    def _validate_audio_inputs(input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor | None) -> None:
-        if input_features.shape[0] == 0:
-            raise ValueError(
-                "`input_features` contains no audio clips; pass `input_features=None` when there is no audio."
-            )
-        if feature_attention_mask is None:
-            raise ValueError("`feature_attention_mask` must be provided when `input_features` are provided.")
-        if input_features.shape[0] != feature_attention_mask.shape[0]:
-            raise ValueError(
-                "The number of audio clips in `input_features` must match the number of rows in `feature_attention_mask`, "
-                f"but got {input_features.shape[0]} clips and {feature_attention_mask.shape[0]} mask rows."
-            )
-
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes images into discrete codes and maps them into the shared text vocabulary via
         `config.image_token_offset`. Each image is cropped to its true size and encoded individually: the encoder
         contains global attention, so batch padding would perturb the codes.
-
-        Only the `pixel_values`/`image_sizes` bookkeeping is validated; the pixel content is assumed to follow
-        the `Apertus1p5ImageProcessor` contract (see `Apertus1p5VisionTokenizerModel.encode`).
 
         Args:
             pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
@@ -772,7 +743,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         Returns:
             `torch.LongTensor`: flat vocabulary ids of all image codes (`sum_i (h_i // 16) * (w_i // 16)` items).
         """
-        self._validate_image_inputs(pixel_values, image_sizes)
         vocab_ids_list = []
         for image, size in zip(pixel_values, image_sizes):
             image = image[None, :, : int(size[0]), : int(size[1])]
@@ -822,7 +792,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         Returns:
             `torch.LongTensor`: flat vocabulary ids of all audio codes (`sum_i ceil(length_i / hop)` items).
         """
-        self._validate_audio_inputs(input_features, feature_attention_mask)
         if input_features.dim() == 2:
             input_features = input_features.unsqueeze(1)
         audio_lengths = feature_attention_mask.sum(dim=-1)
@@ -1126,45 +1095,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        next_sequence_length: int | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        use_cache: bool = True,
-        pixel_values: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
-        is_first_iteration: bool | None = False,
-        **kwargs,
-    ) -> dict[str, Any]:
-        """Prepare a generation step, forwarding media only on the first step when cached decoding is enabled.
-
-        With `use_cache=False`, the full sequence is recomputed and media must be re-encoded on every step.
-        """
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            next_sequence_length=next_sequence_length,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            input_features=input_features,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["input_features"] = None
-
-        return model_inputs
-
     def _expand_inputs_for_generation(
         self,
         expand_size: int = 1,
@@ -1230,7 +1160,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         pixel_values = model_kwargs.get("pixel_values")
         image_sizes = model_kwargs.get("image_sizes")
         if pixel_values is not None:
-            self.model._validate_image_inputs(pixel_values, image_sizes)
             factor = self.model.vision_tokenizer.vision_spatial_factor
             image_token_counts = (image_sizes // factor).prod(dim=-1).tolist()
             image_nums = _get_media_nums(
@@ -1241,7 +1170,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         input_features = model_kwargs.get("input_features")
         feature_attention_mask = model_kwargs.get("feature_attention_mask")
         if input_features is not None:
-            self.model._validate_audio_inputs(input_features, feature_attention_mask)
             hop_length = self.model.audio_tokenizer.config.hop_length
             audio_lengths = feature_attention_mask.sum(dim=-1)
             audio_token_counts = ((audio_lengths + hop_length - 1) // hop_length).tolist()
