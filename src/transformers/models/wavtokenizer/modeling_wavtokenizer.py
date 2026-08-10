@@ -315,10 +315,7 @@ class WavTokenizerVectorQuantization(nn.Module):
 
 
 class WavTokenizerAdaLayerNorm(nn.Module):
-    """
-    Adaptive layer norm whose scale and shift are looked up from condition embeddings (Vocos `AdaLayerNorm`).
-    WavTokenizer conditions on a bandwidth id at training time; at inference the id is always 0.
-    """
+    """Vocos adaptive layer norm using learned scale and shift condition embeddings."""
 
     def __init__(self, config: WavTokenizerConfig):
         super().__init__()
@@ -537,14 +534,7 @@ class WavTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
 
 @auto_docstring(
     custom_intro="""
-    The WavTokenizer neural acoustic codec model: a single-codebook discrete audio tokenizer.
-
-    Proposed in [WavTokenizer: an Efficient Acoustic Discrete Codec Tokenizer for Audio Language Modeling](https://huggingface.co/papers/2408.16532)
-    by Ji et al. (ICLR 2025). Ported from the original (MIT-licensed) implementation at
-    https://github.com/jishengpeng/WavTokenizer.
-
-    The port is inference-only: it encodes audio to discrete codes and decodes codes back to audio, without the
-    original training objectives or a differentiable quantization path.
+    Inference-only, single-codebook WavTokenizer neural audio codec.
     """
 )
 class WavTokenizerModel(WavTokenizerPreTrainedModel):
@@ -573,14 +563,6 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform. Arbitrary non-zero lengths are supported; the encoder pads internally and emits
             `ceil(sequence_length / hop_length)` codes.
-
-            <Tip warning={true}>
-
-            Run the model in `float32` for reproducible codes: code assignment is a nearest-neighbour argmin over
-            codebook distances, and half precision (`bfloat16`/`float16`) perturbs the embeddings enough to flip a
-            large fraction of codes near decision boundaries.
-
-            </Tip>
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`; used to compute `audio_codes_mask`.
         """
@@ -638,27 +620,7 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
             Input audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`.
-
-        Examples:
-
-        ```python
-        >>> from datasets import Audio, load_dataset
-        >>> from transformers import AutoFeatureExtractor, WavTokenizerModel
-
-        >>> model_id = "swiss-ai/wavtokenizer-large-unify-40token"
-        >>> model = WavTokenizerModel.from_pretrained(model_id)
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-        >>> audio = dataset[0]["audio"]["array"]
-
-        >>> inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> audio_codes = outputs.audio_codes
-        >>> audio_values = outputs.audio_values
-        ```"""
+        """
         length = input_values.shape[-1]
         encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
         audio_values = self.decode(encoder_outputs.audio_codes, return_dict=True).audio_values[..., :length]
