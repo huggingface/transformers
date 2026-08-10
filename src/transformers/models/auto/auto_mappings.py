@@ -686,6 +686,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
+        ("weathernext2", "WeatherNext2Config"),
         ("whisper", "WhisperConfig"),
         ("xclip", "XCLIPConfig"),
         ("xclip_text_model", "XCLIPTextConfig"),

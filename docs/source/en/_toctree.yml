@@ -1536,6 +1536,10 @@
       - local: model_doc/timesfm2_5
         title: TimesFM2.5
       title: Time series models
+    - sections:
+      - local: model_doc/weathernext2
+        title: WeatherNext 2
+      title: Weather models
     title: Models
   - sections:
     - local: internal/modeling_utils
