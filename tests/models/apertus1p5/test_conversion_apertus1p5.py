@@ -82,7 +82,15 @@ class Apertus1p5ConversionTest(unittest.TestCase):
                 json.dumps({"model_type": "apertus", "architectures": ["ApertusForCausalLM"]})
             )
             (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
-            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
+            (tmp / "audio" / "config.json").write_text(
+                json.dumps(
+                    {
+                        "model_type": "wavtokenizer",
+                        "architectures": ["WavTokenizerModel"],
+                        "transformers_version": "5.0.0",
+                    }
+                )
+            )
 
             config = conversion.build_config(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"))
 
@@ -90,8 +98,74 @@ class Apertus1p5ConversionTest(unittest.TestCase):
         self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
         self.assertIsInstance(config.audio_config, WavTokenizerConfig)
         self.assertEqual(config.text_config.model_type, "apertus1p5_text")
-        # the backbone's own entrypoint must not leak into the text sub-config
+        # source entrypoints must not leak into nested sub-configs
         self.assertIsNone(getattr(config.text_config, "architectures", None))
+        self.assertIsNone(getattr(config.audio_config, "architectures", None))
+
+    def test_remapped_sources_prunes_audio_decoder(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            for source in ("apertus", "vision", "audio"):
+                (tmp / source).mkdir()
+            save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
+            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            save_file(
+                {
+                    "encoder_model.encoder.weight": torch.ones(1),
+                    "encoder_model.quantizer.codebook.embed": torch.ones(1),
+                    "backbone.weight": torch.ones(1),
+                    "head.linear.weight": torch.ones(1),
+                },
+                tmp / "audio" / SAFE_WEIGHTS_NAME,
+            )
+
+            remapped = list(
+                conversion.remapped_sources(*(str(tmp / source) for source in ("apertus", "vision", "audio")))
+            )
+
+        audio_state_dict = next(state_dict for source, _, state_dict in remapped if source == "wavtokenizer")
+        self.assertEqual(
+            set(audio_state_dict),
+            {
+                "model.audio_tokenizer.encoder.weight",
+                "model.audio_tokenizer.quantizer.codebook.embed",
+            },
+        )
+
+    def test_remapped_sources_rejects_unknown_audio_key(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            for source in ("apertus", "vision", "audio"):
+                (tmp / source).mkdir()
+            save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
+            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            save_file({"unexpected.weight": torch.ones(1)}, tmp / "audio" / SAFE_WEIGHTS_NAME)
+
+            with self.assertRaisesRegex(ValueError, "Unexpected key in the WavTokenizer checkpoint"):
+                list(conversion.remapped_sources(*(str(tmp / source) for source in ("apertus", "vision", "audio"))))
+
+    def test_convert_rejects_audio_source_without_encoder_or_quantizer(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            for source in ("apertus", "vision", "audio"):
+                (tmp / source).mkdir()
+            (tmp / "apertus" / "config.json").write_text(
+                json.dumps({"model_type": "apertus", "tie_word_embeddings": True})
+            )
+            (tmp / "vision" / "config.json").write_text(json.dumps({"model_type": "apertus1p5_vision_tokenizer"}))
+            (tmp / "audio" / "config.json").write_text(json.dumps({"model_type": "wavtokenizer"}))
+            save_file({"model.layer.weight": torch.ones(1)}, tmp / "apertus" / SAFE_WEIGHTS_NAME)
+            save_file({"encoder.weight": torch.ones(1)}, tmp / "vision" / SAFE_WEIGHTS_NAME)
+            save_file(
+                {"backbone.weight": torch.ones(1), "head.linear.weight": torch.ones(1)},
+                tmp / "audio" / SAFE_WEIGHTS_NAME,
+            )
+
+            with (
+                patch.object(conversion, "write_processor"),
+                self.assertRaisesRegex(ValueError, "required audio encoder, quantizer weights"),
+            ):
+                conversion.convert(str(tmp / "apertus"), str(tmp / "vision"), str(tmp / "audio"), str(tmp / "output"))
 
     def test_build_config_rejects_unrelated_text_model(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -144,6 +218,10 @@ class Apertus1p5ConversionTest(unittest.TestCase):
     def test_convert_removes_stale_canonical_weight_files(self):
         config = Mock(tie_word_embeddings=False)
         converted_weights = {"lm_head.weight": torch.ones(2, 2)}
+        audio_weights = {
+            "model.audio_tokenizer.encoder.weight": torch.ones(1),
+            "model.audio_tokenizer.quantizer.weight": torch.ones(1),
+        }
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = Path(tmp_dir)
@@ -157,7 +235,10 @@ class Apertus1p5ConversionTest(unittest.TestCase):
                 patch.object(
                     conversion,
                     "remapped_sources",
-                    return_value=[("apertus", "model.safetensors", converted_weights)],
+                    return_value=[
+                        ("apertus", "model.safetensors", converted_weights),
+                        ("wavtokenizer", "model.safetensors", audio_weights),
+                    ],
                 ),
                 patch.object(conversion, "write_processor"),
             ):
@@ -170,8 +251,16 @@ class Apertus1p5ConversionTest(unittest.TestCase):
 
             with (output_dir / SAFE_WEIGHTS_INDEX_NAME).open() as f:
                 index = json.load(f)
-            self.assertEqual(index["weight_map"], {"lm_head.weight": "model-apertus-model.safetensors"})
+            self.assertEqual(
+                index["weight_map"],
+                {
+                    "lm_head.weight": "model-apertus-model.safetensors",
+                    "model.audio_tokenizer.encoder.weight": "model-wavtokenizer-model.safetensors",
+                    "model.audio_tokenizer.quantizer.weight": "model-wavtokenizer-model.safetensors",
+                },
+            )
             self.assertTrue((output_dir / "model-apertus-model.safetensors").exists())
+            self.assertTrue((output_dir / "model-wavtokenizer-model.safetensors").exists())
 
 
 @require_torch
