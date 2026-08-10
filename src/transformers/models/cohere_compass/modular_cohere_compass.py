@@ -420,7 +420,6 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-
         Example:
 
         ```python
@@ -609,5 +608,4 @@ __all__ = [
     "CohereCompassModel",
     "CohereCompassForConditionalGeneration",
     "CohereCompassTextForSequenceClassification",
-    "CohereCompassRotaryEmbedding",
 ]
