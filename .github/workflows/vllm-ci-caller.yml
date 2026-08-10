@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - vllm_ci
+      - vllm_ci*
 
 env:
   VLLM_TARGET_DEVICE: cpu
