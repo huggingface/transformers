@@ -174,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     steps:
       - name: Checkout Transformers
@@ -227,12 +227,10 @@ jobs:
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
 
-      - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
+      - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 10)"
         working-directory: vllm
         continue-on-error: true
         run: |
-          pytest -v -s \
-            "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-0.3-nvidia/NVIDIA-Nemotron-Parse-v1.2]" \
-            "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-0.5-nvidia/NVIDIA-Nemotron-Parse-v1.2]" \
-            "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-1.0-nvidia/NVIDIA-Nemotron-Parse-v1.2]" \
-            "tests/models/multimodal/processing/test_common.py::test_processing_correctness[1.0-32-0.3-openbmb/MiniCPM-o-2_6]"
+          pytest -v -s tests/models/multimodal/processing/ \
+            --ignore tests/models/multimodal/processing/test_tensor_schema.py \
+            --num-shards=10 --shard-id=${{ matrix.shard }}
