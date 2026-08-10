@@ -176,14 +176,16 @@ def infer_wavtokenizer_config(state_dict: dict[str, torch.Tensor]) -> WavTokeniz
 
 
 def remap_key(key: str) -> str | None:
-    """Map an original state-dict key to the transformers WavTokenizerModel naming; None to drop."""
+    """Map an original state-dict key to the Transformers WavTokenizerModel naming; None to drop."""
     if key in IGNORE_KEYS or any(key.startswith(prefix) for prefix in IGNORE_PREFIXES):
         return None
 
-    # Encoder: feature_extractor.encodec.encoder.model.{i}... -> encoder.layers.{i}...
-    key = key.replace("feature_extractor.encodec.encoder.model.", "encoder.layers.")
-    # Quantizer: ...quantizer.vq.layers.0._codebook.* -> quantizer.codebook.*
-    key = key.replace("feature_extractor.encodec.quantizer.vq.layers.0._codebook.", "quantizer.codebook.")
+    # Encoder: feature_extractor.encodec.encoder.model.{i}... -> encoder_model.encoder.layers.{i}...
+    key = key.replace("feature_extractor.encodec.encoder.model.", "encoder_model.encoder.layers.")
+    # Quantizer: ...quantizer.vq.layers.0._codebook.* -> encoder_model.quantizer.codebook.*
+    key = key.replace(
+        "feature_extractor.encodec.quantizer.vq.layers.0._codebook.", "encoder_model.quantizer.codebook."
+    )
     # ISTFT head: head.out.* -> head.linear.*
     key = key.replace("head.out.", "head.linear.")
 
