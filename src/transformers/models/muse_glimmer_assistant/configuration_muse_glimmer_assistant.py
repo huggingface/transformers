@@ -22,7 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="meta-models/Muse-Glimmer-30B-assistant")
 @strict
 class MuseGlimmerAssistantConfig(PreTrainedConfig):
     r"""
@@ -38,10 +38,10 @@ class MuseGlimmerAssistantConfig(PreTrainedConfig):
     ```python
     >>> from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
 
-    >>> # Initializing a Muse Glimmer Assistant config similar to TODO.
+    >>> # Initializing a Muse Glimmer Assistant config similar to `meta-models/Muse-Glimmer-30B-assistant`.
     >>> configuration = MuseGlimmerAssistantConfig(text_config)
 
-    >>> # Initializing a model from the TODO configuration.
+    >>> # Initializing a model from the `meta-models/Muse-Glimmer-30B-assistant` configuration.
     >>> model = MuseGlimmerAssistantModel(configuration)
 
     >>> # Accessing the model configuration
