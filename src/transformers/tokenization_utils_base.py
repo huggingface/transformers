@@ -3653,6 +3653,13 @@ if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
     )
 
 
+# Decoder-side counterpart of the Metaspace prefix space. Metaspace only prepends `▁` when the text does not already
+# start with one, so a lone leading space is the synthetic prefix and must go, while two or more are the user's own and
+# must stay. Matching " " not followed by " " expresses exactly that; `Strip(content=" ", left=1)` ate a real space.
+# `\A` and not `^`: the regex engine is multiline, and `^` would eat the indentation of every line, not just the first.
+PREFIX_SPACE_PATTERN = r"\A (?! )"
+
+
 def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     if add_prefix_space:
         prepend_scheme = "always"
