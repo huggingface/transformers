@@ -91,19 +91,6 @@ class TorchvisionBackend(BaseImageProcessor):
         self._set_attributes(**kwargs)
 
     @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return True
-
-    @property
     def backend(self) -> str:
         """
         `str`: The backend used by this image processor.
@@ -432,19 +419,6 @@ class PilBackend(BaseImageProcessor):
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
-
-    @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return False
 
     @property
     def backend(self) -> str:

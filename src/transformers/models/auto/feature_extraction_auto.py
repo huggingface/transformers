@@ -201,7 +201,7 @@ def get_feature_extractor_config(
     # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    feature_extractor_dict = {}
+    feature_extractor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "feature_extractor" in processor_dict:
@@ -209,7 +209,7 @@ def get_feature_extractor_config(
 
     if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
         feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
-    return feature_extractor_dict
+    return feature_extractor_dict or {}
 
 
 class AutoFeatureExtractor:

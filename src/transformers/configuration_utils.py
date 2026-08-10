@@ -60,29 +60,36 @@ _FLOAT_TAG_KEY = "__float__"
 _FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
-ALLOWED_LAYER_TYPES = (
+ALLOWED_ATTN_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "window_attention",  # non-overlapping windows usually in ViT
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
-    "conv",  # used in LFMv2
-    "sparse",
-    "dense",
+    "conv",
+    "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
-    "moe",  # for nemotron_h, which uses either attention, mamba or moe
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )
 
+ALLOWED_MLP_LAYER_TYPES = (
+    "sparse",
+    "dense",
+)
+
+# Keep a complete list of layer types as well for BC
+ALLOWED_LAYER_TYPES = ALLOWED_ATTN_LAYER_TYPES + ALLOWED_MLP_LAYER_TYPES
 
 # Legacy ``layer_types`` strings → current ``linear_attention`` / ``full_attention`` convention.
 # Configs call ``remap_legacy_layer_types`` in their ``__post_init__`` so checkpoints stored on
 # the Hub with the old names (``mamba``, ``attention``) load transparently.
 _LEGACY_LAYER_TYPE_REMAP = {
+    "conv": "linear_attention",  # only in LFMv2
     "mamba": "linear_attention",
     "attention": "full_attention",
 }
@@ -240,7 +247,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
-    base_model_fsdp_plan: ClassVar[dict[Any, str] | None] = None
+    base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "norm": "keep_full_weight",
+    }
     base_model_pp_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
@@ -336,6 +347,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # HeterogeneousConfigMixin
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
+
+        if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
+            self.base_model_tp_plan = {
+                **self.base_model_tp_plan,
+                "embed_tokens": "embedding_rowwise",
+            }
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
@@ -473,6 +490,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.is_heterogeneous:
+            for config in self.per_layer_config:
+                config.validate_architecture()
+            return
         if (
             hasattr(self, "head_dim")
             and hasattr(self, "num_heads")
@@ -501,8 +522,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     )
 
     def validate_layer_type(self):
-        """Check that `layer_types` is correctly defined."""
-        for layer_types in ["layer_types", "mlp_layer_types"]:
+        """Check that `mlp_layer_types` and `layer_types` is correctly defined."""
+        for allowed_types, layer_types in zip(
+            [ALLOWED_ATTN_LAYER_TYPES, ALLOWED_MLP_LAYER_TYPES], ["layer_types", "mlp_layer_types"]
+        ):
             layers = getattr(self, layer_types, None)
             if not (layers is not None and hasattr(self, "num_hidden_layers")):
                 return
@@ -512,8 +535,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                     # Only try setattr if layers changed in case layer_types is a read-only property
                     setattr(self, layer_types, remapped)
                 layers = remapped
-            if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layers):
-                raise ValueError(f"The `{layer_types}` entries must be in {ALLOWED_LAYER_TYPES} but got {layers}")
+            if not all(layer_type in allowed_types for layer_type in layers):
+                raise ValueError(f"The `{layer_types}` entries must be in {allowed_types} but got {layers}")
             elif self.num_hidden_layers is not None and self.num_hidden_layers != len(layers):
                 raise ValueError(
                     f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of `{layer_types}` "
@@ -1214,6 +1237,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
+            "base_model_fsdp_plan",
             "distributed_config",
         ]:
             d.pop(key_to_remove, None)

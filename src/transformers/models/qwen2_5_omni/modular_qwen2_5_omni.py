@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -57,7 +57,7 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionRotaryEmbedding,
@@ -875,7 +875,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
                 fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
                 tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
                 temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
+                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will have a difference of 50 in the temporal position IDs.
                 input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
                 vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
                 vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
@@ -1292,7 +1292,7 @@ class SinusoidsPositionEmbedding(nn.Module):
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         position_embedding = self.compute_default_singular_positional_embedding()
-        self.register_buffer("positional_embedding", position_embedding, persistent=False)
+        self.positional_embedding = nn.Buffer(position_embedding, persistent=False)
 
     def compute_default_singular_positional_embedding(self):
         log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
@@ -1662,8 +1662,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(Qwen2VLRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniThinkerConfig, device=None):
-        super().__init__(config, device)
+    pass
 
 
 # It's same as `Qwen2_5_VLAttention`, but talker model's hidden_size isn't divisible by num_heads.
@@ -1712,7 +1711,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
 
 @auto_docstring(
     custom_intro="""
-    The Qwen2.5OmniThinker model which consists of a audio backbone and a language model.
+    The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
@@ -1752,14 +1751,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(video_embeds)
+        return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1770,14 +1767,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = list(image_embeds)
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1827,17 +1822,17 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
         else:
@@ -1864,7 +1859,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1888,10 +1882,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
@@ -1899,10 +1889,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             - 0 for tokens that are **masked**.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
@@ -1958,7 +1944,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             image_embeds = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             ).pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1968,7 +1954,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             video_embeds = self.get_video_features(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             ).pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -2030,51 +2016,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             rope_deltas=self.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_features=None,
-        feature_attention_mask=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
-            use_audio_in_video=use_audio_in_video,
-            video_second_per_grid=video_second_per_grid,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-            model_inputs["input_features"] = None
-
         return model_inputs
 
 
@@ -2104,7 +2048,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
     input_modalities = ("image", "video", "audio", "text")
 
-    _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
+    _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
@@ -2145,7 +2089,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -2170,10 +2113,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             Hidden states from the thinker model's output that represent the text reply part to be processed.
         input_text_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Input token IDs for text-only content, used for position calculation in multimodal contexts.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
@@ -2207,6 +2146,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         if attention_mask is not None and position_ids is None:
             past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
             if past_key_values_length == 0 or self.rope_deltas is None:
+                # Left padding offsets every position by the number of pad tokens, so the delta that continues the
+                # positions during decoding has to discount them, exactly as the thinker does. Without this, padded
+                # rows decode with shifted RoPE positions and their audio degrades.
+                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -2224,7 +2167,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                     inputs_embeds[:, -2, :] += self.get_input_embeddings()(
                         torch.tensor([self.codec_pad_token], dtype=torch.long, device=inputs_embeds.device)
                     )
-                self.rope_deltas = rope_deltas
+                self.rope_deltas = rope_deltas - delta0
 
             else:
                 if inputs_embeds is not None:
@@ -2277,45 +2220,9 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         )
 
     # prepare inputs for talker lm generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        input_text_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        thinker_reply_part=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        input_audio_features=None,
-        audio_feature_attention_mask=None,
-        audio_feature_lengths=None,
-        use_audio_in_video=False,
-        video_second_per_grid=None,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            thinker_reply_part=thinker_reply_part,
-            input_text_ids=input_text_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_audio_in_video=use_audio_in_video,
-            audio_feature_lengths=audio_feature_lengths,
-            video_second_per_grid=video_second_per_grid,
-            **kwargs,
-        )
-
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
         model_inputs["position_ids"] = None
-
         return model_inputs
 
     def _update_model_kwargs_for_generation(
@@ -2341,54 +2248,14 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
-        super().__init__(config, device=device)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(
-            config,
-            device=device,
-            seq_len=seq_len,
-        )
+    pass
 
 
-# Modified from Llama with a different rotate function, will fixed in next release
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
+    """Reorder the head dim from interleaved RoPE layout `(x0, x1, x2, x3, ...)` to the standard half-split layout
+    `(x0, x2, ..., x1, x3, ...)` so the kernelized `apply_rotary_pos_emb` can be used.
     """
-
-    def rotate_half_codec(x):
-        # x = rearrange(x, "... (d r) -> ... d r", r=2)
-        x = x.reshape(*x.shape[:-1], -1, 2)
-        x1, x2 = x.unbind(dim=-1)
-        x = torch.stack((-x2, x1), dim=-1)
-        return x.reshape(*x.shape[:-2], -1)
-
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half_codec(q) * sin)
-    k_embed = (k * cos) + (rotate_half_codec(k) * sin)
-    return q_embed, k_embed
+    return torch.cat((x[..., 0::2], x[..., 1::2]), dim=-1)
 
 
 class TimeDelayNetBlock(nn.Module):
@@ -2840,8 +2707,11 @@ class DiTAttention(nn.Module):
 
         # apply rotary position embedding
         # Due to training process, only first head is applied with RoPE, will be fixed at next release
+        # The checkpoint uses interleaved RoPE, so deinterleave q/k before the half-split rotation.
         cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(
+            deinterleave_head_dim(query[:, :1]), deinterleave_head_dim(key[:, :1]), cos, sin
+        )
 
         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(
@@ -3027,7 +2897,7 @@ class Qwen2_5OmniUpSample1d(nn.Module):
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
 
         filter = kaiser_sinc_filter1d(cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -3060,7 +2930,7 @@ class Qwen2_5OmniDownSample1d(nn.Module):
         self.pad_right = kernel_size // 2
         self.stride = ratio
         filter = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
-        self.register_buffer("filter", filter, persistent=False)
+        self.filter = nn.Buffer(filter, persistent=False)
 
     def forward(self, hidden_states):
         channels = hidden_states.shape[1]
@@ -3429,7 +3299,9 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
-            time_step = time_step.repeat(batch_size)
+            time_step = time_step.repeat(batch_size * 2 if apply_cfg else batch_size)
+        elif apply_cfg and time_step.shape[0] == batch_size:
+            time_step = torch.cat([time_step, time_step], dim=0)
 
         # Compute embeddings
         time_embedding = self.time_embed(time_step)
@@ -3448,7 +3320,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         # Compute positional encodings
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
-        position_ids = position_ids[None, :].repeat(batch_size, 1)
+        position_ids = position_ids[None, :].repeat(hidden_states.shape[0], 1)
         position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
@@ -3478,8 +3350,6 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     ):
         maximum_duration = quantized_code.shape[1] * self.repeats
         batch_size = reference_mel_spectrogram.shape[0]
-        if batch_size != 1:
-            raise ValueError("Only batch size = 1 is currently supported")
 
         if maximum_duration > self.config.max_position_embeddings:
             raise ValueError(
@@ -3735,7 +3605,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
             When `return_audio=True`:
                 - **Text** (`torch.Tensor`): Generated text token sequence.
-                - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
+                - **Audio waveform** (`torch.Tensor` or `list[torch.Tensor]`): A single `(num_samples,)`
+                  waveform when `batch_size == 1`, otherwise one waveform per batch sample, each trimmed to
+                  its own length.
         """
         # check `False` on purpose because the parameter can be `str/bool`. This is needed for BC
         generation_mode = kwargs.pop("generation_mode", None)
@@ -3749,8 +3621,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             )
         if return_audio is None:
             return_audio = self.has_talker
-        if input_ids.shape[0] != 1 and return_audio:
-            raise NotImplementedError("Qwen2.5-Omni currently does not support batched inference with audio output")
+        batch_size = input_ids.shape[0]
 
         shared_kwargs = {"use_audio_in_video": use_audio_in_video}
         thinker_kwargs = {
@@ -3763,6 +3634,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             "top_p": talker_top_p,
             "temperature": talker_temperature,
             "eos_token_id": talker_eos_token_id,
+            "pad_token_id": self.talker.codec_pad_token,
             "repetition_penalty": talker_repetition_penalty,
         }
         token2wav_kwargs = {}
@@ -3850,7 +3722,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_text_ids = torch.cat(
             [
                 input_ids,
-                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -3859,8 +3731,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_ids = torch.cat(
             [
                 torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
-                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=input_ids.device),
-                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_pad_token, dtype=torch.long, device=input_ids.device),
+                torch.full((batch_size, 1), self.talker.codec_bos_token, dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -3868,7 +3740,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device)
+        talker_text_bos_token = torch.full(
+            (batch_size, 1), talker_text_bos_token, dtype=torch.long, device=input_ids.device
+        )
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
@@ -3879,10 +3753,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
-        eos_token = torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        eos_token = torch.full((batch_size, 1), self.talker.text_eos_token, dtype=torch.long, device=input_ids.device)
         eos_embedding = thinker_embed_tokens(eos_token).to(input_ids.device)
 
-        pad_token = torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        pad_token = torch.full((batch_size, 1), self.talker.text_pad_token, dtype=torch.long, device=input_ids.device)
         pad_embedding = thinker_embed_tokens(pad_token).to(input_ids.device)
 
         thinker_reply_part = torch.cat(
@@ -3894,10 +3768,31 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             dim=1,
         )
 
+        # In a batch, rows that finished early keep being forwarded with pad tokens, so their trailing
+        # hidden states are meaningless. Rewrite each row's reply stream so the text EOS embedding sits
+        # right after its last real token, followed by pad embeddings. For the longest row this matches
+        # the appended `eos_embedding`/`pad_embedding` above, keeping single-sample behavior unchanged.
+        thinker_eos_token_id = thinker_kwargs.get("eos_token_id", self.thinker.generation_config.eos_token_id)
+        if thinker_eos_token_id is not None:
+            thinker_eos_token_ids = torch.as_tensor(thinker_eos_token_id, device=input_ids.device).flatten()
+            is_thinker_eos = (thinker_generate_ids.unsqueeze(-1) == thinker_eos_token_ids).any(dim=-1)
+            generated_length = thinker_generate_ids.shape[1]
+            token_positions = torch.arange(generated_length, device=input_ids.device)
+            first_eos_positions = (
+                torch.where(is_thinker_eos, token_positions, generated_length)
+                .min(dim=-1)
+                .values.clamp(min=1, max=generated_length - 1)
+            )
+            reply_positions = torch.arange(thinker_reply_part.shape[1], device=input_ids.device).unsqueeze(0)
+            pad_positions_mask = (reply_positions >= first_eos_positions.unsqueeze(1)).unsqueeze(-1)
+            eos_positions_mask = (reply_positions == (first_eos_positions - 1).unsqueeze(1)).unsqueeze(-1)
+            thinker_reply_part = torch.where(pad_positions_mask, pad_embedding, thinker_reply_part)
+            thinker_reply_part = torch.where(eos_positions_mask, eos_embedding, thinker_reply_part)
+
         talker_attention_mask = None
         if "attention_mask" in kwargs:
             talker_attention_mask = torch.cat(
-                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
+                [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((batch_size, 2))], dim=1
             ).to(input_ids.device)
 
         talker_result = self.talker.generate(
@@ -3909,20 +3804,36 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             suppress_tokens=[self.talker.codec_bos_token],
             **{k: (v.to(input_ids.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
         )
-        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] : -1]
+        talker_generate_codes = talker_result[:, talker_input_ids.shape[1] :]
+        eos_token_ids = torch.as_tensor(talker_kwargs["eos_token_id"], device=talker_generate_codes.device).flatten()
+        eos_mask = (talker_generate_codes.unsqueeze(-1) == eos_token_ids).any(dim=-1)
+        code_positions = torch.arange(talker_generate_codes.shape[-1], device=talker_generate_codes.device)
+        talker_code_lengths = torch.where(eos_mask, code_positions, talker_generate_codes.shape[-1]).min(dim=-1).values
 
         # 3. Generate wavs from code
         if self.token2wav.dtype != torch.float:
             self.token2wav.float()
 
-        wav = self.token2wav(
-            talker_generate_codes.to(input_ids.device),
-            conditioning=speaker_params["cond"].to(input_ids.device).float(),
-            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float(),
-            **token2wav_kwargs,
-        )
+        conditioning = speaker_params["cond"].to(input_ids.device).float().expand(batch_size, -1)
+        reference_mel = speaker_params["ref_mel"].to(input_ids.device).float().expand(batch_size, -1, -1)
+        # Token2Wav starts its diffusion process from random noise. Decoding each sample separately makes batched
+        # generation reproduce single-item generation when the random seed is controlled.
+        wavs = []
+        for index, code_length in enumerate(talker_code_lengths.tolist()):
+            sample_wav = self.token2wav(
+                talker_generate_codes[index : index + 1, :code_length],
+                conditioning=conditioning[index : index + 1],
+                reference_mel=reference_mel[index : index + 1],
+                **token2wav_kwargs,
+            )
+            # The BigVGAN vocoder squeezes its output, so a single-item decode comes back as `(num_samples,)`.
+            wavs.append(sample_wav.reshape(-1).float())
 
-        return thinker_result.sequences, wav.float()
+        if batch_size == 1:
+            # Single-sample generation keeps returning a `(num_samples,)` tensor for backward compatibility.
+            return thinker_result.sequences, wavs[0]
+
+        return thinker_result.sequences, wavs
 
 
 __all__ = [
