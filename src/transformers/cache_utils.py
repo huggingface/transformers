@@ -2102,3 +2102,23 @@ class MtpCache(DynamicCache):
         mtp_offset = layer_idx + 1
         kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
         return kv_length, kv_offset + mtp_offset
+
+
+class DFlashCache(DynamicCache):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._previous_number_of_accepted_tokens = 0
+
+    def set_previous_accepted_tokens(self, number_of_accepted_tokens: int):
+        self._previous_number_of_accepted_tokens = number_of_accepted_tokens
+
+    def get_query_offset(self, layer_idx: int = 0):
+        # During one forward, the hidden states that will create queries do NOT have the same length as those that will create k/v, so
+        # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
+        return super().get_query_offset(layer_idx) + self._previous_number_of_accepted_tokens
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        # During one forward, the hidden states that will create queries do NOT have the same length as those that will create k/v, so
+        # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
+        kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
+        return kv_length + self._previous_number_of_accepted_tokens, kv_offset

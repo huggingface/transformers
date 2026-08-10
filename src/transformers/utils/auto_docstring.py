@@ -1642,6 +1642,36 @@ class ConfigArgs:
     """,
     }
 
+    do_sample_frames = {
+        "description": """
+    Whether to sample frames from the video before processing or to process the whole video.
+    """,
+    }
+
+    video_metadata = {
+        "description": """
+    Metadata of the video containing information about total duration, fps and total number of frames.
+    """,
+    }
+
+    num_frames = {
+        "description": """
+    Maximum number of frames to sample when `do_sample_frames=True`.
+    """,
+    }
+
+    fps = {
+        "description": """
+    Target frames to sample per second when `do_sample_frames=True`.
+    """,
+    }
+
+    return_metadata = {
+        "description": """
+    Whether to return video metadata or not.
+    """,
+    }
+
     spatial_merge_size = {
         "description": """
         The size of the spatial merge window used to reduce the number of visual tokens by merging neighboring patches.
