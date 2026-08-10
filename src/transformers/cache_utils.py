@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import UserDict
 from collections.abc import Iterable
 
 import torch
@@ -24,39 +25,20 @@ _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_de
 logger = logging.get_logger(__name__)
 
 
-class KVCacheSharingStorage:
+class KVCacheSharingStorage(UserDict):
     """
-    A lightweight dict-like container used to share the KV cache between layers.
-    It is not a dict, so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
-    which would be an issue.
-    It also has a .to() method so that accelerate's `send_to_device` can move it from device to device. Because the
-    device map usually maps contiguous layers to the same device, the .to method is in-place: this means that once we
-    enter a new layer group on a new device, the shared KV states don't need to be moved again.
+    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
+    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
+    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
+    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
+    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
     """
-
-    def __init__(self, shared_kv_states: dict[str, tuple[torch.Tensor, ...]] | None = None) -> None:
-        if shared_kv_states is not None and not isinstance(shared_kv_states, dict):
-            raise ValueError(f"shared_kv_states must be a None or a dict, got {type(shared_kv_states)}")
-        self._storage = shared_kv_states if shared_kv_states is not None else {}
-
-    def __getitem__(self, key: str) -> tuple[torch.Tensor, ...]:
-        return self._storage[key]
-
-    def __setitem__(self, key: str, value: tuple[torch.Tensor, ...]) -> None:
-        self._storage[key] = value
-
-    def items(self) -> Iterable[tuple[str, tuple[torch.Tensor, ...]]]:
-        return self._storage.items()
 
     def to(self, device: torch.device, non_blocking: bool = False) -> "KVCacheSharingStorage":
-        self._storage = {
-            key: tuple(v.to(device, non_blocking=non_blocking) for v in values)
-            for key, values in self._storage.items()
-        }
+        keys = list(self.keys())
+        for key in keys:
+            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
         return self
-
-    def asdict(self) -> dict[str, tuple[torch.Tensor, ...]]:
-        return self._storage
 
 
 class CacheLayerMixin(ABC):
@@ -235,14 +217,10 @@ class DynamicLayer(CacheLayerMixin):
             self.values = self.values[indices, ...]
 
 
-class DummyLayer(CacheLayerMixin):
+class DummyLayer:
     """
     A dummy cache layer that does not store any cache. Used for layers that consume cache producer by other layers.
     """
-
-    is_sliding = False
-    is_compileable = True
-    supports_early_init = True
 
     def __init__(self, **kwargs):
         self.is_initialized = True
@@ -260,41 +238,6 @@ class DummyLayer(CacheLayerMixin):
         if key_states is None and value_states is None:
             return None, None
         raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
-
-    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        raise NotImplementedError("Dummy layer don't store cache: they cannot be used to generate masks.")
-
-    def get_seq_length(self) -> int:
-        """Dummy layer does not keep track of sequence length."""
-        return -1
-
-    def get_max_length(self) -> int:
-        """Dummy layer does not have a maximum length."""
-        return -1
-
-    def crop(self, max_length: int) -> None:
-        """Cropping a dummy layer is a no-op."""
-        pass
-
-    def batch_repeat_interleave(self, repeats: int) -> None:
-        """Repeating a dummy layer is a no-op."""
-        pass
-
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
-        """Selecting indices in a dummy layer is a no-op."""
-        pass
-
-    def reset(self) -> None:
-        """Resetting a dummy layer is a no-op: it stores no cache."""
-        pass
-
-    def offload(self) -> None:
-        """Offloading a dummy layer is a no-op: it stores no cache."""
-        pass
-
-    def prefetch(self) -> None:
-        """Prefetching a dummy layer is a no-op: it stores no cache."""
-        pass
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):

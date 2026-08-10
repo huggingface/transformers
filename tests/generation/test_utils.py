@@ -2791,16 +2791,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_hidden_layers = config.num_hidden_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
-        # # Check each layer has the correct shape
-        # for idx, layer in enumerate(past_key_values.layers):
-        #     # Mamba + Attention layer cache
-        #     if type(layer) is LinearAttentionAndFullAttentionLayer:
-        #         # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-        #         keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-        #         values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-        #         self.assertEqual(keys.shape, attention_shape)
-        #         self.assertEqual(values.shape, attention_shape)
-        #         self.assertEqual(layer.conv_states.shape, conv_shape)
         def check_attention_shapes(layer, k_shape, v_shape):
             # Remove the seq_length dim for cross-attention cache (it changes based on the model)
             keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
@@ -2842,15 +2832,18 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
-            #     self.assertEqual(layer.conv_states.shape, conv_shape)
-            #     # May not be used (e.g. lfm2)
-            #     if layer.is_recurrent_states_initialized:
-            #         self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
-            # # Dummy layer type
-            # elif type(layer) is DummyLayer:
-            #     kv_sharing_role = config.kv_sharing_roles[idx]
-            #     self.assertTrue(kv_sharing_role == "consumer")
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
+            # Dummy layer type
+            elif type(layer) is DummyLayer:
+                # Either the dummy layer is there because there is cache sharing
+                kv_sharing_roles = getattr(config, "kv_sharing_roles", None)
+                if kv_sharing_roles is not None:
+                    kv_sharing_role = kv_sharing_roles[layer_idx]
+                    self.assertTrue(kv_sharing_role == "consumer")
+                # Otherwise it's because there is no attention
+                else:
+                    layer_type = config.layer_types[layer_idx]
+                    self.assertTrue(layer_type == "no_attention")
             # Attention only layer type
             else:
                 check_attention_shapes(layer, k_shape, v_shape)

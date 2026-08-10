@@ -447,17 +447,6 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
     """Returns a tuple `(num_heads, head_dim)` containing either 2 ints, or a list of int with the value for each
     layer."""
-    # # Gemma4 has different head_dim and num_heads depending on layer type
-    # if hasattr(config, "global_head_dim"):
-    #     head_dim = [
-    #         config.global_head_dim if layer == "full_attention" else config.head_dim for layer in config.layer_types
-    #     ]
-    #     num_heads = [
-    #         config.num_global_key_value_heads
-    #         if layer == "full_attention" and config.attention_k_eq_v
-    #         else config.num_key_value_heads
-    #         for layer in config.layer_types
-    #     ]
     # Some models (e.g. Gemma4) have different head_dim and num_heads depending on layer type
     per_layer_attributes = config.per_layer_attributes or ()
     # Layers sharing kv states have no kv cache of their own, so they are excluded.
