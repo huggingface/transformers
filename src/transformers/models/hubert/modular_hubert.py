@@ -19,6 +19,8 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
@@ -116,11 +118,136 @@ class HubertFeatureProjection(nn.Module):
 
 
 class HubertEncoder(Wav2Vec2Encoder):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        if attention_mask is not None:
+            # make sure padded tokens output 0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
+
+        # Pass the 2-D bool mask to pos_conv_embed *before* it is converted to a
+        # 4-D additive float mask by create_bidirectional_mask.  When
+        # conv_pos_batch_norm=True, HubertPositionalConvEmbedding uses this mask
+        # to zero-out padded positions after BatchNorm1d so that padding does not
+        # contaminate the batch statistics.
+        position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+
+        for layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            dropout_probability = torch.rand([])
+
+            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
+                hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 class HubertEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        if attention_mask is not None:
+            # make sure padded tokens output 0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0
+
+        # Pass the 2-D bool mask before it becomes a 4-D additive float mask.
+        position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.dropout(hidden_states)
+
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+
+        for layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            dropout_probability = torch.rand([])
+
+            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            if not skip_the_layer or synced_gpus:
+                layer_outputs = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
+                hidden_states = layer_outputs[0]
+
+            if skip_the_layer:
+                layer_outputs = (None, None)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        hidden_states = self.layer_norm(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 @auto_docstring

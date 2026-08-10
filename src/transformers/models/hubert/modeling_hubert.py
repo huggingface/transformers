@@ -18,25 +18,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
-
-import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
+from .configuration_hubert import HubertConfig
+from collections.abc import Callable
+
+import numpy as np
+from torch.nn import CrossEntropyLoss
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
+from ...modeling_outputs import (
+    CausalLMOutput, SequenceClassifierOutput)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
-from .configuration_hubert import HubertConfig
+from ...utils import (
+    TransformersKwargs, logging)
 
 
 logger = logging.get_logger(__name__)
@@ -188,7 +193,9 @@ class HubertFeatureEncoder(nn.Module):
                 HubertNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
-            conv_layers = [HubertLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            conv_layers = [
+                HubertLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
@@ -231,6 +238,7 @@ class HubertFeatureProjection(nn.Module):
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
 
 
 def eager_attention_forward(
@@ -418,7 +426,7 @@ class HubertEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.tensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -432,6 +440,11 @@ class HubertEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        # Pass the 2-D bool mask to pos_conv_embed *before* it is converted to a
+        # 4-D additive float mask by create_bidirectional_mask.  When
+        # conv_pos_batch_norm=True, HubertPositionalConvEmbedding uses this mask
+        # to zero-out padded positions after BatchNorm1d so that padding does not
+        # contaminate the batch statistics.
         position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
 
         attention_mask = create_bidirectional_mask(
@@ -564,11 +577,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -578,6 +591,7 @@ class HubertEncoderStableLayerNorm(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
+        # Pass the 2-D bool mask before it becomes a 4-D additive float mask.
         position_embeddings = self.pos_conv_embed(hidden_states, attention_mask=attention_mask)
 
         attention_mask = create_bidirectional_mask(
@@ -595,13 +609,10 @@ class HubertEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
-                # under fsdp or deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 layer_outputs = layer(
                     hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
                 )
