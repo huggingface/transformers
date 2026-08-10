@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..wavtokenizer import WavTokenizerConfig
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
@@ -197,7 +197,7 @@ class Apertus1p5Config(PreTrainedConfig):
         `torch.finfo(dtype).min` scores and cannot be selected by unconstrained generation.
     vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_config (`Union[dict, PreTrainedConfig]`, *optional*):
+    audio_config (`Union[dict, WavTokenizerConfig]`, *optional*):
         Configuration of the WavTokenizer audio codec.
     image_token_id (`int`, *optional*, defaults to 131079):
         Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
@@ -230,12 +230,12 @@ class Apertus1p5Config(PreTrainedConfig):
     sub_configs = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
-        "audio_config": AutoConfig,
+        "audio_config": WavTokenizerConfig,
     }
 
     text_config: dict | Apertus1p5TextConfig | None = None
     vision_config: dict | Apertus1p5VisionTokenizerConfig | None = None
-    audio_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | WavTokenizerConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -256,10 +256,15 @@ class Apertus1p5Config(PreTrainedConfig):
             self.vision_config = Apertus1p5VisionTokenizerConfig()
 
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "wavtokenizer")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+            model_type = self.audio_config.get("model_type", WavTokenizerConfig.model_type)
+            if model_type != WavTokenizerConfig.model_type:
+                raise ValueError(
+                    f"`audio_config.model_type` must be 'wavtokenizer', got {model_type!r}. Apertus 1.5 audio "
+                    "tokens use the WavTokenizer codebook."
+                )
+            self.audio_config = WavTokenizerConfig(**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
+            self.audio_config = WavTokenizerConfig()
 
         if self.image_token_offset + self.vision_config.codebook_size != self.audio_token_offset:
             raise ValueError(

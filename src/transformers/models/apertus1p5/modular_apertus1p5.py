@@ -24,7 +24,7 @@ Vision tokenization is implemented in this module by `Apertus1p5VisionTokenizerM
 encoder, quantizer, and codebook-scoring path from BAAI's EMU3.5 Vision Tokenizer. It intentionally omits the
 EMU3.5 decoder and backbone. Audio tokenization is provided by WavTokenizer,
 which is implemented separately as a standalone Transformers model rather than reimplemented here; it is loaded
-through `AutoModel` from `audio_config`. Both tokenizers must run in float32 for stable code assignment.
+from `audio_config`. Both tokenizers must run in float32 for stable code assignment.
 """
 
 from dataclasses import dataclass
@@ -45,12 +45,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..apertus.configuration_apertus import ApertusConfig
 from ..apertus.modeling_apertus import ApertusForCausalLM, ApertusModel, ApertusPreTrainedModel
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
 )
+from ..wavtokenizer import WavTokenizerConfig, WavTokenizerModel
 
 
 def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Tensor:
@@ -229,7 +229,7 @@ class Apertus1p5Config(PreTrainedConfig):
         `torch.finfo(dtype).min` scores and cannot be selected by unconstrained generation.
     vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
         Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_config (`Union[dict, PreTrainedConfig]`, *optional*):
+    audio_config (`Union[dict, WavTokenizerConfig]`, *optional*):
         Configuration of the WavTokenizer audio codec.
     image_token_id (`int`, *optional*, defaults to 131079):
         Id of the `<|image|>` placeholder token that image code positions carry in `input_ids`.
@@ -262,12 +262,12 @@ class Apertus1p5Config(PreTrainedConfig):
     sub_configs = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
-        "audio_config": AutoConfig,
+        "audio_config": WavTokenizerConfig,
     }
 
     text_config: dict | Apertus1p5TextConfig | None = None
     vision_config: dict | Apertus1p5VisionTokenizerConfig | None = None
-    audio_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | WavTokenizerConfig | None = None
     image_token_id: int = 131079
     audio_token_id: int = 131085
     image_token_offset: int = 131272
@@ -288,10 +288,15 @@ class Apertus1p5Config(PreTrainedConfig):
             self.vision_config = Apertus1p5VisionTokenizerConfig()
 
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "wavtokenizer")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+            model_type = self.audio_config.get("model_type", WavTokenizerConfig.model_type)
+            if model_type != WavTokenizerConfig.model_type:
+                raise ValueError(
+                    f"`audio_config.model_type` must be 'wavtokenizer', got {model_type!r}. Apertus 1.5 audio "
+                    "tokens use the WavTokenizer codebook."
+                )
+            self.audio_config = WavTokenizerConfig(**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["wavtokenizer"]()
+            self.audio_config = WavTokenizerConfig()
 
         if self.image_token_offset + self.vision_config.codebook_size != self.audio_token_offset:
             raise ValueError(
@@ -672,7 +677,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
+        self.audio_tokenizer = WavTokenizerModel(config.audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
