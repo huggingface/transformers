@@ -101,6 +101,14 @@ with torch.no_grad():
     reconstruction = model.decode(audio_codes).audio_values
 ```
 
+The feature extractor expects mono audio already sampled at its configured sampling rate; it does not resample or
+downmix. Always pass `sampling_rate` so mismatches are detected. The model pads internally and accepts arbitrary
+non-empty lengths, producing `ceil(num_samples / hop_length)` codes.
+
+By default, batches containing clips of different lengths are zero-padded to the longest clip and include a
+`padding_mask`. This mask is downsampled to `audio_codes_mask`. Padding can perturb codes near the end of shorter
+clips, so encode clips separately when codes must exactly match single-clip or original-pipeline results.
+
 Decoded audio is always returned in `float32` (the ISTFT head upcasts internally). A single code is supported and
 decodes to one configuration-dependent hop (600 samples for 40 tokens/s or 320 samples for 75 tokens/s).
 
