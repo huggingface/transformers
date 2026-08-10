@@ -12,6 +12,7 @@ on:
 env:
   VLLM_TARGET_DEVICE: cpu
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_HOME: /mnt/cache
 
 permissions:
   contents: read
@@ -104,11 +105,8 @@ jobs:
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: "Test: test_initialization"
-        # Right now we constantly hit memory issues like:
-        #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
-        # CPU memory is not released between tests on the 32 GiB runner.
-        # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
-        if: always()
+        # Replaced by the vllm-test-init matrix job below.
+        if: false
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py
@@ -150,6 +148,85 @@ jobs:
         if: false
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
+
+  # test_initialization split across 8 parallel shards (test takes ~6 hours when run sequentially).
+  vllm-test-init:
+    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 8)"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SHARD_ID: ${{ matrix.shard }}
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
+
+      - name: Patch vLLM gpu_memory_utilization for CPU
+        run: |
+          sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
+          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
+          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
+          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
+          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+
+      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 8)"
+        working-directory: vllm
+        run: |
+          pytest -v -s tests/models/test_initialization.py \
+            --num-shards=8 --shard-id=$SHARD_ID
 
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
