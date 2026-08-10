@@ -412,6 +412,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
         ("muse_glimmer", "MuseGlimmerConfig"),
+        ("muse_glimmer_assistant", "MuseGlimmerAssistantConfig"),
         ("muse_glimmer_text", "MuseGlimmerTextConfig"),
         ("muse_glimmer_vision", "MuseGlimmerVisionConfig"),
         ("musicflamingo", "MusicFlamingoConfig"),

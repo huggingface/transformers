@@ -347,6 +347,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mra", "MraModel"),
         ("mt5", "MT5Model"),
         ("muse_glimmer", "MuseGlimmerModel"),
+        ("muse_glimmer_assistant", "MuseGlimmerAssistantModel"),
         ("muse_glimmer_text", "MuseGlimmerTextModel"),
         ("muse_glimmer_vision", "MuseGlimmerVisionModel"),
         ("musicflamingo", "MusicFlamingoModel"),
