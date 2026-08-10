@@ -60,10 +60,6 @@ class CohereCompassTextConfig(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*):
         Scale applied to language-model logits.
-    score_shift_a (`float`, *optional*):
-        Platt-scaling slope carried for the rerank head (applied by the consumer).
-    score_shift_b (`float`, *optional*):
-        Platt-scaling intercept carried for the rerank head (applied by the consumer).
     pooling (`str`, *optional*):
         The pooling strategy (`bos` | `eos` | `mean`); `None` defaults to `eos`.
     """
@@ -109,8 +105,6 @@ class CohereCompassTextConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
-    score_shift_a: float | None = None
-    score_shift_b: float | None = None
     pooling: str | None = None
 
     def __post_init__(self, **kwargs):

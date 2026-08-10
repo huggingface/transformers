@@ -71,10 +71,6 @@ class CohereCompassTextConfig(Cohere2Config):
     r"""
     logit_scale (`float`, *optional*):
         Scale applied to language-model logits.
-    score_shift_a (`float`, *optional*):
-        Platt-scaling slope carried for the rerank head (applied by the consumer).
-    score_shift_b (`float`, *optional*):
-        Platt-scaling intercept carried for the rerank head (applied by the consumer).
     pooling (`str`, *optional*):
         The pooling strategy (`bos` | `eos` | `mean`); `None` defaults to `eos`.
     """
@@ -86,8 +82,6 @@ class CohereCompassTextConfig(Cohere2Config):
 
     rope_parameters: dict[str, RopeParameters | dict | float | str | int | None] | None = None
     logit_scale: float | None = None
-    score_shift_a: float | None = None
-    score_shift_b: float | None = None
     pooling: str | None = None
 
     def __post_init__(self, **kwargs):
@@ -247,8 +241,7 @@ class CohereCompassAttention(Cohere2Attention):
 
 class CohereCompassDecoderLayer(Cohere2DecoderLayer):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
-        super().__init__()
-        self.attention_type = config.layer_types[layer_idx]
+        super().__init__(config, layer_idx)
 
 
 @auto_docstring
@@ -358,8 +351,8 @@ class CohereCompassTextModel(Qwen3VLTextModel, CohereCompassPreTrainedModel):
         for layer_idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings[self.config.layer_types[layer_idx]],
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,

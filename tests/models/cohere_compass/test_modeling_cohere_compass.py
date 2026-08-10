@@ -41,6 +41,7 @@ if is_torch_available():
         CohereCompassModel,
         CohereCompassTextForSequenceClassification,
         CohereCompassTextModel,
+        CohereCompassVisionModel,
     )
     from transformers.modeling_outputs import BaseModelOutputWithPast
 
@@ -278,6 +279,24 @@ class CohereCompassModelTester(VLMModelTester):
         attention_mask = torch.ones_like(input_ids)
         mm_token_type_ids = (input_ids == self.image_token_id).int()
         return input_ids, attention_mask, pixel_values, image_grid_thw, mm_token_type_ids
+
+
+@require_torch
+class CohereCompassVisionModelTest(unittest.TestCase):
+    all_model_classes = (CohereCompassVisionModel,)
+
+    def test_forward(self):
+        config = CohereCompassModelTester(self).get_vision_config()
+        model = CohereCompassVisionModel(config).to(torch_device).eval()
+        grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
+        patch_dim = config.in_channels * config.temporal_patch_size * config.patch_size**2
+        hidden_states = torch.randn(4, patch_dim, device=torch_device)
+
+        with torch.no_grad():
+            output = model(hidden_states, grid_thw)
+
+        self.assertEqual(output.last_hidden_state.shape, (4, config.hidden_size))
+        self.assertEqual(output.pooler_output.shape, (1, config.out_hidden_size))
 
 
 @require_torch

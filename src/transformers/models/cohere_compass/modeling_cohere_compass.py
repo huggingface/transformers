@@ -352,7 +352,6 @@ class CohereCompassDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = CohereCompassAttention(config=config, layer_idx=layer_idx)
         self.mlp = CohereCompassMLP(config)
         self.input_layernorm = CohereCompassLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -542,8 +541,8 @@ class CohereCompassTextModel(CohereCompassPreTrainedModel):
         for layer_idx, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings[self.config.layer_types[layer_idx]],
+                attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,
