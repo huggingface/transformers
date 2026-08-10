@@ -90,6 +90,10 @@ def load_fiddle_config(path: str) -> dict[str, Any]:
     return resolve(document["root"])
 
 
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
 def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitudes: int) -> WeatherNext2Config:
     task = fiddle["task"]
     architecture = fiddle["predictor_kwargs"]["noisy_function_kwargs"]
@@ -115,8 +119,8 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         mesh_splits=architecture["mesh_num_splits"],
         attention_k_hop=transformer["attention_k_hop"],
         ball_query_radius_fraction=architecture["points_to_mesh_model_ctor"]["ball_query_radius_fraction"],
-        aggregate_normalization=architecture["points_to_mesh_model_ctor"]["deep_gnn_kwargs"].get(
-            "aggregate_normalization"
+        aggregate_normalization=_optional_float(
+            architecture["points_to_mesh_model_ctor"]["deep_gnn_kwargs"].get("aggregate_normalization")
         ),
         grid_latitudes=grid_latitudes,
         grid_longitudes=grid_longitudes,

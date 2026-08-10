@@ -178,7 +178,7 @@ class WeatherNext2Config(PreTrainedConfig):
     mesh_splits: int = 6
     attention_k_hop: int = 32
     ball_query_radius_fraction: float = 0.6
-    aggregate_normalization: float | None = 4.0
+    aggregate_normalization: float | int | None = 4.0
 
     grid_latitudes: int = 721
     grid_longitudes: int = 1440
