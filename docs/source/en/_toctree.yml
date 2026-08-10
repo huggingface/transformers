@@ -1245,6 +1245,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/cohere_compass
+        title: CohereCompass
       - local: model_doc/colmodernvbert
         title: ColModernVBert
       - local: model_doc/colpali
