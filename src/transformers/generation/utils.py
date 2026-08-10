@@ -1067,6 +1067,7 @@ class GenerationMixin(ContinuousMixin):
                 main_model_input_embeddings=self.get_input_embeddings(),
                 main_model_output_embeddings=self.get_output_embeddings(),
                 generation_config=generation_config,
+                logits_processor=logits_processor,
             )
         elif different_tokenizers:
             assistant_model = cast("PreTrainedModel", assistant_model)

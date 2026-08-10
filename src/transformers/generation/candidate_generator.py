@@ -1570,6 +1570,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         main_model_input_embeddings: nn.Embedding,
         main_model_output_embeddings: nn.Linear,
         generation_config: "GenerationConfig",
+        logits_processor: Optional["LogitsProcessorList"] = None,
         **kwargs,
     ):
         from ..cache_utils import DFlashCache
@@ -1589,6 +1590,10 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
         self.cache.activate_past_recording()
+
+        # Save those to allow logits manipulations
+        self.do_sample = generation_config.do_sample
+        self.logits_processor = logits_processor
 
         self.is_main_model_prefill = True
 
@@ -1664,8 +1669,30 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.is_main_model_prefill = False
 
         candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
-        candidate_ids = candidate_logits.argmax(dim=-1)
-        candidate_ids = torch.cat([input_ids, candidate_ids], dim=1)
+
+        # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
+        if self.logits_processor is not None:
+            candidate_ids = input_ids
+            # We need to sample 1 by 1 for the processors
+            for i in range(candidate_logits.shape[1]):
+                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                if self.do_sample:
+                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+                # Append it to the full sequence
+                candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+        # Here we can vectorize as we don't have any processors
+        else:
+            if self.do_sample:
+                probs = nn.functional.softmax(candidate_logits, dim=-1, dtype=torch.float32)
+                # Multinomial only works on 2d matrices, and assisted decoding restrict to batch size == 1 anyway
+                candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
+            else:
+                candidate_ids = candidate_logits.argmax(dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
         return candidate_ids, candidate_logits
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
