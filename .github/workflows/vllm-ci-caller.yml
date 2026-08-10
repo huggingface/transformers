@@ -1,4 +1,4 @@
-name: Dependents Smoke Test
+name: vLLM Integration Tests
 
 on:
   schedule:
@@ -62,6 +62,8 @@ jobs:
           echo "UV_PYTHON=" >> $GITHUB_ENV
 
       - name: Install dependencies
+        # TODO: Better to build a dedicated Docker image for vLLM CI.
+        # But the workflow only runs once a day, so installing at runtime is fine for now.
         run: |
           uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
@@ -73,6 +75,7 @@ jobs:
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: Patch vLLM gpu_memory_utilization for CPU
+        # TODO: Try to remove this, especially once we have larger CPU runners.
         run: |
           # Lower hardcoded value in test_initialization.py (originally needed by test_initialization and
           # test_transformers steps, now disabled). Kept in case other tests hit the same OOM issue.
@@ -97,22 +100,28 @@ jobs:
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: "Test: test_initialization"
+        # Right now we constantly hit memory issues like:
+        #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
+        # CPU memory is not released between tests on the 32 GiB runner.
+        # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
         if: false
-        # We need infra team to provide larger runner (say 128G CPU RAM)
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py
 
       - name: "Test: test_transformers"
+        # Right now we constantly hit memory issues like:
+        #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
+        # CPU memory is not released between tests on the 32 GiB runner.
+        # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
         if: false
-        # We need infra team to provide larger runner (say 128G CPU RAM)
         working-directory: vllm
         run: |
           pytest -v -s tests/models/transformers/
 
       - name: "Test: multimodal processing"
-        if: false
         # Replaced by the vllm-multimodal-processing matrix job below.
+        if: false
         working-directory: vllm
         run: |
           pytest -v -s tests/models/multimodal/processing/test_transformers_image.py \
@@ -138,8 +147,7 @@ jobs:
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
-  # Multimodal processing tests split across 4 parallel shards.
-  # Each shard runs on a fresh runner — no cross-test memory accumulation.
+  # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
@@ -202,6 +210,7 @@ jobs:
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: Patch vLLM gpu_memory_utilization for CPU
+        # TODO: Try to remove this, especially once we have larger CPU runners.
         run: |
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
@@ -209,6 +218,7 @@ jobs:
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         run: |
+          # test_tensor_schema.py is run separately on GPU in vLLM's CI
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
             --num-shards=4 --shard-id=$SHARD_ID
