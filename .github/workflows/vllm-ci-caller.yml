@@ -43,6 +43,10 @@ jobs:
           wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
           print(wheel['path'].split('/')[3])
           ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
           echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
           echo "vLLM commit: $VLLM_COMMIT"
 
@@ -180,6 +184,10 @@ jobs:
           wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
           print(wheel['path'].split('/')[3])
           ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
           echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
           echo "vLLM commit: $VLLM_COMMIT"
 
