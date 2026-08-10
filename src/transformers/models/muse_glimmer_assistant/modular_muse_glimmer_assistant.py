@@ -276,4 +276,4 @@ class MuseGlimmerAssistantModel(Exaone4Model):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
-__all__ = ["MuseGlimmerAssistantModel"]
+__all__ = ["MuseGlimmerAssistantModel", "MuseGlimmerAssistantPreTrainedModel"]
