@@ -1,0 +1,481 @@
+name: PR comment GitHub CI
+
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  CUDA_VISIBLE_DEVICES: 0,1
+
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan", "guarin", "hmellor"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    outputs:
+      PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+      PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+    steps:
+      - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
+        env:
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+        run: |
+            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+            echo "COMMENT_DATE: $COMMENT_DATE"
+            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
+
+  # use a python script to handle this complex logic.
+  get-tests:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, check-timestamps]
+    outputs:
+      models: ${{ steps.models_to_run.outputs.models }}
+      quantizations: ${{ steps.models_to_run.outputs.quantizations }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: "0"
+          ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
+          persist-credentials: false
+
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+        run: |
+            PR_MERGE_SHA=$(git log -1 --format=%H)
+            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+              exit -1;
+            fi
+
+      - name: Get models to test
+        env:
+          PR_COMMENT: ${{ github.event.comment.body }}
+        run: |
+          python -m pip install GitPython
+          python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt
+          echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
+          python utils/pr_slow_ci_models.py --message "$PR_COMMENT" --quantization | tee output2.txt
+          echo "quantizations=$(tail -n 1 output2.txt)" >> $GITHUB_ENV
+
+      - name: Show models to test
+        id: models_to_run
+        run: |
+          echo "$models"
+          echo "models=$models" >> $GITHUB_OUTPUT
+          echo "$quantizations"
+          echo "quantizations=$quantizations" >> $GITHUB_OUTPUT
+
+  # Report back if we are not able to get the tests (for example, security check is failing)
+  report_error_earlier:
+    name: Report error earlier
+    if: ${{ always() && needs.get-pr-info.result == 'success' && needs.get-tests.result != 'success' }}
+    needs: [get-pr-number, get-pr-info, get-tests]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n'
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -f body="$(echo -e "$PREFIX")💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
+
+  reply_to_comment:
+    name: Reply to the comment
+    if: ${{ needs.get-tests.outputs.models != '[]'  || needs.get-tests.outputs.quantizations != '[]' }}
+    needs: [get-pr-number, get-tests]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+          INFO: '\n\nThis comment contains `run-slow`, running the specified jobs'
+          BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}'
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -f body="$(echo -e "$PREFIX")$(echo -e "$INFO"): $(echo -e "$BODY")"
+
+  create_run:
+    name: Create run
+    needs: [check-timestamps, reply_to_comment]
+    permissions:
+      statuses: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Create Run
+        id: create_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Create a commit status (pending) for a run of this workflow. The status has to be updated later in `update_run_status`.
+          # See https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#create-a-commit-status
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Slow CI job" -f "context=pytest/custom-tests"
+
+  model-ci:
+    name: Model CI
+    if: ${{ needs.get-tests.outputs.models != '[]' }}
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-pr"
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: PR Comment CI
+      report_repo_id: hf-internal-testing/transformers_pr_ci
+      commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+      subdirs: ${{ needs.get-tests.outputs.models }}
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+      pytest_marker: slow
+    secrets: inherit
+
+  quantization-ci:
+    name: Quantization CI
+    if: ${{ needs.get-tests.outputs.quantizations != '[]' }}
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    with:
+      job: run_quantization_torch_gpu
+      slack_report_channel: "#transformers-ci-pr"
+      docker: huggingface/transformers-quantization-latest-gpu
+      ci_event: PR Comment CI
+      report_repo_id: hf-internal-testing/transformers_pr_ci
+      commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+      subdirs: ${{ needs.get-tests.outputs.quantizations }}
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+    secrets: inherit
+
+  report:
+    name: Check & Report
+    needs: [get-pr-number, get-pr-info, check-timestamps, create_run, model-ci, quantization-ci]
+    permissions:
+      pull-requests: write
+      statuses: write
+    if: ${{ always() && needs.create_run.result == 'success' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download model CI new failures artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: new_failures_with_bad_commit_run_models_gpu
+          path: ./new_failures/new_failures_with_bad_commit_run_models_gpu
+        continue-on-error: true
+
+      - name: Download quantization CI new failures artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: new_failures_with_bad_commit_run_quantization_torch_gpu
+          path: ./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu
+        continue-on-error: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Downloaded artifact files:"
+          if [ -d "./new_failures/" ]; then
+            find ./new_failures/ -type f
+          else
+            echo "No artifacts downloaded (directory doesn't exist)"
+          fi
+
+      - name: Show reports from jobs
+        run: |
+          echo "=== Model CI Report ==="
+          if [ -f "./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json" ]; then
+            cat ./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json
+          else
+            echo "No model CI report found"
+          fi
+          
+          echo ""
+          echo "=== Quantization CI Report ==="
+          if [ -f "./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu/new_failures_with_bad_commit.json" ]; then
+            cat ./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu/new_failures_with_bad_commit.json
+          else
+            echo "No quantization CI report found"
+          fi
+
+      - name: Process and filter reports
+        run: |
+          # Preprocess with Python
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          import os
+          from pathlib import Path
+          
+          def count_failures(data):
+            """
+            Count total number of failures (excluding None commits)
+            """
+            total = 0
+            for model, model_result in data.items():
+                for device, failures in model_result.items():
+                    # Count failures where commit is not None
+                    total += sum(
+                        1 for failure in failures 
+                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
+                    )
+            return total
+          
+          def filter_and_format_report(data):
+            """
+            Filter out entries where commit is `None` (failing tests who status is not certain) and format as text
+            """
+            lines = []
+            
+            for model, model_result in data.items():
+                model_lines = []
+                for device, failures in model_result.items():
+                    
+                    filtered_failures = [
+                        failure for failure in failures 
+                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
+                    ]
+
+                    # Add tests to model lines
+                    for idx, failure in enumerate(filtered_failures):
+                        if idx == 0:
+                            job_link = failure['job_link']
+                            model_lines.append(f"- [{model}]({job_link}):")
+        
+                        test_name = failure['test']
+                        status = failure.get('status', '')
+                        if "DIFFERENT error message" in status:
+                            indicator = "(❌ ⟹ ❌)"
+                        else:
+                            indicator = "(✅ ⟹ ❌)"
+        
+                        model_lines.append(f"    {test_name} {indicator}")
+        
+                if len(model_lines) > 0:
+                    lines.extend(model_lines)
+                    lines.append("")  # Empty line between models
+            
+            return "\n".join(lines).strip()
+          
+          # Read reports from downloaded artifact files
+          model_report_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json')
+          quant_report_path = Path('./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu/new_failures_with_bad_commit.json')
+
+          # Read URL files if they exist
+          model_url_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit_url.txt')
+          quant_url_path = Path('./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu/new_failures_with_bad_commit_url.txt')
+
+          model_url = None
+          if model_url_path.exists():
+              with open(model_url_path, 'r') as f:
+                  model_url = f.read().strip()
+          
+          quant_url = None
+          if quant_url_path.exists():
+              with open(quant_url_path, 'r') as f:
+                  quant_url = f.read().strip()
+
+          model_report = {}
+          if model_report_path.exists():
+              with open(model_report_path, 'r') as f:
+                  model_report = json.load(f)
+          
+          quant_report = {}
+          if quant_report_path.exists():
+              with open(quant_report_path, 'r') as f:
+                  quant_report = json.load(f)
+          
+          # Count failures
+          model_count = count_failures(model_report)
+          quant_count = count_failures(quant_report)
+          
+          formatted_model = filter_and_format_report(model_report)
+          formatted_quant = filter_and_format_report(quant_report)
+          
+          # Write to files
+          with open('model_ci.txt', 'w') as f:
+              if formatted_model:
+                  if model_url:
+                      f.write(f"❌ **[{model_count} new failed tests from this PR]({model_url})** 😭\n\n")
+                  else:
+                      f.write(f"❌ **{model_count} new failed tests from this PR** 😭\n\n")
+                  f.write(formatted_model)
+                  f.write('\n')
+          
+          with open('quantization_ci.txt', 'w') as f:
+              if formatted_quant:
+                  if quant_url:
+                      f.write(f"❌ **[{quant_count} new failed tests from this PR]({quant_url})** 😭\n\n")
+                  else:
+                      f.write(f"❌ **{quant_count} new failed tests from this PR** 😭\n\n")
+                  f.write(formatted_quant)
+                  f.write('\n')
+          PYTHON_SCRIPT
+
+      - name: Post results as PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          pr_head_repo: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          run_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+          pr_commit: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+          main_commit: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
+          model_ci_result: ${{ needs.model-ci.result }}
+          quantization_ci_result: ${{ needs.quantization-ci.result }}
+          model_infrastructure_ok: ${{ needs.model-ci.outputs.is_infrastructure_ok }}
+          quant_infrastructure_ok: ${{ needs.quantization-ci.outputs.is_infrastructure_ok }}
+        run: |
+          # Create commit links (8 chars display, full SHA in URL)
+          run_commit_link="[${run_commit:0:8}](https://github.com/${github_repository}/commit/${run_commit})"
+          pr_commit_link="[${pr_commit:0:8}](https://github.com/${pr_head_repo}/commit/${pr_commit})"
+          main_commit_link="[${main_commit:0:8}](https://github.com/${github_repository}/commit/${main_commit})"
+
+          {
+            echo '## CI Results'
+            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
+            echo ''
+
+            echo '### Commit Info'
+            echo "| Context | Commit | Description |"
+            echo "|---------|--------|-------------|"
+            echo "| RUN | ${run_commit_link} | workflow commit (merge commit) |"
+            echo "| PR | ${pr_commit_link} | branch commit (from PR) |"
+            echo "| main | ${main_commit_link} | base commit (on \`main\`) |"
+            echo ''
+
+            # Check infrastructure health - simple and clean!
+            infrastructure_error=false
+            
+            # Model CI
+            if [[ "$model_ci_result" != "skipped" && "$model_ci_result" != "cancelled" ]]; then
+              if [[ "$model_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Model CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            # Quantization CI
+            if [[ "$quantization_ci_result" != "skipped" && "$quantization_ci_result" != "cancelled" ]]; then
+              if [[ "$quant_infrastructure_ok" == "false" ]]; then
+                echo "⚠️ **Quantization CI failed to report results**"
+                echo ''
+                infrastructure_error=true
+              fi
+            fi
+            
+            if [[ "$infrastructure_error" == "true" ]]; then
+              echo 'The test failure analysis could not be completed. Please check the [workflow run]('$GITHUB_RUN_URL') for details.'
+              echo "STATUS=error" >> $GITHUB_ENV
+      
+            # Check if both jobs were skipped or cancelled
+            elif [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
+               [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
+              echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
+              echo "STATUS=error" >> $GITHUB_ENV
+
+            # Check if either file has content
+            elif [ -s model_ci.txt ] || [ -s quantization_ci.txt ]; then
+              echo "STATUS=failure" >> $GITHUB_ENV
+
+              # Check if model_ci.txt has content
+              if [ -s model_ci.txt ]; then
+                echo '### Model CI Report'
+                echo ''
+                cat model_ci.txt
+                echo ''
+              fi
+              
+              # Check if quantization_ci.txt has content
+              if [ -s quantization_ci.txt ]; then
+                echo '### Quantization CI Report'
+                echo ''
+                cat quantization_ci.txt
+                echo ''
+              fi
+            else
+              echo "STATUS=success" >> $GITHUB_ENV
+              echo '✅ No failing test specific to this PR 🎉 👏 !'
+            fi
+          } > comment_body.txt
+
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -F body=@comment_body.txt
+
+      - name: Update PR commit statuses
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+        # The env. variable `STATUS` used here is set in the previous step
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=$STATUS" -f "description=Slow CI job" -f "context=pytest/custom-tests"

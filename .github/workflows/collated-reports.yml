@@ -1,0 +1,52 @@
+name: CI collated reports
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+      report_repo_id:
+        required: true
+        type: string
+      machine_type:
+        required: true
+        type: string
+      gpu_name:
+        description: Name of the GPU used for the job. Its enough that the value contains the name of the GPU, e.g. "noise-h100-more-noise". Case insensitive.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  collated_reports:
+    name: Collated reports
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+
+      - name: Collated reports
+        shell: bash
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_SHA: ${{ github.sha }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          MACHINE_TYPE: ${{ inputs.machine_type }}
+          JOB: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+          GPU_NAME: ${{ inputs.gpu_name }}
+        run: |
+          pip install huggingface_hub
+          python3 utils/collated_reports.py \
+            --path . \
+            --machine-type "$MACHINE_TYPE" \
+            --commit-hash "$CI_SHA" \
+            --job "$JOB" \
+            --report-repo-id "$REPORT_REPO_ID" \
+            --gpu-name "$GPU_NAME"

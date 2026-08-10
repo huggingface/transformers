@@ -1,0 +1,1868 @@
+# Copyright (C) 2025 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+from collections import defaultdict
+from copy import deepcopy
+from typing import TYPE_CHECKING
+
+from .core_model_loading import (
+    Chunk,
+    Concatenate,
+    ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
+    Interleave,
+    MergeModulelist,
+    PermuteForRope,
+    PrefixChange,
+    Transpose,
+    WeightConverter,
+    WeightRenaming,
+    WeightTransform,
+)
+
+
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+    from .quantizers import HfQuantizer
+
+
+_MODEL_TO_CONVERSION_PATTERN = {
+    # Mixtral-style MoE
+    "minimax": "mixtral",
+    "minimax_m2": "mixtral",
+    # Qwen2-style MoE
+    "afmoe": "qwen2_moe",
+    "deepseek_v2": "qwen2_moe",
+    "deepseek_v3": "qwen2_moe",
+    "deepseek_v32": "qwen2_moe",
+    "dots1": "qwen2_moe",
+    "ernie4_5_moe": "qwen2_moe",
+    "glm4_moe": "qwen2_moe",
+    "glm4_moe_lite": "qwen2_moe",
+    "glm_moe_dsa": "qwen2_moe",
+    "glm4v_moe": "qwen2_moe",
+    "longcat_flash": "qwen2_moe",
+    "solar_open": "qwen2_moe",
+    "mellum": "qwen2_moe",
+    "qwen3_moe": "qwen2_moe",
+    "qwen3_omni_moe": "qwen2_moe",
+    "qwen3_omni_moe_thinker": "qwen2_moe",
+    "qwen3_next": "qwen2_moe",
+    "hunyuan_v1_moe": "qwen2_moe",
+    "flex_olmo": "qwen2_moe",
+    "olmoe": "qwen2_moe",
+    "exaone_moe": "qwen2_moe",
+    "cohere2_moe": "qwen2_moe",
+    "rt_detr_v2": "rt_detr",
+    "pp_doclayout_v2": "rt_detr",
+    "pp_doclayout_v3": "rt_detr",
+    "sam3_tracker_video": "sam3_tracker",
+    "AltCLIPVisionModel": "CLIPVisionModel",
+    "ChineseCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegVisionModel": "CLIPVisionModel",
+    "MetaClip2VisionModel": "CLIPVisionModel",
+    "mlcd_vision": "CLIPVisionModel",
+    "mlcd": "CLIPVisionModel",
+    "SiglipVisionModel": "CLIPVisionModel",
+    "Siglip2VisionModel": "CLIPVisionModel",
+    "xCLIPVisionModel": "CLIPVisionModel",
+    "CLIPSegTextModel": "CLIPTextModel",
+    "MetaClip2TextModel": "CLIPTextModel",
+    "SiglipTextModel": "CLIPTextModel",
+    "Siglip2TextModel": "CLIPTextModel",
+    "xCLIPTextModel": "CLIPTextModel",
+    "aria": "llava",
+    "paligemma": "llava",
+    "aya_vision": "llava",
+    "got_ocr2": "llava",
+    "gemma3": "llava",
+    "internvl": "llava",
+    "vipllava": "llava",
+    "mistral3": "llava",
+    "pp_chart2table": "llava",
+    "voxtral": "qwen2_audio",
+    "voxtral_realtime": "qwen2_audio",
+    "audioflamingo3": "qwen2_audio",
+    "glmasr": "qwen2_audio",
+    "musicflamingo": "qwen2_audio",
+    "granite_speech_plus": "granite_speech",
+    "granitemoeshared": "granitemoe",
+    "granitemoehybrid": "granitemoe",
+    "gemma3n_text": "qwen3_5_text",
+    "qwen3_5_moe_text": "qwen3_5_text",
+    "llava_next_video": "llava_next",
+    "llava_onevision": "llava_next",
+    # class-based mappings
+    "AriaModel": "LlavaModel",
+    "PaliGemmaModel": "LlavaModel",
+    "AyaVisionModel": "LlavaModel",
+    "GotOcr2Model": "LlavaModel",
+    "Gemma3Model": "LlavaModel",
+    "InternVLModel": "LlavaModel",
+    "VipLlavaModel": "LlavaModel",
+    "Mistral3Model": "LlavaModel",
+    "PPChart2TableModel": "LlavaModel",
+    "LlavaNextModel": "LlavaModel",
+    "LlavaNextVideoModel": "LlavaModel",
+    "LlavaOnevisionModel": "LlavaModel",
+    "FuyuModel": "LlavaModel",
+    "MllamaModel": "LlavaModel",
+    "VoxtralModel": "Qwen2AudioModel",
+    "VoxtralRealtimeModel": "Qwen2AudioModel",
+    "AudioFlamingo3Model": "Qwen2AudioModel",
+    "GlmAsrModel": "Qwen2AudioModel",
+    "MusicFlamingoModel": "Qwen2AudioModel",
+    "GraniteSpeechPlusModel": "GraniteSpeechModel",
+    "MaskFormerDetrDecoder": "DetrModel",
+    "Qwen2_5_VLModel": "Qwen2VLModel",
+    "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "Tipsv2VisionBackbone": "Tipsv2VisionModel",
+    # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
+    "ASTModel": "ViTModel",
+    "BeitModel": "ViTModel",
+    "DeiTModel": "ViTModel",
+    "IJepaModel": "ViTModel",
+    "ViTMAEModel": "ViTModel",
+    "ViTMSNModel": "ViTModel",
+    "VivitModel": "ViTModel",
+}
+
+
+def _build_checkpoint_conversion_mapping():
+    mapping = {
+        # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
+        # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
+        "cosmos3_edge": [
+            WeightRenaming(r"^embed_tokens\.", "model.language_model.embed_tokens."),
+            WeightRenaming(r"^norm\.", "model.language_model.norm."),
+            WeightRenaming(r"^layers\.", "model.language_model.layers."),
+            WeightRenaming(r"\.self_attn\.to_q\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.self_attn\.to_k\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.self_attn\.to_v\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.self_attn\.to_out\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
+        ],
+        "inkling_mm_model": [
+            WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.language_model.embed_norm.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed\.weight",
+                target_patterns=r"model.language_model.embed_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.norm\.weight", target_patterns=r"model.language_model.norm.weight"
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.audio\.", target_patterns=r"model.audio_tower."),
+            WeightRenaming(source_patterns=r"model\.visual", target_patterns=r"model.vision_tower"),
+            # Vision encoder internals (run after the tower namespace renames)
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.linear_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.projection",
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.layers.norm_(\d+)",
+                target_patterns=r"vision_tower.encoder_layers.\1.layer_norm",
+            ),
+            # Audio tower internals. These run AFTER the generic `model.audio.` -> `model.audio_tower.`
+            # rename above and substring-match its output. The audio dMel embedding moved from
+            # `audio.encoder` to an `InklingAudioModelEmbeddings` submodule, and `final_norm` was
+            # renamed to `norm`.
+            WeightRenaming(
+                source_patterns=r"audio_tower.encoder.weight",
+                target_patterns=r"audio_tower.embed_audio_tokens.embed_audio_tokens.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"audio_tower.final_norm.weight", target_patterns=r"audio_tower.norm.weight"
+            ),
+            # MoE and MLP
+            # no Transpose ops here: the TP loader shards the raw tensor but validates the shard
+            # shape on the target param, so dim-permuting conversions break sharded loads cc @cyril
+            WeightConverter(
+                source_patterns="shared_w13_weight",
+                target_patterns=["gate_proj", "up_proj"],
+                operations=[Interleave(dim=1), Chunk(dim=1)],
+            ),
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
+            WeightConverter(
+                source_patterns="mlp.experts.w13_weight",
+                target_patterns=["mlp.experts.gate_up_proj"],
+                operations=[Interleave(dim=1)],
+            ),
+            WeightRenaming(source_patterns=r"mlp.experts.w2_weight", target_patterns=r"mlp.experts.down_proj"),
+            WeightConverter(
+                source_patterns="mlp.w13_dn.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Interleave(dim=0), Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"mlp.w2_md.weight", target_patterns=r"mlp.down_proj.weight"),
+            WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
+            # Attn
+            WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.r_proj"),
+            WeightRenaming(source_patterns=r"attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"\.attn\.q_norm", target_patterns=r".self_attn.q_norm"),
+            WeightRenaming(source_patterns=r"\.attn\.k_norm", target_patterns=r".self_attn.k_norm"),
+            WeightRenaming(source_patterns=r"\.attn\.k_sconv", target_patterns=r".self_attn.k_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"\.attn\.v_sconv", target_patterns=r".self_attn.v_sconv.conv1d"),
+            WeightRenaming(source_patterns=r"\.attn\.rel_logits_proj", target_patterns=r".self_attn.rel_logits_proj"),
+            WeightRenaming(source_patterns=r"attn_sconv\.weight$", target_patterns=r"attn_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_sconv\.weight$", target_patterns=r"mlp_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
+            WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
+        ],
+        "GPTNeoXForCausalLM": [
+            WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
+        ],
+        "axk2": [
+            # The A.X-K2 hub checkpoints store the routed experts as individual `experts.{i}` projections
+            # (DeepSeek-V3 layout); the model packs them into the stacked expert tensors.
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            # The gated norms store their low-rank gate MLP as `W_down` / `W_up`; the model reuses `CLIPMLP`
+            # (`fc1` / `fc2`). Bridge the names on load (and back on save). Patterns are unanchored (no
+            # surrounding dots) so the same rename also normalizes the bare module names in an fp8 checkpoint's
+            # `modules_to_not_convert` (`W_down`/`W_up` -> `mlp.fc1`/`mlp.fc2`); a dot-anchored pattern would
+            # leave those bare names untouched and the gate MLP would be quantized by mistake.
+            WeightRenaming(source_patterns=r"W_down", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns=r"W_up", target_patterns="mlp.fc2"),
+            # The released checkpoints fuse the query up-projection and the attention output gate into a
+            # single `q_b_proj` (vLLM layout); the model keeps it fused under the clearer name `q_gate_proj`
+            # and splits the activation in the forward. A plain rename (kept fp8-safe: no weight split, and
+            # the prefix also renames the `weight_scale_inv` companion).
+            WeightRenaming(source_patterns=r"self_attn\.q_b_proj\.", target_patterns="self_attn.q_gate_proj."),
+        ],
+        "gemma4_unified": [
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.patch_dense", target_patterns="embed_vision.patch_dense"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.patch_ln2", target_patterns="embed_vision.patch_ln2"),
+            WeightRenaming(
+                source_patterns=r"vision_embedder\.pos_embedding", target_patterns="embed_vision.pos_embedding"
+            ),
+            WeightRenaming(source_patterns=r"vision_embedder\.pos_norm", target_patterns="embed_vision.pos_norm"),
+            WeightRenaming(
+                source_patterns=r"embed_vision\.embedding_projection",
+                target_patterns="embed_vision.multimodal_embedder.embedding_projection",
+            ),
+        ],
+        "radio": [
+            WeightRenaming("radio_model.model.patch_generator.video_embedder", "embeddings.video_patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.embedder", "embeddings.patch_projection"),
+            WeightRenaming("radio_model.model.patch_generator.pos_embed", "embeddings.position_embedding"),
+            WeightRenaming("radio_model.model.patch_generator.cls_token.token", "embeddings.cls_register_token"),
+            WeightRenaming("radio_model.model.blocks", "encoder.layer"),
+            WeightRenaming("attn.proj", "attention.output.dense"),
+            WeightRenaming("radio_model.input_conditioner", "input_conditioner"),
+            WeightRenaming("radio_model.summary_idxs", "summary_idxs"),
+            WeightConverter(
+                source_patterns="attn.qkv",
+                target_patterns=[
+                    "attention.attention.query",
+                    "attention.attention.key",
+                    "attention.attention.value",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "hrm_text": [
+            WeightConverter(
+                source_patterns="mlp.gate_up_proj.weight",
+                target_patterns=["mlp.gate_proj.weight", "mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="attn.gqkv_proj.weight",
+                target_patterns=[
+                    "self_attn.gate_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.o_proj\.", target_patterns=".self_attn.o_proj."),
+        ],
+        "hunyuan_vl": [
+            WeightRenaming(source_patterns="mlp.dense_h_to_4h", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns="mlp.dense_4h_to_h", target_patterns="mlp.fc2"),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.input_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.post_attention_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm2.",
+            ),
+            WeightRenaming(source_patterns=r"perceive\.proj\.0\.", target_patterns="perceive.proj_conv."),
+            WeightRenaming(source_patterns=r"perceive\.proj\.2\.", target_patterns="perceive.proj_out."),
+            WeightRenaming(source_patterns=r"perceive\.", target_patterns="patch_merger."),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|vit|vision_tower))",
+                target_patterns="model.language_model",
+            ),
+            WeightRenaming(source_patterns=r"^model\.vit", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
+        ],
+        "ViTModel": [
+            WeightRenaming(r"encoder\.layer\.", "layers."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "ViTMSNForImageClassification": [
+            WeightRenaming(r"^encoder\.", "vit.encoder."),
+        ],
+        "ViTMAEForPreTraining": [
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "BeitBackbone": [
+            WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+            WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+            WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+            WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+            WeightRenaming(r"^encoder\.layer\.", "beit.encoder.layer."),
+            WeightRenaming(r"^embeddings\.", "beit.embeddings."),
+            WeightRenaming("attention.query", "q_proj"),
+            WeightRenaming("attention.key", "k_proj"),
+            WeightRenaming("attention.value", "v_proj"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "BeitForSemanticSegmentation": [
+            WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)bn\.", "normalization."),
+            WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)conv\.weight", "convolution.weight"),
+            WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+            WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+            WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+            WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+            WeightRenaming("decode_head.bottleneck.", "decode_head.psp_bottleneck."),
+            WeightRenaming(
+                r"decode_head\.psp_modules\.(\d+)\.1\.conv\.weight",
+                r"decode_head.psp_modules.blocks.\1.conv.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
+                r"decode_head.psp_modules.blocks.\1.conv.normalization.",
+            ),
+        ],
+        "lw_detr": [
+            WeightRenaming("attention.attention.query", "attention.q_proj"),
+            WeightRenaming("attention.attention.key", "attention.k_proj"),
+            WeightRenaming("attention.attention.value", "attention.v_proj"),
+            WeightRenaming("attention.output", "attention.o_proj"),
+        ],
+        "SegformerModel": [
+            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"stages.\1.patch_embeddings."),
+            WeightRenaming(r"encoder.block.(\d+).", r"stages.\1.blocks."),
+            WeightRenaming(r"encoder.layer_norm.(\d+)", r"stages.\1.layer_norm"),
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.sr", "attention.sequence_reduction.sequence_reduction"),
+            WeightRenaming("attention.self.layer_norm", "attention.sequence_reduction.layer_norm"),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("mlp.dense1", "mlp.fc1"),
+            WeightRenaming("mlp.dense2", "mlp.fc2"),
+            WeightRenaming("layer_norm_1", "layernorm_before"),
+            WeightRenaming("layer_norm_2", "layernorm_after"),
+        ],
+        "SegformerForSemanticSegmentation": [WeightRenaming("decode_head.linear_c", "decode_head.linear_projections")],
+        "swin": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming(
+                "attention.self.relative_position_bias_table",
+                "attention.relative_position_bias.relative_position_bias_table",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "SwinBackbone": [
+            WeightRenaming(r"^encoder\.", "swin.encoder."),
+            WeightRenaming(r"^embeddings\.", "swin.embeddings."),
+        ],
+        "altclip": [
+            WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
+        ],
+        "kimi_k25": [
+            # Same as llava, add `model` as prefix if needed
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+            # norm/fc/wo renames come before encoder/blocks renames so their source
+            # patterns match the original checkpoint format (vision_tower.encoder.blocks.X.*)
+            GroupWeightRename(
+                source_patterns=[
+                    r"vision_tower.encoder.blocks.(\d+).norm0",
+                    r"vision_tower.encoder.blocks.(\d+).norm1",
+                ],
+                target_patterns=[
+                    r"vision_tower.encoder.blocks.\1.norm1",
+                    r"vision_tower.encoder.blocks.\1.norm2",
+                ],
+            ),
+            GroupWeightRename(
+                source_patterns=[
+                    r"vision_tower.encoder.blocks.(\d+).mlp.fc0",
+                    r"vision_tower.encoder.blocks.(\d+).mlp.fc1",
+                ],
+                target_patterns=[
+                    r"vision_tower.encoder.blocks.\1.mlp.fc1",
+                    r"vision_tower.encoder.blocks.\1.mlp.fc2",
+                ],
+            ),
+            WeightRenaming(
+                source_patterns=r"vision_tower.encoder.blocks.(\d+).wo",
+                target_patterns=r"vision_tower.encoder.blocks.\1.attn.proj",
+            ),
+            WeightRenaming(source_patterns=r"vision_tower.encoder", target_patterns="model.vision_tower"),
+            # Rename projection modules
+            WeightRenaming(source_patterns=r"mm_projector.proj.0", target_patterns="model.mm_projector.in_proj"),
+            WeightRenaming(source_patterns=r"mm_projector.proj.2", target_patterns="model.mm_projector.out_proj"),
+            WeightRenaming(source_patterns=r"blocks", target_patterns="layers"),
+            WeightRenaming(
+                source_patterns=r"vision_tower.patch_embed.pos_emb.weight",
+                target_patterns="model.vision_tower.patch_embed.pos_emb.position_embeddings",
+            ),
+            # Unfuse qkv and apply rope permutation
+            WeightConverter(
+                source_patterns=[r"wqkv"],
+                target_patterns=[
+                    r"attn.q_proj",
+                    r"attn.k_proj",
+                    r"attn.v_proj",
+                ],
+                operations=[
+                    Chunk(dim=0),
+                    PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj", "k_proj"]),
+                ],
+            ),
+        ],
+        "deepseek_v4": [
+            # General mid-key renames acting on several keys
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
+            WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
+            WeightRenaming(source_patterns=r"\.indexer\.compressor\.", target_patterns=r"\.compressor\.indexer\."),
+            # Leaf patterns
+            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="hc_head.hc_fn"),
+            WeightRenaming(source_patterns=r"^hc_head_base$", target_patterns="hc_head.hc_base"),
+            WeightRenaming(source_patterns=r"^hc_head_scale$", target_patterns="hc_head.hc_scale"),
+            WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=r".input_layernorm."),
+            WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r".post_attention_layernorm."),
+            WeightRenaming(source_patterns=r"\.hc_attn_fn$", target_patterns=r".attn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_attn_base$", target_patterns=r".attn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_attn_scale$", target_patterns=r".attn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_fn$", target_patterns=r".ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_base$", target_patterns=r".ffn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_scale$", target_patterns=r".ffn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.attn_sink$", target_patterns=r".sinks"),
+            WeightRenaming(
+                source_patterns=r"\.indexer\.weights_proj\.",
+                target_patterns=r"\.compressor\.indexer\.scorer\.weights_proj\.",
+            ),
+            WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r"\.compressor\.indexer\.q_b_proj\."),
+            WeightRenaming(source_patterns=r"\.norm\.", target_patterns=r"\.kv_norm\."),
+            WeightRenaming(source_patterns=r"\.ape$", target_patterns=r"\.position_bias"),
+            WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.wq_b\.", target_patterns=r"\.self_attn\.q_b_proj\."),
+            WeightRenaming(source_patterns=r"\.wkv\.", target_patterns=r".kv_proj."),
+            WeightRenaming(source_patterns=r"\.wgate\.", target_patterns=r".gate_proj."),
+            WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
+            WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
+            WeightRenaming(source_patterns=r"\.q_norm\.", target_patterns=r".q_a_norm."),
+            WeightRenaming(source_patterns=r"\.gate\.bias$", target_patterns=r".gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
+            WeightConverter(
+                source_patterns=[
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
+                ],
+                target_patterns=r"\.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "LlavaModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "llava": [
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "minimax_m3_vl": [
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.embeddings\.patch_embedding\.",
+                target_patterns="model.vision_tower.embeddings.proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.encoder\.layers\.",
+                target_patterns="model.vision_tower.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision_tower\.vision_model\.pre_layrnorm\.",
+                target_patterns="model.vision_tower.pre_layrnorm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_1\.",
+                target_patterns="model.multi_modal_projector.linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.linear_2\.",
+                target_patterns="model.multi_modal_projector.linear_2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_1\.",
+                target_patterns="model.multi_modal_projector.merge_linear_1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^patch_merge_mlp\.linear_2\.",
+                target_patterns="model.multi_modal_projector.merge_linear_2.",
+            ),
+            WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+            WeightRenaming(
+                source_patterns=r"\.e_score_correction_bias", target_patterns=r"\.gate\.e_score_correction_bias"
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_proj\.", target_patterns=".self_attn.indexer.q_proj."
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_proj\.", target_patterns=".self_attn.indexer.k_proj."
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_q_norm\.", target_patterns=".self_attn.indexer.q_norm."
+            ),
+            WeightRenaming(
+                source_patterns=r"\.self_attn\.index_k_norm\.", target_patterns=".self_attn.indexer.k_norm."
+            ),
+            WeightConverter(
+                source_patterns=[
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
+                ],
+                target_patterns=r"\.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[r"\.gate_proj.weight", r"\.up_proj.weight"],
+                target_patterns=r"\.gate_up_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
+        "qwen2_audio": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "Qwen2AudioModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "granite_speech": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
+            WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
+        ],
+        # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
+        "granitemoe": [
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.input_linear\.weight",
+                target_patterns="block_sparse_moe.experts.gate_up_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.output_linear\.weight",
+                target_patterns="block_sparse_moe.experts.down_proj",
+            ),
+            WeightRenaming(
+                source_patterns=r"block_sparse_moe\.router\.layer\.weight",
+                target_patterns="block_sparse_moe.router.weight",
+            ),
+        ],
+        "GraniteSpeechModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "vibevoice_asr": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(
+                source_patterns=r"^acoustic_tokenizer_encoder", target_patterns="model.acoustic_tokenizer_encoder"
+            ),
+            WeightRenaming(
+                source_patterns=r"^semantic_tokenizer_encoder", target_patterns="model.semantic_tokenizer_encoder"
+            ),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "VibeVoiceAsrModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "llava_next": [
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+            WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
+        ],
+        # Important to refer to classes by name, not model-type! Several classes share the same model type
+        "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
+        "CLIPTextModel": [PrefixChange(prefix_to_remove="text_model")],
+        "VideoLlavaModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "video_llava": [
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^image_tower", target_patterns="model.image_tower"),
+            WeightRenaming(source_patterns=r"^video_tower", target_patterns="model.video_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "fuyu": [
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_embed_tokens", target_patterns="model.vision_embed_tokens"),
+        ],
+        "mllama": [
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "Emu3Model": [
+            WeightRenaming(source_patterns=r"^text_model.model", target_patterns="text_model"),
+        ],
+        "emu3": [
+            WeightRenaming(source_patterns=r"^text_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^text_model", target_patterns="model.text_model"),
+            WeightRenaming(source_patterns=r"^vqmodel", target_patterns="model.vqmodel"),
+        ],
+        "paddleocr_vl": [
+            WeightRenaming(source_patterns=r"^mlp_AR", target_patterns="model.projector"),
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+            WeightRenaming(
+                source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
+                target_patterns="model.language_model",
+            ),
+        ],
+        "Qwen2VLModel": [
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
+        ],
+        "Qwen2VLForConditionalGeneration": [
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "deepseek_ocr2": [
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.norm1\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.norm2\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.layer_norm2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.attn\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.attn.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.blocks\.(\d+)\.mlp\.",
+                target_patterns=r"vision_tower.sam_encoder.layers.\1.mlp.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.patch_embed\.proj\.",
+                target_patterns="vision_tower.sam_encoder.patch_embed.projection.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.pos_embed",
+                target_patterns="vision_tower.sam_encoder.pos_embed",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.0\.",
+                target_patterns="vision_tower.sam_encoder.neck.conv1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.1\.",
+                target_patterns="vision_tower.sam_encoder.neck.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.2\.",
+                target_patterns="vision_tower.sam_encoder.neck.conv2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.neck\.3\.",
+                target_patterns="vision_tower.sam_encoder.neck.layer_norm2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.net_2\.",
+                target_patterns="vision_tower.sam_encoder.proj.conv1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"sam_model\.net_3\.",
+                target_patterns="vision_tower.sam_encoder.proj.conv2.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.model\.model\.layers\.",
+                target_patterns="vision_tower.vision_encoder.layers.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.model\.model\.norm\.",
+                target_patterns="vision_tower.vision_encoder.norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.query_768\.",
+                target_patterns="vision_tower.query_768_resolution.",
+            ),
+            WeightRenaming(
+                source_patterns=r"qwen2_model\.query_1024\.",
+                target_patterns="vision_tower.query_1024_resolution.",
+            ),
+            WeightRenaming(
+                source_patterns=r"projector\.layers\.",
+                target_patterns="multi_modal_projector.",
+            ),
+            WeightRenaming(source_patterns=r"view_seperator", target_patterns="view_separator"),
+            WeightRenaming(
+                source_patterns=r"(^|model\.)embed_tokens\.",
+                target_patterns=r"\1language_model.embed_tokens.",
+            ),
+            WeightRenaming(source_patterns=r"(^|model\.)layers\.", target_patterns=r"\1language_model.layers."),
+            WeightRenaming(source_patterns=r"(^|model\.)norm\.", target_patterns=r"\1language_model.norm."),
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
+        "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
+        "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
+        "pi0": [
+            WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
+            WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_in", target_patterns="embed_action_time.action_time_mlp_in"
+            ),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
+            ),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
+            # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
+                target_patterns="model.dit.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.paligemma.lm_head",
+                target_patterns="model.vlm.language_model.embed_tokens",
+            ),
+        ],
+        "esm": [
+            WeightRenaming(
+                "encoder.layer.*.attention.self.rotary_embeddings.inv_freq",
+                "rotary_embeddings.inv_freq",
+            ),
+        ],
+        "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
+        "timesfm2_5": [
+            WeightRenaming("ff0", "fc1"),
+            WeightRenaming("ff1", "fc2"),
+        ],
+        "olmo_hybrid": [
+            WeightRenaming("attention_layer_norm", "input_layernorm"),
+            WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
+            WeightConverter(
+                source_patterns=[
+                    "linear_attn.q_conv1d.weight",
+                    "linear_attn.k_conv1d.weight",
+                    "linear_attn.v_conv1d.weight",
+                ],
+                target_patterns="linear_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
+        "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
+        "sam3_tracker": [
+            WeightRenaming(
+                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
+            ),
+            WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
+            # the regex allows to remove the prefix, and add it back in revert mode
+            WeightRenaming(source_patterns=r"tracker_model.(.+)", target_patterns=r"\1"),
+        ],
+        "t5gemma2_encoder": [
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
+        ],
+        "mixtral": [
+            WeightRenaming(".block_sparse_moe.", ".mlp."),
+            WeightConverter(
+                source_patterns=[
+                    ".experts.*.w1.weight",
+                    ".experts.*.w3.weight",
+                ],  # you give me a list of 2 keys, I collect a list of a list of tensors
+                target_patterns=".experts.gate_up_proj",  # target key gets the list of two tensors
+                operations=[
+                    MergeModulelist(
+                        dim=0
+                    ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
+                    Concatenate(dim=1),  # each process has 2 tensors, gate and up, we concat them into gate_up
+                ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
+            ),
+            WeightConverter(
+                source_patterns=[
+                    ".experts.*.w2.weight",
+                ],
+                target_patterns=".experts.down_proj",  # target key gets the list of two tensors
+                operations=[
+                    MergeModulelist(
+                        dim=0
+                    ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
+                ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
+            ),
+        ],
+        "qwen2_moe": [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "qwen3_vl_moe": [
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Transpose(1, 2, check_dims=True)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Transpose(1, 2, check_dims=True)],
+            ),
+        ],
+        "cosmos3_omni": [
+            # Cosmos3 unified checkpoints store the Reasoner LLM with the old `model.` prefix
+            # stripped off and the ViT under flat `blocks.*` / `merger.*` / `patch_embed.*` /
+            # `pos_embed.*` / `deepstack_merger_list.*`. Re-target both to the nested Qwen3-VL
+            # layout (`model.language_model.*` and `model.visual.*`). Newer checkpoints also
+            # use Diffusers-style attention names; map them back to Qwen3-VL module names.
+            WeightRenaming(
+                source_patterns=r"^(layers\.|embed_tokens\.|norm\.)",
+                target_patterns=r"model.language_model.\1",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)",
+                target_patterns=r"model.visual.\1",
+            ),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_q\.", target_patterns=".self_attn.q_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_k\.", target_patterns=".self_attn.k_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_v\.", target_patterns=".self_attn.v_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.to_out\.", target_patterns=".self_attn.o_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
+            WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
+        ],
+        "phimoe": [
+            WeightRenaming(".block_sparse_moe.", ".mlp."),
+            WeightRenaming(".gate.weight", ".router.weight"),
+            WeightConverter(
+                source_patterns=[
+                    ".experts.*.w1.weight",
+                    ".experts.*.w3.weight",
+                ],
+                target_patterns=".experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=".experts.*.w2.weight",
+                target_patterns=".experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "lfm2_moe": [
+            WeightConverter(
+                source_patterns=[
+                    "feed_forward.experts.*.w1.weight",
+                    "feed_forward.experts.*.w3.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="feed_forward.experts.*.w2.weight",
+                target_patterns="feed_forward.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "ernie4_5_vl_moe": [
+            # vision
+            WeightRenaming("vision_model", "vision_tower"),
+            # resampler
+            WeightRenaming("spatial_linear.0", "spatial_linear.fc1"),
+            WeightRenaming("spatial_linear.2", "spatial_linear.fc2"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("temporal_linear.0", "temporal_linear.fc1"),
+            WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
+            # language model
+            WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
+            WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
+            WeightRenaming(r"(?<!_)(?<!\w)norm\.", "language_model.norm."),
+            WeightConverter(
+                source_patterns="mlp.gate.weight_1",
+                target_patterns="mlp.vision_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.gate.weight",
+                target_patterns="mlp.text_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.moe_statics.e_score_correction_bias"],
+                target_patterns=[
+                    "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["experts.*.down_proj.weight"],
+                target_patterns=[
+                    "text_moe.experts.down_proj",
+                    "vision_moe.experts.down_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.gate_proj.weight",
+                    "experts.*.up_proj.weight",
+                ],
+                target_patterns=[
+                    "text_moe.experts.gate_up_proj",
+                    "vision_moe.experts.gate_up_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+        ],
+        # MaskFormer embeds both a Swin backbone (model_type="swin") and a DETR decoder
+        # (model_type="detr") as submodules. Both get their mappings collected automatically, but
+        # the Swin reverse mapping "mlp.fc1 → intermediate.dense" would corrupt DETR decoder keys
+        # if it runs before the DETR reverse "layers.N.mlp.fc1 → layers.N.fc1".
+        # By adding a "maskformer"-level mapping with the DETR fc1 rename, it is collected first
+        # (model-level before submodule-level), so its reverse runs first and removes "mlp.fc1"
+        # from DETR decoder paths before the Swin reverse can match them.
+        "maskformer": [
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
+        "DetrModel": [
+            WeightRenaming("backbone.conv_encoder", "backbone"),
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
+        "rt_detr": [
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+            WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
+        ],
+        "RfDetrModel": [
+            # RfDetrConvEncoder — backbone checkpoint layout + projector stages
+            WeightRenaming(r"backbone.0.encoder.encoder", r"backbone.backbone"),
+            WeightRenaming(r"backbone.0.projector", r"backbone.projector"),
+            WeightRenaming(r"projector.stages.0.0.cv1.conv", r"projector.projector_layer.conv1.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv1.bn", r"projector.projector_layer.conv1.norm"),
+            WeightRenaming(r"projector.stages.0.0.cv2.conv", r"projector.projector_layer.conv2.conv"),
+            WeightRenaming(r"projector.stages.0.0.cv2.bn", r"projector.projector_layer.conv2.norm"),
+            WeightRenaming(r"projector.stages.0.1", r"projector.layer_norm"),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.conv", r"projector.projector_layer.bottlenecks.\1.conv1.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv1.bn", r"projector.projector_layer.bottlenecks.\1.conv1.norm"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.conv", r"projector.projector_layer.bottlenecks.\1.conv2.conv"
+            ),
+            WeightRenaming(
+                r"projector.stages.0.0.m.(\d+).cv2.bn", r"projector.projector_layer.bottlenecks.\1.conv2.norm"
+            ),
+            # RfDetrDecoder
+            WeightRenaming(r"transformer.decoder", r"decoder"),
+            WeightRenaming(r"decoder.layers.(\d+).norm1", r"decoder.layers.\1.self_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).norm2", r"decoder.layers.\1.cross_attn_layer_norm"),
+            WeightRenaming(r"decoder.layers.(\d+).linear1", r"decoder.layers.\1.mlp.fc1"),
+            WeightRenaming(r"decoder.layers.(\d+).linear2", r"decoder.layers.\1.mlp.fc2"),
+            WeightRenaming(r"decoder.layers.(\d+).norm3", r"decoder.layers.\1.layer_norm"),
+            WeightRenaming(r"decoder.norm", r"decoder.layernorm"),
+            WeightRenaming(r"^transformer\.enc_output_norm", r"enc_output_norm"),
+            WeightRenaming(r"^transformer\.enc_output", r"enc_output"),
+            WeightRenaming(r"transformer.enc_out_class_embed", r"enc_out_class_embed"),
+            WeightRenaming(r"transformer.enc_out_bbox_embed", r"enc_out_bbox_embed"),
+            WeightRenaming(r"refpoint_embed\.weight", r"reference_point_embed.weight"),
+            # RfDetrAttention
+            WeightRenaming(r"self_attn.out_proj", r"self_attn.o_proj"),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_bias",
+                target_patterns=[r"self_attn.q_proj.bias", r"self_attn.k_proj.bias", r"self_attn.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"self_attn.in_proj_weight",
+                target_patterns=[r"self_attn.q_proj.weight", r"self_attn.k_proj.weight", r"self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "RfDetrForObjectDetection": [
+            WeightRenaming(source_patterns="^", target_patterns="model."),
+        ],
+        "RfDetrForInstanceSegmentation": [
+            WeightRenaming(source_patterns="^(?!segmentation_head)", target_patterns="model."),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.0", r"query_features_block.mlp.fc1"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.layers\.2", r"query_features_block.mlp.fc2"),
+            WeightRenaming(r"segmentation_head\.query_features_block\.norm_in", r"query_features_block.norm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.norm", r"blocks.\1.layernorm"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.dwconv", r"blocks.\1.depthwise_conv"),
+            WeightRenaming(r"segmentation_head\.blocks\.(\d+)\.pwconv1", r"blocks.\1.pointwise_conv"),
+            WeightRenaming(r"segmentation_head\.spatial_features_proj", r"spatial_features_proj"),
+            WeightRenaming(r"segmentation_head\.query_features_proj", r"query_features_proj"),
+            WeightRenaming(r"segmentation_head\.bias", r"segmentation_bias"),
+        ],
+        "ConditionalDetrModel": [
+            WeightRenaming("backbone.conv_encoder", "backbone"),
+            WeightRenaming("self_attn.out_proj", "self_attn.o_proj"),
+            WeightRenaming("encoder_attn.out_proj", "encoder_attn.o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+            # Decoder self-attention projections moved into self_attn module
+            WeightRenaming(r"decoder.layers.(\d+).sa_qcontent_proj", r"decoder.layers.\1.self_attn.q_content_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).sa_qpos_proj", r"decoder.layers.\1.self_attn.q_pos_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).sa_kcontent_proj", r"decoder.layers.\1.self_attn.k_content_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).sa_kpos_proj", r"decoder.layers.\1.self_attn.k_pos_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).sa_v_proj", r"decoder.layers.\1.self_attn.v_proj"),
+            # Decoder cross-attention projections moved into encoder_attn module
+            WeightRenaming(r"decoder.layers.(\d+).ca_qcontent_proj", r"decoder.layers.\1.encoder_attn.q_content_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).ca_qpos_proj", r"decoder.layers.\1.encoder_attn.q_pos_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).ca_kcontent_proj", r"decoder.layers.\1.encoder_attn.k_content_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).ca_kpos_proj", r"decoder.layers.\1.encoder_attn.k_pos_proj"),
+            WeightRenaming(r"decoder.layers.(\d+).ca_v_proj", r"decoder.layers.\1.encoder_attn.v_proj"),
+            WeightRenaming(
+                r"decoder.layers.(\d+).ca_qpos_sine_proj", r"decoder.layers.\1.encoder_attn.q_pos_sine_proj"
+            ),
+        ],
+        "deformable_detr": [
+            WeightRenaming("backbone.conv_encoder", "backbone"),
+            WeightRenaming("self_attn.out_proj", "self_attn.o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
+        "d_fine": [
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.layers.0"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
+            WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
+        ],
+        "nemotron_h": [
+            WeightRenaming("backbone.", "model."),
+            WeightRenaming("embedding.weight", "embeddings.weight"),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.up_proj.weight",
+                ],
+                target_patterns="mixer.experts.up_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.down_proj.weight",
+                ],
+                target_patterns="mixer.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "jamba": [
+            WeightConverter(
+                source_patterns=[
+                    "feed_forward.experts.*.gate_proj.weight",
+                    "feed_forward.experts.*.up_proj.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="feed_forward.experts.*.down_proj.weight",
+                target_patterns="feed_forward.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "nomic_bert": [
+            WeightRenaming(r"encoder.layers", r"layers"),
+            WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
+            WeightRenaming(r"attn.out_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"fc11", r"up_proj"),
+            WeightRenaming(r"fc12", r"gate_proj"),
+            WeightRenaming(r"fc2", r"down_proj"),
+            WeightRenaming(r"norm1", r"post_attention_layernorm"),
+            WeightRenaming(
+                r"norm2",
+                r"post_mlp_layernorm",
+            ),
+            WeightConverter(
+                source_patterns=["attn.Wqkv"],
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "jina_embeddings_v3": [
+            WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
+            WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
+            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
+            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
+            WeightConverter(
+                source_patterns="mixer.Wqkv",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "cohere_asr": [
+            WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
+            WeightRenaming(r"encoder\.pre_encode\.out\.", r"encoder.subsampling.linear."),
+            WeightRenaming(r"transf_decoder\._embedding\.position_embedding\.pos_enc", r"decoder.pos_emb.weight"),
+            WeightRenaming(r"transf_decoder\._embedding\.token_embedding", r"decoder.embed_tokens"),
+            WeightRenaming(r"transf_decoder\._embedding\.layer_norm", r"decoder.embedding_layernorm"),
+            WeightRenaming(r"transf_decoder\._decoder\.final_layer_norm", r"decoder.norm"),
+            WeightRenaming(r"transf_decoder\._decoder\.layers", r"decoder.layers"),
+            WeightRenaming(r"encoder_decoder_proj\.", r"decoder.proj."),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.\1.self_attn.q_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.\1.self_attn.k_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.\1.self_attn.v_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.\1.self_attn.o_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.\1.self_attn.relative_k_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.\1.self_attn.bias_u"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.\1.self_attn.bias_v"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.query_net", r"decoder.\1.self_attn.q_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.key_net", r"decoder.\1.self_attn.k_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.value_net", r"decoder.\1.self_attn.v_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.out_projection", r"decoder.\1.self_attn.o_proj"),
+            WeightRenaming(r"\.second_sub_layer\.query_net", r".encoder_attn.q_proj"),
+            WeightRenaming(r"\.second_sub_layer\.key_net", r".encoder_attn.k_proj"),
+            WeightRenaming(r"\.second_sub_layer\.value_net", r".encoder_attn.v_proj"),
+            WeightRenaming(r"\.second_sub_layer\.out_projection", r".encoder_attn.o_proj"),
+            WeightRenaming(r"\.third_sub_layer\.dense_in", r".mlp.fc1"),
+            WeightRenaming(r"\.third_sub_layer\.dense_out", r".mlp.fc2"),
+            WeightRenaming(r"\.layer_norm_1\.", r".input_layernorm."),
+            WeightRenaming(r"\.layer_norm_2\.", r".post_attention_layernorm."),
+            WeightRenaming(r"\.layer_norm_3\.", r".final_layernorm."),
+            WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
+            WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
+        ],
+        "qianfan_ocr": [
+            WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
+            WeightRenaming(r"encoder\.layers\.", r"layers\."),
+            WeightRenaming(r"\.ls1", r"\.lambda_1"),
+            WeightRenaming(r"\.ls2", r"\.lambda_2"),
+            WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
+            WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
+            WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
+            WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
+            WeightRenaming(r"\.embeddings\.position_embedding", r"\.embeddings\.position_embeddings"),
+            WeightRenaming(r"\.embeddings\.patch_embedding\.", r"\.embeddings\.patch_embeddings\.projection\."),
+            WeightRenaming(r"^language_model\.model\.", r"model\.language_model\."),
+            WeightRenaming(r"^language_model\.lm_head\.", r"lm_head\."),
+            WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
+            WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
+            WeightConverter(
+                source_patterns=["attn.qkv.weight"],
+                target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["attn.qkv.bias"],
+                target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "legacy": [
+            WeightRenaming(
+                source_patterns="LayerNorm.gamma",
+                target_patterns="LayerNorm.weight",
+            ),
+            WeightRenaming(
+                source_patterns="LayerNorm.beta",
+                target_patterns="LayerNorm.bias",
+            ),
+        ],
+        "sapiens2": [
+            WeightRenaming(r"^cls_token$", r"embeddings.cls_token"),
+            WeightRenaming(r"^storage_tokens$", r"embeddings.register_tokens"),
+            WeightRenaming(r"^patch_embed\.projection\.", r"embeddings.patch_embeddings."),
+            WeightRenaming(r"blocks\.(\d+)\.", r"model.layer.\1."),
+            WeightRenaming(r"attn\.proj\.", r"attention.o_proj."),
+            WeightRenaming(r"attn\.wq\.", r"attention.q_proj."),
+            WeightRenaming(r"attn\.wk\.", r"attention.k_proj."),
+            WeightRenaming(r"attn\.wv\.", r"attention.v_proj."),
+            WeightRenaming(r"attn\.q_norm\.", r"attention.q_norm."),
+            WeightRenaming(r"attn\.k_norm\.", r"attention.k_norm."),
+            WeightRenaming(r"attn\.gamma\.weight$", r"layer_scale1.lambda1"),
+            WeightRenaming(r"ffn\.w3\.", r"mlp.down_proj."),
+            WeightRenaming(r"\.ln1\.", r".norm1."),
+            WeightRenaming(r"\.ln2\.", r".norm2."),
+            WeightRenaming(r"^ln1\.", r"norm."),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.weight",
+                target_patterns=[r"mlp.gate_proj.weight", r"mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"ffn\.w12\.bias",
+                target_patterns=[r"mlp.gate_proj.bias", r"mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "Sapiens2ForSemanticSegmentation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.6\.weight", r"decode_head.upsample_layers.2.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.9\.weight", r"decode_head.upsample_layers.3.convolution.weight"
+            ),
+            WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_seg\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForPoseEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.0\.weight", r"decode_head.upsample_layers.0.convolution.weight"
+            ),
+            WeightRenaming(
+                r"decode_head\.deconv_layers\.3\.weight", r"decode_head.upsample_layers.1.convolution.weight"
+            ),
+            WeightRenaming(r"decode_head\.conv_layers\.0\.(weight|bias)", r"decode_head.conv_layers.0.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.3\.(weight|bias)", r"decode_head.conv_layers.1.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_layers\.6\.(weight|bias)", r"decode_head.conv_layers.2.convolution.\1"),
+            WeightRenaming(r"decode_head\.conv_pose\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForNormalEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_normal\.", r"decode_head.predictor."),
+        ],
+        "Sapiens2ForPointmapEstimation": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_pointmap\.", r"decode_head.predictor."),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.0\.weight",
+                r"scale_head.conv_layers.0.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.0\.bias",
+                r"scale_head.conv_layers.0.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.3\.weight",
+                r"scale_head.conv_layers.1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.3\.bias",
+                r"scale_head.conv_layers.1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.6\.weight",
+                r"scale_head.conv_layers.2.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.scale_conv_layers\.6\.bias",
+                r"scale_head.conv_layers.2.convolution.bias",
+            ),
+            WeightRenaming(r"decode_head\.scale_final_layer\.1\.", r"scale_head.predictor.block1.layers.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.3\.", r"scale_head.predictor.block2.layers.0."),
+            WeightRenaming(r"decode_head\.scale_final_layer\.5\.", r"scale_head.predictor.proj."),
+        ],
+        "Sapiens2ForImageMatting": [
+            WeightRenaming(r"^backbone\.", r"model."),
+            WeightRenaming(
+                r"decode_head\.input_conv\.0\.(weight|bias)",
+                r"decode_head.input_conv.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.weight",
+                r"decode_head.upsample_layers.\1.convolution.weight",
+            ),
+            WeightRenaming(
+                r"decode_head\.upsample_blocks\.(\d+)\.0\.bias",
+                r"decode_head.upsample_layers.\1.convolution.bias",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.0\.(weight|bias)",
+                r"decode_head.conv_layers.0.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.3\.(weight|bias)",
+                r"decode_head.conv_layers.1.convolution.\1",
+            ),
+            WeightRenaming(
+                r"decode_head\.conv_layers\.6\.(weight|bias)",
+                r"decode_head.conv_layers.2.convolution.\1",
+            ),
+            WeightRenaming(r"decode_head\.conv_matting\.", r"decode_head.predictor."),
+        ],
+        "tipsv2": [
+            WeightRenaming("text_encoder", "text_model"),
+            WeightRenaming("vision_encoder", "vision_model"),
+        ],
+        "Tipsv2TextModel": [
+            PrefixChange(prefix_to_remove="text_encoder"),
+            WeightRenaming(r"ln_final\.", "final_layer_norm."),
+            WeightRenaming(r"token_embedding\.", "embeddings.token_embedding."),
+            WeightRenaming(r"transformer\.resblocks\.", r"encoder.layers."),
+            WeightRenaming(r"\.ln_1\.", ".layer_norm1."),
+            WeightRenaming(r"\.ln_2\.", ".layer_norm2."),
+            WeightRenaming(r"\.attn\.", ".self_attn."),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),
+            WeightConverter(
+                source_patterns=r"\.in_proj_weight",
+                target_patterns=[".q_proj.weight", ".k_proj.weight", ".v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.in_proj_bias",
+                target_patterns=[".q_proj.bias", ".k_proj.bias", ".v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "Tipsv2VisionModel": [
+            PrefixChange(prefix_to_remove="vision_encoder"),
+            WeightRenaming(r"patch_embed\.proj\.", "embeddings.patch_embeddings.projection."),
+            WeightRenaming(r"cls_token", "embeddings.cls_token"),
+            WeightRenaming(r"mask_token", "embeddings.mask_token"),
+            WeightRenaming(r"register_tokens", "embeddings.register_tokens"),
+            WeightRenaming(r"pos_embed", "embeddings.position_embeddings"),
+            WeightRenaming(r"norm\.", "layernorm."),
+            WeightRenaming(r"blocks\.", r"encoder.layer."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+            WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
+            WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
+            WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
+            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.weight",
+                target_patterns=[
+                    ".attention.attention.query.weight",
+                    ".attention.attention.key.weight",
+                    ".attention.attention.value.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.attn\.qkv\.bias",
+                target_patterns=[
+                    ".attention.attention.query.bias",
+                    ".attention.attention.key.bias",
+                    ".attention.attention.value.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
+        "tipsv2_dpt": [
+            WeightRenaming("vision_encoder", "backbone"),
+            WeightRenaming(
+                r"head\.reassemble\.readout_projects\.(\d+)",
+                r"neck.reassemble_stage.readout_projects.\1.layers.0",
+            ),
+            WeightRenaming(
+                r"head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."
+            ),
+            WeightRenaming(r"head\.reassemble\.resize_layers\.(\d+)\.", r"neck.reassemble_stage.layers.\1.resize."),
+            WeightRenaming(r"head\.fusion_blocks\.(\d+)\.out_conv\.", r"neck.fusion_stage.layers.\1.projection."),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.main_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.main_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
+            ),
+            WeightRenaming(
+                r"head\.fusion_blocks\.(\d+)\.residual_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
+            ),
+            WeightRenaming(r"head\.convs", "neck.convs"),
+            WeightRenaming(r"head\.project", "decoder.project"),
+            WeightRenaming(r"depth_head\.depth_head\.", "depth_decoder.head."),
+            WeightRenaming(r"normals_head\.normals_head\.", "normals_decoder.head."),
+            WeightRenaming(r"segmentation_head\.segmentation_head\.", "segmentation_decoder.head."),
+        ],
+        "Tipsv2DptForDepthEstimation": [
+            WeightRenaming("vision_encoder", "backbone"),
+            WeightRenaming(
+                r"depth_head\.reassemble\.readout_projects\.(\d+)",
+                r"neck.reassemble_stage.readout_projects.\1.layers.0",
+            ),
+            WeightRenaming(
+                r"depth_head\.reassemble\.out_projections\.(\d+)\.", r"neck.reassemble_stage.layers.\1.projection."
+            ),
+            WeightRenaming(
+                r"depth_head\.reassemble\.resize_layers\.(\d+)\.", r"neck.reassemble_stage.layers.\1.resize."
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.out_conv\.", r"neck.fusion_stage.layers.\1.projection."
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.main_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution1.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.main_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer2.convolution2.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.residual_unit\.conv1\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution1.",
+            ),
+            WeightRenaming(
+                r"depth_head\.fusion_blocks\.(\d+)\.residual_unit\.conv2\.",
+                r"neck.fusion_stage.layers.\1.residual_layer1.convolution2.",
+            ),
+            WeightRenaming(r"depth_head\.convs", "neck.convs"),
+            WeightRenaming(r"depth_head\.project", "decoder.project"),
+            WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+        ],
+    }
+
+    mapping["Tipsv2DptForNormalEstimation"] = [
+        WeightRenaming(renaming.source_patterns[0].replace("depth", "normals"), renaming.target_patterns[0])
+        for renaming in mapping["Tipsv2DptForDepthEstimation"]
+    ]
+    mapping["Tipsv2DptForSemanticSegmentation"] = [
+        WeightRenaming(renaming.source_patterns[0].replace("depth", "segmentation"), renaming.target_patterns[0])
+        for renaming in mapping["Tipsv2DptForDepthEstimation"]
+    ]
+
+    # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
+    mapping["esm"] += mapping["legacy"].copy()
+
+    mapping["legacy"] += [
+        WeightRenaming(
+            source_patterns=".weight_g$",
+            target_patterns=".parametrizations.weight.original0",
+        ),
+        WeightRenaming(
+            source_patterns=".weight_v$",
+            target_patterns=".parametrizations.weight.original1",
+        ),
+    ]
+    # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
+    # scoped sub-module transforms; only the segmentation-specific patterns are needed here.
+    mapping["DetrForSegmentation"] = [
+        WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+        WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+        WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+        WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+        WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+        WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+        WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+        WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+        WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+        WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+        WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+        WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+        WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+        WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+        WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+        WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
+    ]
+    mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
+
+    mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
+
+    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
+    mapping["BeitModel"] = mapping["ViTModel"].copy() + [
+        WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
+        WeightRenaming(
+            "attention.attention.relative_position_bias.relative_position_bias_table",
+            "relative_position_bias.relative_position_bias_table",
+        ),
+    ]
+
+    mapping["pixio"] = mapping["ViTModel"].copy()
+    mapping["pixio"] += [
+        WeightRenaming("norm1", "layernorm_before"),
+        WeightRenaming("norm2", "layernorm_after"),
+        WeightRenaming(r"^encoder\.", "pixio."),
+    ]
+
+    mapping["minimax_m2"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] += [
+        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    ]
+    mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
+    mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
+    mapping["mimo_v2_flash"] += [
+        WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
+    ]
+    # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
+    mapping["hy_v3"] = mapping["qwen2_moe"].copy()
+    mapping["hy_v3"] += [
+        WeightRenaming(source_patterns=r"mlp\.router\.gate\.weight", target_patterns="mlp.gate.weight"),
+        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
+        WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
+    ]
+    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
+    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
+
+    mapping["laguna"] = mapping["qwen2_moe"].copy()
+    mapping["laguna"] += [
+        WeightRenaming("mlp.experts.e_score_correction_bias", "mlp.gate.e_score_correction_bias"),
+        WeightRenaming("mlp.shared_expert.", "mlp.shared_experts."),
+    ]
+
+    # A.X-K1 checkpoints store the MoE output norm at the decoder-layer level.
+    mapping["axk1"] = mapping["qwen2_moe"].copy()
+    mapping["axk1"] += [
+        WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
+    ]
+
+    mapping["MtpModel"] = [
+        PrefixChange(prefix_to_remove="model"),
+        PrefixChange(prefix_to_remove="mtp"),
+        WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
+        WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
+        WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
+        WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+        # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
+        # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
+        # rename the block internals
+        WeightRenaming(source_patterns=r"\.hidden_norm\.", target_patterns=r".hnorm."),
+        WeightRenaming(source_patterns=r"\.embed_norm\.", target_patterns=r".enorm."),
+        WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
+        WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
+        WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+    ]
+
+    for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
+        if model_type in mapping:
+            continue
+        mapping[model_type] = mapping[base_pattern].copy()
+
+    return mapping
+
+
+_checkpoint_conversion_mapping_cache = None
+
+
+def get_checkpoint_conversion_mapping(model_type):
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+
+
+USER_REGISTERED_MAPPINGS = set()
+
+
+def register_checkpoint_conversion_mapping(
+    model_type_or_class_name: str,
+    mapping: list[WeightConverter | WeightRenaming],
+    overwrite: bool = False,
+) -> None:
+    """
+    Register a conversion mapping for a model type string or a class name.
+
+    Class names take priority over `model_type` strings during lookup (see
+    `extract_weight_conversions_for_model`), making it possible to define
+    task-head-specific or class-specific conversions that differ from the shared
+    `model_type` baseline.
+    """
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if model_type_or_class_name in _checkpoint_conversion_mapping_cache and not overwrite:
+        raise ValueError(
+            f"Conversion mapping for '{model_type_or_class_name}' already exists. Pass overwrite=True to replace it."
+        )
+    _checkpoint_conversion_mapping_cache[model_type_or_class_name] = mapping
+    # Keep track of what was added manually by the user
+    USER_REGISTERED_MAPPINGS.add(model_type_or_class_name)
+
+
+def extract_weight_conversions_for_model(
+    model: PreTrainedModel,
+) -> list[WeightTransform] | None:
+    """
+    Return the registered conversion list for `model`, or `None` if none exists.
+
+    Looks up by class name first (enables task-head-specific overrides), then
+    falls back to `model.config.model_type`.  Transforms are returned
+    unmodified; the caller sets `scope_prefix` on each transform for sub-module isolation.
+    """
+    class_name = type(model).__name__
+    model_type = model.config.model_type
+
+    # Class name takes priority — allows ForXxx-specific overrides
+    conversions = get_checkpoint_conversion_mapping(class_name)
+    if conversions is None and model_type:
+        conversions = get_checkpoint_conversion_mapping(model_type)
+    return conversions
+
+
+def get_model_conversion_mapping(
+    model: PreTrainedModel,
+    key_mapping: dict[str, str] | None = None,
+    hf_quantizer: HfQuantizer | None = None,
+    add_legacy: bool = True,
+) -> list[WeightTransform]:
+    """
+    Collect the ordered list of weight transforms for `model` (used during
+    loading and, when reversed, during saving).
+
+    Each `PreTrainedModel` sub-module is looked up by class name then
+    `model_type`.  Root transforms are applied globally; sub-module transforms
+    have their `scope_prefix` set so they only match keys under that prefix.  After any
+    sub-module is processed, both its class name and `model_type` are marked
+    seen to prevent `XForY` / `XModel` pairs from applying the same mapping
+    twice via different lookup paths.
+    """
+    from .modeling_utils import PreTrainedModel
+
+    # note: this function is used in PEFT, so changing the API requires coordination
+    weight_conversions = []
+
+    # Load models with explicit, user-provided key mapping
+    if key_mapping is not None:
+        weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
+
+    # Maps each identifier (class name or model_type) to the module paths that have
+    # already claimed it.  A later module is skipped only when one of those paths is
+    # an ancestor of the current module path — siblings are never ancestors of each
+    # other, so two sibling sub-models with the same model_type both get their own
+    # scoped transforms.  A child is an ancestor of everything nested under it, which
+    # prevents a parent's transforms from being duplicated with a scoped copy for the child.
+    seen_identifiers: defaultdict[str, list[str]] = defaultdict(list)
+
+    for module_name, submodule in model.named_modules():
+        # Skip if it's not a submodel
+        if not isinstance(submodule, PreTrainedModel):
+            continue
+
+        class_name = type(submodule).__name__
+        model_type = submodule.config.model_type
+
+        # Skip it if it's custom code and it was NOT registered by the user directly: it may have the same `model_type`/ClassName
+        # as a native model inside the library, but it uses custom modeling so it should not share the conversions
+        if (
+            submodule.is_custom_code()
+            and class_name not in USER_REGISTERED_MAPPINGS
+            and model_type not in USER_REGISTERED_MAPPINGS
+        ):
+            continue
+
+        # Skip if an ancestor already claimed this class (its unscoped transforms already cover this subtree).
+        if any(seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[class_name]):
+            continue
+
+        # Class name takes priority — a class-specific mapping bypasses the model_type
+        # deduplication check (e.g. LlavaModel nested inside LlavaForConditionalGeneration
+        # must still get its own scoped mapping even after "llava" is marked seen).
+        conversions = get_checkpoint_conversion_mapping(class_name)
+        found_via_class = conversions is not None
+
+        if not found_via_class:
+            # Same ancestor check as above, but via model_type for modules without a class-specific mapping.
+            if model_type and any(
+                seen == "" or module_name.startswith(seen + ".") for seen in seen_identifiers[model_type]
+            ):
+                continue
+            if model_type is not None:
+                conversions = get_checkpoint_conversion_mapping(model_type)
+
+        if conversions is None:
+            continue
+
+        is_root_model = module_name == ""
+        if not is_root_model:
+            # Scope each transform so it only matches keys under this sub-module's prefix - but we still allow to
+            # arbitrary add/remove base_model_prefix to load ForXXX model from BaseModel and the opposite
+            # Note that we need 2 removeprefix calls here, as only one level of nesting would not have the ending dot to module_name
+            scope_prefix = module_name.removeprefix(model.base_model_prefix)
+            scope_prefix = module_name.removeprefix(".")
+            for transform in conversions:
+                transform.scope_prefix = scope_prefix
+                transform.base_model_prefix = model.base_model_prefix
+        weight_conversions.extend(conversions)
+
+        seen_identifiers[class_name].append(module_name)
+        # Only record model_type when the hit was via model_type. When the hit was via
+        # class name, other sub-modules sharing the same model_type but without a
+        # class-specific mapping (e.g. DetrModel under DetrForSegmentation) must still
+        # be reachable so their base transforms are picked up and scoped.
+        if not found_via_class and model_type:
+            seen_identifiers[model_type].append(module_name)
+
+    if add_legacy:
+        weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
+
+    # Let the quantizer rewrite / augment the conversion pipeline. This is where the
+    # FP8 dequantizer (when `dequantize=True`) prepends a `Fp8Dequantize` op to
+    # every existing converter so that per-block scales are applied *before* any
+    # expert-merge / concat ops flatten the per-expert structure away.
+    if hf_quantizer is not None:
+        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions)
+
+    return weight_conversions

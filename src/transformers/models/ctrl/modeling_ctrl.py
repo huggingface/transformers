@@ -1,0 +1,634 @@
+# Copyright 2018 Salesforce and HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch CTRL model."""
+
+from collections.abc import Callable
+
+import numpy as np
+import torch
+from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from .configuration_ctrl import CTRLConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+def angle_defn(pos, i, d_model_size):
+    angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / d_model_size)
+    return pos * angle_rates
+
+
+def positional_encoding(position, d_model_size, dtype):
+    # create the sinusoidal pattern for the positional encoding
+    angle_rads = angle_defn(
+        torch.arange(position, dtype=torch.int64).to(dtype).unsqueeze(1),
+        torch.arange(d_model_size, dtype=torch.int64).to(dtype).unsqueeze(0),
+        d_model_size,
+    )
+
+    sines = torch.sin(angle_rads[:, 0::2])
+    cosines = torch.cos(angle_rads[:, 1::2])
+
+    pos_encoding = torch.cat([sines, cosines], dim=-1)
+    return pos_encoding
+
+
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        self.config = config
+        self.num_heads = config.n_head
+        self.d_model_size = config.n_embd
+        self.layer_idx = layer_idx
+        self.is_causal = True
+
+        self.head_dim = int(self.d_model_size / self.num_heads)
+        self.scaling = self.head_dim**-0.5
+
+        self.Wq = nn.Linear(self.d_model_size, self.d_model_size)
+        self.Wk = nn.Linear(self.d_model_size, self.d_model_size)
+        self.Wv = nn.Linear(self.d_model_size, self.d_model_size)
+
+        self.dense = nn.Linear(self.d_model_size, self.d_model_size)
+
+    def forward(
+        self,
+        v,
+        k,
+        q,
+        layer_past=None,
+        attention_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        input_shape = q.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.Wq(q).view(hidden_shape).transpose(1, 2)
+        key_states = self.Wk(k).view(hidden_shape).transpose(1, 2)
+        value_states = self.Wv(v).view(hidden_shape).transpose(1, 2)
+
+        if layer_past is not None:
+            key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.dense(attn_output)
+        return attn_output, attn_weights
+
+
+def point_wise_feed_forward_network(d_model_size, dff):
+    return nn.Sequential(nn.Linear(d_model_size, dff), nn.ReLU(), nn.Linear(dff, d_model_size))
+
+
+class EncoderLayer(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+
+        self.multi_head_attention = MultiHeadAttention(config, layer_idx=layer_idx)
+        self.ffn = point_wise_feed_forward_network(config.n_embd, config.dff)
+
+        self.layernorm1 = nn.LayerNorm(config.n_embd, eps=1e-6)
+        self.layernorm2 = nn.LayerNorm(config.n_embd, eps=1e-6)
+
+        self.dropout1 = nn.Dropout(config.resid_pdrop)
+        self.dropout2 = nn.Dropout(config.resid_pdrop)
+
+    def forward(
+        self,
+        x,
+        layer_past=None,
+        attention_mask=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        normed = self.layernorm1(x)
+        attn_output, _ = self.multi_head_attention(
+            normed,
+            normed,
+            normed,
+            layer_past=layer_past,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        attn_output = self.dropout1(attn_output)
+        out1 = x + attn_output
+
+        out2 = self.layernorm2(out1)
+        ffn_output = self.ffn(out2)
+        ffn_output = self.dropout2(ffn_output)
+        out2 = out1 + ffn_output
+
+        return out2
+
+
+@auto_docstring
+class CTRLPreTrainedModel(PreTrainedModel):
+    config: CTRLConfig
+    base_model_prefix = "transformer"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": EncoderLayer,
+        "attentions": MultiHeadAttention,
+    }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, CTRLModel):
+            init.copy_(
+                module.pos_encoding, positional_encoding(module.config.n_positions, module.d_model_size, torch.float)
+            )
+
+
+@auto_docstring
+class CTRLModel(CTRLPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.d_model_size = config.n_embd
+        self.num_layers = config.n_layer
+
+        self.w = nn.Embedding(config.vocab_size, config.n_embd)
+
+        self.dropout = nn.Dropout(config.embd_pdrop)
+        self.h = nn.ModuleList([EncoderLayer(config, layer_idx=i) for i in range(config.n_layer)])
+        self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+
+        self.pos_encoding = nn.Buffer(
+            positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.w
+
+    def set_input_embeddings(self, new_embeddings):
+        self.w = new_embeddings
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CTRLModel
+        >>> import torch
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLModel.from_pretrained("Salesforce/ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 5, 1280]
+        ```"""
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        if input_ids is not None:
+            inputs_embeds = self.w(input_ids)
+        elif inputs_embeds is None:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        input_shape = inputs_embeds.shape[:-1]
+        batch_size = inputs_embeds.shape[0]
+        device = inputs_embeds.device
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if position_ids is None:
+            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0)
+
+        if token_type_ids is not None:
+            token_type_embeds = self.w(token_type_ids)
+            token_type_embeds *= np.sqrt(self.d_model_size)
+        else:
+            token_type_embeds = 0
+
+        if attention_mask is not None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim < 4:
+            attention_mask = attention_mask.view(batch_size, -1)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        inputs_embeds *= np.sqrt(self.d_model_size)
+
+        # `self.pos_encoding` won't be sent to the correct device and dtype along the model, so we do it manually.
+        self.pos_encoding = self.pos_encoding.to(device=device, dtype=inputs_embeds.dtype)
+        pos_embeds = self.pos_encoding[position_ids, :]
+
+        hidden_states = inputs_embeds + pos_embeds + token_type_embeds
+
+        hidden_states = self.dropout(hidden_states)
+
+        for h in self.h:
+            hidden_states = h(
+                hidden_states,
+                layer_past=past_key_values,
+                attention_mask=causal_mask,
+                **kwargs,
+            )
+
+        hidden_states = self.layernorm(hidden_states)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The CTRL Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """
+)
+class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "transformer.w.weight"}
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = CTRLModel(config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CTRLLMHeadModel
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Wikipedia The llama is", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> sequence_ids = model.generate(inputs["input_ids"])
+        >>> sequences = tokenizer.batch_decode(sequence_ids)
+        >>> sequences
+        ['Wikipedia The llama is a member of the family Bovidae. It is native to the Andes of Peru,']
+
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> round(outputs.loss.item(), 2)
+        9.21
+
+        >>> list(outputs.logits.shape)
+        [1, 5, 246534]
+        ```"""
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
+    ):
+        # Overwritten -- `token_type_ids` are created in custom way inside model`
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        # token_type_ids are computed on CTRLModel.forward()
+        model_inputs.pop("token_type_ids", None)
+
+        return model_inputs
+
+
+@auto_docstring(
+    custom_intro="""
+    The CTRL Model transformer with a sequence classification head on top (linear layer).
+    [`CTRLForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the position of the last
+    token. If a `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in
+    each row. If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last
+    value in each row of the batch).
+    """
+)
+class CTRLForSequenceClassification(CTRLPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.transformer = CTRLModel(config)
+        self.classifier = nn.Linear(config.n_embd, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Example of single-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl")
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> import torch
+
+        >>> torch.manual_seed(42)  # doctest: +IGNORE_RESULT
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl", num_labels=num_labels)
+
+        >>> labels = torch.tensor(1)
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> round(loss.item(), 2)
+        0.93
+        ```
+
+        Example of multi-label classification:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
+        >>> model = CTRLForSequenceClassification.from_pretrained(
+        ...     "Salesforce/ctrl", problem_type="multi_label_classification"
+        ... )
+
+        >>> # CTRL was trained with control codes as the first token
+        >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
+        >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
+
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> predicted_class_id = logits.argmax().item()
+        >>> model.config.id2label[predicted_class_id]
+        'LABEL_0'
+        ```
+
+        ```python
+        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
+        >>> num_labels = len(model.config.id2label)
+        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl", num_labels=num_labels)
+
+        >>> num_labels = len(model.config.id2label)
+        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
+        ...     torch.float
+        ... )
+        >>> loss = model(**inputs, labels=labels).loss
+        >>> loss.backward()  # doctest: +IGNORE_RESULT
+        ```"""
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.classifier(hidden_states)
+
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if self.config.pad_token_id is None:
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
+        else:
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=pooled_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+__all__ = ["CTRLForSequenceClassification", "CTRLLMHeadModel", "CTRLModel", "CTRLPreTrainedModel"]

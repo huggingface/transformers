@@ -1,0 +1,226 @@
+# Copyright 2024 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for PaliGemma.
+"""
+
+import numpy as np
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, is_valid_image
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+IMAGE_TOKEN = "<image>"
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+
+
+class PaliGemmaTextKwargs(TextKwargs):
+    """
+    suffix (`str`, `list[str]`, `list[list[str]]`):
+        The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+        for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
+    """
+
+    suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
+
+
+class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: PaliGemmaTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+        },
+    }
+
+
+@auto_docstring
+class PaliGemmaProcessor(ProcessorMixin):
+    valid_processor_kwargs = PaliGemmaProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        **kwargs,
+    ):
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
+
+        self.image_seq_length = image_processor.image_seq_length
+
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
+        else:
+            self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
+
+        tokenizer.add_tokens(EXTRA_TOKENS)
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[PaliGemmaProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
+        """
+        if (suffix := kwargs.pop("suffix", None)) is not None:
+            if not isinstance(suffix, (list, tuple)):
+                suffix = [suffix]
+            suffix = [sample + self.tokenizer.eos_token for sample in suffix]
+            kwargs["text_pair"] = suffix
+
+        kwargs["return_token_type_ids"] = True
+        kwargs = self._merge_kwargs(
+            PaliGemmaProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_tensors = kwargs["text_kwargs"].get("return_tensors")
+        result = super().__call__(images=images, text=text, **kwargs)
+
+        # NOTE: ideally users should build 'labels' with data collator, since we return token_type_ids.
+        # Kept only for BC!
+        if "token_type_ids" in result:
+            labels = np.array(result["input_ids"])
+            labels[np.array(result["token_type_ids"]) == 0] = -100
+            result["labels"] = labels
+
+        return BatchFeature(data=result, tensor_type=return_tensors)
+
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        text = "" or text
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        if images is not None and text is not None:
+            if not any(IMAGE_TOKEN in sample for sample in text):
+                # BC branch that cannot be deleted atp, relies on hidden magic to infer text with placeholders :(
+                logger.warning(
+                    "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
+                    "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
+                    "add `<image>` tokens in the very beginning of your text. For this call, we will infer how many images "
+                    "each text has and add special tokens."
+                )
+                # DON'T replace below code with `image_utils.make_nested_list_of_images`, they aren't identical
+                # when images are a flat list, we treat each image as separate batch while `image_utils` puts everything in one batch
+                if is_valid_image(images):
+                    images_per_sample = [[images]] * len(text)
+                elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+                    if len(images) != len(text):
+                        raise ValueError(
+                            f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."
+                        )
+                    images_per_sample = [[image] for image in images]
+                elif (
+                    isinstance(images, (list, tuple))
+                    and isinstance(images[0], (list, tuple))
+                    and is_valid_image(images[0][0])
+                ):
+                    images_per_sample = images
+                else:
+                    raise ValueError("images must be an image, list of images or list of list of images")
+
+                text = [
+                    f"{IMAGE_TOKEN * (len(image_list) if isinstance(image_list, list) else 1)}{self.tokenizer.bos_token}{prompt}\n"
+                    for prompt, image_list in zip(text, images_per_sample)
+                ]
+            else:
+                new_text = []
+                for sample in text:
+                    last_image_end = sample.rfind(IMAGE_TOKEN) + len(IMAGE_TOKEN)
+                    new_text.append(
+                        sample[:last_image_end] + self.tokenizer.bos_token + sample[last_image_end:] + "\n"
+                    )
+                text = new_text
+
+        return images, text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images=images, text=text, **kwargs)
+
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
+
+        if text is None:
+            logger.warning_once(
+                "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
+            )
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.image_seq_length
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["token_type_ids", "labels"]
+
+
+__all__ = ["PaliGemmaProcessor"]

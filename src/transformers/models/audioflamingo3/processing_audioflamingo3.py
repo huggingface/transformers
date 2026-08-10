@@ -1,0 +1,299 @@
+# Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
+# reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import numpy as np
+
+from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
+
+
+logger = logging.get_logger(__name__)
+
+
+class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "return_attention_mask": True,
+            "padding": "max_length",
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+            "padding_side": "left",
+        },
+    }
+
+
+@requires(backends=("torch",))
+@auto_docstring
+class AudioFlamingo3Processor(ProcessorMixin):
+    valid_processor_kwargs = AudioFlamingo3ProcessorKwargs
+
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+        audio_token="<sound>",
+        default_transcription_prompt="Transcribe the input speech.",
+        max_audio_len=600,
+    ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
+            Default prompt to use for transcription tasks when applying transcription requests.
+        max_audio_len (`int`, *optional*, defaults to 600):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+        """
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.default_transcription_prompt = default_transcription_prompt
+        self.max_audio_len = max_audio_len
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
+    def __call__(
+        self,
+        text: TextInput | list[TextInput],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
+        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
+
+        Returns:
+            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
+            audio features (`input_features`, `input_features_mask`).
+        """
+        # Check only if passed explicitly as another value since by default we'll use `pt`
+        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        if output_labels:
+            kwargs["return_mm_token_type_ids"] = True
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
+
+        if output_labels:
+            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
+            labels = model_inputs["input_ids"].clone()
+            labels[mm_token_type_ids != 0] = -100  # audio positions
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            model_inputs["labels"] = labels
+        return BatchFeature(data=model_inputs, tensor_type="pt")
+
+    def validate_inputs(
+        self,
+        audio: AudioInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text, **kwargs)
+
+        if text is not None and audio is not None and len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+
+    def _get_audio_token_length(self, audio_lengths):
+        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
+        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+        return audio_tokens_lengths
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        # Determine number of chunks per sample, and flatten
+        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+
+        per_sample_windows: list[int] = []
+        flat_chunks: list[np.ndarray] = []
+        for audio_el in audio:
+            n_samples = int(audio_el.shape[0])
+            n_win = max(1, (n_samples + window_size - 1) // window_size)
+            if n_win > max_windows:
+                logger.warning(
+                    f"Audio duration ({n_samples / kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
+                )
+                n_win = max_windows
+            per_sample_windows.append(n_win)
+
+            time_cap = min(n_samples, n_win * window_size)
+            for i in range(n_win):
+                start = i * window_size
+                end = min((i + 1) * window_size, time_cap)
+                flat_chunks.append(audio_el[start:end])
+
+        audio = self.feature_extractor.fetch_audio(audio)
+        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
+
+        # AudioFlamingo doesn't have its own feature extractor and crops audio into
+        # chunks here. Save the number of tokens based on crops/padding in analogy
+        # with some vision processors
+        audio_lengths = torch.stack(
+            [s.sum() for s in torch.split(audio_inputs["input_features_mask"].sum(-1), per_sample_windows)]
+        )
+        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths)
+
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
+
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
+    @property
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names + ["input_features_mask"]
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
+
+    def apply_transcription_request(
+        self,
+        audio: str | list[str] | AudioInput,
+        prompt: str | list[str] | None = None,
+        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
+
+        Args:
+            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
+                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
+            prompt (`str` or `list[str]`, *optional*):
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
+                each sample uses `"Transcribe the input speech."`.
+            **kwargs:
+                Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`] (for example
+                `text_kwargs`, `audio_kwargs`, ...).
+
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to [`AudioFlamingo3ForConditionalGeneration.generate`].
+
+        """
+
+        audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
+        audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
+
+        batch_size = len(audio_items)
+        if batch_size == 0:
+            raise ValueError("`audio` must contain at least one sample.")
+
+        if prompt is None:
+            prompts = [self.default_transcription_prompt] * batch_size
+        elif isinstance(prompt, str):
+            prompts = [prompt] * batch_size
+        elif isinstance(prompt, (list, tuple)):
+            if len(prompt) != batch_size:
+                raise ValueError(
+                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
+                )
+            prompts = []
+            for item in prompt:
+                if item is None:
+                    prompts.append(self.default_transcription_prompt)
+                elif isinstance(item, str):
+                    prompts.append(item)
+                else:
+                    raise TypeError("Each prompt must be a string or `None`.")
+        else:
+            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt_text},
+                        {"type": "audio", "path": audio_item}
+                        if isinstance(audio_item, str)
+                        else {"type": "audio", "audio": audio_item},
+                    ],
+                }
+            ]
+            for prompt_text, audio_item in zip(prompts, audio_items)
+        ]
+
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            **kwargs,
+        )
+
+    def decode(self, *args, strip_prefix=False, **kwargs):
+        """
+        Forward arguments to [`~PreTrainedTokenizer.decode`] and optionally remove the assistant framing the model
+        was trained to produce.
+
+        AF3 transcription requests respond with sentences such as `"The spoken content of the audio is \"...\"."`.
+        Setting `strip_prefix=True` trims the fixed prefix for just the transcription text.
+        """
+        decoded = self.tokenizer.decode(*args, **kwargs)
+        if strip_prefix:
+            decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
+        return decoded
+
+    def batch_decode(self, *args, **kwargs):
+        """BC as previous examples used batch_decode"""
+        return self.decode(*args, **kwargs)
+
+    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
+        """
+        Remove the assistant prefix and surrounding quotes from a decoded transcription string.
+        """
+
+        stripped = text.strip()
+
+        for prefix in (
+            "The spoken content of the audio is",
+            "The transcription of the audio is",
+            "The content of the input audio is",
+        ):
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix) :].strip()
+                break
+
+        if stripped.endswith("."):
+            stripped = stripped[:-1].strip()
+
+        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
+            stripped = stripped[1:-1].strip()
+
+        return stripped
+
+
+__all__ = ["AudioFlamingo3Processor"]
