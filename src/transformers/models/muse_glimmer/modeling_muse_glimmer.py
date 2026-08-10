@@ -432,10 +432,6 @@ class MuseGlimmerPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
 
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
