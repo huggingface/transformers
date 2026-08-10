@@ -833,7 +833,8 @@ class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
 
 
 class Step3p7Attention(LagunaAttention):
-    def __init__(self, config: Step3p7TextConfig, layer_idx: int, num_heads: int):
+    def __init__(self, config: Step3p7TextConfig, layer_idx: int):
+        num_heads = config.num_attention_heads
         super().__init__(config, layer_idx, num_heads)
         self.scaling = config.query_pre_attn_scalar**-0.5
 
@@ -890,7 +891,7 @@ class Step3p7DecoderLayer(LagunaDecoderLayer):
         # ambiguous here (per-layer). Resolve it first, then restore `config` identity so
         # `set_attn_implementation` still reaches this module.
         layer_config = config.per_layer_config[layer_idx]
-        self.self_attn = Step3p7Attention(layer_config, layer_idx, layer_config.num_attention_heads)
+        self.self_attn = Step3p7Attention(layer_config, layer_idx)
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
