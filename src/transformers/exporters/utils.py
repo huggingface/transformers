@@ -108,11 +108,26 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 def apply_patches(backend: str):
     """Install `_PATCHES[backend]` for the duration of the block, resolving each entry's dotted object
     path now (importing submodules as needed). This runs only when `backend` is actually exporting, so
-    its modules are importable — an unresolvable path is a bug and raises rather than being skipped."""
-    patches = [
-        (_resolve_dotted_path(obj_path), attribute, factory)
-        for obj_path, attribute, factory in _PATCHES.get(backend, [])
-    ]
+    its modules are importable.
+
+    A patch whose target no longer resolves — the owner path or the attribute was removed by a newer
+    backend version — is skipped with a warning rather than failing the export. Such a patch worked
+    around something that version of the backend no longer has (e.g. an upstream fix removed the pass
+    it wrapped), so it is simply moot; a hard failure here would break export on every version bump
+    that drops a patched symbol."""
+    patches = []
+    for obj_path, attribute, factory in _PATCHES.get(backend, []):
+        try:
+            obj = _resolve_dotted_path(obj_path)
+        except (ImportError, AttributeError):
+            obj = None
+        if obj is None or not hasattr(obj, attribute):
+            logger.warning_once(
+                f"Skipping export patch for `{obj_path}.{attribute}`: not found in the installed "
+                f"`{backend}` backend (likely removed or fixed upstream)."
+            )
+            continue
+        patches.append((obj, attribute, factory))
     with patch_attributes(patches):
         yield
 

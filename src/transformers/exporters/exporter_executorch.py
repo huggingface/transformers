@@ -121,7 +121,7 @@ class ExecutorchExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "executorch"]
-    tested_versions = {"torch": "2.12.0", "executorch": "1.3.1"}
+    tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
 
     def export(
         self,
@@ -1178,33 +1178,6 @@ def _patch_squeeze_node_visitors(original):
         cls = original[key]
         new[key] = type(cls.__name__, (cls,), {"define_node": _make_squeeze_define_node(cls.define_node)})
     return new
-
-
-@register_patch("executorch.qnn", "executorch.backends.qualcomm._passes.replace_inf_values.ReplaceInfValues.call")
-def _patch_replace_inf_values(original):
-    """QNN's ``ReplaceInfValues`` pass ``setattr``s every float buffer back onto the graph module by name,
-    which ``register_buffer`` rejects for nested (dotted) names such as ``model.rotary_emb.inv_freq``. The
-    pass already clamps ``inf`` in place, so clamp the dotted float buffers ourselves, hide them from the
-    pass's ``setattr``, and restore them afterwards.
-    """
-
-    def call(self, graph_module):
-        hidden = []
-        for name, buffer in list(graph_module.named_buffers()):
-            if "." in name and buffer.is_floating_point():
-                buffer[buffer == float("inf")] = 255
-                buffer[buffer == float("-inf")] = -255
-                parent_path, _, attr = name.rpartition(".")
-                parent = graph_module.get_submodule(parent_path)
-                hidden.append((parent, attr, buffer))
-                delattr(parent, attr)
-        try:
-            return original(self, graph_module)
-        finally:
-            for parent, attr, buffer in hidden:
-                parent.register_buffer(attr, buffer, persistent=False)
-
-    return call
 
 
 # ── Stage 4: FX program fixes ─────────────────────────────────────────────────
