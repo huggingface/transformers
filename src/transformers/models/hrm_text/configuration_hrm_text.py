@@ -120,6 +120,11 @@ class HrmTextConfig(PreTrainedConfig):
     num_layers_per_stack: int | None = None  # Usually inferred in post init
 
     def __post_init__(self, **kwargs):
+        # hrm_text always carries an explicit head_dim (default 128) and never derives it from
+        # hidden_size / num_attention_heads, so the divisibility check in validate_architecture
+        # never applies to this model.
+        self._head_dim_was_explicit = self.head_dim is not None
+
         if self.L_bp_cycles is None:
             # Default `[2]` matches upstream `hrm_nocarry_more_bp_no_x`. Left-padding to length
             # `L_cycles` is performed inside [`HrmTextModel`] since it depends on `L_cycles`.
