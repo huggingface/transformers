@@ -110,6 +110,7 @@ class MuseGlimmerAssistantModelTester:
 
 
 @require_torch
+@unittest.skip("Need some test work, as it needs different inputs (dflash speculator model)")
 class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MuseGlimmerAssistantModel,) if is_torch_available() else ()
     additional_model_inputs = ["context_hidden_states"]
