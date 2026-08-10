@@ -126,6 +126,12 @@ decodes to one configuration-dependent hop (600 samples for 40 tokens/s or 320 s
 [[autodoc]] WavTokenizerFeatureExtractor
     - __call__
 
+## WavTokenizerEncoderModel
+
+[[autodoc]] WavTokenizerEncoderModel
+    - encode
+    - forward
+
 ## WavTokenizerModel
 
 [[autodoc]] WavTokenizerModel
