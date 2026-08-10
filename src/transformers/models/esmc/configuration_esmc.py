@@ -103,6 +103,8 @@ class EsmcConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.intermediate_size is None:
             self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
+        # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles
+        # as BOS, `<eos>`=2); configs saved before these fields existed carry explicit nulls.
         if self.bos_token_id is None:
             self.bos_token_id = 0
         if self.eos_token_id is None:
