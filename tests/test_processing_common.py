@@ -1,6 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -92,6 +91,9 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
             values[-1].append(rng.random() * scale)
 
     return values
+
+
+a = 1
 
 
 @require_torch
