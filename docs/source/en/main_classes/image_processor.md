@@ -44,12 +44,15 @@ processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backen
 When using the torchvision backend, you can set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise.
 
 ```python
+import torch
 from torchvision.io import read_image
 from transformers import DetrImageProcessor
 
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
 images = read_image("image.jpg")
 processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
-images_processed = processor(images, return_tensors="pt", device="cuda")
+images_processed = processor(images, return_tensors="pt", device=device)
 ```
 
 Here are some speed comparisons between the torchvision and PIL backends for the `DETR` and `RT-DETR` models, and how they impact overall inference time:
