@@ -292,14 +292,6 @@ def _reshaped_vision_attention_forward(
         seq_length != 0,
         "Chunked vision attention received an empty input.",
     )
-    num_segments = cu_seqlens.shape[0] - 1
-    torch_compilable_check(
-        seq_length % num_segments == 0,
-        "Chunked vision attention requires uniform segment lengths during export. "
-        "Ensure all images have the same resolution (use do_resize=True in the processor) "
-        "or pad inputs to a common size.",
-    )
-
     if hasattr(self, "qkv"):
         # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
         # uniform reshape into (seq, 3, num_heads, -1) only works when Q, K, V share the head count.
@@ -337,30 +329,33 @@ def _reshaped_vision_attention_forward(
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-    seg_len = seq_length // num_segments
+    # Segments (per-image for full attention, per-window for window attention) generally have DIFFERENT
+    # lengths — ragged edge windows on any real image, or images of different resolution. Build a
+    # block-diagonal mask from `cu_seqlens` so each token attends only within its own segment, and run
+    # ONE SDPA over the full flat sequence. Correct for arbitrary segment lengths. It uses only
+    # `arange(seq_length)` (a shape/symint, as the old reshape did) plus comparisons — no data-dependent
+    # `max_len`; an `arange(max_len)` padded batch would be more efficient but trips
+    # GuardOnDataDependentSymNode under the onnx/executorch export paths.
+    device = hidden_states.device
+    positions = torch.arange(seq_length, device=device)
+    # Count segment ends at/behind each position → its segment index. Uses `cu_seqlens[1:]` (the segment
+    # ends, always non-empty) rather than `cu_seqlens[1:-1]`: a single segment (full attention on one
+    # image) makes the internal-boundary slice empty, and the resulting `(seq, 0)` tensor breaks ONNX/ORT.
+    segment_id = (positions[:, None] >= cu_seqlens[1:][None, :]).sum(-1)  # (seq,) segment index per token
+    block_mask = (segment_id[:, None] == segment_id[None, :])[None, None]  # (1, 1, seq, seq) block-diagonal
 
-    # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
-    def _to_batched(t):
-        return t.unflatten(0, (num_segments, seg_len)).transpose(1, 2)
-
-    query_states = _to_batched(query_states)
-    key_states = _to_batched(key_states)
-    value_states = _to_batched(value_states)
-
-    torch_compilable_check(query_states.shape[0] != 0, "Reshaped chunked-vision attention got zero batch.")
-    torch_compilable_check(query_states.shape[2] != 0, "Reshaped chunked-vision attention got zero seq.")
+    # (seq, heads, dim) → (1, heads, seq, dim), one masked SDPA, then back to (seq, heads*dim).
     attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query_states,
-        key_states,
-        value_states,
+        query_states.transpose(0, 1)[None],
+        key_states.transpose(0, 1)[None],
+        value_states.transpose(0, 1)[None],
+        attn_mask=block_mask,
         is_causal=False,
         scale=self.scaling,
         dropout_p=0.0 if not self.training else self.attention_dropout,
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
-
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
-    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
+    attn_output = attn_output[0].transpose(0, 1).reshape(seq_length, -1)
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -390,6 +385,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
     # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
     "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
+    "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
