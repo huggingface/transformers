@@ -49,10 +49,12 @@ from .utils import (
 from .utils.hub import cached_file, hf_api
 from .utils.import_utils import requires
 from .video_utils import (
+    TORCHVISION_VIDEO_DECODING_ERROR,
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
     infer_channel_dimension_format,
+    is_torchvision_video_decoding_available,
     is_valid_video,
     load_video,
     make_batched_metadata,
@@ -752,6 +754,12 @@ class BaseVideoProcessor(TorchvisionBackend):
         """
         backend = "torchcodec"
         if not is_torchcodec_available():
+            # `torchvision` is only a valid fallback while it still ships the (now removed) video decoding API.
+            if not is_torchvision_video_decoding_available():
+                raise ImportError(
+                    "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                    f"{TORCHVISION_VIDEO_DECODING_ERROR}"
+                )
             warnings.warn(
                 "`torchcodec` is not installed and cannot be used to decode the video by default. "
                 "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "
