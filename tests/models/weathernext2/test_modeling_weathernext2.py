@@ -18,10 +18,11 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -90,6 +91,18 @@ class WeatherNext2ModelTester:
         noise = floats_tensor([self.batch_size, self.noise_channels])
         return config, grid_features, global_features, noise
 
+    def create_and_check_model(self, config, grid_features, global_features, noise):
+        model = WeatherNext2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(grid_features=grid_features, global_features=global_features, noise=noise)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, config.num_grid_points, self.hidden_size)
+        )
+        self.parent.assertEqual(
+            result.mesh_hidden_state.shape, (self.batch_size, config.num_mesh_nodes, self.hidden_size)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config, grid_features, global_features, noise = self.prepare_config_and_inputs()
         return config, {
@@ -104,8 +117,10 @@ def floats_tensor(shape):
 
 
 @require_torch
-class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
+class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
+    # There is no `weather-forecasting` pipeline yet; the inputs are global gridded states rather than
+    # anything the generic pipeline machinery handles.
     pipeline_model_mapping = {}
 
     fx_compatible = False
@@ -123,6 +138,10 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_forward_shapes(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -288,3 +307,41 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         np.testing.assert_array_equal(first.mesh_lat, second.mesh_lat)
         np.testing.assert_array_equal(first.grid_to_mesh_senders, second.grid_to_mesh_senders)
         np.testing.assert_array_equal(first.mesh_to_grid_senders, second.mesh_to_grid_senders)
+
+
+@require_torch
+@slow
+class WeatherNext2ModelIntegrationTest(unittest.TestCase):
+    """End-to-end check against the released 0.25 degree checkpoint.
+
+    Marked slow: it downloads ~700 MB of weights and builds the 0.25 degree mesh, which needs a few
+    minutes and tens of GB the first time.
+    """
+
+    checkpoint = "kashif/weathernext-cyclones"
+
+    def test_inference_shapes_and_determinism(self):
+        from transformers import WeatherNext2Processor
+
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
+        processor = WeatherNext2Processor.from_pretrained(self.checkpoint)
+        config = model.config
+
+        grid_features = torch.zeros(
+            1,
+            config.num_grid_input_channels - 3,
+            config.grid_latitudes,
+            config.grid_longitudes,
+            device=torch_device,
+        )
+        global_features = torch.zeros(1, config.num_mesh_input_channels - 3, device=torch_device)
+        noise = torch.zeros(1, config.noise_channels, device=torch_device)
+
+        with torch.no_grad():
+            first = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+            second = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+
+        self.assertEqual(first.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes))
+        self.assertTrue(torch.isfinite(first).all())
+        torch.testing.assert_close(first, second)
+        self.assertEqual(len(processor.target_variables), len(config.target_variables))
