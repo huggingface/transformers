@@ -193,18 +193,20 @@ class WavTokenizerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_encoder_model_loads_full_checkpoint(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        full_model = randomize_codebook(WavTokenizerModel(config)).eval()
+        full_model = randomize_codebook(WavTokenizerModel(config)).to(torch_device).eval()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             full_model.save_pretrained(tmp_dir)
             encoder_model, loading_info = WavTokenizerEncoderModel.from_pretrained(tmp_dir, output_loading_info=True)
+        encoder_model = encoder_model.to(torch_device).eval()
 
         self.assertFalse(loading_info["missing_keys"])
         self.assertFalse(loading_info["unexpected_keys"])
         self.assertFalse(loading_info["mismatched_keys"])
+        input_values = inputs_dict["input_values"].to(torch_device)
         with torch.no_grad():
-            expected = full_model.encode(inputs_dict["input_values"]).audio_codes
-            actual = encoder_model(inputs_dict["input_values"]).audio_codes
+            expected = full_model.encode(input_values).audio_codes
+            actual = encoder_model(input_values).audio_codes
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def test_forward_signature(self):
