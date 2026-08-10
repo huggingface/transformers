@@ -475,6 +475,7 @@ def get_vision_temporal_merge_index(
     return torch.cat(rows, dim=0)
 
 
+@auto_docstring
 class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     config: Kimi_K25VisionConfig
     input_modalities = ("image", "video")
@@ -582,6 +583,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Kimi_K25Model(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
@@ -611,6 +613,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -721,6 +724,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         )
 
 
+@auto_docstring
 class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
