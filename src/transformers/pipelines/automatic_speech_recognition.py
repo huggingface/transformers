@@ -424,10 +424,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if not isinstance(inputs, (np.ndarray, torch.Tensor)):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
         if inputs.ndim != 1:
+            # `soundfile.read`, `librosa.load(mono=False)` and `scipy.io.wavfile.read`
+            # all return channels-last, `(samples, channels)`. Averaging over axis 0
+            # on that layout averages across *time*, collapsing the waveform to one
+            # value per channel. Infer the channel axis instead: real audio has far
+            # more samples than channels, so the shorter axis is the channel axis.
+            channel_axis = int(np.argmin(inputs.shape))
             logger.warning(
-                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got {inputs.ndim}. Taking the mean of the channels for mono conversion."
+                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got shape "
+                f"{tuple(inputs.shape)}. Taking the mean over axis {channel_axis} for mono conversion."
             )
-            inputs = inputs.mean(axis=0)
+            inputs = inputs.mean(axis=channel_axis)
 
         if chunk_length_s:
             if stride_length_s is None:

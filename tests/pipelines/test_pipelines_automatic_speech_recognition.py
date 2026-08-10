@@ -183,6 +183,30 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @require_torch
+    def test_multichannel_mono_conversion_is_layout_agnostic(self):
+        # `soundfile.read`, `librosa.load(mono=False)` and `scipy.io.wavfile.read` all
+        # return channels-last `(samples, channels)`. Averaging over a hardcoded axis 0
+        # collapsed such input to one value per channel, so a 34,000-sample waveform
+        # became 2 samples and was transcribed as silence with only a warning.
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        expected = speech_recognizer(waveform)
+
+        channels_last = np.stack([waveform, waveform], axis=-1)  # (samples, 2)
+        channels_first = np.stack([waveform, waveform], axis=0)  # (2, samples)
+        self.assertEqual(channels_last.shape, (waveform.size, 2))
+        self.assertEqual(speech_recognizer(channels_last), expected)
+        self.assertEqual(speech_recognizer(channels_first), expected)
+
+        # a 2-D mono waveform must survive in either orientation too
+        self.assertEqual(speech_recognizer(waveform[:, None]), expected)
+        self.assertEqual(speech_recognizer(waveform[None, :]), expected)
+
+    @require_torch
     def test_small_model_pt_fp16(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
