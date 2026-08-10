@@ -51,6 +51,7 @@ class WavTokenizerConversionTest(unittest.TestCase):
     def _to_original_state_dict(self, state_dict):
         original_state_dict = {}
         for key, value in state_dict.items():
+            key = key.removeprefix("encoder_model.")
             original_key = key.replace(
                 "encoder.layers.",
                 "feature_extractor.encodec.encoder.model.",
@@ -121,7 +122,12 @@ class WavTokenizerConversionTest(unittest.TestCase):
     def test_converts_and_reloads_75_token_checkpoint(self):
         import torch
 
-        from transformers import WavTokenizerConfig, WavTokenizerFeatureExtractor, WavTokenizerModel
+        from transformers import (
+            WavTokenizerConfig,
+            WavTokenizerEncoderModel,
+            WavTokenizerFeatureExtractor,
+            WavTokenizerModel,
+        )
         from transformers.models.wavtokenizer.convert_wavtokenizer_checkpoint import convert_checkpoint
 
         config = WavTokenizerConfig(
@@ -145,15 +151,24 @@ class WavTokenizerConversionTest(unittest.TestCase):
             convert_checkpoint(str(checkpoint_path), str(output_dir))
 
             converted_model = WavTokenizerModel.from_pretrained(output_dir)
+            converted_encoder, loading_info = WavTokenizerEncoderModel.from_pretrained(
+                output_dir, output_loading_info=True
+            )
             feature_extractor = WavTokenizerFeatureExtractor.from_pretrained(output_dir)
 
         self.assertEqual(converted_model.config.upsampling_ratios, [8, 5, 4, 2])
         self.assertEqual(converted_model.config.hop_length, 320)
         self.assertEqual(feature_extractor.hop_length, 320)
         self.assertEqual(feature_extractor.sampling_rate, converted_model.config.sampling_rate)
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
         self.assertEqual(source_model.state_dict().keys(), converted_model.state_dict().keys())
         for key, expected_value in source_model.state_dict().items():
             torch.testing.assert_close(converted_model.state_dict()[key], expected_value, rtol=0, atol=0)
+        self.assertEqual(converted_model.encoder_model.state_dict().keys(), converted_encoder.state_dict().keys())
+        for key, expected_value in converted_model.encoder_model.state_dict().items():
+            torch.testing.assert_close(converted_encoder.state_dict()[key], expected_value, rtol=0, atol=0)
 
 
 if __name__ == "__main__":
