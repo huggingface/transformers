@@ -50,6 +50,8 @@ if is_torch_available():
         Apertus1p5VisionTokenizerConfig,
         Apertus1p5VisionTokenizerModel,
         WatermarkingConfig,
+        WavTokenizerConfig,
+        WavTokenizerModel,
     )
 
 
@@ -244,11 +246,17 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_fixed_text_backbone(self):
+    def test_fixed_backbones(self):
         config = self.model_tester.get_config()
         self.assertIsInstance(config.text_config, Apertus1p5TextConfig)
+        self.assertIsInstance(config.audio_config, WavTokenizerConfig)
         model = Apertus1p5ForConditionalGeneration(config)
         self.assertIsInstance(model.model.language_model, Apertus1p5TextModel)
+        self.assertIsInstance(model.model.audio_tokenizer, WavTokenizerModel)
+
+    def test_rejects_unrelated_audio_config(self):
+        with self.assertRaisesRegex(ValueError, "must be 'wavtokenizer'"):
+            Apertus1p5Config(audio_config={"model_type": "dac"})
 
     @pytest.mark.generate
     @unittest.skip("Apertus1p5 has dynamic control flow in vision backbone")
