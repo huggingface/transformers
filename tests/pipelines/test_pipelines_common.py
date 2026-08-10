@@ -616,6 +616,15 @@ class PipelineUtilsTest(unittest.TestCase):
         actual_output = classifier("Test input.")
         self.assertEqual(expected_output, actual_output)
 
+    def test_pipeline_invalid_device_raises_early(self):
+        with self.assertRaises(ValueError) as ctx:
+            pipeline("text-classification", model="hf-internal-testing/tiny-random-bert", device="invalid_device_name")
+        self.assertIn("Invalid device", str(ctx.exception))
+
+        with self.assertRaises(ValueError) as ctx:
+            pipeline("text-classification", model="hf-internal-testing/tiny-random-bert", device=-5)
+        self.assertIn("Invalid device", str(ctx.exception))
+
     @require_torch_accelerator
     def test_pipeline_no_device(self):
         # Test when no device is passed to pipeline

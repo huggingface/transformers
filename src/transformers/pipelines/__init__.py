@@ -838,6 +838,25 @@ def pipeline(
     >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
+    if device is not None:
+        if not (isinstance(device, int) and device == -1):
+            try:
+                if isinstance(device, int):
+                    if device < 0:
+                        raise ValueError(
+                            f"Invalid device ordinal {device}. Expected a non-negative integer or -1 for CPU."
+                        )
+                    torch.device(device)
+                elif isinstance(device, str):
+                    torch.device(device)
+                elif not isinstance(device, torch.device):
+                    torch.device(device)
+            except RuntimeError as e:
+                raise ValueError(
+                    f"Invalid device '{device}'. Expected a valid device string (e.g. 'cpu', 'cuda', 'mps'), "
+                    f"an integer device ordinal, or a `torch.device` instance."
+                ) from e
+
     if model_kwargs is None:
         model_kwargs = {}
 
