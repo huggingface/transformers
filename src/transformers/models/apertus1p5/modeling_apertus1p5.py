@@ -253,12 +253,7 @@ class Apertus1p5VisionTokenizerEncoder(nn.Module):
 
 
 class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
-    """
-    IBQ codebook lookup, from *Scalable Image Tokenization with Index Backpropagation Quantization*
-    (https://huggingface.co/papers/2412.02692). IBQ differs from plain VQ in how the codebook is trained; at
-    inference, quantization reduces to a dot-product similarity argmax over the codebook. This class implements
-    only that inference path, not IBQ's differentiable index-backpropagation training path.
-    """
+    """Inference-only IBQ codebook lookup using dot-product similarity and `argmax`."""
 
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__()
@@ -295,19 +290,8 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Apertus 1.5 vision tokenizer: an encode-only port of the EMU3.5 Vision Tokenizer by BAAI
-    (*Emu3.5: Native Multimodal Models are World Learners*, https://huggingface.co/papers/2510.26583; weights and
-    original code at https://huggingface.co/BAAI/Emu3.5-VisionTokenizer, Apache-2.0), an IBQ image tokenizer with
-    a 131k codebook and 16x spatial downsampling.
-
-    The port is inference-only: Apertus 1.5 generates text only, so it omits IBQ's differentiable training path,
-    tokenizer losses, and decoder, and `encode` returns hard argmax indices that stop gradients (calling
-    `train()` does not restore the omitted components). Run the tokenizer in `float32`: code assignment is an
-    argmax over codebook logits, and half precision flips ~10% of codes (bf16); the weights are kept fp32
-    on half-precision `from_pretrained` loads via `_keep_in_fp32_modules_strict`.
-
-    Inputs are expected preprocessed by `Apertus1p5ImageProcessor`; `encode` assumes that contract and does
-    not validate it.
+    Encode-only EMU3.5-derived vision tokenizer used by Apertus 1.5. It returns hard codebook indices and is kept
+    in `float32` for stable code assignment.
     """
 )
 class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
@@ -331,18 +315,13 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         """
         Tokenizes images into a grid of discrete codebook indices.
 
-        The method respects the caller's gradient mode, as public Transformers model methods normally do; use
-        `torch.no_grad()` or `torch.inference_mode()` when calling it for standalone inference.
-
         Args:
             pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-                Input images, RGB, normalized to `[-1, 1]` (`pixel / 127.5 - 1`), with sides that are multiples
-                of the spatial factor (16), as produced by `Apertus1p5ImageProcessor`. This contract is assumed,
-                not validated
+                RGB images normalized to `[-1, 1]`, with sides that are multiples of the spatial factor.
 
         Returns:
             `torch.LongTensor` of shape `(batch_size, height // factor, width // factor)` with values in
-            `[0, codebook_size)`, where `factor` is `config.spatial_scale_factor` (16 by default).
+            `[0, codebook_size)`.
         """
         # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
         # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
@@ -406,13 +385,13 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        """Allow noop-getter-only calls, but reject resizing pruned LM heads because the generic path restores full width."""
+        """Reject resizing when the LM head is pruned."""
         if new_num_tokens is not None or pad_to_multiple_of is not None:
             _check_pruned_head_resize(self.config)
         return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
     def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Reject tying a pruned LM head because the generic path would install full-width input embeddings."""
+        """Reject weight tying when the LM head is pruned."""
         _check_pruned_head_tie(self.config)
         return super().tie_weights(missing_keys, recompute_mapping)
 
@@ -662,13 +641,13 @@ class Apertus1p5TextPreTrainedModel(PreTrainedModel):
         pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        """Mirror the resize guard via a converter-safe direct call while preserving getter-only calls."""
+        """Reject resizing when the LM head is pruned."""
         if new_num_tokens is not None or pad_to_multiple_of is not None:
             _check_pruned_head_resize(self.config)
         return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
     def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Mirror the tie guard via a converter-safe direct call to prevent installing full-width embeddings."""
+        """Reject weight tying when the LM head is pruned."""
         _check_pruned_head_tie(self.config)
         return super().tie_weights(missing_keys, recompute_mapping)
 
@@ -854,13 +833,7 @@ class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="""
-        With `labels`, computes the standard causal language modeling loss and returns logits at the physical
-        LM-head width. Without `labels`, returns no loss; for a pruned head, it pads logits to `config.vocab_size`
-        with `torch.finfo(dtype).min` scores for the input-only tail, as required by generic generation.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -877,16 +850,11 @@ class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Target token ids. `-100` ignores a position; other values must be within the physical LM-head range.
             With a pruned head, mask multimodal/input-only ids with `-100`.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            Sequence positions for which to compute logits. Keep the default of `0` when using full-sequence
-            `labels`; a reduced selection requires correspondingly aligned `shift_labels`.
 
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
-                Standard causal language-model outputs. The logits shape is
-                `(batch_size, kept_sequence_length, output_width)`, where `kept_sequence_length` is selected by
-                `logits_to_keep`. With `labels`, `output_width` is the physical LM-head width; otherwise it is
-                `config.vocab_size`, with any pruned input-only tail filled by the dtype's minimum value.
+                With a pruned head, logits use the physical head width when `labels` are provided and are padded
+                to `config.vocab_size` otherwise.
         """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
@@ -930,20 +898,7 @@ class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The Apertus 1.5 multimodal base model combines an Apertus language backbone, an encode-only port of the EMU3.5
-    Vision Tokenizer, and WavTokenizer (encoding path only). It maps discrete media codes into the shared
-    vocabulary, substitutes their embeddings at expanded media placeholders, and runs the unified sequence
-    through the language backbone. It returns hidden states and cache; [`Apertus1p5ForConditionalGeneration`]
-    adds the text-generation head.
-
-    Modality inputs are assumed to follow the [`Apertus1p5Processor`] contract for preprocessing, padding,
-    placeholder expansion, and row ordering. The model validates companion tensors and aggregate
-    feature/placeholder counts, but not per-sample ownership. Placeholders without modality inputs remain
-    unchanged.
-    """
-)
+@auto_docstring
 class Apertus1p5Model(Apertus1p5PreTrainedModel):
     # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
     _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
@@ -965,9 +920,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
-        Tokenizes images into discrete codes and maps them into the shared text vocabulary via
-        `config.image_token_offset`. Each image is cropped to its true size and encoded individually: the encoder
-        contains global attention, so batch padding would perturb the codes.
+        Tokenizes each unpadded image and returns flattened shared-vocabulary ids.
 
         Args:
             pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
@@ -976,7 +929,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
                 The true size of each image, being (height, width).
 
         Returns:
-            `torch.LongTensor`: flat vocabulary ids of all image codes (`sum_i (h_i // 16) * (w_i // 16)` items).
+            `torch.LongTensor`: Image code ids offset by `config.image_token_offset`.
         """
         vocab_ids_list = []
         for image, size in zip(pixel_values, image_sizes):
@@ -986,9 +939,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         return torch.cat(vocab_ids_list)
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Tokenizes images into discrete tokens with the vision tokenizer and embeds them with the text embeddings layer"
-    )
+    @auto_docstring(custom_intro="Tokenizes images and embeds their discrete codes with the text embedding layer.")
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
@@ -1014,9 +965,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
     ) -> torch.LongTensor:
         """
-        Tokenizes audio clips into discrete codes and maps them into the shared text vocabulary via
-        `config.audio_token_offset`. Each clip is sliced to its true length and encoded individually so the codes
-        are independent of batch padding.
+        Tokenizes each unpadded audio clip and returns flattened shared-vocabulary ids.
 
         Args:
             input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
@@ -1025,7 +974,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
                 Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
 
         Returns:
-            `torch.LongTensor`: flat vocabulary ids of all audio codes (`sum_i ceil(length_i / hop)` items).
+            `torch.LongTensor`: Audio code ids offset by `config.audio_token_offset`.
         """
         if input_features.dim() == 2:
             input_features = input_features.unsqueeze(1)
@@ -1046,9 +995,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         return torch.cat(vocab_ids_list)
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Tokenizes audio clips into discrete tokens with the audio codec and embeds them with the text embeddings layer"
-    )
+    @auto_docstring(custom_intro="Tokenizes audio and embeds its discrete codes with the text embedding layer.")
     def get_audio_features(
         self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
@@ -1073,11 +1020,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         image_features: torch.FloatTensor | None = None,
         audio_features: torch.FloatTensor | None = None,
     ):
-        """
-        Obtains multimodal placeholder masks from `input_ids` or `inputs_embeds`, and checks that each
-        placeholder token count equals the length of the corresponding multimodal features. If the lengths are
-        different, an error is raised.
-        """
+        """Build placeholder masks and verify that their lengths match the supplied media features."""
         if input_ids is None:
             embedder = self.get_input_embeddings()
             image_token_embed = embedder(
@@ -1112,18 +1055,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         return special_image_mask, special_audio_mask
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="""
-        The forward pass:
-
-        1. Requires exactly one of `input_ids` or `inputs_embeds`, embedding token ids when needed.
-        2. Encodes supplied images and audio into discrete vocabulary ids and looks up their language embeddings.
-        3. Replaces expanded media placeholders with those embeddings, locating placeholders by token id for
-           `input_ids` or by exact placeholder-embedding equality for `inputs_embeds`.
-        4. Passes the unified embeddings, attention inputs, and cache to the language backbone and returns its
-           hidden states and cache.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1139,8 +1071,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token ids prepared by `Apertus1p5Processor`, or an equivalent expanded media-placeholder layout.
         pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
             Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
             rows must follow expanded image-placeholder order.
@@ -1196,14 +1126,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         return outputs
 
 
-@auto_docstring(
-    custom_intro="""
-    The Apertus 1.5 conditional-generation model adds a text-generation head to [`Apertus1p5Model`], which combines
-    an Apertus language backbone, an encode-only EMU3.5 Vision Tokenizer port, and WavTokenizer's encoding path. It
-    generates text from interleaved image, audio, and text inputs. Modality inputs are assumed to follow the
-    [`Apertus1p5Processor`] contract for preprocessing, padding, placeholder expansion, and row ordering.
-    """
-)
+@auto_docstring
 class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
     output_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -1231,14 +1154,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         return self.lm_head
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="""
-        Runs the composite base model to encode media and replace expanded placeholders, then projects its hidden
-        states through the LM head. With `labels`, computes the standard causal language modeling loss and returns
-        logits at the physical head width. Without `labels`, returns no loss; for a pruned head, it pads logits to
-        `config.text_config.vocab_size` with `torch.finfo(dtype).min` scores for generic generation.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1256,8 +1172,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token ids prepared by `Apertus1p5Processor`, or an equivalent expanded media-placeholder layout.
         pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
             Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
             rows must follow expanded image-placeholder order.
@@ -1274,16 +1188,11 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Target token ids. `-100` ignores a position; other values must be within the physical LM-head range.
             With a pruned head, mask multimodal/input-only ids with `-100`.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            Sequence positions for which to compute logits. Keep the default of `0` when using full-sequence
-            `labels`; a reduced selection requires correspondingly aligned `shift_labels`.
 
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
-                Standard causal language-model outputs. The logits shape is
-                `(batch_size, kept_sequence_length, output_width)`, where `kept_sequence_length` is selected by
-                `logits_to_keep`. With `labels`, `output_width` is the physical LM-head width; otherwise it is
-                `config.text_config.vocab_size`, with any pruned input-only tail filled by the dtype's minimum value.
+                With a pruned head, logits use the physical head width when `labels` are provided and are padded
+                to `config.text_config.vocab_size` otherwise.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1337,20 +1246,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor | None, dict[str, Any]]:
-        """
-        Expand generation inputs without breaking flattened image or audio groups.
-
-        This extends `GenerationMixin._expand_inputs_for_generation` and follows the grouped-expansion pattern used
-        by `Qwen3VLForConditionalGeneration` for packed visual tensors:
-
-        1. Match each prompt's placeholder count to the token counts of its media items.
-        2. Split flattened modality tensors into per-prompt groups and repeat each complete group for every beam or
-           returned sequence.
-        3. Expand ordinary batch-shaped tensors with the default row-wise `repeat_interleave`.
-
-        For two beams, `[img0, img1]` becomes `[img0, img1, img0, img1]`, not
-        `[img0, img0, img1, img1]`.
-        """
+        """Expand complete per-sample media groups together for beam or return-sequence expansion."""
         if expand_size == 1:
             return input_ids, model_kwargs
 
