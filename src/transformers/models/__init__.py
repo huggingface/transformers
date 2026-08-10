@@ -309,6 +309,8 @@ if TYPE_CHECKING:
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .muse_glimmer import *
+    from .muse_glimmer_assistant import *
     from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
