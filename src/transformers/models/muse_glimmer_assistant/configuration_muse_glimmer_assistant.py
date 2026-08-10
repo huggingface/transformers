@@ -70,11 +70,13 @@ class MuseGlimmerAssistantConfig(PreTrainedConfig):
 
     block_size: int = 16
     mask_token_id: int = 201818
-    target_layer_ids: list[int] = [1, 13, 25, 37, 49]
+    target_layer_ids: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = ["sliding_attention"] * self.num_hidden_layers
+        if self.target_layer_ids is None:
+            self.target_layer_ids = [1, 13, 25, 37, 49]
         super().__post_init__(**kwargs)
 
 
