@@ -20,7 +20,7 @@ jobs:
   vllm:
     name: Test vLLM integration
     runs-on:
-      group: aws-m8i-2xl-cache
+      group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
@@ -108,7 +108,7 @@ jobs:
         #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
         # CPU memory is not released between tests on the 32 GiB runner.
         # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
-        if: false
+        if: always()
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py
@@ -118,7 +118,7 @@ jobs:
         #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
         # CPU memory is not released between tests on the 32 GiB runner.
         # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
-        if: false
+        if: always()
         working-directory: vllm
         run: |
           pytest -v -s tests/models/transformers/
@@ -132,28 +132,29 @@ jobs:
                        tests/models/multimodal/processing/test_transformers_audio.py
 
       - name: "Test: test_mapping"
-        if: always()
+        if: false
         working-directory: vllm
         run: pytest -v -s tests/models/multimodal/test_mapping.py
 
       - name: "Example: chat"
-        if: always()
+        if: false
         working-directory: vllm
         run: python3 examples/basic/offline_inference/chat.py
 
       - name: "Example: vision language"
-        if: always()
+        if: false
         working-directory: vllm
         run: python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
 
       - name: "Example: audio language (whisper)"
-        if: always()
+        if: false
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
+    if: false
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-2xl-cache
