@@ -42,7 +42,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import AutoModel
+from ..wavtokenizer import WavTokenizerModel
 from .configuration_apertus1p5 import Apertus1p5Config, Apertus1p5TextConfig, Apertus1p5VisionTokenizerConfig
 
 
@@ -907,7 +907,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
         self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
+        self.audio_tokenizer = WavTokenizerModel(config.audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
