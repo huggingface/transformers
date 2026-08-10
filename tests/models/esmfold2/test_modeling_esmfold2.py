@@ -427,6 +427,24 @@ class EsmFold2ModelTest(unittest.TestCase):
             out = reloaded.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=1)
         self.assertTrue(torch.isfinite(out["sample_atom_coords"]).all())
 
+    def test_bf16_load_keeps_pinned_buffers_fp32(self):
+        # The reference runs the trunk in fp32 under autocast, which leaves buffers alone, so a bf16
+        # load must not round these. The distance-bin edges are the sharp case: bf16 moves them by up
+        # to 9.5% of a bin width, silently re-binning ~1.6% of atom pairs in the confidence head.
+        model = self._build()
+        expected = {name: buf.clone() for name, buf in model.named_buffers() if buf.is_floating_point()}
+        self.assertIn("confidence_head.boundaries", expected)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            reloaded = EsmFold2Model.from_pretrained(tmp, dtype=torch.bfloat16).eval()
+
+        pinned = dict(reloaded.named_buffers())
+        for name, tensor in expected.items():
+            with self.subTest(buffer=name):
+                self.assertEqual(pinned[name].dtype, torch.float32)
+                torch.testing.assert_close(pinned[name], tensor, rtol=0, atol=0)
+
 
 @require_torch
 class EsmFold2IntegrationTest(TestCasePlus):

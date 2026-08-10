@@ -1829,8 +1829,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "EsmFold2DiffusionTransformer",
     ]
     supports_gradient_checkpointing = True
-    # Every norm weight/bias, plus the Fourier noise-embedding buffers, stay fp32 under a bf16 load.
-    _keep_in_fp32_modules_strict = ["fourier", "norm"]
+    _keep_in_fp32_modules_strict = ["fourier", "norm", "boundaries"]
     _supports_sdpa = True
 
     def _init_weights(self, module):

@@ -85,8 +85,8 @@ class EsmcConfig(PreTrainedConfig):
     max_position_embeddings: int = 2048
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     pad_token_id: int | None = 1
-    bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
@@ -103,6 +103,10 @@ class EsmcConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.intermediate_size is None:
             self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
+        if self.bos_token_id is None:
+            self.bos_token_id = 0
+        if self.eos_token_id is None:
+            self.eos_token_id = 2
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
