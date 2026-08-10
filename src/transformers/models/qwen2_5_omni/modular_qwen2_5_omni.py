@@ -785,6 +785,12 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
 
+    @staticmethod
+    def create_masks_for_generate(attention_mask: torch.Tensor | None = None, **kwargs) -> torch.Tensor | None:
+        # `forward` recomputes the mrope positions from the 2D padding mask, so we defer the mask creation to the
+        # text model instead of letting `generate` replace it by the 4D masks when using a compilable cache.
+        return attention_mask
+
     def get_llm_pos_ids_for_vision(
         self,
         start_idx: int,
