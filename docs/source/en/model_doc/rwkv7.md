@@ -189,6 +189,14 @@ compiled = torch.compile(model, mode="reduce-overhead")
    cudagraph pass does not merely skip but segfaults. Passing `state=None` and letting
    the model allocate is correct, just several times slower.
 
+The compiled step hands back the same buffers every time, which is where the speed
+comes from and also why a kept reference goes stale: a logits row read after the next
+call has already been overwritten. That surfaces as an error rather than as quietly
+wrong numbers, since torch checks it (`accessing tensor output of CUDAGraphs that has
+been overwritten by a subsequent run`), but code that collects logits -- to score, or
+to sample from once the loop is done -- has to `.clone()` each row. Consuming them on
+the spot, as an inline `argmax` does, needs nothing.
+
 For more than this, the kernels are a separate, optional package rather than part of
 the model: `transformers` keeps the portable implementation that builds and runs
 anywhere and that these are checked against.
