@@ -75,8 +75,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers", "n_routed_experts"],
     # Fixed architecture flags, preprocessing metadata, and compatibility aliases
-    # carried by the released Dots3-Note Omni checkpoint.
-    "Dots3NoteOmniAudioConfig": [
+    # carried by the released Dots 3 Note Preview checkpoint.
+    "Dots3NoteAudioConfig": [
         "audio_end_token",
         "audio_pad_token",
         "audio_start_token",
@@ -88,7 +88,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "use_conv2d_stem",
         "use_rope",
     ],
-    "Dots3NoteOmniConfig": [
+    "Dots3NoteConfig": [
         "moe_shared_expert_intermediate_size",
         "moe_topk",
         "multi_latent_attention",
@@ -98,7 +98,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "sliding_window_size",
         "softmax_type",
     ],
-    "Dots3NoteOmniVisionConfig": ["adapter_type", "post_norm", "pre_pixel_shuffle"],
+    "Dots3NoteVisionConfig": ["adapter_type", "post_norm", "pre_pixel_shuffle"],
     "JambaConfig": [
         "attn_layer_offset",
         "attn_layer_period",

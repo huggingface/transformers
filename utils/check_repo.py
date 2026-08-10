@@ -526,10 +526,10 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
         "Florence2VisionBackbone",  # Building part of a bigger model
         "HiggsAudioV2Model",  # Building part of a bigger model
-        "Dots3NoteOmniAudioModel",  # Building part of Dots3NoteOmniForCausalLM
-        "Dots3NoteOmniTextForCausalLM",  # Text-only building part of Dots3NoteOmniForCausalLM
-        "Dots3NoteOmniTextModel",  # Text-only building part of Dots3NoteOmniForCausalLM
-        "Dots3NoteOmniVisionModel",  # Building part of Dots3NoteOmniForCausalLM
+        "Dots3NoteAudioModel",  # Building part of Dots3NoteForCausalLM
+        "Dots3NoteTextForCausalLM",  # Text-only building part of Dots3NoteForCausalLM
+        "Dots3NoteTextModel",  # Text-only building part of Dots3NoteForCausalLM
+        "Dots3NoteVisionModel",  # Building part of Dots3NoteForCausalLM
         "Qwen3OmniMoeCode2Wav",  # Building part of a bigger model
         "Qwen3OmniMoeCode2WavTransformerModel",  # Building part of a bigger model
         "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of a bigger model

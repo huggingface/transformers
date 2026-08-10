@@ -127,7 +127,7 @@ if TYPE_CHECKING:
     from .doge import *
     from .donut import *
     from .dots1 import *
-    from .dots3_note_omni import *
+    from .dots3_note import *
     from .dpr import *
     from .dpt import *
     from .edgetam import *

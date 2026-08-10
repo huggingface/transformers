@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the PyTorch Dots3-Note Omni model."""
+"""Tests for the PyTorch Dots 3 Note Preview model."""
 
 import tempfile
 import unittest
@@ -21,9 +21,9 @@ from parameterized import parameterized
 from safetensors import safe_open
 
 from transformers import (
-    Dots3NoteOmniConfig,
-    Dots3NoteOmniForCausalLM,
-    Dots3NoteOmniForConditionalGeneration,
+    Dots3NoteConfig,
+    Dots3NoteForCausalLM,
+    Dots3NoteForConditionalGeneration,
     FineGrainedFP8Config,
     is_torch_available,
 )
@@ -51,13 +51,13 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers.models.dots3_note_omni.modeling_dots3_note_omni import (
-        Dots3NoteOmniAudioModel,
-        Dots3NoteOmniTextForCausalLM,
-        Dots3NoteOmniTextIndexer,
-        Dots3NoteOmniTextModel,
-        Dots3NoteOmniVisionModel,
-        Dots3NoteOmniVisionMoE,
+    from transformers.models.dots3_note.modeling_dots3_note import (
+        Dots3NoteAudioModel,
+        Dots3NoteTextForCausalLM,
+        Dots3NoteTextIndexer,
+        Dots3NoteTextModel,
+        Dots3NoteVisionModel,
+        Dots3NoteVisionMoE,
         dsa_sparse_attention_forward,
         eager_attention_forward,
         quantize_indexer_fp8,
@@ -102,7 +102,7 @@ def get_tiny_config(use_dsa=False):
         "adapter_input_size": 32,
         "adapter_output_size": 32,
     }
-    config = Dots3NoteOmniConfig(
+    config = Dots3NoteConfig(
         vocab_size=128,
         hidden_size=32,
         intermediate_size=64,
@@ -156,11 +156,11 @@ def get_tiny_config(use_dsa=False):
     return config
 
 
-class Dots3NoteOmniTextModelTester(CausalLMModelTester):
+class Dots3NoteTextModelTester(CausalLMModelTester):
     if is_torch_available():
-        base_model_class = Dots3NoteOmniTextModel
-        config_class = Dots3NoteOmniConfig
-        causal_lm_class = Dots3NoteOmniTextForCausalLM
+        base_model_class = Dots3NoteTextModel
+        config_class = Dots3NoteConfig
+        causal_lm_class = Dots3NoteTextForCausalLM
 
     def __init__(self, parent):
         super().__init__(
@@ -187,13 +187,13 @@ class Dots3NoteOmniTextModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Dots3NoteOmniTextModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Dots3NoteOmniTextModelTester
-    all_model_classes = (Dots3NoteOmniTextForCausalLM,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-generation": Dots3NoteOmniTextForCausalLM} if is_torch_available() else {}
+class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Dots3NoteTextModelTester
+    all_model_classes = (Dots3NoteTextForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"text-generation": Dots3NoteTextForCausalLM} if is_torch_available() else {}
     _is_stateful = True
 
-    @unittest.skip(reason="Initial Dots3-Note Omni support is inference-only.")
+    @unittest.skip(reason="Initial Dots 3 Note Preview support is inference-only.")
     def test_gradient_checkpointing_enable_disable(self):
         pass
 
@@ -231,7 +231,7 @@ class Dots3NoteOmniTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     # DSA selects positions with a hard top-k. Tiny numerical changes caused by padding or
     # sequence packing can change the selected positions, so generic exact-equivalence tests do not apply.
-    # Deterministic physical cache/padding coordinate coverage lives in Dots3NoteOmniModelTest below.
+    # Deterministic physical cache/padding coordinate coverage lives in Dots3NoteModelTest below.
     @unittest.skip(reason="DSA hard top-k selection is numerically discontinuous across padding shifts.")
     def test_left_padding_compatibility(self):
         pass
@@ -255,13 +255,13 @@ class Dots3NoteOmniTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Dots3NoteOmniModelTest(unittest.TestCase):
+class Dots3NoteModelTest(unittest.TestCase):
     all_model_classes = (
         (
-            Dots3NoteOmniAudioModel,
-            Dots3NoteOmniForCausalLM,
-            Dots3NoteOmniForConditionalGeneration,
-            Dots3NoteOmniVisionModel,
+            Dots3NoteAudioModel,
+            Dots3NoteForCausalLM,
+            Dots3NoteForConditionalGeneration,
+            Dots3NoteVisionModel,
         )
         if is_torch_available()
         else ()
@@ -269,7 +269,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_text_forward_and_cache(self):
         config = get_tiny_config()
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 7, 11, 9, 2]])
 
         with torch.no_grad():
@@ -283,7 +283,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_dsa_text_forward(self):
         config = get_tiny_config(use_dsa=True)
         config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         with torch.no_grad():
             logits = model(torch.tensor([[1, 5, 6, 7, 2]]), use_cache=False).logits
         self.assertTrue(torch.isfinite(logits).all())
@@ -330,7 +330,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_dsa_indexer_left_padding_uses_physical_cache_positions(self):
         config = get_tiny_config(use_dsa=True)
         config.index_topk = 2
-        indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0).eval()
+        indexer = Dots3NoteTextIndexer(config, layer_idx=0).eval()
         for parameter in indexer.parameters():
             torch.nn.init.zeros_(parameter)
 
@@ -355,7 +355,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_dsa_indexer_requires_shared_4d_attention_mask(self):
         config = get_tiny_config(use_dsa=True)
         config.index_topk = 1
-        indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0).eval()
+        indexer = Dots3NoteTextIndexer(config, layer_idx=0).eval()
         for parameter in indexer.parameters():
             torch.nn.init.zeros_(parameter)
 
@@ -435,7 +435,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         config = get_tiny_config(use_dsa=True)
         config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
         config._attn_implementation = "sdpa"
-        model = Dots3NoteOmniTextModel(config).eval()
+        model = Dots3NoteTextModel(config).eval()
         hidden_states = torch.randn(1, 2, config.hidden_size)
         position_ids = torch.arange(2).unsqueeze(0)
         cos, sin = model.rotary_emb(hidden_states, position_ids)
@@ -458,7 +458,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         # score ties, for which `topk` is allowed to pick different tied keys as the cached key width grows.
         # Sparse top-k math and sparse cached generation are covered independently below.
         config.index_topk = config.max_position_embeddings
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 7, 11, 9, 6, 13, 12, 5, 8, 10, 2]])
         attention_mask = torch.ones_like(input_ids)
 
@@ -482,7 +482,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_dsa_chunked_prefill_generate_matches_one_shot(self):
         config = get_tiny_config(use_dsa=True)
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 7, 11, 9, 6, 13, 12]])
         attention_mask = torch.ones_like(input_ids)
 
@@ -521,7 +521,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         # Select every key so this test targets physical cache/padding coordinates rather than
         # the numerical discontinuity of hard top-k selection on a randomly initialized indexer.
         config.index_topk = config.max_position_embeddings
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         model.set_experts_implementation("eager")
 
         sequences = [
@@ -577,7 +577,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         config = get_tiny_config(use_dsa=True)
         config.layer_types = ["deepseek_sparse_attention"] * config.num_hidden_layers
         config.index_topk = 2
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
 
         with patch.object(
             ALL_ATTENTION_FUNCTIONS, "get_interface", wraps=ALL_ATTENTION_FUNCTIONS.get_interface
@@ -592,7 +592,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_text_attention_backend_kwargs_reach_interface(self):
         config = get_tiny_config(use_dsa=False)
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         marker = object()
         received_markers = []
 
@@ -608,7 +608,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_dsa_cache_uses_dynamic_layer_dispatch(self):
         config = get_tiny_config(use_dsa=True)
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
 
         with torch.no_grad():
             outputs = model.generate(
@@ -627,7 +627,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_dsa_static_cache_matches_dynamic_cache(self):
         torch.manual_seed(0)
         config = get_tiny_config(use_dsa=True)
-        model = Dots3NoteOmniTextForCausalLM(config).eval()
+        model = Dots3NoteTextForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 7, 11, 9]])
         attention_mask = torch.ones_like(input_ids)
 
@@ -675,16 +675,16 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_dsa_fused_indexer_projection_keeps_bf16_and_fp8_paths_distinct(self):
         with self.assertRaisesRegex(ValueError, "index_head_dim=128, got 256"):
-            Dots3NoteOmniConfig(index_head_dim=256)
-        Dots3NoteOmniConfig(quantization_config=FineGrainedFP8Config().to_dict())
+            Dots3NoteConfig(index_head_dim=256)
+        Dots3NoteConfig(quantization_config=FineGrainedFP8Config().to_dict())
         with self.assertRaisesRegex(ValueError, "scale_fmt='float', got 'ue8m0'"):
-            Dots3NoteOmniConfig(quantization_config=FineGrainedFP8Config(scale_fmt="ue8m0").to_dict())
+            Dots3NoteConfig(quantization_config=FineGrainedFP8Config(scale_fmt="ue8m0").to_dict())
 
         config = get_tiny_config(use_dsa=True)
         config.hidden_size = 256
         hidden_states = torch.randn(2, 3, config.hidden_size, dtype=torch.bfloat16)
 
-        bf16_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0).to(torch.bfloat16)
+        bf16_indexer = Dots3NoteTextIndexer(config, layer_idx=0).to(torch.bfloat16)
         bf16_weight = torch.cat((bf16_indexer.wk.weight, bf16_indexer.weights_proj.weight))
         bf16_actual = torch.cat(bf16_indexer._project_key_and_weights(hidden_states), dim=-1)
         self.assertIsNone(bf16_indexer.wk.weight_scale_inv)
@@ -700,7 +700,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
         config.quantization_config = FineGrainedFP8Config(dequantize=False, weight_block_size=(128, 128))
         config._is_quantized = True
-        fp8_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0)
+        fp8_indexer = Dots3NoteTextIndexer(config, layer_idx=0)
         torch.manual_seed(0)
         for projection in (fp8_indexer.wk, fp8_indexer.weights_proj):
             projection.weight.data.fill_(1)
@@ -721,11 +721,11 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         )
 
         config.quantization_config = FineGrainedFP8Config(dequantize=True, weight_block_size=(128, 128))
-        dequantized_indexer = Dots3NoteOmniTextIndexer(config, layer_idx=0)
+        dequantized_indexer = Dots3NoteTextIndexer(config, layer_idx=0)
         self.assertIsNone(dequantized_indexer.wk.weight_scale_inv)
 
     def test_dsa_precomputed_mask_uses_dispatched_layer_type(self):
-        model = Dots3NoteOmniTextForCausalLM(get_tiny_config(use_dsa=True)).eval()
+        model = Dots3NoteTextForCausalLM(get_tiny_config(use_dsa=True)).eval()
         full_mask = torch.ones(1, 1, 2, 2, dtype=torch.bool)
         sliding_mask = torch.eye(2, dtype=torch.bool).view(1, 1, 2, 2)
 
@@ -744,7 +744,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_vision_forward(self):
         config = get_tiny_config().vision_config
-        model = Dots3NoteOmniVisionModel(config).eval()
+        model = Dots3NoteVisionModel(config).eval()
         pixel_values = torch.randn(4, 3 * config.temporal_patch_size * config.patch_size**2)
         grid_thw = torch.tensor([[1, 2, 2]])
         with torch.no_grad():
@@ -769,7 +769,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
                 config.pyramid_num_routed[0] = 3
                 config.capacity_factor = 2
                 config.router_scoring_func = scoring_func
-                moe = Dots3NoteOmniVisionMoE(config, layer_idx=0).eval()
+                moe = Dots3NoteVisionMoE(config, layer_idx=0).eval()
                 selected_experts = []
                 moe.experts = torch.nn.ModuleList(
                     [RecordingExpert(expert_idx, selected_experts) for expert_idx in range(3)]
@@ -785,7 +785,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_audio_forward(self):
         config = get_tiny_config().audio_config
-        model = Dots3NoteOmniAudioModel(config).eval()
+        model = Dots3NoteAudioModel(config).eval()
         with torch.no_grad():
             outputs = model(
                 input_features=torch.randn(1, config.feature_size, 16),
@@ -799,7 +799,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
     def test_audio_flash_attention_3_uses_requested_backend(self):
         config = get_tiny_config().audio_config
         config.attention_backend = "flash_attention_3"
-        model = Dots3NoteOmniAudioModel(config).eval()
+        model = Dots3NoteAudioModel(config).eval()
         requested_backends = []
 
         def flash_attention_spy(query, key, value, *args, attn_implementation=None, **kwargs):
@@ -807,7 +807,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
             return query
 
         with patch(
-            "transformers.models.dots3_note_omni.modeling_dots3_note_omni._flash_attention_forward",
+            "transformers.models.dots3_note.modeling_dots3_note._flash_attention_forward",
             side_effect=flash_attention_spy,
         ):
             with torch.no_grad():
@@ -821,9 +821,9 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         self.assertEqual(requested_backends, ["flash_attention_3"] * config.whisper_config["encoder_layers"])
         self.assertTrue(torch.isfinite(outputs.audio_embeds).all())
 
-    def test_omni_image_and_audio_forward(self):
+    def test_multimodal_image_and_audio_forward(self):
         config = get_tiny_config()
-        model = Dots3NoteOmniForCausalLM(config).eval()
+        model = Dots3NoteForCausalLM(config).eval()
         input_ids = torch.tensor([[1, 120, 5, 121, 121, 7, 2]])
         pixel_values = torch.randn(4, 3 * config.vision_config.temporal_patch_size * 2**2)
 
@@ -842,9 +842,9 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.vocab_size))
         self.assertTrue(torch.isfinite(outputs.logits).all())
 
-    def test_omni_video_forward(self):
+    def test_multimodal_video_forward(self):
         config = get_tiny_config()
-        model = Dots3NoteOmniForCausalLM(config).eval()
+        model = Dots3NoteForCausalLM(config).eval()
         input_ids = torch.tensor([[1, config.video_token_id, 7, 2]])
         pixel_values_videos = torch.randn(
             4,
@@ -863,11 +863,11 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.vocab_size))
         self.assertTrue(torch.isfinite(outputs.logits).all())
 
-    def test_omni_chunked_prefill_processes_cached_media(self):
+    def test_multimodal_chunked_prefill_processes_cached_media(self):
         torch.manual_seed(0)
         config = get_tiny_config(use_dsa=True)
         config.index_topk = config.max_position_embeddings
-        model = Dots3NoteOmniForCausalLM(config).eval()
+        model = Dots3NoteForCausalLM(config).eval()
         prefix_ids = torch.tensor([[1, 5]])
         patch_width = (
             config.vision_config.num_channels
@@ -926,7 +926,7 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
 
     def test_expert_checkpoint_conversion_roundtrip(self):
         torch.manual_seed(13)
-        model = Dots3NoteOmniForCausalLM(get_tiny_config()).eval()
+        model = Dots3NoteForCausalLM(get_tiny_config()).eval()
         input_ids = torch.tensor([[1, 5, 6, 2]])
         with torch.no_grad():
             expected = model(input_ids, use_cache=False).logits
@@ -940,14 +940,14 @@ class Dots3NoteOmniModelTest(unittest.TestCase):
             self.assertIn("model.layers.1.mlp.experts.0.down_proj.weight", checkpoint_keys)
             self.assertNotIn("model.layers.1.mlp.experts.gate_up_proj", checkpoint_keys)
 
-            reloaded = Dots3NoteOmniForCausalLM.from_pretrained(tmpdirname).eval()
+            reloaded = Dots3NoteForCausalLM.from_pretrained(tmpdirname).eval()
 
         with torch.no_grad():
             actual = reloaded(input_ids, use_cache=False).logits
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def test_expert_fp8_scale_conversion(self):
-        model = Dots3NoteOmniForCausalLM(get_tiny_config())
+        model = Dots3NoteForCausalLM(get_tiny_config())
         model.config.quantization_config = FineGrainedFP8Config(dequantize=True)
         conversions = get_model_conversion_mapping(model)
         converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]

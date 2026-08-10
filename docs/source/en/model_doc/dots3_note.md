@@ -1,4 +1,4 @@
-<!--Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,17 +15,17 @@ rendered properly in your Markdown viewer.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-08-09.*
 
-# Dots3-Note Omni
+# Dots 3 Note Preview
 
-Dots3-Note Omni is a mixture-of-experts causal language model with native text, image, video, and audio inputs. It uses
+Dots 3 Note Preview is a mixture-of-experts causal language model with native text, image, video, and audio inputs. It uses
 a shared vision encoder for images and videos and a Whisper-style audio encoder. Both encoders project their outputs
 into the language model's hidden space before autoregressive text generation.
 
-Dots3-Note Omni checkpoints are available with BF16 weights or with fine-grained FP8 language-model weights and BF16
+Dots 3 Note Preview checkpoints are available with BF16 weights or with fine-grained FP8 language-model weights and BF16
 vision, audio, and language-model-head weights. Both formats load through the standard Transformers APIs.
 
 > [!NOTE]
-> Dots3-Note Omni support is inference-only. In particular, the DSA indexer's discrete FP8 top-k selection runs under
+> Dots 3 Note Preview support is inference-only. In particular, the DSA indexer's discrete FP8 top-k selection runs under
 > `torch.no_grad()`, so its parameters do not receive gradients and training or fine-tuning is not supported.
 
 > [!NOTE]
@@ -39,7 +39,7 @@ vision, audio, and language-model-head weights. Both formats load through the st
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "rednote-hilab/dots3.note.omni"
+model_id = "dots-studio/dots-3-note-prev"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -64,60 +64,60 @@ output_ids = model.generate(**inputs, max_new_tokens=128)
 print(processor.batch_decode(output_ids, skip_special_tokens=True)[0])
 ```
 
-## Dots3NoteOmniConfig
+## Dots3NoteConfig
 
-[[autodoc]] Dots3NoteOmniConfig
+[[autodoc]] Dots3NoteConfig
 
-## Dots3NoteOmniVisionConfig
+## Dots3NoteVisionConfig
 
-[[autodoc]] Dots3NoteOmniVisionConfig
+[[autodoc]] Dots3NoteVisionConfig
 
-## Dots3NoteOmniAudioConfig
+## Dots3NoteAudioConfig
 
-[[autodoc]] Dots3NoteOmniAudioConfig
+[[autodoc]] Dots3NoteAudioConfig
 
-## Dots3NoteOmniForCausalLM
+## Dots3NoteForCausalLM
 
-[[autodoc]] Dots3NoteOmniForCausalLM
+[[autodoc]] Dots3NoteForCausalLM
     - forward
 
-## Dots3NoteOmniForConditionalGeneration
+## Dots3NoteForConditionalGeneration
 
-[[autodoc]] Dots3NoteOmniForConditionalGeneration
+[[autodoc]] Dots3NoteForConditionalGeneration
 
-## Dots3NoteOmniTextModel
+## Dots3NoteTextModel
 
-[[autodoc]] Dots3NoteOmniTextModel
+[[autodoc]] Dots3NoteTextModel
     - forward
 
-## Dots3NoteOmniTextForCausalLM
+## Dots3NoteTextForCausalLM
 
-[[autodoc]] Dots3NoteOmniTextForCausalLM
+[[autodoc]] Dots3NoteTextForCausalLM
     - forward
 
-## Dots3NoteOmniVisionModel
+## Dots3NoteVisionModel
 
-[[autodoc]] Dots3NoteOmniVisionModel
+[[autodoc]] Dots3NoteVisionModel
     - forward
 
-## Dots3NoteOmniAudioModel
+## Dots3NoteAudioModel
 
-[[autodoc]] Dots3NoteOmniAudioModel
+[[autodoc]] Dots3NoteAudioModel
     - forward
 
-## Dots3NoteOmniProcessor
+## Dots3NoteProcessor
 
-[[autodoc]] Dots3NoteOmniProcessor
+[[autodoc]] Dots3NoteProcessor
     - __call__
 
-## Dots3NoteOmniImageProcessor
+## Dots3NoteImageProcessor
 
-[[autodoc]] Dots3NoteOmniImageProcessor
+[[autodoc]] Dots3NoteImageProcessor
 
-## Dots3NoteOmniVideoProcessor
+## Dots3NoteVideoProcessor
 
-[[autodoc]] Dots3NoteOmniVideoProcessor
+[[autodoc]] Dots3NoteVideoProcessor
 
-## Dots3NoteOmniFeatureExtractor
+## Dots3NoteFeatureExtractor
 
-[[autodoc]] Dots3NoteOmniFeatureExtractor
+[[autodoc]] Dots3NoteFeatureExtractor

@@ -1,4 +1,4 @@
-# Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Train-consistent native video preprocessing for Dots3-Note Omni."""
+"""Train-consistent native video preprocessing for Dots 3 Note Preview."""
 
 from __future__ import annotations
 
@@ -48,18 +48,18 @@ _AUDIO_CHUNK_SECONDS = 30
 
 
 @dataclass(frozen=True)
-class Dots3NoteOmniVideoPart:
+class Dots3NoteVideoPart:
     kind: Literal["text", "image", "audio"]
     value: str | Image.Image | np.ndarray
 
 
-class Dots3NoteOmniVideoProcessor(Qwen2VLVideoProcessor):
-    """Video processor providing the native Dots3 timestamped image/audio expansion."""
+class Dots3NoteVideoProcessor(Qwen2VLVideoProcessor):
+    """Video processor providing the native Dots 3 Note Preview timestamped image/audio expansion."""
 
     size = {"shortest_edge": 56 * 56, "longest_edge": (36 * 28) ** 2}
     temporal_patch_size = 1
 
-    def preprocess_native(self, video, **kwargs) -> list[Dots3NoteOmniVideoPart]:
+    def preprocess_native(self, video, **kwargs) -> list[Dots3NoteVideoPart]:
         return preprocess_dots3_note_video(video, **kwargs)
 
 
@@ -273,7 +273,7 @@ def _prepare_decoded_frames(
     if frames.ndim == 4 and frames.shape[1] in (3, 4) and frames.shape[-1] not in (3, 4):
         frames = frames.transpose(0, 2, 3, 1)
     if frames.ndim != 4 or frames.shape[-1] not in (3, 4):
-        raise TypeError("Decoded Dots3 video must have shape (frames, height, width, channels)")
+        raise TypeError("Decoded Dots 3 Note Preview video must have shape (frames, height, width, channels)")
     if not np.issubdtype(frames.dtype, np.integer):
         frames = np.clip(frames * 255.0 if frames.max(initial=0) <= 1.0 else frames, 0, 255).astype(np.uint8)
     fps = float((metadata or {}).get("fps", 1.0)) if metadata else 1.0
@@ -368,7 +368,7 @@ def preprocess_dots3_note_video(
     k_mode: str = "eval_ek",
     max_new_tokens: int = 0,
     jpeg_quality: int = 85,
-) -> list[Dots3NoteOmniVideoPart]:
+) -> list[Dots3NoteVideoPart]:
     """Expand one video into SGLang-compatible timestamped image/audio parts."""
     if sequence_length <= 0:
         raise ValueError(f"sequence_length must be positive, got {sequence_length}")
@@ -426,8 +426,8 @@ def preprocess_dots3_note_video(
     if pcm is None:
         output = []
         for timestamp, image in frames:
-            output.append(Dots3NoteOmniVideoPart("text", f"<{_format_timestamp(timestamp)}>"))
-            output.append(Dots3NoteOmniVideoPart("image", image))
+            output.append(Dots3NoteVideoPart("text", f"<{_format_timestamp(timestamp)}>"))
+            output.append(Dots3NoteVideoPart("image", image))
         return output
 
     video_id = hashlib.sha1(video_bytes, usedforsecurity=False).hexdigest()
@@ -445,14 +445,14 @@ def preprocess_dots3_note_video(
         if end_time <= start_time:
             end_time = start_time + audio_duration / max(1, len(bounds) - 1)
         for timestamp, image in frames[start:end]:
-            output.append(Dots3NoteOmniVideoPart("text", f"<{_format_timestamp(timestamp)}>"))
-            output.append(Dots3NoteOmniVideoPart("image", image))
+            output.append(Dots3NoteVideoPart("text", f"<{_format_timestamp(timestamp)}>"))
+            output.append(Dots3NoteVideoPart("image", image))
         sample_start = max(0, int(round(start_time * audio_sample_rate)))
         sample_end = min(len(pcm), int(round(end_time * audio_sample_rate)))
         if sample_end > sample_start:
             waveform = np.ascontiguousarray(pcm[sample_start:sample_end].astype(np.float32) / 32768.0)
-            output.append(Dots3NoteOmniVideoPart("audio", waveform))
+            output.append(Dots3NoteVideoPart("audio", waveform))
     return output
 
 
-__all__ = ["Dots3NoteOmniVideoProcessor"]
+__all__ = ["Dots3NoteVideoProcessor"]

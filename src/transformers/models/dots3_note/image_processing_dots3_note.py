@@ -1,4 +1,4 @@
-# Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor for Dots3-Note Omni."""
+"""Image processor for Dots 3 Note Preview."""
 
 import math
 
@@ -23,7 +23,7 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 
 
 def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixels: int) -> tuple[int, int]:
-    """Resize exactly as the Dots3 training and serving preprocessors."""
+    """Resize exactly as the Dots 3 Note Preview training and serving preprocessors."""
     if min(height, width) < factor // 4:
         raise ValueError(f"Image height and width must be at least {factor // 4}, got {height}x{width}")
     if max(height, width) / min(height, width) > 200:
@@ -46,8 +46,8 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
     return resized_height, resized_width
 
 
-class Dots3NoteOmniImageProcessor(Qwen2VLImageProcessorPil):
-    """PIL preprocessing numerically identical to the published Dots3 path."""
+class Dots3NoteImageProcessor(Qwen2VLImageProcessorPil):
+    """PIL preprocessing numerically identical to the published Dots 3 Note Preview path."""
 
     def convert_to_rgb(self, image):
         if not isinstance(image, Image.Image):
@@ -84,4 +84,4 @@ class Dots3NoteOmniImageProcessor(Qwen2VLImageProcessorPil):
         )
 
 
-__all__ = ["Dots3NoteOmniImageProcessor"]
+__all__ = ["Dots3NoteImageProcessor"]

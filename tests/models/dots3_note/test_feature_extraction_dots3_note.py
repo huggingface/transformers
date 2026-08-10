@@ -16,8 +16,8 @@ import unittest
 
 import numpy as np
 
-from transformers import Dots3NoteOmniFeatureExtractor, is_torch_available
-from transformers.models.dots3_note_omni.feature_extraction_dots3_note_omni import (
+from transformers import Dots3NoteFeatureExtractor, is_torch_available
+from transformers.models.dots3_note.feature_extraction_dots3_note import (
     compute_audio_token_length,
 )
 from transformers.testing_utils import require_torch
@@ -28,9 +28,9 @@ if is_torch_available():
 
 
 @require_torch
-class Dots3NoteOmniFeatureExtractorTest(unittest.TestCase):
+class Dots3NoteFeatureExtractorTest(unittest.TestCase):
     def get_feature_extractor(self):
-        return Dots3NoteOmniFeatureExtractor(
+        return Dots3NoteFeatureExtractor(
             feature_size=8,
             sampling_rate=32,
             n_fft=16,
@@ -63,7 +63,7 @@ class Dots3NoteOmniFeatureExtractorTest(unittest.TestCase):
             self.get_feature_extractor()(torch.zeros(2, 64), sampling_rate=32)
 
     def test_sglang_log_mel_numerical_golden(self):
-        extractor = Dots3NoteOmniFeatureExtractor()
+        extractor = Dots3NoteFeatureExtractor()
         waveform = ((torch.arange(960_001, dtype=torch.int32) % 257) - 128).to(torch.float32) / 128.0
         output = extractor(waveform, sampling_rate=16_000)
 
@@ -85,7 +85,7 @@ class Dots3NoteOmniFeatureExtractorTest(unittest.TestCase):
         extractor = self.get_feature_extractor()
         with tempfile.TemporaryDirectory() as tmpdirname:
             extractor.save_pretrained(tmpdirname)
-            reloaded = Dots3NoteOmniFeatureExtractor.from_pretrained(tmpdirname)
+            reloaded = Dots3NoteFeatureExtractor.from_pretrained(tmpdirname)
 
         self.assertEqual(extractor.to_dict(), reloaded.to_dict())
         self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))

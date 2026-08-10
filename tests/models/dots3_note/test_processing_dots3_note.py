@@ -21,10 +21,10 @@ from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 
 from transformers import (
-    Dots3NoteOmniFeatureExtractor,
-    Dots3NoteOmniImageProcessor,
-    Dots3NoteOmniProcessor,
-    Dots3NoteOmniVideoProcessor,
+    Dots3NoteFeatureExtractor,
+    Dots3NoteImageProcessor,
+    Dots3NoteProcessor,
+    Dots3NoteVideoProcessor,
     PreTrainedTokenizerFast,
     Qwen2VLVideoProcessor,
     is_torch_available,
@@ -74,11 +74,11 @@ def get_tiny_processor():
         "temporal_patch_size": 1,
         "merge_size": 2,
     }
-    return Dots3NoteOmniProcessor(
-        image_processor=Dots3NoteOmniImageProcessor(**vision_kwargs),
+    return Dots3NoteProcessor(
+        image_processor=Dots3NoteImageProcessor(**vision_kwargs),
         tokenizer=get_tiny_tokenizer(),
-        video_processor=Dots3NoteOmniVideoProcessor(**vision_kwargs),
-        feature_extractor=Dots3NoteOmniFeatureExtractor(
+        video_processor=Dots3NoteVideoProcessor(**vision_kwargs),
+        feature_extractor=Dots3NoteFeatureExtractor(
             feature_size=8,
             sampling_rate=32,
             n_fft=16,
@@ -91,13 +91,13 @@ def get_tiny_processor():
 
 @require_torch
 @require_torchvision
-class Dots3NoteOmniProcessorTest(unittest.TestCase):
+class Dots3NoteProcessorTest(unittest.TestCase):
     def test_legacy_checkpoint_defaults_without_processor_config(self):
-        processor = Dots3NoteOmniProcessor(
-            image_processor=Dots3NoteOmniImageProcessor(),
+        processor = Dots3NoteProcessor(
+            image_processor=Dots3NoteImageProcessor(),
             tokenizer=get_tiny_tokenizer(),
             video_processor=Qwen2VLVideoProcessor(),
-            feature_extractor=Dots3NoteOmniFeatureExtractor(),
+            feature_extractor=Dots3NoteFeatureExtractor(),
         )
 
         expected_size = {"shortest_edge": 3136, "longest_edge": 1016064}
@@ -224,10 +224,10 @@ class Dots3NoteOmniProcessorTest(unittest.TestCase):
         processor = get_tiny_processor()
         with tempfile.TemporaryDirectory() as directory:
             processor.save_pretrained(directory)
-            reloaded = Dots3NoteOmniProcessor.from_pretrained(directory)
+            reloaded = Dots3NoteProcessor.from_pretrained(directory)
 
-        self.assertIsInstance(reloaded.image_processor, Dots3NoteOmniImageProcessor)
-        self.assertIsInstance(reloaded.video_processor, Dots3NoteOmniVideoProcessor)
+        self.assertIsInstance(reloaded.image_processor, Dots3NoteImageProcessor)
+        self.assertIsInstance(reloaded.video_processor, Dots3NoteVideoProcessor)
         self.assertEqual(reloaded.image_processor.temporal_patch_size, 1)
 
 

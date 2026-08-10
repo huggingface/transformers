@@ -1,4 +1,4 @@
-# Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="rednote-hilab/dots3.note.omni")
+@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
 @strict
-class Dots3NoteOmniVisionConfig(PreTrainedConfig):
+class Dots3NoteVisionConfig(PreTrainedConfig):
     r"""
-    Configuration of the Dots3-Note vision encoder.
+    Configuration of the Dots 3 Note Preview vision encoder.
 
     embed_dim (`int`, *optional*, defaults to 1536):
         Width of the patch embeddings and transformer blocks.
@@ -52,7 +52,7 @@ class Dots3NoteOmniVisionConfig(PreTrainedConfig):
         Spatial merge factor used by the vision adapter.
     """
 
-    model_type = "dots3_note_omni_vision_encoder"
+    model_type = "dots3_note_vision_encoder"
     base_config_key = "vision_config"
 
     embed_dim: int = 1536
@@ -101,19 +101,19 @@ class Dots3NoteOmniVisionConfig(PreTrainedConfig):
         if self.router_scoring_func not in {"sigmoid", "softmax"}:
             raise ValueError("router_scoring_func must be 'sigmoid' or 'softmax'")
         if self.temporal_patch_size != 1:
-            raise ValueError("Dots3-Note vision preprocessing requires temporal_patch_size=1")
+            raise ValueError("Dots 3 Note Preview vision preprocessing requires temporal_patch_size=1")
         if self.is_causal:
-            raise ValueError("Dots3-Note vision attention requires is_causal=False")
+            raise ValueError("Dots 3 Note Preview vision attention requires is_causal=False")
         if not self.pre_pixel_shuffle or self.adapter_type != "patch_merger":
-            raise ValueError("Dots3-Note requires pre_pixel_shuffle=True and adapter_type='patch_merger'")
+            raise ValueError("Dots 3 Note Preview requires pre_pixel_shuffle=True and adapter_type='patch_merger'")
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="rednote-hilab/dots3.note.omni")
+@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
 @strict
-class Dots3NoteOmniAudioConfig(PreTrainedConfig):
+class Dots3NoteAudioConfig(PreTrainedConfig):
     r"""
-    Configuration of the Dots3-Note audio encoder and adapter.
+    Configuration of the Dots 3 Note Preview audio encoder and adapter.
 
     encoder_type (`str`, *optional*, defaults to `"dots"`):
         Identifier of the audio encoder architecture stored in the released checkpoint.
@@ -162,7 +162,7 @@ class Dots3NoteOmniAudioConfig(PreTrainedConfig):
         Token delimiting the end of an audio span.
     """
 
-    model_type = "dots3_note_omni_audio_encoder"
+    model_type = "dots3_note_audio_encoder"
     base_config_key = "audio_config"
     attribute_map = {
         "hidden_size": "d_model",
@@ -222,13 +222,13 @@ class Dots3NoteOmniAudioConfig(PreTrainedConfig):
         if self.chunk_seconds <= 0 or self.merge_factor <= 0:
             raise ValueError("chunk_seconds and merge_factor must be positive")
         if self.encoder_type != "dots":
-            raise ValueError("Dots3-Note only supports encoder_type='dots'")
+            raise ValueError("Dots 3 Note Preview only supports encoder_type='dots'")
         if not self.use_conv2d_stem:
-            raise ValueError("the released Dots3-Note audio encoder requires use_conv2d_stem=True")
+            raise ValueError("the released Dots 3 Note Preview audio encoder requires use_conv2d_stem=True")
         if not self.use_rope or self.use_causal:
-            raise ValueError("Dots3-Note audio inference requires use_rope=True and use_causal=False")
+            raise ValueError("Dots 3 Note Preview audio inference requires use_rope=True and use_causal=False")
         if self.whisper_config.get("activation_function") != "swiglu":
-            raise ValueError("the released Dots3-Note audio encoder requires activation_function='swiglu'")
+            raise ValueError("the released Dots 3 Note Preview audio encoder requires activation_function='swiglu'")
         if self.adapter_input_size != self.whisper_config["d_model"]:
             raise ValueError("adapter_input_size must match whisper_config.d_model")
         if self.attention_backend not in {"sdpa", "flash_attention_2", "flash_attention_3"}:
@@ -252,11 +252,11 @@ class Dots3NoteOmniAudioConfig(PreTrainedConfig):
         return self.chunk_seconds * 100
 
 
-@auto_docstring(checkpoint="rednote-hilab/dots3.note.omni")
+@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
 @strict
-class Dots3NoteOmniConfig(PreTrainedConfig):
+class Dots3NoteConfig(PreTrainedConfig):
     r"""
-    Configuration for the Dots3-Note Omni multimodal causal language model.
+    Configuration for the Dots 3 Note Preview multimodal causal language model.
 
     seq_length (`int`, *optional*, defaults to 393216):
         Sequence length used during pretraining. This is retained for checkpoint compatibility.
@@ -338,7 +338,7 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
         Token id delimiting the end of an audio span.
     """
 
-    model_type = "dots3_note_omni"
+    model_type = "dots3_note"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
@@ -347,8 +347,8 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     sub_configs = {
-        "vision_config": Dots3NoteOmniVisionConfig,
-        "audio_config": Dots3NoteOmniAudioConfig,
+        "vision_config": Dots3NoteVisionConfig,
+        "audio_config": Dots3NoteAudioConfig,
     }
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
@@ -427,8 +427,8 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
     topk_group: int = 1
     use_dynamic_rsf: bool = False
 
-    vision_config: dict | Dots3NoteOmniVisionConfig | None = None
-    audio_config: dict | Dots3NoteOmniAudioConfig | None = None
+    vision_config: dict | Dots3NoteVisionConfig | None = None
+    audio_config: dict | Dots3NoteAudioConfig | None = None
     image_token_id: int = 151660
     image_start_token_id: int = 151661
     image_end_token_id: int = 151662
@@ -441,9 +441,9 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         if self.num_key_value_heads != self.num_attention_heads:
-            raise ValueError("Dots3-Note requires num_key_value_heads to match num_attention_heads")
+            raise ValueError("Dots 3 Note Preview requires num_key_value_heads to match num_attention_heads")
         if self.swa_num_key_value_heads != self.swa_num_attention_heads:
-            raise ValueError("Dots3-Note requires swa_num_key_value_heads to match swa_num_attention_heads")
+            raise ValueError("Dots 3 Note Preview requires swa_num_key_value_heads to match swa_num_attention_heads")
         if self.attention_gate_type not in {"headwise", "elementwise"}:
             raise ValueError(f"Unsupported attention_gate_type: {self.attention_gate_type!r}")
         if self.swa_attention_gate_type not in {"headwise", "elementwise"}:
@@ -476,7 +476,7 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
         if unsupported:
             raise ValueError(f"Unsupported layer types: {sorted(unsupported)}")
         if self.index_head_dim != 128:
-            raise ValueError(f"Dots3 Note Omni requires index_head_dim=128, got {self.index_head_dim}")
+            raise ValueError(f"Dots 3 Note Preview requires index_head_dim=128, got {self.index_head_dim}")
         if self.qk_rope_head_dim > self.index_head_dim:
             raise ValueError("qk_rope_head_dim must not exceed index_head_dim")
         if self.n_group < 1 or self.n_routed_experts % self.n_group != 0:
@@ -485,13 +485,13 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
             raise ValueError("topk_group must be in [1, n_group]")
 
         if self.vision_config is None:
-            self.vision_config = Dots3NoteOmniVisionConfig()
+            self.vision_config = Dots3NoteVisionConfig()
         elif isinstance(self.vision_config, dict):
-            self.vision_config = Dots3NoteOmniVisionConfig(**self.vision_config)
+            self.vision_config = Dots3NoteVisionConfig(**self.vision_config)
         if self.audio_config is None:
-            self.audio_config = Dots3NoteOmniAudioConfig()
+            self.audio_config = Dots3NoteAudioConfig()
         elif isinstance(self.audio_config, dict):
-            self.audio_config = Dots3NoteOmniAudioConfig(**self.audio_config)
+            self.audio_config = Dots3NoteAudioConfig(**self.audio_config)
         if self.vision_config.hidden_size != self.hidden_size:
             raise ValueError("vision adapter output width must match the text hidden size")
         if self.audio_config.adapter_output_size != self.hidden_size:
@@ -502,13 +502,13 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
             for name, expected in (("activation_scheme", "dynamic"), ("fmt", "e4m3")):
                 actual = quantization_config.get(name, expected if name == "fmt" else None)
                 if actual != expected:
-                    raise ValueError(f"Dots3 Note Omni FP8 requires {name}={expected!r}, got {actual!r}")
+                    raise ValueError(f"Dots 3 Note Preview FP8 requires {name}={expected!r}, got {actual!r}")
             block_size = quantization_config.get("weight_block_size")
             if not isinstance(block_size, (list, tuple)) or tuple(block_size) != (128, 128):
-                raise ValueError(f"Dots3 Note Omni FP8 requires weight_block_size=(128, 128), got {block_size!r}")
+                raise ValueError(f"Dots 3 Note Preview FP8 requires weight_block_size=(128, 128), got {block_size!r}")
             scale_fmt = quantization_config.get("scale_fmt", "float")
             if scale_fmt != "float":
-                raise ValueError(f"Dots3 Note Omni FP8 requires scale_fmt='float', got {scale_fmt!r}")
+                raise ValueError(f"Dots 3 Note Preview FP8 requires scale_fmt='float', got {scale_fmt!r}")
             # Distinguish a pre-quantized checkpoint before the generic quantizer runs after model construction.
             self._is_quantized = True
             quantization_config.setdefault("modules_to_not_convert", ["vision_encoder", "audio_encoder", "lm_head"])
@@ -516,7 +516,7 @@ class Dots3NoteOmniConfig(PreTrainedConfig):
 
 
 __all__ = [
-    "Dots3NoteOmniAudioConfig",
-    "Dots3NoteOmniConfig",
-    "Dots3NoteOmniVisionConfig",
+    "Dots3NoteAudioConfig",
+    "Dots3NoteConfig",
+    "Dots3NoteVisionConfig",
 ]

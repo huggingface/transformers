@@ -1,4 +1,4 @@
-# Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Processor for Dots3-Note Omni text, image, video, and audio inputs."""
+"""Processor for Dots 3 Note Preview text, image, video, and audio inputs."""
 
 from pathlib import Path
 
@@ -25,7 +25,7 @@ _QWEN2_VL_IMAGE_DEFAULT_SIZE = {"shortest_edge": 56 * 56, "longest_edge": 28 * 2
 _QWEN2_VL_VIDEO_DEFAULT_SIZE = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
 
 
-class Dots3NoteOmniVideosKwargs(VideosKwargs, total=False):
+class Dots3NoteVideosKwargs(VideosKwargs, total=False):
     """
     seq (`int`, *optional*, defaults to 131072):
         Maximum sequence length used to budget video, audio, and output tokens.
@@ -55,14 +55,14 @@ class Dots3NoteOmniVideosKwargs(VideosKwargs, total=False):
     jpeg_quality: int
 
 
-class Dots3NoteOmniProcessorKwargs(ProcessingKwargs, total=False):
-    videos_kwargs: Dots3NoteOmniVideosKwargs
+class Dots3NoteProcessorKwargs(ProcessingKwargs, total=False):
+    videos_kwargs: Dots3NoteVideosKwargs
     _defaults = {}
 
 
 @auto_docstring
-class Dots3NoteOmniProcessor(ProcessorMixin):
-    valid_processor_kwargs = Dots3NoteOmniProcessorKwargs
+class Dots3NoteProcessor(ProcessorMixin):
+    valid_processor_kwargs = Dots3NoteProcessorKwargs
 
     def __init__(
         self,
@@ -74,7 +74,7 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
     ):
         # Early checkpoints only shipped the legacy preprocessor config. Auto classes then
         # instantiate the Qwen2-VL defaults, whose pixel limits and temporal patch size do
-        # not match Dots3-Note. Normalize fallback pixel limits while enforcing the vision
+        # not match Dots 3 Note Preview. Normalize fallback pixel limits while enforcing the vision
         # encoder's fixed temporal patch size; custom pixel limits remain untouched.
         if image_processor is not None:
             if dict(image_processor.size) == _QWEN2_VL_IMAGE_DEFAULT_SIZE:
@@ -117,7 +117,9 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         if videos is not None and (images is not None or audio is not None):
-            raise ValueError("Dots3-Note does not support mixing a native video with separate image/audio inputs")
+            raise ValueError(
+                "Dots 3 Note Preview does not support mixing a native video with separate image/audio inputs"
+            )
         if audio is None:
             return
         texts = [text] if isinstance(text, str) else text
@@ -138,17 +140,21 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
         if isinstance(videos, (str, bytes, Path)) or not isinstance(videos, (list, tuple)):
             videos = [videos]
         if len(videos) != 1:
-            raise ValueError(f"Dots3-Note supports one request with exactly one native video, got {len(videos)}")
+            raise ValueError(
+                f"Dots 3 Note Preview supports one request with exactly one native video, got {len(videos)}"
+            )
         video = videos[0]
         if isinstance(video, (list, tuple)) and video and all(isinstance(item, (str, bytes, Path)) for item in video):
             if len(video) != 1:
-                raise ValueError(f"Dots3-Note supports exactly one native video per request, got {len(video)}")
+                raise ValueError(
+                    f"Dots 3 Note Preview supports exactly one native video per request, got {len(video)}"
+                )
             video = video[0]
 
         audio_sample_rate = kwargs.pop("audio_sr", 16_000)
         if audio_sample_rate != self.feature_extractor.sampling_rate:
             raise ValueError(
-                f"Dots3-Note audio preprocessing requires {self.feature_extractor.sampling_rate} Hz, "
+                f"Dots 3 Note Preview audio preprocessing requires {self.feature_extractor.sampling_rate} Hz, "
                 f"got {audio_sample_rate}"
             )
         video_kwargs = {
@@ -165,7 +171,7 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
         unsupported = {key: value for key, value in kwargs.items() if value is not None}
         if unsupported:
             raise ValueError(
-                "Dots3-Note native video preprocessing uses the fixed SGLang-aligned transform; "
+                "Dots 3 Note Preview native video preprocessing uses the fixed SGLang-aligned transform; "
                 f"unsupported video overrides: {sorted(unsupported)}"
             )
         parts = self.video_processor.preprocess_native(
@@ -176,7 +182,7 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
         images = [part.value for part in parts if part.kind == "image"]
         audios = [part.value for part in parts if part.kind == "audio"]
         if not images:
-            raise ValueError("Dots3-Note video preprocessing produced no frames")
+            raise ValueError("Dots 3 Note Preview video preprocessing produced no frames")
 
         image_inputs = self.image_processor(images, return_tensors="pt")
         audio_inputs = (
@@ -204,7 +210,9 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
         return self.image_token * num_tokens
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        raise RuntimeError("Native Dots3 videos are expanded into timestamped image/audio blocks before tokenization")
+        raise RuntimeError(
+            "Native Dots 3 Note Preview videos are expanded into timestamped image/audio blocks before tokenization"
+        )
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         return self.audio_token * int(audio_inputs["audio_token_lengths"][audio_idx])
@@ -215,4 +223,4 @@ class Dots3NoteOmniProcessor(ProcessorMixin):
         return list(dict.fromkeys(names))
 
 
-__all__ = ["Dots3NoteOmniProcessor"]
+__all__ = ["Dots3NoteProcessor"]

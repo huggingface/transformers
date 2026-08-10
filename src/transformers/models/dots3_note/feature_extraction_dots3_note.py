@@ -1,4 +1,4 @@
-# Copyright 2026 The rednote-hilab team and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Dots Studio team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Exact waveform feature extraction for the Dots3-Note audio encoder."""
+"""Exact waveform feature extraction for the Dots 3 Note Preview audio encoder."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires
-from .configuration_dots3_note_omni import Dots3NoteOmniAudioConfig
+from .configuration_dots3_note import Dots3NoteAudioConfig
 
 
 if is_torch_available():
@@ -61,8 +61,8 @@ def _pad_or_trim(waveform: torch.Tensor, length: int) -> torch.Tensor:
 
 
 @requires(backends=("torch",))
-class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
-    """Convert 16 kHz mono waveforms into Dots3 log-mel chunks."""
+class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
+    """Convert 16 kHz mono waveforms into Dots 3 Note Preview log-mel chunks."""
 
     model_input_names = [
         "input_features",
@@ -109,7 +109,7 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters = np.ascontiguousarray(filters.T, dtype=np.float32)
 
     @classmethod
-    def from_audio_config(cls, config: Dots3NoteOmniAudioConfig) -> Dots3NoteOmniFeatureExtractor:
+    def from_audio_config(cls, config: Dots3NoteAudioConfig) -> Dots3NoteFeatureExtractor:
         return cls(
             feature_size=config.feature_size,
             sampling_rate=config.sampling_rate,
@@ -170,7 +170,7 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
         waveform = clip if isinstance(clip, torch.Tensor) else torch.as_tensor(np.asarray(clip))
         waveform = waveform.to(torch.float32).squeeze()
         if waveform.ndim != 1:
-            raise ValueError(f"Dots3-Note audio must be mono, got shape={tuple(waveform.shape)}")
+            raise ValueError(f"Dots 3 Note Preview audio must be mono, got shape={tuple(waveform.shape)}")
         if waveform.numel() == 0:
             raise ValueError("audio waveform must contain at least one sample")
         return waveform.contiguous()
@@ -227,4 +227,4 @@ class Dots3NoteOmniFeatureExtractor(SequenceFeatureExtractor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["Dots3NoteOmniFeatureExtractor"]
+__all__ = ["Dots3NoteFeatureExtractor"]

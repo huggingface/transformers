@@ -905,7 +905,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "dots3_note_omni": [
+        "dots3_note": [
             WeightConverter(
                 source_patterns=[
                     "mlp.experts.*.gate_proj.weight$",
