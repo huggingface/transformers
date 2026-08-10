@@ -74,8 +74,8 @@ jobs:
 
       - name: Patch vLLM gpu_memory_utilization for CPU
         run: |
-          # Lower hardcoded value in test_initialization.py
-          # Needed by: test_initialization.py::test_can_initialize_small_subset[*]
+          # Lower hardcoded value in test_initialization.py (originally needed by test_initialization and
+          # test_transformers steps, now disabled). Kept in case other tests hit the same OOM issue.
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
           # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
@@ -97,71 +97,48 @@ jobs:
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
       - name: "Test: test_initialization"
+        if: false
+        # We need infra team to provide larger runner (say 128G CPU RAM)
         working-directory: vllm
-        continue-on-error: true
         run: |
-          # Skipped models:
-          #   TransformersMultiModalForCausalLM — OOM (exit code 137)
-          #   Gemma3nForCausalLM               — OOM (exit code 137)
-          #   DeepSeekMTPModel                 — MLA not supported on CPU (vLLM-side issue, NotImplementedError)
-          pytest -v -s \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[LlavaForConditionalGeneration]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[Llama4ForConditionalGeneration]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[BertForSequenceClassification]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[JinaVLForRanking]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[InternVLChatModel]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[InternLM2ForRewardModel]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[PrithviGeoSpatialMAE]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[UltravoxModel]" \
-            "tests/models/test_initialization.py::test_can_initialize_small_subset[XLMRobertaModel]"
+          pytest -v -s tests/models/test_initialization.py
 
       - name: "Test: test_transformers"
         if: false
-        # We constantly hit memory issues after the first 2 tests. The CPU memory doesn't seem to be
-        # released by the OS. A larger runner may work but it's unclear if the memory not being
-        # released issue would persist.
+        # We need infra team to provide larger runner (say 128G CPU RAM)
         working-directory: vllm
-        continue-on-error: true
         run: |
-          # Skipped models:
-          #   allenai/OLMoE-1B-7B-0924 — OOM: previous test leaves insufficient free memory (13.35/27.83 GiB < 0.4*27.83)
-          #   test_hybrid_attention     — OOM: only 10.1/27.83 GiB free after 2 prior tests (needs 0.4*27.83=11.13 GiB)
-          #   test_mla                  — OOM + model too large: DeepSeek-V2-Lite-Chat (15.7B) exceeds 32 GiB runner
-          pytest -v -s tests/models/transformers/ \
-            --deselect "tests/models/transformers/test_backend.py::test_models[allenai/OLMoE-1B-7B-0924-transformers-num_fused2]" \
-            --deselect "tests/models/transformers/test_backend.py::test_hybrid_attention" \
-            --deselect "tests/models/transformers/test_backend.py::test_mla"
+          pytest -v -s tests/models/transformers/
 
       - name: "Test: multimodal processing"
         if: false
         # Replaced by the vllm-multimodal-processing matrix job below.
         working-directory: vllm
-        continue-on-error: true
         run: |
           pytest -v -s tests/models/multimodal/processing/test_transformers_image.py \
                        tests/models/multimodal/processing/test_transformers_audio.py
 
       - name: "Test: test_mapping"
+        if: always()
         working-directory: vllm
-        continue-on-error: true
         run: pytest -v -s tests/models/multimodal/test_mapping.py
 
       - name: "Example: chat"
+        if: always()
         working-directory: vllm
-        continue-on-error: true
         run: python3 examples/basic/offline_inference/chat.py
 
       - name: "Example: vision language"
+        if: always()
         working-directory: vllm
-        continue-on-error: true
         run: python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
 
       - name: "Example: audio language (whisper)"
+        if: always()
         working-directory: vllm
-        continue-on-error: true
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
-  # Multimodal processing tests split across 4 parallel shards (1312 tests total).
+  # Multimodal processing tests split across 4 parallel shards.
   # Each shard runs on a fresh runner — no cross-test memory accumulation.
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
@@ -174,7 +151,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        shard: [0, 1, 2, 3]
+    env:
+      SHARD_ID: ${{ matrix.shard }}
 
     steps:
       - name: Checkout Transformers
@@ -227,10 +206,9 @@ jobs:
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
 
-      - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 10)"
+      - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
-        continue-on-error: true
         run: |
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
-            --num-shards=10 --shard-id=${{ matrix.shard }}
+            --num-shards=4 --shard-id=$SHARD_ID
