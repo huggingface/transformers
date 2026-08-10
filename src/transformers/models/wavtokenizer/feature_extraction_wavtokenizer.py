@@ -25,18 +25,8 @@ logger = logging.get_logger(__name__)
 
 class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a WavTokenizer feature extractor.
-
-    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
-
-    This feature extractor does not resample or downmix audio. Input must already be mono and sampled at the configured
-    `sampling_rate`; pass `sampling_rate` to [`__call__`] so it can validate the input rate.
-
-    Note that [`WavTokenizerModel`] pads internally and accepts arbitrary lengths, so single inputs are returned
-    unpadded, which keeps the produced audio codes bit-identical to the original WavTokenizer pipeline. Batches of
-    different lengths are zero-padded to the longest sample (`padding_mask` marks the valid part); zero-padding can
-    perturb the codes of shorter samples near the end, so encode each clip individually when bit-exact codes matter.
+    Constructs a WavTokenizer feature extractor for mono audio at the configured sampling rate. Audio is not resampled
+    or downmixed.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
