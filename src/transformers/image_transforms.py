@@ -1057,7 +1057,7 @@ def reorder_images(
             Dictionary mapping original indices to (shape, index) tuples.
         is_nested (bool, *optional*, defaults to False):
             Whether the images are nested. Cannot be inferred from the input, as some processing functions outputs nested images.
-            even with non nested images,e.g functions splitting images into patches. We thus can't deduce is_nested from the input.
+            even with non nested images, e.g. functions splitting images into patches. We thus can't deduce is_nested from the input.
 
 
     Returns:

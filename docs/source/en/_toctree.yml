@@ -589,8 +589,6 @@
         title: DeepSeek-V3.2
       - local: model_doc/deepseek_v4
         title: DeepSeek-V4
-      - local: model_doc/dialogpt
-        title: DialoGPT
       - local: model_doc/diffllama
         title: DiffLlama
       - local: model_doc/distilbert
@@ -755,8 +753,6 @@
         title: MBart and MBart-50
       - local: model_doc/megatron-bert
         title: MegatronBERT
-      - local: model_doc/megatron_gpt2
-        title: MegatronGPT2
       - local: model_doc/mellum
         title: Mellum
       - local: model_doc/mimo_v2_flash
@@ -795,6 +791,10 @@
         title: MRA
       - local: model_doc/mt5
         title: MT5
+      - local: model_doc/muse_glimmer
+        title: MuseGlimmer
+      - local: model_doc/muse_glimmer_assistant
+        title: MuseGlimmerAssistant
       - local: model_doc/mvp
         title: MVP
       - local: model_doc/myt5
@@ -977,8 +977,6 @@
         title: DINOv2 with Registers
       - local: model_doc/dinov3
         title: DINOv3
-      - local: model_doc/dit
-        title: DiT
       - local: model_doc/dpt
         title: DPT
       - local: model_doc/efficientloftr

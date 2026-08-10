@@ -82,8 +82,6 @@ class HunYuanVLRMSNorm(nn.Module):
 
 
 class HunYuanVLRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__()
@@ -109,8 +107,8 @@ class HunYuanVLRotaryEmbedding(nn.Module):
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
             inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
 
@@ -1007,12 +1005,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor`):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
@@ -1085,12 +1077,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
-        r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1177,11 +1163,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-
         Example:
 
         ```python

@@ -175,8 +175,6 @@ class DeepseekV2RMSNorm(nn.Module):
 
 
 class DeepseekV2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekV2Config, device=None):
         super().__init__()
@@ -191,8 +189,8 @@ class DeepseekV2RotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -301,15 +299,13 @@ def yarn_apply_mscale(rope_parameters, scaling):
 class DeepseekV2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: DeepseekV2Config, layer_idx: int | None = None):
+    def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.max_position_embeddings = config.max_position_embeddings
 
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
@@ -324,9 +320,9 @@ class DeepseekV2Attention(nn.Module):
         if self.q_lora_rank is None:
             self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         else:
-            self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepseekV2RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            self.q_a_layernorm = DeepseekV2RMSNorm(self.q_lora_rank)
+            self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,
@@ -336,7 +332,7 @@ class DeepseekV2Attention(nn.Module):
         self.kv_a_layernorm = DeepseekV2RMSNorm(config.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
             config.kv_lora_rank,
-            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
 
@@ -346,18 +342,25 @@ class DeepseekV2Attention(nn.Module):
             bias=config.attention_bias,
         )
 
-        self.scaling = self.qk_head_dim ** (-0.5)
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.scaling)
+        self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
+    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Expands the compressed latents into key and value states. Args:
+            - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+        Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
+        """
+        batch_size, _, seq_length, _ = kv_nope.shape
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
+        # Concatenate k_nope and k_rot in a new tensor
+        key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
+        key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
     def forward(
@@ -380,18 +383,19 @@ class DeepseekV2Attention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_nope = self.kv_a_layernorm(kv_nope)
-
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
+        # Cache read / write is performed while the latent KV is still compressed
+        if past_key_values is not None:
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
+
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
         key_states, value_states = self.expand_kv(k_nope, k_pe)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

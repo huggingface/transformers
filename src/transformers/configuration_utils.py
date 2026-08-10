@@ -64,6 +64,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "window_attention",  # non-overlapping windows usually in ViT
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl

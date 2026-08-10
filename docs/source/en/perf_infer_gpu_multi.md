@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -164,7 +164,7 @@ def forward(self, hidden_states):
 Local strategies (`local_colwise`, `local_rowwise`, `local_packed_rowwise`) don't use [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) because it lacks support for some operations like [torch.chunk](https://docs.pytorch.org/docs/stable/generated/torch.chunk.html). Instead, local strategies use the basic [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html) and perform distributed logic manually.
 
 <!--
-Readd this when I get the exact error message
+Re-add this when I get the exact error message
 > [!TIP]
 > If you are using a custom partitioning strategy, and it's not working with `... is not supported` error, try using the `local*` strategies to see if they work better.
 -->
@@ -261,10 +261,12 @@ Transformers implements tensor parallelism in a framework-agnostic way. It relie
 `DeviceMesh` creates a multi-dimensional grid of devices that communicate together. Different parallelization strategies require different communication patterns. Create a `DeviceMesh` with multiple sub-meshes to handle these patterns.
 
 ```python
+import torch
 from torch.distributed.device_mesh import init_device_mesh
 
-# Create a 1D mesh of 4 GPUs
-device_mesh = init_device_mesh("cuda", (4,), mesh_dim_names=["tp"])
+# Create a 1D mesh of 4 accelerators
+device_type = torch.accelerator.current_accelerator().type
+device_mesh = init_device_mesh(device_type, (4,), mesh_dim_names=["tp"])
 ```
 
 Most `torch.distributed` parallelization strategies apply to the mesh itself or its sub-mesh. The mesh automatically handles communication patterns.
