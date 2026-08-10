@@ -299,7 +299,7 @@ class LoadVideoTester(unittest.TestCase):
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             backend="torchcodec",
         )
-        self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertEqual(video.shape, (243, 3, 360, 640))
 
         # Can't use certain backends with url
         with self.assertRaises(ValueError):
@@ -324,7 +324,7 @@ class LoadVideoTester(unittest.TestCase):
         self.assertIsInstance(metadata, VideoMetadata)
 
         video, metadata = load_video(video_file_path, backend="torchcodec")
-        self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertEqual(video.shape, (243, 3, 360, 640))
         self.assertIsInstance(metadata, VideoMetadata)
 
     @require_torchvision_video_decoding
