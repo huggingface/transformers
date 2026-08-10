@@ -293,6 +293,7 @@ def get_vision_bilinear_indices_and_weights(
     grid_thw: torch.Tensor,
     num_grid_per_side: int,
     spatial_merge_size: int,
+    align_corners: bool = True,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Deprecated — use [`get_vision_interpolation_indices_and_weights`] with `mode="bilinear"`,

@@ -791,6 +791,10 @@
         title: MRA
       - local: model_doc/mt5
         title: MT5
+      - local: model_doc/muse_glimmer
+        title: MuseGlimmer
+      - local: model_doc/muse_glimmer_assistant
+        title: MuseGlimmerAssistant
       - local: model_doc/mvp
         title: MVP
       - local: model_doc/myt5
