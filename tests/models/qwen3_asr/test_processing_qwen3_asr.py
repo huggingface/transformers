@@ -29,6 +29,7 @@ from transformers.testing_utils import require_torch
 from ...test_processing_common import ProcessorTesterMixin
 
 
+# trigger tests_processors
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_asr"
