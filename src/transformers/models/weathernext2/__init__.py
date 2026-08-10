@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_weathernext2 import *
+    from .feature_extraction_weathernext2 import *
     from .modeling_weathernext2 import *
-    from .processing_weathernext2 import *
 else:
     import sys
 

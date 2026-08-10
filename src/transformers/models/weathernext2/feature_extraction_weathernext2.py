@@ -47,7 +47,7 @@ def get_day_progress(seconds_since_epoch: np.ndarray, longitude: np.ndarray) -> 
     return np.mod(greenwich[..., None] + offsets, 1.0).astype(np.float32)
 
 
-class WeatherNext2Processor(FeatureExtractionMixin):
+class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     r"""
     Constructs a WeatherNext 2 feature extractor.
 
@@ -58,7 +58,7 @@ class WeatherNext2Processor(FeatureExtractionMixin):
             Variables the model predicts, in channel order.
         forcing_variables (`Sequence[str]`):
             Variables supplied for the predicted time step. These are all derived from the clock, so this class
-            computes them itself in [`~WeatherNext2Processor.compute_forcings`].
+            computes them itself in [`~WeatherNext2FeatureExtractor.compute_forcings`].
         atmospheric_variables (`Sequence[str]`):
             Variables that carry a pressure-level dimension.
         static_variables (`Sequence[str]`):
@@ -380,4 +380,4 @@ class WeatherNext2Processor(FeatureExtractionMixin):
         return next_state
 
 
-__all__ = ["WeatherNext2Processor"]
+__all__ = ["WeatherNext2FeatureExtractor"]

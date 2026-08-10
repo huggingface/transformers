@@ -47,8 +47,8 @@ import numpy as np
 import torch
 
 from transformers.models.weathernext2.configuration_weathernext2 import WeatherNext2Config
+from transformers.models.weathernext2.feature_extraction_weathernext2 import WeatherNext2FeatureExtractor
 from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2ForWeatherForecasting
-from transformers.models.weathernext2.processing_weathernext2 import WeatherNext2Processor
 
 
 PARAM_PREFIX = "params:multimodality_forward/"
@@ -353,7 +353,7 @@ def main():
         raise ValueError(f"Missing keys: {missing}")
     print(f"Converted {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M parameters.")
 
-    processor = WeatherNext2Processor(
+    processor = WeatherNext2FeatureExtractor(
         input_variables=config.input_variables,
         target_variables=config.target_variables,
         forcing_variables=config.forcing_variables,

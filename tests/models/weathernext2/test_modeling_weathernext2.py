@@ -197,6 +197,47 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             else:
                 torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
 
+    def test_attention_outputs(self):
+        """Same contract as the shared test, with this model's block-local attention shape.
+
+        Attention runs over three block-diagonals of the mesh adjacency, so a layer's weights are
+        `[batch * num_blocks, heads, block_size, 3 * block_size]` rather than `[batch, heads, seq, seq]`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            num_blocks, _, block_size, key_length = model.get_submodule(
+                "model" if model_class is not WeatherNext2Model else ""
+            ).attention_mask.shape
+            expected = (
+                self.model_tester.batch_size * num_blocks,
+                self.model_tester.num_attention_heads,
+                block_size,
+                key_length,
+            )
+
+            # via the forward argument
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_attentions=True)
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(tuple(attentions[0].shape), expected)
+
+            # via the config
+            config.output_attentions = True
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(tuple(outputs.attentions[0].shape), expected)
+            config.output_attentions = False
+
+            # and off by default
+            with torch.no_grad():
+                outputs = model_class._from_config(config).to(torch_device).eval()(**inputs_dict)
+            self.assertIsNone(outputs.attentions)
+
     def test_banded_attention_matches_dense_masking(self):
         """The three-block-diagonal attention must equal masking the full node-by-node matrix."""
         from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2Attention
@@ -246,10 +287,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="WeatherNext 2 builds its own geometric attention mask.")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
     def test_hidden_states_output(self):
         pass
@@ -261,10 +298,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="The attention mask is geometric and internal, so external masks do not apply.")
     def test_eager_matches_sdpa_inference(self, *args, **kwargs):
-        pass
-
-    @unittest.skip(reason="Only the mesh transformer is parallelizable; the graph network is not yet planned.")
-    def test_tp_plan_matches_params(self):
         pass
 
 
@@ -320,10 +353,10 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
     checkpoint = "kashif/weathernext2-mini"
 
     def test_inference_shapes_and_determinism(self):
-        from transformers import WeatherNext2Processor
+        from transformers import WeatherNext2FeatureExtractor
 
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
-        processor = WeatherNext2Processor.from_pretrained(self.checkpoint)
+        processor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
         config = model.config
 
         grid_features = torch.zeros(

@@ -50,17 +50,17 @@ use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly
 
 ## Usage
 
-The model itself works in a normalized space, and [`WeatherNext2Processor`] owns everything physical: the per-variable
+The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor`] owns everything physical: the per-variable
 normalization statistics, the calendar-derived forcings, and the residual connection that turns the model's output back
 into an atmospheric state.
 
 ```python
 import numpy as np
 import torch
-from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Processor
+from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2FeatureExtractor
 
 model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini").eval()
-processor = WeatherNext2Processor.from_pretrained("kashif/weathernext2-mini")
+processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
 
 # `state` maps each input variable to its values. Time-varying variables are
 # [batch, num_input_timesteps, (levels,) lat, lon]; static ones are [lat, lon].
@@ -91,7 +91,7 @@ with torch.no_grad():
 
 ### Autoregressive rollout
 
-Each 6-hour step draws fresh noise. [`~WeatherNext2Processor.advance_state`] assembles the next conditioning window:
+Each 6-hour step draws fresh noise. [`~WeatherNext2FeatureExtractor.advance_state`] assembles the next conditioning window:
 it drops the oldest frame, appends the forecast, recomputes the clock variables, and discards the targets that are not
 also inputs (precipitation and the cyclone diagnostics).
 
@@ -124,9 +124,9 @@ for step in range(1, 21):  # 5 days
 
 [[autodoc]] WeatherNext2Config
 
-## WeatherNext2Processor
+## WeatherNext2FeatureExtractor
 
-[[autodoc]] WeatherNext2Processor
+[[autodoc]] WeatherNext2FeatureExtractor
     - __call__
     - postprocess
     - advance_state

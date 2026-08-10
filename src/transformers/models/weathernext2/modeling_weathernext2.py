@@ -39,6 +39,8 @@ from ...utils import (
     is_torch_flex_attn_available,
     requires_backends,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_weathernext2 import WeatherNext2Config
 
 
@@ -460,6 +462,7 @@ class WeatherNext2ModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     mesh_hidden_state: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring(custom_intro="A single forecast step.")
@@ -470,13 +473,14 @@ class WeatherNext2ForecastOutput(ModelOutput):
         Predicted state for the next time step, in the model's normalized space, with channels ordered as in
         [`WeatherNext2Config.target_channel_layout`]. For variables that are also inputs this is a normalized
         *residual* on the last input frame; for the others it is the normalized value itself. Use
-        [`WeatherNext2Processor.postprocess`] to get physical units.
+        [`WeatherNext2FeatureExtractor.postprocess`] to get physical units.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_grid_points, hidden_size)`):
         Grid-point features the prediction was decoded from.
     """
 
     prediction: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def build_banded_attention_mask(geometry: "WeatherNext2Geometry") -> torch.Tensor:
@@ -565,7 +569,8 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         register("mesh_to_grid_edge_features", geometry.mesh_to_grid_edge_features)
         register("attention_mask", build_banded_attention_mask(geometry))
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -722,7 +727,11 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         prediction = prediction.transpose(1, 2).reshape(
             prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
         )
-        return WeatherNext2ForecastOutput(prediction=prediction, last_hidden_state=outputs.last_hidden_state)
+        return WeatherNext2ForecastOutput(
+            prediction=prediction,
+            last_hidden_state=outputs.last_hidden_state,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = ["WeatherNext2ForWeatherForecasting", "WeatherNext2Model", "WeatherNext2PreTrainedModel"]

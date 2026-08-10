@@ -157,13 +157,15 @@ class WeatherNext2Config(PreTrainedConfig):
     ```"""
 
     model_type = "weathernext2"
+    # Only the mesh transformer is tensor-parallel; the graph network is sharded over nodes, not
+    # channels. Paths are relative to `WeatherNext2Model`.
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "mesh_transformer.layers.*.self_attn.q_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.k_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.v_proj": "colwise",
+        "mesh_transformer.layers.*.self_attn.o_proj": "rowwise",
+        "mesh_transformer.layers.*.mlp.fc1": "colwise",
+        "mesh_transformer.layers.*.mlp.fc2": "rowwise",
     }
 
     hidden_size: int = 768
