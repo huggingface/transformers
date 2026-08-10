@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import SAFE_WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
@@ -39,6 +40,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import (
         Apertus1p5ForConditionalGeneration,
@@ -51,7 +53,7 @@ if is_torch_available():
         Apertus1p5VisionTokenizerModel,
         WatermarkingConfig,
         WavTokenizerConfig,
-        WavTokenizerModel,
+        WavTokenizerEncoderModel,
     )
 
 
@@ -252,11 +254,47 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.assertIsInstance(config.audio_config, WavTokenizerConfig)
         model = Apertus1p5ForConditionalGeneration(config)
         self.assertIsInstance(model.model.language_model, Apertus1p5TextModel)
-        self.assertIsInstance(model.model.audio_tokenizer, WavTokenizerModel)
+        self.assertIsInstance(model.model.audio_tokenizer, WavTokenizerEncoderModel)
+        self.assertFalse(hasattr(model.model.audio_tokenizer, "backbone"))
+        self.assertFalse(hasattr(model.model.audio_tokenizer, "head"))
 
     def test_rejects_unrelated_audio_config(self):
         with self.assertRaisesRegex(ValueError, "must be 'wavtokenizer'"):
             Apertus1p5Config(audio_config={"model_type": "dac"})
+
+    def test_encoder_only_checkpoint_save_load(self):
+        config = self.model_tester.get_config()
+        model = Apertus1p5ForConditionalGeneration(config).eval()
+        with torch.no_grad():
+            codebook = model.model.audio_tokenizer.quantizer.codebook.embed
+            codebook.copy_(torch.randn(codebook.shape, generator=torch.Generator().manual_seed(0)))
+        input_features = torch.randn(1, 1, config.audio_config.hop_length * 2 + 1)
+        feature_attention_mask = torch.ones(1, input_features.shape[-1], dtype=torch.long)
+        with torch.no_grad():
+            expected_codes = model.model.get_audio_tokens(input_features, feature_attention_mask)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            checkpoint_path = os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)
+            state_dict = load_file(checkpoint_path)
+            audio_keys = {key for key in state_dict if key.startswith("model.audio_tokenizer.")}
+            self.assertTrue(any(key.startswith("model.audio_tokenizer.encoder.") for key in audio_keys))
+            self.assertTrue(any(key.startswith("model.audio_tokenizer.quantizer.") for key in audio_keys))
+            self.assertFalse(any(key.startswith("model.audio_tokenizer.backbone.") for key in audio_keys))
+            self.assertFalse(any(key.startswith("model.audio_tokenizer.head.") for key in audio_keys))
+            reloaded, loading_info = Apertus1p5ForConditionalGeneration.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
+        self.assertIsInstance(reloaded.model.audio_tokenizer, WavTokenizerEncoderModel)
+        self.assertFalse(hasattr(reloaded.model.audio_tokenizer, "backbone"))
+        self.assertFalse(hasattr(reloaded.model.audio_tokenizer, "head"))
+        with torch.no_grad():
+            actual_codes = reloaded.model.get_audio_tokens(input_features, feature_attention_mask)
+        torch.testing.assert_close(actual_codes, expected_codes, rtol=0, atol=0)
 
     @pytest.mark.generate
     @unittest.skip("Apertus1p5 has dynamic control flow in vision backbone")
@@ -809,6 +847,9 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
         self.assertEqual(next(self.model.model.language_model.parameters()).dtype, torch.bfloat16)
         self.assertEqual(next(self.model.model.vision_tokenizer.parameters()).dtype, torch.float32)
         self.assertEqual(next(self.model.model.audio_tokenizer.parameters()).dtype, torch.float32)
+        self.assertIsInstance(self.model.model.audio_tokenizer, WavTokenizerEncoderModel)
+        self.assertFalse(hasattr(self.model.model.audio_tokenizer, "backbone"))
+        self.assertFalse(hasattr(self.model.model.audio_tokenizer, "head"))
 
     def test_image_codes_map_into_vocabulary(self):
         """A 256x256 image must give exactly (256/16)^2 codes whose ids round-trip through the real vocabulary."""
