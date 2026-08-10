@@ -1629,30 +1629,23 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
-            # 3. Handle dtype casting
-            needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
-            )
-            if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+            # 3. Handle dtype casting: only quantize the parameter if it needs to be quantized and it isn't already
+            if hf_quantizer is not None and not hf_quantizer.pre_quantized:
+                needs_quantization = hf_quantizer.param_needs_quantization(model, renamed_key)
+                if needs_quantization:
+                    mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+            else:
+                needs_quantization = False
+
+            if hasattr(tensor, "get_dtype"):
+                is_floating_point = tensor.get_dtype().startswith(("F", "BF"))
+            else:
+                is_floating_point = tensor.is_floating_point()
 
             _dtype = dtype
-            if (
-                hf_quantizer
-                and hf_quantizer.pre_quantized
-                and (
-                    original_key != renamed_key
-                    or not (
-                        tensor.get_dtype().startswith(("F", "BF"))
-                        if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
-                    )
-                )
-            ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
+            if has_on_the_fly_quantization and (original_key != renamed_key or not is_floating_point):
+                # if the key was renamed as it is not available in the state dict otherwise, it means that we are
+                # deserializing it, so we need to make sure to load the tensor with the same dtype from the checkpoint
                 # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
                 _dtype = None
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
