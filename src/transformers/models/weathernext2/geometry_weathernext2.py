@@ -582,4 +582,5 @@ def _load_geometry(path: str) -> WeatherNext2Geometry:
     )
 
 
-__all__ = ["WeatherNext2Geometry", "build_geometry", "build_geometry_cached"]
+# Deliberately no `__all__`: this module is an internal helper, not part of the public API, and it
+# imports scipy at module level. Exporting it would make `from transformers import *` require scipy.
