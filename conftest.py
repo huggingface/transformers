@@ -21,7 +21,6 @@ import functools
 import os
 import re
 import sys
-import traceback
 import tempfile
 import warnings
 from os.path import abspath, dirname, join
@@ -40,8 +39,6 @@ from transformers.testing_utils import (
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
 
-
-pytest_plugins = ["memory_tracker_plugin"]
 
 _ci_fallback_cache_dir = None
 # Directory holding one append-only file per process recording the repo/file id for every
@@ -140,11 +137,6 @@ def _with_tmpdir_cache_fallback(fn):
             print(
                 f"[CI_CACHE_FALLBACK] read-only cache hit for {repo_id!r} ({type(e).__name__}); "
                 "retrying via writable tmp cache_dir with Xet disabled",
-                file=sys.stderr,
-                flush=True,
-            )
-            print(
-                f"[CI_CACHE_FALLBACK] call stack:\n{''.join(traceback.format_stack())}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -309,9 +301,7 @@ def pytest_addoption(parser):
 def pytest_runtest_logreport(report):
     if report.when == "call":
         outcome = "PASSED" if report.passed else "FAILED" if report.failed else "SKIPPED"
-        delta = next((v for k, v in report.user_properties if k == "memory_delta_mb"), None)
-        mem_str = f" mem:{delta:+.0f}MB" if delta is not None else ""
-        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s{mem_str}")
+        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s")
 
 
 def pytest_terminal_summary(terminalreporter):

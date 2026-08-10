@@ -93,9 +93,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-a = 1
-
-
 @require_torch
 @require_vision
 class ProcessorTesterMixin:
