@@ -46,6 +46,10 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor.image_seq_length = 0
         return image_processor
 
+    @unittest.skip("Model doesn't take images+text as input")
+    def test_replacement_offsets(self):
+        pass
+
     @unittest.skip("ColpaliProcessor can only process one of text or images at a time")
     def test_processor_with_multiple_inputs(self):
         pass

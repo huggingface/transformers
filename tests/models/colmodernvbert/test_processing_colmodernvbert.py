@@ -103,6 +103,10 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # The following tests override the parent tests because ColModernVBertProcessor can only take one of images or text as input at a time.
 
+    @unittest.skip("Model doesn't take images+text as input")
+    def test_replacement_offsets(self):
+        pass
+
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")

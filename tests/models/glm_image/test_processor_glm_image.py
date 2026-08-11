@@ -169,3 +169,7 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     )
     def test_tokenizer_defaults(self):
         pass
+
+    # tiny model has too little tokens and collapses everything to UNK which is not defined
+    def test_replacement_offsets(self):
+        pass

@@ -203,6 +203,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_assistant_mask(self):
         pass
 
+    @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
+    def test_replacement_offsets(self):
+        pass
+
     def test_processor_text_has_no_visual(self):
         # Overwritten: Shieldgemma has a complicated processing so we don't check id values
         processor = self.get_processor()

@@ -14,10 +14,6 @@
 
 import unittest
 
-from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.pre_tokenizers import Whitespace
-
 from transformers import MuseGlimmerProcessor
 from transformers.testing_utils import require_torch, require_vision
 
@@ -49,29 +45,7 @@ VOCAB = {
 @require_torch
 class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseGlimmerProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = Tokenizer(WordLevel(vocab=VOCAB, unk_token="<|unk|>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        return tokenizer_class(
-            tokenizer_object=tokenizer,
-            unk_token="<|unk|>",
-            pad_token="<|finetune_right_pad|>",
-            bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>",
-            # adjacent runs of these carry no whitespace, so they must split as added tokens
-            additional_special_tokens=[
-                "<|patch|>",
-                "<|video|>",
-                "<|vid_start|>",
-                "<|vid_end|>",
-                "<|vid_frame_separator|>",
-                "<|image_start|>",
-                "<|image_end|>",
-            ],
-        )
+    model_id = "meta-models/Muse-Glimmer-30B"
 
     @classmethod
     def _setup_image_processor(cls):

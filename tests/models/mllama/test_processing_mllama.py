@@ -425,6 +425,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=3,
             )
 
-    @unittest.skip("Mllama can't process inputs with no image ttogether with multimodal inputs")
+    @unittest.skip("Mllama can't process inputs with no image together with multimodal inputs")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("Model doesn't use offsets as it uses cross-attn instead of early fusion")
+    def test_replacement_offsets(self):
         pass

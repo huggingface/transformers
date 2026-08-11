@@ -26,6 +26,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
+from transformers import ProcessorMixin
 from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     Unpack,
@@ -2151,3 +2152,67 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
         self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+
+    @staticmethod
+    def does_processor_return_offsets(processor_class, method_name: str):
+        """
+        Updated processor need to override a `replace_xxx_method` which is the only
+        reliable way to tell if processor is old format or not.
+        """
+        child_method = getattr(processor_class, method_name)
+        base_method = getattr(ProcessorMixin, method_name)
+        return child_method is not base_method
+
+    def test_replacement_offsets(self):
+        "Tests that the returned replacement offsets show correct text and spans for multimodal tokens"
+
+        processor = self.get_processor()
+
+        if not self.does_processor_return_offsets(processor.__class__, "replace_image_token"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        attr_to_input_param = {
+            "tokenizer": ("text", "prepare_text_inputs", "text_input_name"),
+            "image_processor": ("images", "prepare_image_inputs", "images_input_name"),
+            "video_processor": ("videos", "prepare_video_inputs", "videos_input_name"),
+            "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
+            "audio_processor": ("audio", "prepare_audio_inputs", "audio_input_name"),
+        }
+
+        # Prepare inputs dynamically based on processor attributes
+        processor_inputs = {}
+        modalities = []
+        attributes = self.processor_class.get_attributes()
+
+        for attr in attributes:
+            param_name, prepare_method_name, output_key_attr = attr_to_input_param[attr]
+            prepare_method = getattr(self, prepare_method_name)
+            if param_name == "text":
+                if "image_processor" in attributes:
+                    modalities.append("image")
+                if "video_processor" in attributes:
+                    modalities.append("video")
+                    processor_inputs["do_sample_frames"] = False
+                if "audio_processor" in attributes or "feature_extractor" in attributes:
+                    modalities.append("audio")
+                processor_inputs[param_name] = prepare_method(modalities=modalities)
+            else:
+                processor_inputs[param_name] = prepare_method()
+
+        model_inputs = processor(
+            **processor_inputs,
+            add_special_tokens=False,
+            padding=False,
+            truncation=False,
+            max_length=None,
+            return_text_replacement_offsets=True,
+            return_tensors="pt",
+        )
+        detokenized_text = processor.tokenizer.batch_decode(model_inputs["input_ids"], skip_special_tokens=False)
+        self.assertIn("text_replacement_offsets", model_inputs)
+
+        for i, sample_offsets in enumerate(model_inputs["text_replacement_offsets"]):
+            for curr_dict in sample_offsets:
+                self.assertIn(curr_dict["type"], modalities)
+                start, end = curr_dict["new_span"]
+                self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])

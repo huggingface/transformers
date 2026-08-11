@@ -53,6 +53,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_defaults(self):
         pass
 
+    @unittest.skip("Model doesn't take images+text as input")
+    def test_replacement_offsets(self):
+        pass
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

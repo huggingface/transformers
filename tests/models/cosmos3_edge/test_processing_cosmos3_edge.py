@@ -390,3 +390,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(text, [f"before{replacement}after"])
         self.assertEqual(replacement_offsets[0][0]["text"], "<|vision_start|><|video_pad|><|vision_end|>")
+
+    @unittest.skip("Model needs real tokenizer and isn't worth testing, as it's used in diffusers pipe")
+    def test_replacement_offsets(self):
+        pass

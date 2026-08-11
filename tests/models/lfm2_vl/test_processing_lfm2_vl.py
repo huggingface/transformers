@@ -36,7 +36,9 @@ if is_vision_available():
 class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
     # Tiny processor created with make_tiny_processor.py from "LiquidAI/LFM2-VL-1.6B"
-    tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
+    # tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
+
+    model_id = "LiquidAI/LFM2-VL-1.6B"
 
     @classmethod
     def _setup_image_processor(cls):

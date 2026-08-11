@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 
-from transformers import PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
 from transformers.utils import (
     is_tokenizers_available,
@@ -32,9 +31,7 @@ if is_torch_available():
     import torch
 
 if is_tokenizers_available():
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
+    pass
 
 if is_vision_available():
     from PIL import Image
@@ -51,6 +48,7 @@ if is_vision_available():
 @require_tokenizers
 class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = HunYuanVLProcessor
+    model_id = "tencent/HunyuanOCR"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -77,53 +75,6 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return [f"lower newer {special_token_to_add}", f" {special_token_to_add} upper older longer string"] + [
             f"lower newer {special_token_to_add}"
         ] * (batch_size - 2)
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        vocab = {
-            "<unk>": 0,
-            "<pad>": 1,
-            "<bos>": 2,
-            "<eos>": 3,
-            "<image_start>": 4,
-            "<image>": 5,
-            "<image_end>": 6,
-            "hello": 7,
-            "<placeholder>": 8,
-            "<new_tail>": 9,
-            "lower": 10,
-            "newer": 11,
-            "upper": 12,
-            "older": 13,
-            "longer": 14,
-            "string": 15,
-            "Describe": 16,
-            "this.": 17,
-        }
-        tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        fast_tokenizer = PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            unk_token="<unk>",
-            pad_token="<pad>",
-            bos_token="<bos>",
-            eos_token="<eos>",
-            extra_special_tokens={
-                "image_start_token": "<image_start>",
-                "image_token": "<image>",
-                "image_end_token": "<image_end>",
-            },
-        )
-        fast_tokenizer.chat_template = (
-            "{% for message in messages %}"
-            "{% for content in message['content'] %}"
-            "{% if content['type'] == 'image' %}<image_start><image><image_end>"
-            "{% elif content['type'] == 'text' %}{{ content['text'] }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% endfor %}"
-        )
-        return fast_tokenizer
 
     @classmethod
     def _setup_image_processor(cls):
