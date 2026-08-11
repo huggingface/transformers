@@ -302,7 +302,6 @@ class WeatherNext2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_attention_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
@@ -325,17 +324,18 @@ class WeatherNext2Attention(nn.Module):
             Which of the three candidate blocks each query may attend to, node by node.
         """
         batch_size, num_blocks, block_size, _ = hidden_states.shape
-        head_shape = (batch_size, num_blocks, block_size, self.num_attention_heads, self.head_dim)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # [batch, blocks, block, hidden] -> [batch, blocks, heads, block, head_dim]
-        query_states = self.q_proj(hidden_states).view(head_shape).transpose(2, 3)
-        key_states = gather_neighbouring_blocks(self.k_proj(hidden_states).view(head_shape).transpose(2, 3))
-        value_states = gather_neighbouring_blocks(self.v_proj(hidden_states).view(head_shape).transpose(2, 3))
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(2, 3)
+        key_states = gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+        value_states = gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
 
         # Fold the block axis into the batch axis so the attention interface sees a plain 4-D
         # problem, and upcast: the original implementation runs attention in float32.
         def flatten(states: torch.Tensor) -> torch.Tensor:
-            return states.reshape(-1, self.num_attention_heads, states.shape[-2], self.head_dim).float()
+            return states.reshape(-1, *states.shape[-3:]).float()
 
         if self.config._attn_implementation == "flex_attention":
             if self._flex_block_mask is None or self._flex_batch_size != batch_size:
@@ -360,9 +360,7 @@ class WeatherNext2Attention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.to(hidden_states.dtype).view(
-            batch_size, num_blocks, block_size, self.num_attention_heads * self.head_dim
-        )
+        attn_output = attn_output.to(hidden_states.dtype).reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
 
 
