@@ -137,10 +137,10 @@ class CohereCompassConfig(PreTrainedConfig):
     ```python
     >>> from transformers import CohereCompassForConditionalGeneration, CohereCompassConfig
 
-    >>> # Initializing a Qwen3-VL style configuration
-    >>> configuration = CohereCompassConfig()
+    >>> # Initializing a CohereCompass style configuration
+    >>> configuration = CohereCompassConfig.from_pretrained("CohereLabs/North-Micro-Vision-Instruct")
 
-    >>> # Initializing a model from the Qwen3-VL-4B style configuration
+    >>> # Initializing a model from the CohereCompass style configuration
     >>> model = CohereCompassForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

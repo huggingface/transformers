@@ -94,6 +94,22 @@ class CohereCompassTextConfig(Cohere2Config):
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
 class CohereCompassConfig(Qwen3VLConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import CohereCompassForConditionalGeneration, CohereCompassConfig
+
+    >>> # Initializing a CohereCompass style configuration
+    >>> configuration = CohereCompassConfig.from_pretrained("CohereLabs/North-Micro-Vision-Instruct")
+
+    >>> # Initializing a model from the CohereCompass style configuration
+    >>> model = CohereCompassForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "cohere_compass"
     sub_configs = {
         "text_config": CohereCompassTextConfig,
