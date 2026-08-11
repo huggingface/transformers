@@ -1091,15 +1091,21 @@ def register_dynamic_cache_export_support():
     try:
         torch.utils._pytree.register_pytree_node(
             DynamicCache,
-            _flatten_dynamic_cache,
+            lambda dynamic_cache: _flatten_cache_dict(
+                _get_cache_dict(dynamic_cache), _get_dynamic_cache_layout(dynamic_cache)
+            ),
             _unflatten_dynamic_cache,
             serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-            flatten_with_keys_fn=_flatten_dynamic_cache_with_keys,
+            flatten_with_keys_fn=lambda dynamic_cache: _flatten_cache_dict_with_keys(
+                _get_cache_dict(dynamic_cache), _get_dynamic_cache_layout(dynamic_cache)
+            ),
         )
         # TODO (tmanlaibaatar) This won't be needed in torch 2.7.
         torch.fx._pytree.register_pytree_flatten_spec(
             DynamicCache,
-            _flatten_dynamic_cache_spec,
+            lambda cache, spec: _flatten_cache_dict_spec(
+                _get_cache_dict(cache), _get_dynamic_cache_layout(cache), spec
+            ),
         )
     # Catching this in case there are multiple runs for some test runs
     except ValueError as e:
@@ -1107,65 +1113,62 @@ def register_dynamic_cache_export_support():
             raise
 
 
-def _get_cache_dict(cache: DynamicCache, populated_layer_indices: tuple[int, ...]):
+def _get_dynamic_cache_layout(cache: DynamicCache) -> list[list[int | bool | None]]:
+    layout = []
+    for layer_idx, layer in enumerate(cache.layers):
+        if type(layer) is DynamicLayer:
+            sliding_window = None
+        elif type(layer) is DynamicSlidingWindowLayer:
+            sliding_window = layer.sliding_window
+        else:
+            raise RuntimeError(
+                "ExecuTorch export supports only DynamicLayer and DynamicSlidingWindowLayer, "
+                f"but dynamic cache layer {layer_idx} has type {type(layer).__name__}."
+            )
+
+        layout.append([sliding_window, layer.keys is not None])
+    return layout
+
+
+def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
     if not is_torch_greater_or_equal_than_2_6:
         logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
-        "key_cache": [cache.layers[layer_idx].keys for layer_idx in populated_layer_indices],
-        "value_cache": [cache.layers[layer_idx].values for layer_idx in populated_layer_indices],
+        "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
+        "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
     }
 
 
-def _get_populated_dynamic_cache_layer_indices(cache: DynamicCache) -> tuple[int, ...]:
-    if any(not isinstance(layer, (DynamicLayer, DynamicSlidingWindowLayer)) for layer in cache.layers):
-        raise RuntimeError("This pytree flattening function should only be applied to DynamicCache")
-
-    populated_layer_indices = []
-    for layer_idx, layer in enumerate(cache.layers):
-        if (layer.keys is None) != (layer.values is None):
-            raise ValueError(f"Dynamic cache layer {layer_idx} has only one of key or value states.")
-        if layer.keys is not None:
-            populated_layer_indices.append(layer_idx)
-    return tuple(populated_layer_indices)
+def _flatten_cache_dict(cache_dict, layout):
+    values, dictionary_keys = torch.utils._pytree._dict_flatten(cache_dict)
+    return values, [dictionary_keys, layout]
 
 
-def _flatten_dynamic_cache(cache: DynamicCache):
-    populated_layer_indices = _get_populated_dynamic_cache_layer_indices(cache)
-    values, dictionary_keys = torch.utils._pytree._dict_flatten(_get_cache_dict(cache, populated_layer_indices))
-    return values, (tuple(dictionary_keys), len(cache.layers), populated_layer_indices)
+def _flatten_cache_dict_with_keys(cache_dict, layout):
+    values, dictionary_keys = torch.utils._pytree._dict_flatten_with_keys(cache_dict)
+    return values, [dictionary_keys, layout]
 
 
-def _flatten_dynamic_cache_with_keys(cache: DynamicCache):
-    populated_layer_indices = _get_populated_dynamic_cache_layer_indices(cache)
-    values, dictionary_keys = torch.utils._pytree._dict_flatten_with_keys(
-        _get_cache_dict(cache, populated_layer_indices)
-    )
-    return values, (tuple(dictionary_keys), len(cache.layers), populated_layer_indices)
+def _flatten_cache_dict_spec(cache_dict, layout, spec: torch.utils._pytree.TreeSpec):
+    dictionary_keys, expected_layout = spec.context
+    if layout != expected_layout:
+        raise ValueError(f"Dynamic cache layout {layout} does not match the exported layout {expected_layout}.")
 
-
-def _flatten_dynamic_cache_spec(cache: DynamicCache, spec: torch.utils._pytree.TreeSpec):
-    dictionary_keys, expected_num_layers, expected_populated_layer_indices = spec.context
-    populated_layer_indices = _get_populated_dynamic_cache_layer_indices(cache)
-
-    actual_layout = (len(cache.layers), populated_layer_indices)
-    expected_layout = (expected_num_layers, tuple(expected_populated_layer_indices))
-    is_compatible_lazy_cache = actual_layout == (0, ()) and not expected_layout[1]
-    if actual_layout != expected_layout and not is_compatible_lazy_cache:
-        raise ValueError(f"Dynamic cache layout {actual_layout} does not match the exported layout {expected_layout}.")
-
-    cache_dict = _get_cache_dict(cache, populated_layer_indices)
     return [cache_dict[key] for key in dictionary_keys]
 
 
 def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
-    dictionary_keys, num_layers, populated_layer_indices = context
+    dictionary_keys, layout = context
     dictionary = torch.utils._pytree._dict_unflatten(values, dictionary_keys)
-    cache = DynamicCache()
-    cache.layers.extend(DynamicLayer() for _ in range(num_layers))
-    for layer_idx, key, value in zip(
-        populated_layer_indices, dictionary.get("key_cache", []), dictionary.get("value_cache", [])
-    ):
-        cache.update(key, value, layer_idx)
-    return cache
+    key_states = iter(dictionary.get("key_cache", []))
+    value_states = iter(dictionary.get("value_cache", []))
+    layers = []
+    for sliding_window, is_populated in layout:
+        layer = DynamicLayer() if sliding_window is None else DynamicSlidingWindowLayer(sliding_window)
+        if is_populated:
+            layer.update(next(key_states), next(value_states))
+        layers.append(layer)
+
+    return DynamicCache(layers=layers) if layers else DynamicCache()
