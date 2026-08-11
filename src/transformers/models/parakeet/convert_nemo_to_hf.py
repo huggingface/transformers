@@ -158,7 +158,10 @@ def write_processor(
         tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
         print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
 
-    if model_type == "rnnt":
+    # parakeet-tdt-0.6b-v2's NeMo vocab (unlike v3's) carries no <pad>, so its blank must land on
+    # `len(labels)` exactly like RNN-T's — take the RNN-T ordering for that case.
+    tdt_without_pad = model_type == "tdt" and tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None
+    if model_type == "rnnt" or tdt_without_pad:
         # RNN-T (unlike TDT) has no dedicated pad token in its NeMo vocab. NeMo's blank is the final vocab entry,
         # i.e. `config.blank_token_id == len(labels)`, and the joint head emits exactly `len(labels) + 1` logits.
         # Add `<blank>` *first* so it lands on that id (no `<pad>` is appended to push it past the model's vocab),
@@ -349,7 +352,7 @@ def convert_tdt_config(nemo_config, encoder_config):
         hidden_act="relu",
         max_symbols_per_step=10,
         encoder_config=encoder_config.to_dict(),
-        pad_token_id=labels.index("<pad>"),
+        pad_token_id=labels.index("<pad>") if "<pad>" in labels else blank_token_id,
         blank_token_id=blank_token_id,  # blank token is different from pad token for TDT
     )
 
