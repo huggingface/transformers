@@ -90,22 +90,6 @@ def compute_retention_mask(
     return mask
 
 
-class NemotronH_Omni_Reasoning_V3SoundEncoder(nn.Module):
-    """Thin wrapper exposing the Parakeet encoder's `last_hidden_state` for audio embedding."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.encoder = AutoModel.from_config(config)
-
-    def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
-        return self.encoder(input_features=input_features, attention_mask=attention_mask).last_hidden_state
-
-    @property
-    def hidden_size(self) -> int:
-        return self.config.hidden_size
-
-
 class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
     """Single-forward audio pipeline: feature-extract raw clip(s), encode with Parakeet and project,
     returning flattened LLM-space embeddings ready to scatter onto `<audio>` positions.
@@ -118,7 +102,7 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
             sampling_rate=getattr(config, "sampling_rate", 16000),
             feature_size=config.num_mel_bins,
         )
-        self.sound_encoder = NemotronH_Omni_Reasoning_V3SoundEncoder(config)
+        self.sound_encoder = AutoModel.from_config(config)
         self.sound_projection = NemotronH_Omni_Reasoning_V3MLP(
             config.hidden_size,
             config.projection_hidden_size,
@@ -127,7 +111,7 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
         )
 
     def forward(self, sound_clips) -> torch.Tensor:
-        weight = self.sound_encoder.encoder.subsampling.linear.weight
+        weight = self.sound_encoder.subsampling.linear.weight
         device, dtype = weight.device, weight.dtype
 
         if isinstance(sound_clips, torch.Tensor) and sound_clips.dim() >= 3:
@@ -145,11 +129,14 @@ class NemotronH_Omni_Reasoning_V3SoundProjector(nn.Module):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(device=device)
 
-        sound_embeds = self.sound_projection(self.sound_encoder(input_features, attention_mask).to(torch.bfloat16))
+        encoder_states = self.sound_encoder(
+            input_features=input_features, attention_mask=attention_mask
+        ).last_hidden_state
+        sound_embeds = self.sound_projection(encoder_states.to(torch.bfloat16))
 
         # Multiple clips are batch-padded; keep only each clip's real (subsampled) length before flattening.
         if sound_embeds.dim() == 3 and sound_embeds.shape[0] > 1 and attention_mask is not None:
-            lengths = self.sound_encoder.encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
+            lengths = self.sound_encoder._get_subsampling_output_length(attention_mask.sum(-1) + 1)
             return torch.cat([sound_embeds[i, : int(n)] for i, n in enumerate(lengths.tolist())], dim=0)
         return sound_embeds.reshape(-1, sound_embeds.shape[-1])
 
