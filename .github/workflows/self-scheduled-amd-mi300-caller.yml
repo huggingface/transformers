@@ -13,7 +13,7 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - pr-ci-amd
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -30,7 +30,7 @@ on:
 
 # Used for `push` to easily modify the target workflow runs to compare against
 env:
-    prev_workflow_run_id: ""
+    prev_workflow_run_id: "31296988966"
     other_workflow_run_id: ""
 
 
@@ -59,7 +59,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
     with:
       job: run_models_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -69,11 +69,12 @@ jobs:
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
       commit_sha: ${{ github.sha }}
+      subdirs: '["models/vit"]'
     secrets: inherit
 
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -87,7 +88,7 @@ jobs:
 
   example-ci:
     name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
     with:
       job: run_examples_gpu
       slack_report_channel: "#amd-hf-ci"
@@ -101,7 +102,7 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@pr-ci-amd
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#amd-hf-ci"
