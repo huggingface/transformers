@@ -357,6 +357,7 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
 
 def test_lazy_module_error_message_includes_cause():
     import pytest
+
     from transformers.utils import _LazyModule
 
     import_structure = {"fake_module": ["FakeClass"]}
@@ -367,4 +368,3 @@ def test_lazy_module_error_message_includes_cause():
         with pytest.raises(ModuleNotFoundError) as exc_info:
             _ = lazy_mod.FakeClass
         assert "Caused by: No module named 'fake_dep'" in str(exc_info.value)
-
