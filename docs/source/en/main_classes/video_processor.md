@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Video Processor
+# Video processor
 
 A **Video Processor** is a utility responsible for preparing input features for video models, as well as handling the post-processing of their outputs. It provides transformations such as resizing, normalization, and conversion into PyTorch. Along with transformations the `VideoProcessor` class handles video decoding from local paths or URLs (requires [`torchcodec`](https://pypi.org/project/torchcodec/)) and frame sampling according to model-specific strategies.
 

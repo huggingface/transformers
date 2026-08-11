@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tensor parallelism
+# Tensor parallelism for inference
 
 [Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) slices a model layer into pieces so multiple hardware accelerators work on it simultaneously. This lets you run models that exceed a single GPU's memory capacity and achieve higher throughput. You'll need fast intra-node communication because GPUs exchange partial results at each layer.
 
