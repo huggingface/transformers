@@ -694,7 +694,7 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         # Update only the sliding layer so the full-attention layer remains unpopulated.
         class CacheUpdateModule(torch.nn.Module):
             def forward(self, new_states, past_key_values):
-                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
                 return past_key_values
 
         # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
@@ -702,7 +702,7 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         cache_config = LlamaConfig(
             num_hidden_layers=2,
             sliding_window=4,
-            layer_types=["sliding_attention", "full_attention"],
+            layer_types=["full_attention", "sliding_attention"],
         )
 
         register_dynamic_cache_export_support()
@@ -719,14 +719,15 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
         self.assertEqual(len(exported_cache.layers), 2)
-        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
-        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
-        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
-        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
-        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
-        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
-        self.assertIsNone(exported_cache.layers[1].keys)
-        self.assertIsNone(exported_cache.layers[1].values)
+        self.assertIs(type(exported_cache.layers[0]), DynamicLayer)
+        self.assertIsNone(exported_cache.layers[0].keys)
+        self.assertIsNone(exported_cache.layers[0].values)
+        self.assertIs(type(exported_cache.layers[1]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[1].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
+        torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
+
 
 @require_torch
 class CacheExportIntegrationTest(unittest.TestCase):
