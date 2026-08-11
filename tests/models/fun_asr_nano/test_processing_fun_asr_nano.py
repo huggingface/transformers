@@ -225,6 +225,7 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
         self.assertTrue(captured["kwargs"]["tokenize"])
         self.assertTrue(captured["kwargs"]["add_generation_prompt"])
         self.assertTrue(captured["kwargs"]["return_dict"])
+        self.assertTrue(captured["kwargs"]["processor_kwargs"]["padding"])
 
     def test_apply_transcription_request_structures_batch_options(self):
         processor, captured = self._make_processor()
@@ -265,6 +266,18 @@ class FunAsrNanoProcessorTest(unittest.TestCase):
                     }
                 ],
             ],
+        )
+
+    def test_apply_transcription_request_preserves_explicit_padding(self):
+        processor, captured = self._make_processor()
+
+        processor.apply_transcription_request(
+            audio="audio.wav", processor_kwargs={"padding": False, "audio_kwargs": {"sampling_rate": 16000}}
+        )
+
+        self.assertEqual(
+            captured["kwargs"]["processor_kwargs"],
+            {"padding": False, "audio_kwargs": {"sampling_rate": 16000}},
         )
 
     def test_apply_transcription_request_rejects_unsupported_language(self):

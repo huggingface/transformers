@@ -178,6 +178,9 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
                 content.append({"type": "language", "language": language_name})
             conversations.append([{"role": "user", "content": content}])
 
+        processor_kwargs = dict(kwargs.get("processor_kwargs") or {})
+        processor_kwargs.setdefault("padding", True)
+        kwargs["processor_kwargs"] = processor_kwargs
         return self.apply_chat_template(
             conversations,
             tokenize=True,
