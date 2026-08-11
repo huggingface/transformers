@@ -1153,8 +1153,7 @@ def _flatten_cache_dict_with_keys(cache_dict, layout):
 
 def _flatten_cache_dict_spec(cache_dict, layout, spec: torch.utils._pytree.TreeSpec):
     dictionary_keys, expected_layout = spec.context
-    is_compatible_empty_cache = not layout and all(not is_populated for _, is_populated in expected_layout)
-    if layout != expected_layout and not is_compatible_empty_cache:
+    if layout != expected_layout:
         raise ValueError(f"Dynamic cache layout {layout} does not match the exported layout {expected_layout}.")
 
     return [cache_dict[key] for key in dictionary_keys]

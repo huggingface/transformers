@@ -708,23 +708,17 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
 
         register_dynamic_cache_export_support()
 
-        # An empty DynamicCache should match an exported layout whose layers are all unpopulated.
-        example_cache = DynamicCache(config=cache_config)
-        _, cache_spec = torch.utils._pytree.tree_flatten(example_cache)
-        cache_spec = torch.utils._pytree.treespec_loads(torch.utils._pytree.treespec_dumps(cache_spec))
-        self.assertEqual(torch.fx._pytree.tree_flatten_spec(DynamicCache(), cache_spec), [])
-
         # Exporting and running the module populates both layers; compare the reconstructed output with eager execution.
         exported_program = torch.export.export(
             CacheUpdateModule(),
             (),
-            {"new_states": new_states, "past_key_values": example_cache},
+            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
             strict=False,
         )
-        exported_input_cache = DynamicCache(config=cache_config)
-        eager_input_cache = DynamicCache(config=cache_config)
-        exported_cache = exported_program.module()(new_states=new_states, past_key_values=exported_input_cache)
-        eager_cache = CacheUpdateModule()(new_states, eager_input_cache)
+        exported_cache = exported_program.module()(
+            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
+        )
+        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
         self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
         self.assertEqual(exported_cache.layers[0].sliding_window, 4)
