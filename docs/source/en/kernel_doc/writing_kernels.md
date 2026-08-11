@@ -79,7 +79,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda",
+    device_map="auto",
 )
 ```
 
@@ -153,7 +153,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     use_kernels=True,
     kernel_config=kernel_config,
-    device_map="cuda",
+    device_map="auto",
 )
 ```
 
