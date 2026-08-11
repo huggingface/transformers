@@ -816,6 +816,21 @@ def require_torchvision(test_case):
     return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
 
 
+def require_torchvision_video_decoding(test_case):
+    """
+    Decorator marking a test that requires the torchvision video decoding API.
+
+    These tests are skipped when torchvision isn't installed, or when it is too recent to still ship the video
+    decoding API (removed in `torchvision==0.26`).
+
+    """
+    from .video_utils import is_torchvision_video_decoding_available
+
+    return unittest.skipUnless(
+        is_torchvision_video_decoding_available(), "test requires Torchvision with video decoding support"
+    )(test_case)
+
+
 def require_torchcodec(test_case):
     """
     Decorator marking a test that requires Torchcodec.
