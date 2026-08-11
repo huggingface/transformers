@@ -70,8 +70,11 @@ def get_checkpoint_from_config_class(config_class):
     source_lines, start_lineno = inspect.getsourcelines(config_class)
     config_source = "".join(source_lines)
 
-    # Also scan lines immediately before the class definition (e.g. commented-out decorators
-    # like `# @auto_docstring(checkpoint=...)`), stopping at the first blank line.
+    # Also scan lines immediately before the class definition, stopping at the first blank line.
+    # This is needed for config classes whose @auto_docstring decorator is temporarily commented
+    # out (e.g. `# @auto_docstring(checkpoint="thinkingmachines/Inkling")`) because undocumented
+    # fields block the decorator from being applied. `inspect.getsource` only returns lines from
+    # the first live decorator onward, so the checkpoint regex would miss those commented lines.
     try:
         all_lines = open(inspect.getfile(config_class), encoding="utf-8").readlines()
         prefix = []

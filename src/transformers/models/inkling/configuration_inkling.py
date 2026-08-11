@@ -22,7 +22,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
 
 
 # TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of

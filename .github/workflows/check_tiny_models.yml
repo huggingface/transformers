@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - check_tiny_models*
-      - update_tiny*
   repository_dispatch:
   schedule:
     - cron: "0 2 * * *"
