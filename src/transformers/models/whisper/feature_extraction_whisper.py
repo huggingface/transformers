@@ -155,7 +155,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         if waveform.dim() == 2:
-            max_val = torch.nanmax(log_spec.flatten(1), dim=1, keepdim=True).values.unsqueeze(2) if hasattr(torch, "nanmax") else log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            max_val = (
+                torch.nanmax(log_spec.flatten(1), dim=1, keepdim=True).values.unsqueeze(2)
+                if hasattr(torch, "nanmax")
+                else log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            )
             max_val = torch.nan_to_num(max_val, nan=0.0)
             log_spec = torch.maximum(log_spec, max_val - 8.0)
         else:

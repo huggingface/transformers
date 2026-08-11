@@ -382,4 +382,3 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feats = feature_extractor(audio, sampling_rate=16000, return_tensors="np")["input_features"]
         # One NaN sample should not make the entire 80x3000 matrix NaN
         self.assertLess(np.isnan(feats).mean(), 1.0)
-
