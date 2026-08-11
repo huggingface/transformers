@@ -353,3 +353,18 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
+
+
+def test_lazy_module_error_message_includes_cause():
+    import pytest
+    from transformers.utils import _LazyModule
+
+    import_structure = {"fake_module": ["FakeClass"]}
+    lazy_mod = _LazyModule("fake_module", "/fake/file.py", import_structure)
+    lazy_mod._class_to_module = {"FakeClass": "transformers.models.fake.modeling_fake"}
+
+    with patch.object(lazy_mod, "_get_module", side_effect=ModuleNotFoundError("No module named 'fake_dep'")):
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            _ = lazy_mod.FakeClass
+        assert "Caused by: No module named 'fake_dep'" in str(exc_info.value)
+
