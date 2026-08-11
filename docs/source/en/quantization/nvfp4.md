@@ -23,7 +23,7 @@ not replaced.
 
 > [!TIP]
 > NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [`kernels`](https://github.com/huggingface/kernels) package.
+> the [kernels](https://github.com/huggingface/kernels) package.
 
 Install Accelerate and a compatible version of `kernels`.
 
