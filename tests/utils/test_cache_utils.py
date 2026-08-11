@@ -734,8 +734,8 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
             torch.testing.assert_close(exported_layer.values, eager_layer.values)
 
         # A direct pytree round-trip should preserve automatic layer creation for an empty DynamicCache.
-        empty_cache_leaves, empty_cache_spec = torch.utils._pytree.tree_flatten(DynamicCache())
-        restored_empty_cache = torch.utils._pytree.tree_unflatten(empty_cache_leaves, empty_cache_spec)
+        flattened_empty_cache, empty_cache_spec = torch.utils._pytree.tree_flatten(DynamicCache())
+        restored_empty_cache = torch.utils._pytree.tree_unflatten(flattened_empty_cache, empty_cache_spec)
         restored_empty_cache.update(new_states, new_states, layer_idx=0)
         self.assertIs(type(restored_empty_cache.layers[0]), DynamicLayer)
 
