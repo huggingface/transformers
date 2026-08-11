@@ -303,6 +303,48 @@ def get_supported_tasks() -> list[str]:
     return PIPELINE_REGISTRY.get_supported_tasks()
 
 
+def _validate_device(device):
+    """Validates device input early before model loading."""
+    if device is None:
+        return
+
+    # Integer ordinals (e.g., device=0)
+    if isinstance(device, int):
+        if device < -1:
+            raise ValueError(f"Invalid device ordinal '{device}'. Must be >= -1.")
+        return
+
+    # torch.device instances
+    if isinstance(device, torch.device):
+        return
+
+    # String device types
+    if isinstance(device, str):
+        device_str = device.strip().lower()
+        
+        # If passed as a numeric string (e.g., device="0" or device="-1")
+        if device_str.isdigit() or (device_str.startswith("-") and device_str[1:].isdigit()):
+            if int(device_str) < -1:
+                raise ValueError(f"Invalid device ordinal '{device}'. Must be >= -1.")
+            return
+
+        base_device = device_str.split(":")[0]
+        valid_devices = {
+            "cpu", "cuda", "mps", "npu", "xpu", "hpu", 
+            "ipu", "meta", "vulkan", "opencl", "directml"
+        }
+        if base_device not in valid_devices:
+            raise ValueError(
+                f"Invalid device string '{device}'. Expected a valid device string "
+                f"(e.g., 'cpu', 'cuda', 'mps', 'npu'), an integer device ordinal, or a `torch.device` instance."
+            )
+        return
+
+    raise TypeError(
+        f"Invalid device type '{type(device).__name__}'. Expected `str`, `int`, `torch.device`, or `None`."
+    )
+
+
 def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
     if is_offline_mode():
         raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
@@ -838,6 +880,7 @@ def pipeline(
     >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
     >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
+    _validate_device(device)
     if model_kwargs is None:
         model_kwargs = {}
 

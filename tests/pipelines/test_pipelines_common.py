@@ -57,7 +57,7 @@ from transformers.testing_utils import (
 from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
 from transformers.utils.chat_template_utils import Chat
-
+from transformers.pipelines import _validate_device
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
@@ -114,6 +114,23 @@ class CommonPipelineTest(unittest.TestCase):
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
 
         self.assertIsInstance(pipe, TextClassificationPipeline)
+
+    @require_torch
+    def test_pipeline_invalid_device_raises_early(self):
+        """Verify that an invalid device string raises a ValueError immediately before model loading."""
+        with self.assertRaises(ValueError):
+            _validate_device("mpx")
+        with self.assertRaises(ValueError):
+            _validate_device(-5)
+
+    @require_torch
+    def test_pipeline_valid_devices_pass(self):
+        """Verify that standard valid device configurations pass validation cleanly."""
+        _validate_device("cpu")
+        _validate_device("cuda:0")
+        _validate_device("mps")
+        _validate_device(0)
+        _validate_device(None)
 
     @require_torch
     def test_pipeline_batch_size_global(self):
