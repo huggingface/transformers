@@ -127,15 +127,15 @@ class NemotronH_Omni_Reasoning_V3MLP(nn.Module):
 
 
 class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
-    """Single-forward vision pipeline: run the vision tower (image, or temporally-packed video) through
-    pixel-shuffle downsampling and the projection MLP (`mlp1`) into LLM-space embeddings. The
-    weight-bearing `vision_model` is passed in so its checkpoint keys stay at the top level.
+    """Project vision-tower features into LLM space: pixel-shuffle downsampling then `mlp1`.
+
+    Shared by the image and the temporally-packed video path, which differ only in how the tower
+    is run; both hand their `(num_patches, height * width, vit_hidden_size)` features to `forward`.
     """
 
     def __init__(self, config):
         super().__init__()
         self.downsample_ratio = config.downsample_ratio
-        self.video_temporal_patch_dim = config.video_temporal_patch_size
         self.ps_version = config.ps_version
         self.mlp1 = NemotronH_Omni_Reasoning_V3MLP(
             config.vit_hidden_size * int(1 / config.downsample_ratio) ** 2,
@@ -162,36 +162,11 @@ class NemotronH_Omni_Reasoning_V3VisionProjector(nn.Module):
             x = x.permute(0, 2, 1, 3).contiguous()
         return x
 
-    def _project(self, vit_embeds, h, w):
-        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], h, w, -1)
+    def forward(self, vit_embeds, height, width):
+        vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], height, width, -1)
         vit_embeds = self.pixel_shuffle(vit_embeds, scale_factor=self.downsample_ratio)
         vit_embeds = vit_embeds.reshape(vit_embeds.shape[0], -1, vit_embeds.shape[-1])
         return self.mlp1(vit_embeds)
-
-    def forward(self, pixel_values, vision_model):
-        if isinstance(pixel_values, (list, tuple)):
-            return torch.cat([self.forward(pv, vision_model) for pv in pixel_values], dim=0)
-        pixel_values = pixel_values.to(dtype=vision_model.config.torch_dtype)
-        vit_embeds = vision_model(pixel_values).features
-        _, _, H, W = pixel_values.shape
-        patch_size = vision_model.patch_size
-        return self._project(vit_embeds, H // patch_size, W // patch_size)
-
-    def forward_video(self, pixel_values_videos, vision_model):
-        pixel_values_videos = pixel_values_videos.to(dtype=vision_model.config.torch_dtype)
-        T = self.video_temporal_patch_dim
-        N, C, H, W = pixel_values_videos.shape
-
-        if N % T != 0:
-            pad = pixel_values_videos[-1:].expand(T - (N % T), -1, -1, -1)
-            pixel_values_videos = torch.cat([pixel_values_videos, pad], dim=0)
-            N = pixel_values_videos.shape[0]
-        num_groups = N // T
-
-        x = pixel_values_videos.reshape(num_groups, T * C, H, W)
-        vit_embeds = vision_model(x, use_video_patch_projection=True).features
-        patch_size = vision_model.patch_size
-        return self._project(vit_embeds, H // patch_size, W // patch_size)
 
 
 def compute_retention_mask(
@@ -264,6 +239,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         llm_hidden_size = config.llm_config.hidden_size
 
         self.video_pruning_rate = config.video_pruning_rate
+        self.video_temporal_patch_dim = config.video_temporal_patch_size
 
         self.vision_projector = NemotronH_Omni_Reasoning_V3VisionProjector(config)
 
@@ -276,6 +252,36 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         self.all_tied_weights_keys = {}
 
         self.post_init()
+
+    def get_image_features(self, pixel_values):
+        if isinstance(pixel_values, (list, tuple)):
+            return torch.cat([self.get_image_features(pv) for pv in pixel_values], dim=0)
+        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
+        vit_embeds = self.vision_model(pixel_values).features
+        height, width = pixel_values.shape[-2:]
+        patch_size = self.vision_model.patch_size
+        return self.vision_projector(vit_embeds, height // patch_size, width // patch_size)
+
+    def get_video_features(self, pixel_values_videos):
+        pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
+        temporal_patch_dim = self.video_temporal_patch_dim
+        num_frames, channels, height, width = pixel_values_videos.shape
+
+        # Frames are consumed in groups of `temporal_patch_dim`; repeat the last frame to fill the
+        # final group so the packed reshape below is exact.
+        if num_frames % temporal_patch_dim != 0:
+            padding = pixel_values_videos[-1:].expand(
+                temporal_patch_dim - (num_frames % temporal_patch_dim), -1, -1, -1
+            )
+            pixel_values_videos = torch.cat([pixel_values_videos, padding], dim=0)
+            num_frames = pixel_values_videos.shape[0]
+
+        packed = pixel_values_videos.reshape(
+            num_frames // temporal_patch_dim, temporal_patch_dim * channels, height, width
+        )
+        vit_embeds = self.vision_model(packed, use_video_patch_projection=True).features
+        patch_size = self.vision_model.patch_size
+        return self.vision_projector(vit_embeds, height // patch_size, width // patch_size)
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -307,7 +313,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         # Multimodal merges need `input_ids` to locate the placeholder tokens; skip them on the
         # cached decode steps and the inputs-embeds-only path where `input_ids` is absent.
         if pixel_values is not None and input_ids is not None:
-            image_embeds = self.vision_projector(pixel_values, self.vision_model)
+            image_embeds = self.get_image_features(pixel_values)
             if image_flags is not None:
                 image_embeds = image_embeds[image_flags.squeeze(-1) == 1]
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -315,7 +321,7 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_embeds)
 
         if pixel_values_videos is not None and input_ids is not None:
-            video_embeds = self.vision_projector.forward_video(pixel_values_videos, self.vision_model)
+            video_embeds = self.get_video_features(pixel_values_videos)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_embeds)
