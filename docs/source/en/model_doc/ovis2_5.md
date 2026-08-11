@@ -66,7 +66,6 @@ model_id = "./Ovis2.5-2B-hf"  # or "./Ovis2.5-9B-hf"
 processor = Ovis2_5Processor.from_pretrained(model_id)
 model = Ovis2_5ForConditionalGeneration.from_pretrained(
     model_id,
-    dtype="auto",
     device_map="auto",
 )
 
@@ -103,20 +102,17 @@ they should appear in the prompt.
 
 ## Video inference
 
-The official example uniformly samples eight frames. Load and sample the video before placing the decoded frames in a
-`video` content item. The processor returns `pixel_values_videos` and `video_grid_thw` along with the tokenized prompt.
+The official example uniformly samples eight frames. Pass the video path directly in the conversation and let the
+processor load and sample it. The processor returns `pixel_values_videos` and `video_grid_thw` along with the tokenized
+prompt.
 Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
 
 ```python
-from transformers.video_utils import load_video
-
-
-video_frames, _ = load_video("path/to/video.mp4", num_frames=8)
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "video", "video": video_frames},
+            {"type": "video", "path": "path/to/video.mp4"},
             {"type": "text", "text": "Describe what happens in this video."},
         ],
     }
@@ -129,7 +125,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     enable_thinking=False,
-    processor_kwargs={"videos_kwargs": {"max_pixels": 896 * 896}},
+    processor_kwargs={"num_frames": 8, "max_pixels": 896 * 896},
 ).to(model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=256)
