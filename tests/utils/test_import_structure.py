@@ -1,6 +1,5 @@
 import os
 import unittest
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -197,11 +196,13 @@ class TestImportStructures(unittest.TestCase):
 @pytest.mark.parametrize(
     "backend,package_name,version_comparison,version",
     [
-        pytest.param(Backend("torch>=2.5 "), "torch", VersionComparison.GREATER_THAN_OR_EQUAL.value, "2.5"),
-        pytest.param(Backend("torchvision==0.19.1"), "torchvision", VersionComparison.EQUAL.value, "0.19.1"),
+        pytest.param(Backend("torch>=2.5 "), "torch", VersionComparison.GREATER_THAN_OR_EQUAL, "2.5"),
+        pytest.param(Backend("torchvision==0.19.1"), "torchvision", VersionComparison.EQUAL, "0.19.1"),
     ],
 )
-def test_backend_specification(backend: Backend, package_name: str, version_comparison: Callable, version: str):
+def test_backend_specification(
+    backend: Backend, package_name: str, version_comparison: VersionComparison, version: str
+):
     assert backend.package_name == package_name
     assert VersionComparison.from_string(backend.version_comparison) == version_comparison
     assert backend.version == version

@@ -13,12 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-05-28 and added to Hugging Face Transformers on 2021-06-01.*
-<div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
-</div>
+*This model was published in HF papers on 2021-05-28 and contributed to Hugging Face Transformers on 2021-06-01.*
 
 # ByT5
 
@@ -32,34 +27,17 @@ You can find all the original ByT5 checkpoints under the [Google](https://huggin
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(
-    task="text2text-generation",
-    model="google/byt5-small",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("translate English to French: The weather is nice today")
-```
-
-</hfoption>
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/byt5-small"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-small",
-    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -67,13 +45,6 @@ input_ids = tokenizer("summarize: Photosynthesis is the process by which plants,
 
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers">
-
-```bash
-echo -e "translate English to French: Life is beautiful." | transformers run --task text2text-generation --model google/byt5-small --device 0
 ```
 
 </hfoption>
@@ -87,14 +58,13 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 # pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-xl",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -115,7 +85,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small", device_map="auto")
 
     num_special_tokens = 3
 

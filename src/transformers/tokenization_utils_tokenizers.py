@@ -33,7 +33,11 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import BPE, Unigram
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
+from transformers.utils.hub import cached_file
+
+from .convert_slow_tokenizer import SpmConverter
 from .integrations.ggml import convert_gguf_tokenizer
+from .integrations.mistral.constants import is_tekken_vocab_filename
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -44,7 +48,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
     generate_merges,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
@@ -97,7 +101,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @classmethod
     def convert_to_native_format(cls, trust_remote_code=False, **kwargs):
-        """s
+        """
         Build a `tokenizers.Tokenizer` backend from the available serialization files (tokenizer.json, sentencepiece
         models, tekken.json, vocab/merges).
         """
@@ -113,16 +117,68 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
-            # we extract vocab / merges from the tokenizer file to pass them to __init__
-            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
+            # from the file so the reconstructed tokenizer matches the tokenizer.json
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
+
+            # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
+            # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
+            # This optimization applies to BPE, WordPiece, and WordLevel only:
+            # - Unigram (SentencePiece) requires a non-empty vocab to initialize correctly in Rust
+            #   (e.g. AlbertTokenizer, CamembertTokenizer, LlamaTokenizer, T5Tokenizer); passing an
+            #   empty vocab causes "Unable to load vocab EmptyVocabulary". TODO: investigate if keeping
+            #   just the UNK token is sufficient to make Unigram work with a minimal vocab.
+            # - Older tokenizer.json formats (e.g. XLNetTokenizer, DistilBertTokenizer) omit the
+            #   "type" field in the "model" section, so we cannot determine the model type from JSON.
+            # In both cases we fall back to the original from_file path (no performance improvement).
+            model_type = tokenizer_json.get("model", {}).get("type")
+            if model_type not in (None, "Unigram"):
+                minimal_tokenizer_json = dict(tokenizer_json)
+                minimal_model = dict(tokenizer_json["model"])
+                minimal_model["vocab"] = {}
+                if model_type == "BPE":
+                    minimal_model["merges"] = []
+                minimal_tokenizer_json["model"] = minimal_model
+                minimal_tokenizer_json["added_tokens"] = []
+                tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
+            else:
+                tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
+
+            local_kwargs["post_processor"] = tok_from_file.post_processor
+            local_kwargs["tokenizer_padding"] = tok_from_file.padding
+            local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
+            # Preserve truncation and padding baked into tokenizer.json so that classes
+            # with a custom __init__ that rebuild the backend tokenizer from scratch
+            # can still access these settings.
+            if tok_from_file.truncation is not None:
+                local_kwargs["_json_truncation"] = tok_from_file.truncation
+            if tok_from_file.padding is not None:
+                local_kwargs["_json_padding"] = tok_from_file.padding
+
+            # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+            # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
+            normalizer_config = tokenizer_json.get("normalizer")
+            if normalizer_config:
+                if normalizer_config.get("type", None) == "Sequence":
+                    normalizer_config = normalizer_config["normalizers"]
+                elif not isinstance(normalizer_config, list):
+                    normalizer_config = [normalizer_config]
+                for normalizer in normalizer_config:
+                    if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                        import base64
+
+                        local_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(
+                            normalizer["precompiled_charsmap"]
+                        )
+                        break
+
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
                 if isinstance(vocab, list):
                     vocab = list(map(tuple, vocab))  # TODO just for now
             elif cls.model.__name__ == "Unigram":
-                if vocab and isinstance(vocab[0], (list, tuple)):
+                if isinstance(vocab, list) and vocab and isinstance(vocab[0], (list, tuple)):
                     vocab = [tuple(item) for item in vocab]
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
@@ -137,8 +193,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
 
-            if processor is not None:
-                local_kwargs["post_processor"] = processor
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")
@@ -147,12 +201,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         merges = local_kwargs.get("merges")
 
         # Tekken converter (Mistral)
-        if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
-            from .convert_slow_tokenizer import MistralConverter
+        if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and is_tekken_vocab_filename(vocab_file):
+            from .integrations.mistral.tokenizer import MistralConverter
 
-            local_kwargs["vocab"], local_kwargs["merges"] = MistralConverter(
-                vocab_file=vocab_file
-            ).extract_vocab_merges_from_model(vocab_file)
+            converter = MistralConverter(vocab_file)
+            local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
         # SentencePiece model (with TikToken fallback)
@@ -160,7 +213,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             try:
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
-                local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
+                # 1. Extract vocab, merges, and spm_precompiled from the .model proto
+                extractor = SentencePieceExtractor(vocab_file)
+                local_kwargs = extractor.extract(cls.model, **local_kwargs)
+
+                # 2. If a model-specific converter exists, use it.
                 try:
                     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
 
@@ -171,9 +228,48 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     logger.warning(
                         f"Could not reorder vocab using converter for {cls.__name__} due to {e}. Falling back to raw SentencePiece extraction."
                     )
-                # what used to be in `convert_slow`
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)
+
+                # 3. For non-model specific tokenizers (e.g. TokenizersBackend used
+                #    for MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS), build a _tokenizer
+                #    from the proto so normalizer/decoder are configured correctly.
+                if "tokenizer_object" not in local_kwargs and (
+                    cls is TokenizersBackend or "__init__" not in cls.__dict__
+                ):
+                    vocab = local_kwargs.pop("vocab", None)
+                    merges = local_kwargs.pop("merges", None)
+
+                    # Replace placeholder tokens as specified in added_tokens_decoder
+                    added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
+                    if vocab is not None and added_tokens_decoder:
+                        id_to_token = {token_id: token for token, token_id in vocab.items()}
+                        for token_id, new_token in added_tokens_decoder.items():
+                            token_id = int(token_id)
+                            new_token = str(new_token)
+                            current_token = id_to_token.get(token_id)
+                            if current_token and current_token != new_token and new_token not in vocab:
+                                vocab[new_token] = vocab.pop(current_token)
+                                id_to_token[token_id] = new_token
+
+                    tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
+                        proto=extractor.proto,
+                        vocab=vocab,
+                        merges=merges,
+                    )
+                    if tokenizer_object is not None:
+                        local_kwargs["tokenizer_object"] = tokenizer_object
+                        # Set bos/eos tokens from proto spec if available. This is needed when
+                        # building a tokenizer_object directly from a .model file because the
+                        # tokenizer_object does not have bos/eos set.
+                        proto_spec = extractor.proto.trainer_spec
+                        if proto_spec.bos_id >= 0:
+                            local_kwargs.setdefault("bos_token", proto_spec.bos_piece or "<s>")
+                        if proto_spec.eos_id >= 0:
+                            local_kwargs.setdefault("eos_token", proto_spec.eos_piece or "</s>")
+                        if proto_spec.unk_id >= 0:
+                            local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")
+
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
                     f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "
@@ -181,10 +277,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 )
                 from .convert_slow_tokenizer import TikTokenConverter
 
-                local_kwargs["vocab"], local_kwargs["merges"] = TikTokenConverter(
+                converter = TikTokenConverter(
                     vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
-                ).extract_vocab_merges_from_model(vocab_file)
-
+                )
+                local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
 
         # Fallback to standard vocab/merges files if they existed!
@@ -230,6 +326,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return local_kwargs
 
     def __init__(self, *args, **kwargs):
+        # Truncation/padding dicts extracted from tokenizer.json by convert_to_native_format
+        # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
+        _json_truncation = kwargs.pop("_json_truncation", None)
+        _json_padding = kwargs.pop("_json_padding", None)
+        # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
+        # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
+        kwargs.pop("_spm_precompiled_charsmap", None)
+
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
@@ -250,7 +354,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
-            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
+            gguf_param = load_gguf_checkpoint(gguf_path)
             architecture = gguf_param["config"]["model_type"]
             tokenizer_dict = gguf_param["tokenizer"]
             tokenizer_config = gguf_param["tokenizer_config"]
@@ -286,8 +391,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
-        _truncation = self._tokenizer.truncation
-
+        _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
             self._tokenizer.enable_truncation(**_truncation)
             kwargs.setdefault("max_length", _truncation["max_length"])
@@ -297,7 +401,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             self._tokenizer.no_truncation()
 
-        _padding = self._tokenizer.padding
+        _padding = kwargs.pop("tokenizer_padding", None) or self._tokenizer.padding or _json_padding
         if _padding is not None:
             self._tokenizer.enable_padding(**_padding)
             kwargs.setdefault("pad_token", _padding["pad_token"])
@@ -374,7 +478,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 self._tokenizer,
                 self.init_kwargs.get("name_or_path", None),
                 init_kwargs=self.init_kwargs,
-                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
+                fix_mistral_regex=kwargs.pop("fix_mistral_regex", None),
                 **kwargs,
             )
 
@@ -415,6 +519,74 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         return (out_vocab_file,)
 
+    def save_pretrained(
+        self,
+        save_directory: str | os.PathLike,
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
+        push_to_hub: bool = False,
+        save_format: str | None = None,
+        **kwargs,
+    ) -> tuple[str, ...]:
+        """
+        Save the full tokenizer state.
+
+
+        Extends [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] with
+        `save_format` support, for tokenizers converted from a native vocabulary file
+        (e.g. Mistral's `tekken.json`). See the base method for `legacy_format`,
+        `filename_prefix`, and `push_to_hub`.
+
+        Args:
+            save_format (`str`, *optional*):
+                `"mistral"` to save as a native `tekken.json` by copying the original
+                file (requires the original tekken vocabulary file to be available). The name is
+                normalized to `tekken.json` on save, and the instantiated tokenizer must still match
+                it exactly.
+                `"hf"` or `None` for the default HuggingFace format.
+            kwargs (`dict[str, Any]`, *optional*):
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+
+        Returns:
+            A tuple of `str`: The files saved.
+        """
+        if save_format not in (None, "hf", "mistral"):
+            raise ValueError(f"Unknown save_format={save_format!r}. Supported values: 'hf', 'mistral'.")
+
+        if save_format == "mistral":
+            from .integrations.mistral.tokenizer import save_tekken_format
+
+            # Snapshot timestamps before writing anything, so the freshly written tekken.json is
+            # correctly detected as modified by `_upload_modified_files` below. `save_directory` may
+            # not exist yet at this point (`save_tekken_format` creates it), hence the empty fallback.
+            files_timestamps = {}
+            if push_to_hub and os.path.isdir(save_directory):
+                files_timestamps = self._get_files_timestamps(save_directory)
+
+            save_files = save_tekken_format(self, save_directory)
+
+            if push_to_hub:
+                commit_message = kwargs.pop("commit_message", None)
+                repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
+                repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+                self._upload_modified_files(
+                    working_dir=save_directory,
+                    repo_id=repo_id,
+                    files_timestamps=files_timestamps,
+                    commit_message=commit_message,
+                    token=kwargs.get("token"),
+                )
+
+            return save_files
+
+        return super().save_pretrained(
+            save_directory,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix,
+            push_to_hub=push_to_hub,
+            **kwargs,
+        )
+
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -422,15 +594,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         bos = self.bos_token
         bos_token_id = self.bos_token_id
         if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
+            self.add_bos_token = False
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
-        # If eos_token is None and add_eos_token is True, silently disable add_eos_token
-        # This allows tokenizers to set add_eos_token even if eos_token is not configured
         if eos is None and self.add_eos_token:
             self.add_eos_token = False
-            return
 
         single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
         pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
@@ -525,6 +694,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `dict[str, int]`: The added tokens.
         """
         return self._tokenizer.get_added_tokens_decoder()
+
+    # BC v5: expose ``_added_tokens_encoder`` / ``_added_tokens_decoder`` attrs for custom tokenizers that expect
+    # them from slow tokenizers. Only supports read, not write (won't sync to Rust backend, use add_tokens() instead
+    _added_tokens_encoder = added_tokens_encoder
+    _added_tokens_decoder = added_tokens_decoder
 
     def get_added_vocab(self) -> dict[str, int]:
         """
@@ -923,7 +1097,34 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            # Skip cleanup for BPE tokenizers — the cleanup was designed for
+            # WordPiece tokenizers and is destructive for BPE (it strips
+            # legitimate spaces before punctuation).
+            if (
+                type(self.backend_tokenizer.model).__name__ == "BPE"
+                and not self.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output
+            ):
+                logger.warning_once(
+                    "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer"
+                    f" {self.__class__.__name__}. The clean_up_tokenization post-processing"
+                    " step is designed for WordPiece tokenizers and is destructive for BPE"
+                    " (it strips spaces before punctuation). Set"
+                    " clean_up_tokenization_spaces=False to suppress this warning, or set"
+                    " clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to"
+                    " force cleanup anyway."
+                )
+            else:
+                text = self.clean_up_tokenization(text)
+
+        return text
 
     def _save_pretrained(
         self,
@@ -1161,20 +1362,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 >> Tags including `base_model:.*mistralai`
         """
         import re
+        from functools import lru_cache
 
-        from huggingface_hub import model_info
         from packaging import version
 
-        from transformers.utils.hub import cached_file
+        from transformers.utils.hub import cached_file, hf_api
 
+        @lru_cache(maxsize=128)
         def is_base_mistral(model_id: str) -> bool:
-            model = model_info(model_id)
+            try:
+                model = hf_api().model_info(model_id)
+            except Exception:
+                # Never block tokenizer init on a Hub error — assume non-Mistral.
+                return False
             if model.tags is not None:
                 if re.search("base_model:.*mistralai", "".join(model.tags)):
                     return True
             return False
 
-        if is_offline_mode():
+        if local_files_only or is_offline_mode():
             is_local = True
 
         if pretrained_model_name_or_path is not None and (
@@ -1202,7 +1408,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None
@@ -1216,7 +1422,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) > version.parse("4.57.3"):
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
                     return tokenizer
 
                 mistral_config_detected = True
@@ -1226,7 +1432,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                # only warn if its not explicitly passed
+                # only warn if it's not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
                     logger.warning(
@@ -1244,11 +1450,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ),
                         behavior="isolated",
                     )
-                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+                    current_pretokenizer = tokenizer.pre_tokenizer
                     # Check if it's already a Sequence
                     if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
                         # Replace the first element (the Split pattern)
-                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
+                        tokenizer.pre_tokenizer[0] = split_pretokenizer
                     else:
                         # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
                         # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
@@ -1258,7 +1464,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             )
 
                         # Not a Sequence, so create one with Split + current pretokenizer
-                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
+                        tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
                             [
                                 split_pretokenizer,
                                 current_pretokenizer,

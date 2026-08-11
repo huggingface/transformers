@@ -285,39 +285,6 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
-    def test_repetition_penalty_continuous_batching(self):
-        vocab_size = 10
-
-        input_ids = torch.tensor([1, 2, 3, 4, 5, 6], device=torch_device, dtype=torch.long)
-        scores = torch.ones((1, 6, vocab_size), device=torch_device, dtype=torch.float) / vocab_size
-
-        scores[0, 2, 1] = -2.0
-        scores[0, 2, 2] = 3.0
-        scores[0, 2, 3] = 4.0
-        scores[0, 5, 4] = -5.0
-        scores[0, 5, 5] = 6.0
-        scores[0, 5, 6] = 7.0
-
-        logits_indices = torch.tensor([2, 5], device=torch_device, dtype=torch.long)
-        cumulative_seqlens_q = torch.tensor([0, 3, 6], device=torch_device, dtype=torch.long)
-
-        rep_penalty_proc = RepetitionPenaltyLogitsProcessor(penalty=2.0)
-        rep_penalty_proc.set_continuous_batching_context(logits_indices, cumulative_seqlens_q)
-
-        original_scores = scores.clone()
-        processed_scores = rep_penalty_proc(input_ids, scores)
-
-        self.assertAlmostEqual(processed_scores[0, 2, 1].item(), -2.0 * 2.0)
-        self.assertAlmostEqual(processed_scores[0, 2, 2].item(), 3.0 / 2.0)
-        self.assertAlmostEqual(processed_scores[0, 2, 3].item(), 4.0 / 2.0)
-        self.assertAlmostEqual(processed_scores[0, 5, 4].item(), -5.0 * 2.0)
-        self.assertAlmostEqual(processed_scores[0, 5, 5].item(), 6.0 / 2.0)
-        self.assertAlmostEqual(processed_scores[0, 5, 6].item(), 7.0 / 2.0)
-        self.assertAlmostEqual(processed_scores[0, 2, 0].item(), 1.0 / vocab_size)
-        self.assertAlmostEqual(processed_scores[0, 5, 0].item(), 1.0 / vocab_size)
-
-        self.assertFalse(torch.all(original_scores == processed_scores))
-
     def test_top_k_dist_warper(self):
         input_ids = None
         vocab_size = 10
@@ -681,6 +648,31 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == filtered_scores_2_gram))
         self.assertFalse(torch.all(scores == filtered_scores_3_gram))
+
+    def test_no_repeat_ngram_dist_processor_banned_token_reappears(self):
+        vocab_size = 10
+        batch_size = 1
+
+        # The 3-gram (1, 2, 5) repeats the current (1, 2) suffix and bans 5. The later 3-gram (7, 8, 5) ends in the
+        # same token without repeating the suffix, and must not undo that ban.
+        input_ids = torch.tensor([[1, 2, 5, 7, 8, 5, 1, 2]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        filtered_scores = NoRepeatNGramLogitsProcessor(3)(input_ids, scores)
+
+        self.assertListEqual(torch.isinf(filtered_scores).nonzero()[:, 1].tolist(), [5])
+
+    def test_no_repeat_ngram_dist_processor_sequence_shorter_than_ngram(self):
+        vocab_size = 3
+        batch_size = 2
+
+        # The sequences are one token short of holding a 3-gram, so nothing can be banned yet
+        input_ids = torch.tensor([[1, 2], [0, 1]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        filtered_scores = NoRepeatNGramLogitsProcessor(3)(input_ids, scores)
+
+        self.assertFalse(torch.isinf(filtered_scores).any())
 
     def test_encoder_no_repeat_ngram_dist_processor(self):
         vocab_size = 3

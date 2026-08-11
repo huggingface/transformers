@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_base import AddedToken
@@ -169,12 +169,6 @@ class BlenderbotTokenizer(TokenizersBackend):
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
-        )
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), self.eos_token_id),
-            cls=(str(bos_token), self.bos_token_id),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=True,
         )
 
 

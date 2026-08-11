@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -52,6 +52,8 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
+        # Set seed for deterministic test - ensures reproducible model initialization and inputs
+        set_seed(42)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 3
@@ -114,6 +116,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
                 ("cuda", 8): [[1.1094, -1.5352, -1.5811], [1.9395, 0.1461, -1.5537], [1.7803, 0.2466, -0.4316]],
+                ("xpu", 3): [[1.1094, -1.5342, -1.5831], [1.9414, 0.1533, -1.5566], [1.7793, 0.2546, -0.4331]],
             }
         )
         expected_left_unpadded = torch.tensor(EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation(), device=torch_device)
@@ -121,6 +124,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
                 ("cuda", 8): [[0.8135, -1.8164, -1.5898], [0.0663, -1.3408, -0.5435], [0.5396, 0.3293, -1.7529]],
+                ("xpu", 3): [[0.8140, -1.8174, -1.5898], [0.0706, -1.3359, -0.5435], [0.5464, 0.3320, -1.7539]],
             }
         )
         expected_right_unpadded = torch.tensor(EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation(), device=torch_device)
@@ -128,7 +132,6 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits
         logits = logits.float()
-
         torch.testing.assert_close(
             logits[0, -3:, -3:],
             expected_left_unpadded,
@@ -146,6 +149,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", 8): 'Tell me about the french revolution. Pemkab Pemkab المتاحة/journal blinded blindedébé抓算不上 blinded blinded healthiest.Clébé Bronx开启了 Bronx Bronx抽样ikat糜 BronxSources TODOSources parfum Bronx parfum donde donde donde او',
+                ("xpu", 3): 'Tell me about the french revolution. Pemkab Pemkab المتاحة/journal blinded blindedébé抓算不上 blinded blinded healthiest.Clébé Bronx开启了 Bronx Bronx抽样ikat糜 BronxSources TODOSources parfum Bronx parfum donde donde donde او',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()

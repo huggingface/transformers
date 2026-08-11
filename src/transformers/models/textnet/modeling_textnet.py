@@ -19,19 +19,18 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from transformers import PreTrainedModel
-from transformers.activations import ACT2CLS
-from transformers.modeling_outputs import (
+from ...activations import ACT2CLS
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from transformers.models.textnet.configuration_textnet import TextNetConfig
-from transformers.utils import logging
-from transformers.utils.backbone_utils import BackboneMixin
-
-from ...utils import auto_docstring
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
+from .configuration_textnet import TextNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -238,7 +237,7 @@ class TextNetModel(TextNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[Any, list[Any]] | tuple[Any] | BaseModelOutputWithPoolingAndNoAttention:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -302,12 +301,14 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import TextNetForImageClassification, TextNetImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("czczup/textnet-base")
@@ -318,7 +319,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
         last_hidden_state = outputs[0]
@@ -342,12 +343,11 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     TextNet backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
+class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.textnet = TextNetModel(config)
         self.num_features = config.hidden_sizes
@@ -355,6 +355,8 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -368,12 +370,14 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
 
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, AutoBackbone
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("czczup/textnet-base")
         >>> model = AutoBackbone.from_pretrained("czczup/textnet-base")
@@ -382,7 +386,7 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         >>> with torch.no_grad():
         >>>     outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

@@ -11,43 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
+"""Backward-compatible re-exports. Prefer ``transformers.distributed.fsdp``."""
 
-import os
-from typing import TYPE_CHECKING
-
-from ..utils import is_torch_available, strtobool
-
-
-if TYPE_CHECKING:
-    from torch import nn
+from ..distributed.fsdp import (
+    get_fsdp_ckpt_kwargs,
+    is_fsdp_enabled,
+    is_fsdp_managed_module,
+    update_fsdp_plugin_peft,
+)
 
 
-def is_fsdp_managed_module(module: nn.Module) -> bool:
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    if not torch.distributed.is_available():
-        return False
-
-    import torch.distributed.fsdp
-
-    return isinstance(module, torch.distributed.fsdp.FullyShardedDataParallel) or getattr(
-        module, "_is_fsdp_managed_module", False
-    )
-
-
-def is_fsdp_enabled():
-    if is_torch_available():
-        import torch
-
-        return (
-            torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-            and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-            and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-        )
-
-    return False
+__all__ = ["get_fsdp_ckpt_kwargs", "is_fsdp_enabled", "is_fsdp_managed_module", "update_fsdp_plugin_peft"]

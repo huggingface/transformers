@@ -21,6 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -49,9 +50,7 @@ class LiltTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -111,7 +110,7 @@ class LiltTextEmbeddings(nn.Module):
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         Args:
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.:
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
             inputs_embeds: torch.Tensor
         Returns: torch.Tensor
         """
@@ -572,7 +571,7 @@ class LiltModel(LiltPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -601,10 +600,6 @@ class LiltModel(LiltPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output, position_ids = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -612,12 +607,18 @@ class LiltModel(LiltPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         layout_embedding_output = self.layout_embeddings(bbox=bbox, position_ids=position_ids)
 
         encoder_outputs = self.encoder(
             embedding_output,
             layout_embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -701,7 +702,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> predicted_class_idx = outputs.logits.argmax(-1).item()
         >>> predicted_class = model.config.id2label[predicted_class_idx]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,
@@ -814,7 +815,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> predicted_class_indices = outputs.logits.argmax(-1)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,
@@ -935,7 +936,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
         >>> predicted_answer = tokenizer.decode(predict_answer_tokens)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,

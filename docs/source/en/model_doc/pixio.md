@@ -9,12 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-16.*
+*This model was contributed to Hugging Face Transformers on 2025-12-17.*
 *This model is to be announced*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -31,18 +30,20 @@ The example below demonstrates how to obtain an image embedding with the [`AutoM
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-from transformers import AutoImageProcessor, AutoModel
 from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModel
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("facebook/pixio-vith16")
-model = AutoModel.from_pretrained("facebook/pixio-vith16")
+model = AutoModel.from_pretrained("facebook/pixio-vith16", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 features_norm = outputs.last_hidden_state # class tokens + patch tokens after last LayerNorm
 features = outputs.hidden_states[-1] # class tokens + patch tokens before last LayerNorm
@@ -67,10 +68,10 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   print(image.height, image.width)  # [480, 640]
 
   processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
-  model = AutoModel.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16', device_map="auto")
   patch_size = model.config.patch_size
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   print(inputs.pixel_values.shape)  # [1, 3, 256, 256]
   batch_size, rgb, img_height, img_width = inputs.pixel_values.shape
   num_patches_height, num_patches_width = img_height // patch_size, img_width // patch_size
@@ -97,11 +98,11 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   image = Image.open(requests.get(url, stream=True).raw)
 
   processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
-  model = AutoModel.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16', device_map="auto")
 
   compiled_model = torch.compile(model)
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   outputs = compiled_model(**inputs)
   last_hidden_states = outputs.last_hidden_state
   ```

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_GPU_NAMES = ["mi300", "mi325", "mi355", "h100", "a10"]
+DEFAULT_GPU_NAMES = ["mi300", "mi355", "h100", "a10"]
 
 
 def simplify_gpu_name(gpu_name: str, simplified_names: list[str]) -> str:
@@ -44,6 +44,14 @@ def parse_short_summary_line(line: str) -> tuple[str | None, int]:
     if line.startswith("ERROR"):
         return "error", 1
     return None, 0
+
+
+def get_missing_summary_result(model_dir: Path) -> dict:
+    return {
+        "status": "error",
+        "test": f"Missing summary_short.txt in artifact {model_dir.name}",
+        "count": 1,
+    }
 
 
 def validate_path(p: str) -> Path:
@@ -176,8 +184,15 @@ if __name__ == "__main__":
         report = {"model": model_name, "results": []}
         results = []
 
+        summary_short_path = model_dir / "summary_short.txt"
+        if not summary_short_path.is_file():
+            total_status_count["error"] += 1
+            report["results"] = [get_missing_summary_result(model_dir)]
+            collated_report_buffer.append(report)
+            continue
+
         # Read short summary
-        with open(model_dir / "summary_short.txt", "r") as f:
+        with open(summary_short_path, "r") as f:
             short_summary_lines = f.readlines()
 
         # Parse short summary

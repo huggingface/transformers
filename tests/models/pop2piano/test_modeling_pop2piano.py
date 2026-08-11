@@ -398,7 +398,6 @@ class Pop2PianoModelTester:
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -418,6 +417,12 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def setUp(self):
         self.model_tester = Pop2PianoModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Pop2PianoConfig, d_model=37)
+
+    @unittest.skip(
+        reason="Pop2Piano always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -553,13 +558,13 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     def test_mel_conditioner_integration(self):
         composer = "composer1"
         model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
-        input_embeds = torch.ones([10, 100, 512])
+        inputs_embeds = torch.ones([10, 100, 512])
 
         composer_value = model.generation_config.composer_to_feature_token[composer]
         composer_value = torch.tensor(composer_value)
-        composer_value = composer_value.repeat(input_embeds.size(0))
+        composer_value = composer_value.repeat(inputs_embeds.size(0))
         outputs = model.mel_conditioner(
-            input_embeds, composer_value, min(model.generation_config.composer_to_feature_token.values())
+            inputs_embeds, composer_value, min(model.generation_config.composer_to_feature_token.values())
         )
 
         # check shape

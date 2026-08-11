@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 A classificação de texto é uma tarefa comum de NLP que atribui um rótulo ou classe a um texto. Existem muitas aplicações práticas de classificação de texto amplamente utilizadas em produção por algumas das maiores empresas da atualidade. Uma das formas mais populares de classificação de texto é a análise de sentimento, que atribui um rótulo como positivo, negativo ou neutro a um texto.
 
-Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) no conjunto de dados [IMDb](https://huggingface.co/datasets/imdb) para determinar se a crítica de filme é positiva ou negativa.
+Este guia mostrará como realizar o fine-tuning do [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) no conjunto de dados [IMDb](https://huggingface.co/datasets/stanfordnlp/imdb) para determinar se a crítica de filme é positiva ou negativa.
 
 <Tip>
 
@@ -35,7 +35,7 @@ Carregue o conjunto de dados IMDb utilizando a biblioteca 🤗 Datasets:
 ```py
 >>> from datasets import load_dataset
 
->>> imdb = load_dataset("imdb")
+>>> imdb = load_dataset("stanfordnlp/imdb")
 ```
 
 Em seguida, dê uma olhada em um exemplo:

@@ -135,7 +135,7 @@ class SmolVLMVisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                3,  # SmolVLMImageProcessor always generates RGB pixel values
+                3,  # SmolVLMImageProcessorPil always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
@@ -168,7 +168,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
-
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
     def setUp(self):
@@ -339,6 +339,7 @@ class SmolVLMForConditionalGenerationModelTest(
         if is_torch_available()
         else ()
     )
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
     def setUp(self):
@@ -353,22 +354,6 @@ class SmolVLMForConditionalGenerationModelTest(
     @is_flaky(description="TODO: check why flaky")
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):
@@ -586,7 +571,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 (None, None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
                 ("cuda", (8, 0)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
-                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model, specifically a neural network model, which is designed to learn and',
+                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
                 ("rocm", (9, 4)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
                 ("rocm", None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
             }

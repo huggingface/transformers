@@ -198,6 +198,26 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
 
 
+@require_tokenizers
+class TokenizersBackendTest(unittest.TestCase):
+    def test_clean_up_tokenization_spaces(self):
+        tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
+
+        # GPT-2 is a BPE tokenizer — clean_up_tokenization is skipped because it
+        # was designed for WordPiece and is destructive for BPE (strips legitimate
+        # spaces before punctuation).
+        # Use text with spaces before punctuation that cleanup would strip if applied.
+        text = "x != y"
+        token_ids = tokenizer.encode(text)
+
+        decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
+        self.assertEqual(decoded_no_cleanup, text)
+
+        # With BPE guard, cleanup=True also preserves the text
+        decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
+        self.assertEqual(decoded_with_cleanup, text)
+
+
 class TrieTest(unittest.TestCase):
     def test_trie(self):
         trie = Trie()

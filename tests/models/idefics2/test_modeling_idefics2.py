@@ -177,6 +177,8 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics2Model,) if is_torch_available() else ()
+    # Idefics2 merges batch_size and num_frames in the first output dimension
+    skip_test_image_features_output_shape = True
 
     test_resize_embeddings = True
     _is_composite = True
@@ -190,11 +192,11 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
@@ -367,6 +369,9 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
+    skip_test_image_features_output_shape = (
+        True  # Idefics2 merges batch_size and num_frames in the first output dimension
+    )
 
     test_resize_embeddings = True
 
@@ -374,7 +379,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         self.model_tester = Idefics2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Idefics2Config, has_text_modality=False)
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 

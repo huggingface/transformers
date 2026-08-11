@@ -41,6 +41,7 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "QuantoConfig"
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)

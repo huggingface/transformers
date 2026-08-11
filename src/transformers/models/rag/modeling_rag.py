@@ -33,12 +33,12 @@ from .retrieval_rag import RagRetriever
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for retriever augmented marginalized models outputs.
     """
 )
+@dataclass
 class RetrievAugLMMarginOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -129,8 +129,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
     generator_cross_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class RetrievAugLMOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -521,7 +521,7 @@ class RagModel(RagPreTrainedModel):
                 retriever_outputs = self.retriever(
                     input_ids,
                     question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                    prefix=self.generator.config.prefix,
+                    prefix=getattr(self.generator.config, "prefix", None),
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
@@ -940,9 +940,11 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication
         num_doc_return_sequences = (
-            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+            num_return_sequences
+            if num_return_sequences is not None
+            else getattr(self.config, "num_return_sequences", 1)
         )
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        num_beams = num_beams if num_beams is not None else getattr(self.config, "num_beams", 1)
 
         assert input_ids is not None or context_input_ids is not None, (
             " At least one of input_ids or context_input_ids must be given"
@@ -953,7 +955,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )["context_input_ids"]
@@ -1428,19 +1430,19 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
                 retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
                 Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
                 retriever.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
                 `question_encoder_last_hidden_state`.
 
-                If the model has is not initialized with a `retriever`, `context_input_ids` has to be provided to the
+                If the model is not initialized with a `retriever`, `context_input_ids` has to be provided to the
                 forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
@@ -1505,7 +1507,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             out = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )
@@ -1566,6 +1568,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         model_kwargs["encoder_outputs"] = encoder_outputs
         model_kwargs["attention_mask"] = context_attention_mask
         model_kwargs["n_docs"] = n_docs
+        model_kwargs["use_cache"] = generation_config.use_cache
 
         prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
@@ -1587,9 +1590,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             batch_size=input_ids.shape[0],
             max_cache_length=generation_config.max_length - 1,
         )
-
-        # Prefill pass
-        generation_mode_kwargs["prefill_outputs"] = self._prefill(input_ids, generation_config, model_kwargs)
 
         return decoding_method(
             self,

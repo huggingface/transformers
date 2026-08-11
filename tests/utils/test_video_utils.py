@@ -28,9 +28,15 @@ from transformers.testing_utils import (
     require_torch,
     require_torchcodec,
     require_torchvision,
+    require_torchvision_video_decoding,
     require_vision,
 )
-from transformers.video_utils import group_videos_by_shape, make_batched_videos, reorder_videos
+from transformers.video_utils import (
+    group_videos_by_shape,
+    is_torchvision_video_decoding_available,
+    make_batched_videos,
+    reorder_videos,
+)
 
 
 if is_torch_available():
@@ -101,9 +107,19 @@ class BaseVideoProcessorTester(unittest.TestCase):
         video = get_random_video(16, 32)
         videos_list = make_batched_videos(video)
         self.assertIsInstance(videos_list, list)
+        self.assertTrue(len(videos_list), 1)
         self.assertIsInstance(videos_list[0], np.ndarray)
         self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0], video))
+
+        # Test a 5d array of batch videos is converted to a list of videos
+        video = video[None, ...].repeat(4, 0)
+        videos_list = make_batched_videos(video)
+        self.assertIsInstance(videos_list, list)
+        self.assertTrue(len(videos_list), 4)
+        self.assertIsInstance(videos_list[0], np.ndarray)
+        self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
+        self.assertTrue(np.array_equal(videos_list[0], video[0]))
 
         # Test a list of videos is converted to a list of videos
         video = get_random_video(16, 32)
@@ -130,6 +146,16 @@ class BaseVideoProcessorTester(unittest.TestCase):
         torch_video = torch.from_numpy(video)
         videos_list = make_batched_videos(torch_video)
         self.assertIsInstance(videos_list, list)
+        self.assertTrue(len(videos_list), 1)
+        self.assertIsInstance(videos_list[0], torch.Tensor)
+        self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
+        self.assertTrue(np.array_equal(videos_list[0], video))
+
+        # Test a 5d array of batch videos is converted to a list of videos
+        torch_video = torch_video[None, ...].repeat(4, 1, 1, 1, 1)
+        videos_list = make_batched_videos(torch_video)
+        self.assertIsInstance(videos_list, list)
+        self.assertTrue(len(videos_list), 4)
         self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0], video))
@@ -260,7 +286,6 @@ class LoadVideoTester(unittest.TestCase):
     #     self.assertEqual(video.shape, (243, 360, 640, 3)) # 243 frames is the whole video, no sampling applied
 
     @require_decord
-    @require_torchvision
     @require_torchcodec
     @require_cv2
     def test_load_video_backend_url(self):
@@ -274,7 +299,7 @@ class LoadVideoTester(unittest.TestCase):
             "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
             backend="torchcodec",
         )
-        self.assertEqual(video.shape, (243, 360, 640, 3))
+        self.assertEqual(video.shape, (243, 3, 360, 640))
 
         # Can't use certain backends with url
         with self.assertRaises(ValueError):
@@ -282,14 +307,8 @@ class LoadVideoTester(unittest.TestCase):
                 "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
                 backend="opencv",
             )
-        with self.assertRaises(ValueError):
-            video, _ = load_video(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
-                backend="torchvision",
-            )
 
     @require_decord
-    @require_torchvision
     @require_torchcodec
     @require_cv2
     def test_load_video_backend_local(self):
@@ -304,13 +323,38 @@ class LoadVideoTester(unittest.TestCase):
         self.assertEqual(video.shape, (243, 360, 640, 3))
         self.assertIsInstance(metadata, VideoMetadata)
 
+        video, metadata = load_video(video_file_path, backend="torchcodec")
+        self.assertEqual(video.shape, (243, 3, 360, 640))
+        self.assertIsInstance(metadata, VideoMetadata)
+
+    @require_torchvision_video_decoding
+    def test_load_video_backend_torchvision(self):
+        # `torchvision.io.read_video` was removed in `torchvision==0.26`, so this only runs on older versions
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
         video, metadata = load_video(video_file_path, backend="torchvision")
         self.assertEqual(video.shape, (243, 360, 640, 3))
         self.assertIsInstance(metadata, VideoMetadata)
 
-        video, metadata = load_video(video_file_path, backend="torchcodec")
-        self.assertEqual(video.shape, (243, 360, 640, 3))
-        self.assertIsInstance(metadata, VideoMetadata)
+        # Can't use the `torchvision` backend with a url
+        with self.assertRaises(ValueError):
+            load_video(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                backend="torchvision",
+            )
+
+    @require_torchvision
+    def test_load_video_torchvision_removed_raises(self):
+        # On recent `torchvision` versions, we should point users to `torchcodec` instead of failing obscurely
+        if is_torchvision_video_decoding_available():
+            self.skipTest("`torchvision` still ships the video decoding API")
+
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ImportError, "torchcodec"):
+            load_video(video_file_path, backend="torchvision")
 
     def test_load_video_num_frames(self):
         video, _ = load_video(

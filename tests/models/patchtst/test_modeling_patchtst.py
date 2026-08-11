@@ -71,7 +71,7 @@ class PatchTSTModelTester:
         seed=42,
         num_targets=2,
         mask_type="random",
-        random_mask_ratio=0,
+        random_mask_ratio=0.0,
     ):
         self.parent = parent
         self.batch_size = batch_size

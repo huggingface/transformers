@@ -13,8 +13,9 @@
 # limitations under the License.
 import argparse
 import re
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -375,7 +376,7 @@ def preprocess_old_state(state_dict: dict, config: MMGroundingDinoConfig) -> dic
         if (
             k == "dn_query_generator.label_embedding.weight"
             or k == "language_model.language_backbone.body.model.embeddings.position_ids"
-            or k == "image_seperate.weight"
+            or k == "image_separate.weight"
             or k.startswith("lmm")
             or k.startswith("connector")
             or k.startswith("region_connector")
@@ -419,8 +420,9 @@ def convert_mm_to_hf_state(original_state: dict, hf_cfg: MMGroundingDinoConfig) 
 
 
 def prepare_test_inputs():
-    image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(image_url, stream=True).raw)
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     text = [["cat", "remote"]]
     return image, text
 

@@ -35,6 +35,7 @@ from .utils import (
     is_torch_tensor,
     is_torchcodec_available,
     is_torchvision_available,
+    is_torchvision_greater_or_equal,
     is_vision_available,
     is_yt_dlp_available,
     logging,
@@ -195,19 +196,21 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     """
     # Early exit for deeply nested list of image frame paths. We shouldn't flatten them
     try:
-        if isinstance(videos[0][0], list) and isinstance(videos[0][0][0], str):
+        if isinstance(videos[0][0], (list, tuple)) and isinstance(videos[0][0][0], str):
             return [image_paths for sublist in videos for image_paths in sublist]
     except (IndexError, TypeError):
         pass
 
-    if isinstance(videos, str) or is_valid_video(videos):
+    if is_batched_video(videos):
+        return convert_pil_frames_to_video(list(videos))
+    elif isinstance(videos, str) or is_valid_video(videos):
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
         if isinstance(videos, PIL.Image.Image):
             videos = np.array(videos)
         return [videos[None, ...]]
-    elif not isinstance(videos, list):
+    elif not isinstance(videos, (list, tuple)):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
             f" type {type(videos)}."
@@ -218,7 +221,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     for item in videos:
         if isinstance(item, str) or is_valid_video(item):
             flat_videos_list.append(item)
-        elif isinstance(item, list) and item:
+        elif isinstance(item, (list, tuple)) and item:
             flat_videos_list.extend(make_batched_videos(item))
 
     flat_videos_list = convert_pil_frames_to_video(flat_videos_list)
@@ -505,6 +508,26 @@ def read_video_pyav(
     return video, metadata
 
 
+# `torchvision.io.read_video` removed in `torchvision==0.26` (https://github.com/pytorch/vision/releases#release-v0.26.0),
+# which ships with `torch==2.11`. As `transformers` supports `torch>=2.5`, we cannot rely on the pinned version and have to check
+# it at runtime instead. Once the minimum supported `torch` version is bumped to 2.11, the whole `torchvision` video
+# decoding backend can be deleted.
+TORCHVISION_VIDEO_DECODING_REMOVED_VERSION = "0.26.0"
+
+TORCHVISION_VIDEO_DECODING_ERROR = (
+    "Video decoding with `torchvision` is not available: `torchvision.io.read_video` was deprecated in "
+    f"`torchvision==0.22` and removed in `torchvision=={TORCHVISION_VIDEO_DECODING_REMOVED_VERSION}`. "
+    "Please install `torchcodec` (`pip install torchcodec`) and use `backend='torchcodec'` to decode videos."
+)
+
+
+def is_torchvision_video_decoding_available() -> bool:
+    """Whether the installed `torchvision` still exposes the (removed) video decoding API."""
+    return is_torchvision_available() and not is_torchvision_greater_or_equal(
+        TORCHVISION_VIDEO_DECODING_REMOVED_VERSION
+    )
+
+
 def read_video_torchvision(
     video_path: Union["URL", "Path"],
     sample_indices_fn: Callable,
@@ -529,6 +552,9 @@ def read_video_torchvision(
             - Torch tensor of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
+    if not is_torchvision_video_decoding_available():
+        raise ImportError(TORCHVISION_VIDEO_DECODING_ERROR)
+
     warnings.warn(
         "Using `torchvision` for video decoding is deprecated and will be removed in future versions. "
         "Please use `torchcodec` instead."
@@ -650,7 +676,7 @@ def load_video(
         sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
-            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            If not provided, simple uniform sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
             The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
             indices at which the video should be sampled. For example:
 
@@ -862,6 +888,7 @@ def group_videos_by_shape(
     and a dictionary with the index of the video in the original list as key and the shape and index in the grouped list as value.
     """
     grouped_videos = {}
+
     grouped_videos_index = {}
     for i, video in enumerate(videos):
         shape = video.shape[-2::]
@@ -871,6 +898,7 @@ def group_videos_by_shape(
             grouped_videos[shape] = []
         grouped_videos[shape].append(video)
         grouped_videos_index[i] = (shape, len(grouped_videos[shape]) - 1)
+
     # stack videos with the same size and number of frames
     grouped_videos = {shape: torch.stack(videos, dim=0) for shape, videos in grouped_videos.items()}
     return grouped_videos, grouped_videos_index

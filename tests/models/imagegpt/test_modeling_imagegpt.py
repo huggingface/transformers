@@ -39,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTImageProcessor
+    from transformers import ImageGPTImageProcessorPil
 
 
 class ImageGPTModelTester:
@@ -228,7 +228,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     test_missing_keys = False
-    test_torch_exportable = True
 
     # as ImageGPTForImageClassification isn't included in any auto mapping, we add labels here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -275,24 +274,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_imagegpt_for_image_classification(*config_and_inputs)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "openai/imagegpt-small"
@@ -327,7 +308,7 @@ def prepare_img():
 class ImageGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
+        return ImageGPTImageProcessorPil.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
 
     @slow
     def test_inference_causal_lm_head(self):

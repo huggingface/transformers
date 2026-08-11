@@ -15,7 +15,6 @@
 
 import unittest
 
-import pytest
 import torch
 
 from transformers import is_torch_available
@@ -28,11 +27,7 @@ from transformers.testing_utils import (
 
 
 if is_torch_available():
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        HunYuanMoEV1Model,
-    )
+    from transformers import AutoTokenizer, HunYuanMoEV1ForCausalLM, HunYuanMoEV1Model
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -59,24 +54,6 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    @unittest.skip("Hunyuan model Unsupported")
-    @pytest.mark.torch_compile_test
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Hunyuan model Unsupported")
-    def test_generate_with_static_cache(self):
-        pass
-
 
 @require_torch
 class HunYuanMoEV1IntegrationTest(unittest.TestCase):
@@ -88,12 +65,10 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generation(self):
-        # we will compele this when model file change over
-        # pass
         EXPECTED_ANSWER = "\nOkay, I need to write a"
         prompt = "Write a short summary of the benefits of regular exercise"
         tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
-        model = AutoModelForCausalLM.from_pretrained(
+        model = HunYuanMoEV1ForCausalLM.from_pretrained(
             "tencent/Hunyuan-A13B-Instruct", device_map="auto", dtype=torch.bfloat16
         )
         messages = [
@@ -104,8 +79,8 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
             tokenize=True,
             add_generation_prompt=True,
             return_tensors="pt",
-        )
-        generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=10, top_k=1)
+        ).to(model.device)
+        generated_ids = model.generate(**tokenized_chat, max_new_tokens=10, top_k=1)
         text = tokenizer.decode(generated_ids[0])
         output = text.split("<think>")[1]
         self.assertEqual(EXPECTED_ANSWER, output)

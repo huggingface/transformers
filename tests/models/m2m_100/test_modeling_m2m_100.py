@@ -229,33 +229,12 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": M2M100Model,
-            "summarization": M2M100ForConditionalGeneration,
-            "text2text-generation": M2M100ForConditionalGeneration,
-            "translation": M2M100ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
     test_missing_keys = False
-
-    # TODO: Fix the failed tests
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        if pipeline_test_case_name == "TranslationPipelineTests":
-            # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
-            # `M2M100Config` was never used in pipeline tests: cannot create a simple tokenizer.
-            return True
-
-        return False
 
     def setUp(self):
         self.model_tester = M2M100ModelTester(self)

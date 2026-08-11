@@ -19,9 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_donut_swin import *
-    from .feature_extraction_donut import *
     from .image_processing_donut import *
-    from .image_processing_donut_fast import *
+    from .image_processing_pil_donut import *
     from .modeling_donut_swin import *
     from .processing_donut import *
 else:

@@ -13,16 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-10 and added to Hugging Face Transformers on 2026-01-10.*
+*This model was contributed to Hugging Face Transformers on 2026-01-13.*
 
 # GlmImage
 
 ## Overview
 
-GLM-Image is an image generation model adopts a hybrid autoregressive + diffusion decoder architecture, effectively pushing the upper bound of visual fidelity and fine-grained details. In general image generation quality, it aligns with industry-standard LDM-based approaches, while demonstrating significant advantages in knowledge-intensive image generation scenarios.
+GLM-Image is an image generation model that adopts a hybrid autoregressive + diffusion decoder architecture, effectively pushing the upper bound of visual fidelity and fine-grained details. In general image generation quality, it aligns with industry-standard LDM-based approaches, while demonstrating significant advantages in knowledge-intensive image generation scenarios.
 
 Model architecture: a hybrid autoregressive + diffusion decoder design、
 
@@ -48,13 +48,15 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 Using GLM-Image with image input to generate vision token for DIT using.
 
 ```python
-from transformers import GlmImageForConditionalGeneration, AutoProcessor
+
 import torch
+
+from transformers import AutoProcessor, GlmImageForConditionalGeneration
+
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    dtype=torch.bfloat16,
-    device_map="cuda:0"
+    device_map=torch.accelerator.current_accelerator()
 )
 processor = AutoProcessor.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/processor",
@@ -171,14 +173,15 @@ print(f"Output tokens: {output_tokens}")
 [[autodoc]] GlmImageImageProcessor
     - preprocess
 
-## GlmImageImageProcessorFast
+## GlmImageImageProcessorPil
 
-[[autodoc]] GlmImageImageProcessorFast
+[[autodoc]] GlmImageImageProcessorPil
     - preprocess
 
 ## GlmImageProcessor
 
 [[autodoc]] GlmImageProcessor
+    - __call__
 
 ## GlmImageVisionModel
 
@@ -199,8 +202,10 @@ print(f"Output tokens: {output_tokens}")
 
 [[autodoc]] GlmImageModel
     - forward
+    - get_image_features
 
 ## GlmImageForConditionalGeneration
 
 [[autodoc]] GlmImageForConditionalGeneration
     - forward
+    - get_image_features

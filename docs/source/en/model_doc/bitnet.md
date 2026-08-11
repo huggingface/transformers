@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-28.*
+*This model was published in HF papers on 2025-04-16 and contributed to Hugging Face Transformers on 2025-04-28.*
 
 # BitNet
 
@@ -77,8 +77,8 @@ pip install transformers
 ### Example
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "microsoft/bitnet-b1.58-2B-4T"
 
@@ -86,8 +86,7 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16
-)
+ device_map="auto")
 
 # Apply the chat template
 messages = [

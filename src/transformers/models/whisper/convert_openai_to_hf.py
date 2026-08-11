@@ -38,7 +38,7 @@ from transformers import (
     WhisperTokenizerFast,
 )
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, bytes_to_unicode
-from transformers.utils.import_utils import _is_package_available
+from transformers.utils.import_utils import is_tiktoken_available
 
 
 _MODELS = {
@@ -345,7 +345,7 @@ if __name__ == "__main__":
 
     if args.convert_preprocessor:
         try:
-            if not _is_package_available("tiktoken"):
+            if not is_tiktoken_available(with_blobfile=False):
                 raise ModuleNotFoundError(
                     """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
                 )

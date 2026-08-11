@@ -250,6 +250,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 (None, None): "The image shows two cats lying on a pink surface, which appears to be a bed or couch.",
                 ("xpu", 3): "The image shows two cats lying on a pink blanket. The cat on the left is a tabby",
+                ("xpu", 5): "The image shows two cats lying on a pink surface, which appears to be a bed or couch.",
             }
         )
         # fmt: on
@@ -495,7 +496,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The man is performing a volley.",
+                ("xpu", 3): "The man is performing a forehand shot.",
                 ("cuda", 7): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
             }

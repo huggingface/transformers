@@ -384,6 +384,41 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_enum_extraction_non_string_choices(self):
+        def fn(rating: int, enabled: bool):
+            """
+            Test function
+
+            Args:
+                rating: The rating to give (choices: [1, 2, 3])
+                enabled: Whether it is enabled (choices: [true, false])
+            """
+            return -40.0
+
+        # Non-string choices (numbers, booleans) must be preserved as-is, not stripped as strings
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rating": {
+                        "type": "integer",
+                        "enum": [1, 2, 3],
+                        "description": "The rating to give",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "enum": [True, False],
+                        "description": "Whether it is enabled",
+                    },
+                },
+                "required": ["rating", "enabled"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_literal(self):
         def fn(
             temperature_format: Literal["celsius", "fahrenheit"],
@@ -486,6 +521,77 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "return": {"type": "null"},
         }
         self.assertEqual(schema["function"], expected_schema)
+
+    def test_instance_method(self):
+        class Tool:
+            def fn(self, x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)  # unbound case
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)  # bound case
+
+    def test_static_method(self):
+        class Tool:
+            @staticmethod
+            def fn(x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)
+
+    def test_class_method(self):
+        class Tool:
+            @classmethod
+            def fn(cls, x: int):
+                """
+                Test function
+
+                Args:
+                    x: The input
+                """
+                return x
+
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(Tool.fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(Tool().fn)["function"], expected_schema)
 
     def test_everything_all_at_once(self):
         def fn(x: str, y: list[str | int] | None, z: tuple[str | int, str] = (42, "hello")) -> tuple[int, str]:

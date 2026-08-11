@@ -32,6 +32,8 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
+    is_kernels_available,
+    is_torch_xpu_available,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -183,11 +185,12 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
                 reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
             )
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if (
+            attn_implementation == "flash_attention_2"
+            and not is_flash_attn_2_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
+        ):
             self.skipTest("FlashAttention2 is required for this test.")
-
-        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/vaultgemma-1b"
         EXPECTED_COMPLETIONS = [
@@ -228,11 +231,12 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
                 reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
             )
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if (
+            attn_implementation == "flash_attention_2"
+            and not is_flash_attn_2_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
+        ):
             self.skipTest("FlashAttention2 is required for this test.")
-
-        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "google/vaultgemma-1b"
         EXPECTED_COMPLETIONS = [

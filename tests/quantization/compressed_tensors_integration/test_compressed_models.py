@@ -2,7 +2,7 @@ import gc
 import unittest
 import warnings
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM
 from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import CompressedTensorsConfig
@@ -21,21 +21,9 @@ class StackCompressedModelTest(unittest.TestCase):
             "nm-testing/llama2.c-stories42M-gsm8k-quantized-only-compressed",
             "nm-testing/llama2.c-stories42M-gsm8k-quantized-only-uncompressed",
         ),
-        (
-            "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-compressed",
-            "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-uncompressed",
-        ),
-        (
-            "nm-testing/llama2.c-stories42M-gsm8k-stacked-compressed",
-            "nm-testing/llama2.c-stories42M-gsm8k-stacked-uncompressed",
-        ),
     ]
     # Flatten the list for tests that require a single list of stubs.
     model_stubs = [stub for pair in compressed_uncompressed_model_stubs for stub in pair]
-
-    # For the outputs matching test, use the sparse-only pair.
-    sparse_compressed_model = "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-compressed"
-    sparse_uncompressed_model = "nm-testing/llama2.c-stories42M-gsm8k-sparse-only-uncompressed"
 
     prompt = "Paris is the capital of which country?"
 
@@ -58,73 +46,33 @@ class StackCompressedModelTest(unittest.TestCase):
                 obj = getattr(obj, attr)
             return obj
 
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
-
         for compressed_model, uncompressed_model in self.compressed_uncompressed_model_stubs:
             with self.subTest(compressed_model=compressed_model, uncompressed_model=uncompressed_model):
                 uncompressed = AutoModelForCausalLM.from_pretrained(
                     uncompressed_model,
                     device_map="auto",
                     dtype="auto",
-                    quantization_config=CompressedTensorsConfig(run_compressed=False),
+                    quantization_config=CompressedTensorsConfig(dequantize=True),
                 )
                 compressed_decompressed = AutoModelForCausalLM.from_pretrained(
                     compressed_model,
                     device_map="auto",
                     dtype="auto",
-                    quantization_config=CompressedTensorsConfig(run_compressed=False),
+                    quantization_config=CompressedTensorsConfig(dequantize=True),
                 )
 
-                for name, submodule in iter_named_leaf_modules(uncompressed):
+                for name, submodule in uncompressed.named_modules():
+                    if list(submodule.children()):
+                        continue
                     comp_decomp_obj = _has_nested_attr(compressed_decompressed, name)
                     if comp_decomp_obj is not None and hasattr(submodule, "weight"):
-                        if "sparse-only" in uncompressed_model:
-                            self.assertTrue(
-                                torch.equal(
-                                    submodule.weight.to(torch_device), comp_decomp_obj.weight.to(torch_device)
-                                ),
-                                f"Weight mismatch for module '{name}' in sparse-only model.",
-                            )
-                        else:
-                            self.assertTrue(
-                                torch.allclose(
-                                    submodule.weight.to(torch_device),
-                                    comp_decomp_obj.weight.to(torch_device),
-                                    atol=0.2,
-                                ),
-                                f"Weight mismatch for module '{name}' in quantized-only or stacked model.",
-                            )
-
-    def test_outputs_match(self):
-        """
-        Ensure that the generated outputs match between the uncompressed model
-        and its decompressed compressed counterpart.
-        """
-        tokenizer = AutoTokenizer.from_pretrained(self.sparse_uncompressed_model)
-        input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
-
-        uncompressed = AutoModelForCausalLM.from_pretrained(
-            self.sparse_uncompressed_model,
-            device_map="auto",
-            dtype="auto",
-            quantization_config=CompressedTensorsConfig(run_compressed=False),
-        )
-
-        output_uncompressed = uncompressed.generate(input_ids.to(uncompressed.device), max_new_tokens=100)
-
-        decompressed = AutoModelForCausalLM.from_pretrained(
-            self.sparse_compressed_model,
-            device_map="auto",
-            dtype="auto",
-            quantization_config=CompressedTensorsConfig(run_compressed=False),
-        )
-        output_decompressed = decompressed.generate(input_ids.to(decompressed.device), max_new_tokens=100)
-
-        self.assertEqual(
-            tokenizer.decode(output_uncompressed[0]),
-            tokenizer.decode(output_decompressed[0]),
-            "Generated outputs do not match between compressed and uncompressed models.",
-        )
+                        torch.testing.assert_close(
+                            submodule.weight.to(torch_device),
+                            comp_decomp_obj.weight.to(torch_device),
+                            atol=0.2,
+                            rtol=1e-5,
+                            msg=f"Weight mismatch for module '{name}'.",
+                        )
 
     def test_no_warnings_for_all_models(self):
         """
@@ -139,7 +87,7 @@ class StackCompressedModelTest(unittest.TestCase):
                         model_stub,
                         device_map="auto",
                         dtype="auto",
-                        quantization_config=CompressedTensorsConfig(run_compressed=False),
+                        quantization_config=CompressedTensorsConfig(dequantize=True),
                     )
                     for warning in caught_warnings:
                         self.assertNotIn(
@@ -156,7 +104,11 @@ class StackCompressedModelTest(unittest.TestCase):
 
 @require_compressed_tensors
 @require_torch
-class RunCompressedTest(unittest.TestCase):
+class DequantizeTest(unittest.TestCase):
+    """Non-FP8 schemes have no kernels, so they run dequantized. `dequantize=True` (or the
+    deprecated `run_compressed=False`) does it at load time; by default the weights are left
+    compressed and compressed-tensors decompresses them on the first forward pass."""
+
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
 
@@ -169,70 +121,55 @@ class RunCompressedTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    def test_default_run_compressed__True(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
+    def test_default_load_stays_compressed_until_first_forward(self):
+        from compressed_tensors import QuantizationStatus
 
         for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
+            model = AutoModelForCausalLM.from_pretrained(stub)
+
+            compressed_count = sum(
+                1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
             )
-            compressed_linear_counts = 0
+            self.assertGreater(compressed_count, 0, "weights must not be decompressed at load time")
 
-            for _, submodule in iter_named_leaf_modules(
-                model,
-            ):
-                if isinstance(submodule, CompressedLinear):
-                    compressed_linear_counts += 1
+            model(input_ids=torch.tensor([[0, 1, 2]]))
 
-            # some linear models are not compressed - ex. lm_head
-            assert compressed_linear_counts > 0
+            # The hook compressed-tensors registered decompressed the model on that forward pass.
+            compressed_count = sum(
+                1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
+            )
+            self.assertEqual(compressed_count, 0, "no modules should be left in COMPRESSED state")
+            self.assertFalse(any("weight_packed" in name for name, _ in model.named_parameters()))
+            self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
 
-    def test_default_run_compressed__False(self):
-        from compressed_tensors.linear.compressed_linear import CompressedLinear
-        from compressed_tensors.quantization.utils import iter_named_leaf_modules
-
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
+    def test_deprecated_run_compressed_maps_to_dequantize(self):
+        # `run_compressed=False` is deprecated and must behave as `dequantize=True`.
         quantization_config = CompressedTensorsConfig(run_compressed=False)
+        self.assertTrue(quantization_config.dequantize)
 
-        for stub in self.stubs:
-            model = AutoModelForCausalLM.from_pretrained(
-                stub,
-                quantization_config=quantization_config,
-            )
-            compressed_linear_counts = 0
+        from compressed_tensors import QuantizationStatus
 
-            for _, submodule in iter_named_leaf_modules(
-                model,
-            ):
-                if isinstance(submodule, CompressedLinear):
-                    compressed_linear_counts += 1
+        model = AutoModelForCausalLM.from_pretrained(self.stubs[0], quantization_config=quantization_config)
+        compressed_count = sum(
+            1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
+        )
+        self.assertEqual(compressed_count, 0)
 
-            # No modules should be CompressedLinear
-            assert compressed_linear_counts == 0
-
-    def test_run_compressed_outputs_match(self):
-        """Check that run_compressed=True/False output are the same"""
-
+    def test_dequantize_outputs_match_default(self):
+        """An explicit `dequantize=True` must produce the same outputs as the default load
+        (both are dequantized)."""
         from transformers import AutoTokenizer
-        from transformers.utils.quantization_config import CompressedTensorsConfig
-
-        quantization_config = CompressedTensorsConfig(run_compressed=False)
 
         for stub in self.stubs:
             tokenizer = AutoTokenizer.from_pretrained(stub)
             input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
 
-            model_run_compressed__True = AutoModelForCausalLM.from_pretrained(
-                stub,
-            )
-            output_rc_true = model_run_compressed__True.generate(input_ids, max_new_tokens=100)
+            model_default = AutoModelForCausalLM.from_pretrained(stub)
+            output_default = model_default.generate(input_ids, max_new_tokens=100)
 
-            model_run_compressed__False = AutoModelForCausalLM.from_pretrained(
-                stub,
-                quantization_config=quantization_config,
+            model_dequantized = AutoModelForCausalLM.from_pretrained(
+                stub, quantization_config=CompressedTensorsConfig(dequantize=True)
             )
-            output_rc_false = model_run_compressed__False.generate(input_ids, max_new_tokens=100)
+            output_dequantized = model_dequantized.generate(input_ids, max_new_tokens=100)
 
-            assert tokenizer.decode(output_rc_true[0]) == tokenizer.decode(output_rc_false[0])
+            self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))

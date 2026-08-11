@@ -19,9 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_vit import *
-    from .feature_extraction_vit import *
+    from .image_processing_pil_vit import *
     from .image_processing_vit import *
-    from .image_processing_vit_fast import *
     from .modeling_vit import *
 else:
     import sys

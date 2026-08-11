@@ -9,46 +9,46 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # TimmWrapper
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
 Helper class to enable loading timm models to be used with the transformers library and its autoclasses.
 
 ```python
->>> import torch
->>> from PIL import Image
->>> from urllib.request import urlopen
->>> from transformers import AutoModelForImageClassification, AutoImageProcessor
+from urllib.request import urlopen
 
->>> # Load image
->>> image = Image.open(urlopen(
-...     'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
-... ))
+import torch
+from PIL import Image
 
->>> # Load model and image processor
->>> checkpoint = "timm/resnet50.a1_in1k"
->>> image_processor = AutoImageProcessor.from_pretrained(checkpoint)
->>> model = AutoModelForImageClassification.from_pretrained(checkpoint).eval()
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
->>> # Preprocess image
->>> inputs = image_processor(image)
 
->>> # Forward pass
->>> with torch.no_grad():
-...     logits = model(**inputs).logits
+# Load image
+image = Image.open(urlopen(
+    'https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png'
+))
 
->>> # Get top 5 predictions
->>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
+# Load model and image processor
+checkpoint = "timm/resnet50.a1_in1k"
+image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+model = AutoModelForImageClassification.from_pretrained(checkpoint).eval( device_map="auto")
+
+# Preprocess image
+inputs = image_processor(image)
+
+# Forward pass
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+# Get top 5 predictions
+top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
 ```
 
 ## Resources

@@ -34,12 +34,12 @@ from .configuration_levit import LevitConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LevitForImageClassificationWithTeacher`].
     """
 )
+@dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
@@ -176,9 +176,7 @@ class LevitAttention(nn.Module):
 
         self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -257,9 +255,7 @@ class LevitAttentionSubsample(nn.Module):
         self.indices = indices
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points_, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points_, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -510,7 +506,7 @@ class LevitModel(LevitPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -575,7 +571,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
@@ -636,7 +632,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | LevitForImageClassificationWithTeacherOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 

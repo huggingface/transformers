@@ -124,7 +124,7 @@ class WatermarkDetector:
         self,
         model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Union["WatermarkingConfig", dict] | None,
+        watermarking_config: Union["WatermarkingConfig", dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
@@ -251,7 +251,7 @@ class BayesianDetectorConfig(PreTrainedConfig):
     Args:
         watermarking_depth (`int`, *optional*):
             The number of tournament layers.
-        base_rate (`float1`, *optional*, defaults to 0.5):
+        base_rate (`float`, *optional*, defaults to 0.5):
             Prior probability P(w) that a text is watermarked.
     """
 

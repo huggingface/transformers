@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitNetQuantConfig
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 
@@ -38,6 +39,7 @@ class BitNetHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "BitNetQuantConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -103,3 +105,20 @@ class BitNetHfQuantizer(HfQuantizer):
             self.quantization_config.linear_class == "autobitlinear"
             and self.quantization_config.quantization_mode == "online"
         )
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.bitnet import BitNetDeserialize
+
+        if (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "offline"
+        ):
+            return [
+                WeightConverter(
+                    source_patterns=["weight"],
+                    target_patterns=["weight"],
+                    operations=[BitNetDeserialize(self)],
+                )
+            ]
+        return []

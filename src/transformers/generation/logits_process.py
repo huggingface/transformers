@@ -14,13 +14,13 @@
 
 import inspect
 import math
-from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
-from ..pytorch_utils import isin_mps_friendly
+from .._typing import WhisperGenerationConfigLike
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -48,6 +48,10 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
 class LogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
+
+    # Whether the logit processor is supported by continuous batching.
+    # True if it is, False if it is not, None if it is not yet known.
+    supports_continuous_batching: bool | None = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -133,6 +137,8 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching: bool = False
+
     def __init__(self, min_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
@@ -148,7 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -192,6 +198,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = False
+
     def __init__(
         self,
         prompt_length_to_skip: int,
@@ -220,7 +228,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -274,6 +282,8 @@ class TemperatureLogitsWarper(LogitsProcessor):
     'Hugging Face Company is a company that has been around for over 20 years']
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, temperature: float):
         if not isinstance(temperature, float) or not (temperature > 0):
@@ -343,6 +353,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = False
+
     def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
@@ -356,10 +368,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.prompt_ignore_length = prompt_ignore_length
         self.logits_indices = None
         self.cu_seq_lens_q = None
-
-    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cu_seq_lens_q: torch.Tensor):
-        self.logits_indices = logits_indices
-        self.cu_seq_lens_q = cu_seq_lens_q
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -442,6 +450,8 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching: bool = False
+
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
@@ -499,6 +509,8 @@ class TopPLogitsWarper(LogitsProcessor):
     A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         top_p = float(top_p)
@@ -564,12 +576,15 @@ class TopKLogitsWarper(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = True
+
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
         self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep  # used for CB processor initialization
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -1055,21 +1070,6 @@ def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
     return banned_ngrams.get(ngram_idx, [])
 
 
-def _calc_banned_ngram_tokens(
-    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
-) -> list[Iterable[int]]:
-    """Copied from fairseq for no_repeat_ngram in beam_search"""
-    if cur_len + 1 < ngram_size:
-        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-        return [[] for _ in range(num_hypos)]
-    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
-    banned_tokens = [
-        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
-        for hypo_idx in range(num_hypos)
-    ]
-    return banned_tokens
-
-
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
     N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given the
@@ -1119,14 +1119,24 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
-        scores_processed = scores.clone()
-        banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
-        for i, banned_tokens in enumerate(banned_batch_tokens):
-            scores_processed[i, banned_tokens] = -float("inf")
+        # No complete ngram yet, so nothing to ban
+        if cur_len < self.ngram_size:
+            return scores
 
-        return scores_processed
+        # An ngram can only be completed by the next token if it starts with the current suffix, so we match that one
+        # prefix against every window instead of building all ngrams. A matching window bans its own last token. (The
+        # window starting at the prefix needs one token more than we have, so a prefix never bans its own successor.)
+        prefix = input_ids[:, cur_len + 1 - self.ngram_size :]
+        windows = input_ids.unfold(dimension=1, size=self.ngram_size, step=1)
+        matches = (windows[..., :-1] == prefix.unsqueeze(1)).all(dim=-1)
+
+        # Non-matching windows go to a spare column past the vocab, where they can't unban another window's token
+        vocab_size = scores.shape[-1]
+        banned_mask = scores.new_zeros((scores.shape[0], vocab_size + 1), dtype=torch.bool)
+        banned_mask.scatter_(1, torch.where(matches, windows[..., -1], vocab_size), True)
+
+        return scores.masked_fill(banned_mask[:, :vocab_size], -float("inf"))
 
 
 class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
@@ -1264,7 +1274,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
-        self.sequence_bias = sequence_bias
+        # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
+        self.sequence_bias: Any = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
 
@@ -1847,7 +1858,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens.to(scores.device))
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1890,7 +1901,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
+        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -1959,8 +1970,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         begin_index: int,
         _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
-        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
-        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        whisper_generate_config = cast(WhisperGenerationConfigLike, generate_config)
+        self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
+        self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
@@ -2052,17 +2064,14 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-        # overwritten dynamically
-        self.model = None
-        self.inputs = None
+        # overwritten dynamically via set_model()
+        self.model: Any = None
+        self.inputs: dict[str, Any] | None = None
 
     def set_model(self, model):
         self.model = model
 
     def set_inputs(self, inputs):
-        # build `cache_position` on the fly
-        seq_length = inputs["input_ids"].shape[1]
-        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
         # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
@@ -2596,7 +2605,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             Device to use.
         skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
-        debug_mode (`bool`, optional, *optional*, defaults to `False`):
+        debug_mode (`bool`, *optional*, defaults to `False`):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
 
@@ -2696,8 +2705,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the dense logits.
-        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+        # Build continuation indices once and broadcast across batch instead of creating one arange per row.
+        all_indices = torch.arange(vocab_size, device=self.device).unsqueeze(0).expand(batch_size, -1)
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.

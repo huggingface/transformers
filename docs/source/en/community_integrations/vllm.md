@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -35,11 +35,14 @@ vllm serve meta-llama/Llama-3.2-1B \
     --model-impl transformers
 ```
 
-vLLM uses [`AutoConfig.from_pretrained`] to load a model's `config.json` file from the Hub or your Hugging Face cache. It checks the `architectures` field against its internal model registry to determine which vLLM model class to load. If the model isn't in the registry, vLLM calls [`AutoModel.from_config`] to load the Transformers model implementation.
+## Transformers integration
 
-Setting `model_impl="transformers"` bypasses the vLLM model registry and loads directly from Transformers. vLLM replaces most model modules (MoE, attention, linear, etc.) with its own optimized versions.
+1. [`AutoConfig.from_pretrained`] loads the model's `config.json` from the Hub or your Hugging Face cache. vLLM checks the `architectures` field against its internal model registry to determine which vLLM model class to use.
+2. If the model isn't in the registry, vLLM calls [`AutoModel.from_config`] to load the Transformers model implementation instead.
+3. [`AutoTokenizer.from_pretrained`] loads the tokenizer files. vLLM caches some tokenizer internals to reduce overhead during inference.
+4. Model weights download from the Hub in safetensors format.
 
-[`AutoTokenizer.from_pretrained`] loads tokenizer files. vLLM caches some tokenizer internals to reduce overhead during inference. Model weights download from the Hub in safetensors format.
+Setting `model_impl="transformers"` bypasses the vLLM model registry and loads directly from Transformers. vLLM replaces most model modules (MoE, attention, linear layers) with its own optimized versions while keeping the Transformers model structure.
 
 ## Resources
 

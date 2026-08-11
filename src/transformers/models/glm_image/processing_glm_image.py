@@ -20,17 +20,13 @@
 
 import math
 
-import numpy as np
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ...utils.import_utils import requires
 
 
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
@@ -59,6 +55,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: GlmImageImagesKwargs
 
 
+@requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
@@ -71,6 +68,9 @@ class GlmImageProcessor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
+
+    valid_processor_kwargs = GlmImageProcessorKwargs
+    model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -119,63 +119,114 @@ class GlmImageProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        target_h = output_kwargs["images_kwargs"].pop("target_h", None)
-        target_w = output_kwargs["images_kwargs"].pop("target_w", None)
+
+        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        if text is None:  # early exit if cond only on text
+            return model_inputs
+
+        target_h = output_kwargs["images_kwargs"].get("target_h")
+        target_w = output_kwargs["images_kwargs"].get("target_w")
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
         is_text_to_image = images is None
 
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
+        # Count images per sample by counting image tokens in each text
+        batch_size = len(text) if not isinstance(text, str) else 1
+        images_per_sample = []
+        for i in range(batch_size):
+            images_per_sample.append(text[i].count(self.image_token))
 
-        if not isinstance(text, list):
-            text = [text]
+        # Build prompt with target shape and combine grids in a single loop
+        # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
+        # Note: In image2image mode, batches are homogeneous (same number of source images per sample)
+        num_source_images = images_per_sample[0] if images_per_sample else 0
 
-        if len(text) > 1:
-            raise ValueError("The model does not support batch size > 1")
+        all_grids = []
+        for i in range(batch_size):
+            token_h, token_w, prev_h, prev_w = self._get_target_shape(height=target_h, width=target_w)
+            # Add source grids for this sample (i2i mode only)
+            if not is_text_to_image and num_source_images > 0:
+                start_idx = i * num_source_images
+                all_grids.append(model_inputs["image_grid_thw"][start_idx : start_idx + num_source_images])
+            # Add target grid for this sample
+            all_grids.append(
+                self._build_target_image_grid_thw(
+                    token_h=token_h,
+                    token_w=token_w,
+                    prev_token_h=prev_h,
+                    prev_token_w=prev_w,
+                    is_text_to_image=is_text_to_image,
+                )
+            )
+        model_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
 
-        text = text.copy()  # below lines change text in-place
-        if not is_text_to_image:
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    grid = image_grid_thw[index]
-                    num_image_tokens = int(grid[1] * grid[2])
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        text[0], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
-            text[0], height=target_h, width=target_w, is_text_to_image=is_text_to_image
+        # Store images_per_sample for later use (add target images count)
+        # Each sample will have: source_images + target_images (typically 2 for t2i, 1 for i2i)
+        num_target_grids = 2 if is_text_to_image else 1
+        model_inputs["images_per_sample"] = torch.tensor(
+            [num_source_images + num_target_grids] * batch_size, dtype=torch.long
         )
-        image_inputs["image_grid_thw"] = self._build_target_image_grid_thw(
-            token_h=token_h,
-            token_w=token_w,
-            prev_token_h=prev_h,
-            prev_token_w=prev_w,
-            image_grid_thw=image_grid_thw if not is_text_to_image else None,
-        )
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
-
-    def _build_prompt_with_target_shape(
+    def prepare_inputs_layout(
         self,
-        prompt: str,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[GlmImageImagesKwargs],
+    ):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        processed_text = text
+        if text is not None:
+            processed_text = []
+            target_h = kwargs["images_kwargs"].get("target_h", None)
+            target_w = kwargs["images_kwargs"].get("target_w", None)
+
+            for sample in text:
+                token_h, token_w, prev_token_h, prev_token_w = self._get_target_shape(height=target_h, width=target_w)
+                if images is None:
+                    sample = f"{sample}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}{self.bos_token}"
+                else:
+                    sample = f"{sample}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
+                processed_text.append(sample)
+
+        return images, processed_text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[GlmImageImagesKwargs],
+    ):
+        super().validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("You must provide at least one of `text` or `images`.")
+
+        # Validate homogeneity for i2i mode
+        images_per_sample = []
+        for i in range(len(text)):
+            images_per_sample.append(text[i].count(self.image_token))
+
+        if images is not None and images_per_sample and len(set(images_per_sample)) != 1:
+            raise ValueError(
+                f"In image-to-image mode, all samples must have the same number of source images. "
+                f"Got different counts: {images_per_sample}"
+            )
+
+    def _process_images(self, images: ImageInput, **kwargs):
+        # Kwargs used only in processor, if we pass them down to image processor it raises an error
+        kwargs.pop("target_h", None)
+        kwargs.pop("target_w", None)
+        return super()._process_images(images, **kwargs)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def _get_target_shape(
+        self,
         height: int,
         width: int,
-        is_text_to_image: bool,
     ) -> tuple[str, int, int, int, int]:
         factor = 32
         height = (height // factor) * factor
@@ -185,13 +236,7 @@ class GlmImageProcessor(ProcessorMixin):
         ratio = token_h / token_w
         prev_token_h = int(math.sqrt(ratio) * (factor // 2))
         prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
-
-        if is_text_to_image:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}{self.bos_token}"
-        else:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
-
-        return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
+        return token_h, token_w, prev_token_h, prev_token_w
 
     @staticmethod
     def _build_target_image_grid_thw(
@@ -199,9 +244,10 @@ class GlmImageProcessor(ProcessorMixin):
         token_w: int,
         prev_token_h: int,
         prev_token_w: int,
-        image_grid_thw: None,
+        is_text_to_image: bool = True,
     ):
-        if image_grid_thw is None:
+        if is_text_to_image:
+            # Text-to-image: 2 target grids (large + small preview)
             return torch.tensor(
                 [
                     [1, token_h, token_w],
@@ -209,8 +255,11 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
         else:
-            return torch.cat(
-                [image_grid_thw, torch.tensor([[1, token_h, token_w]], device=image_grid_thw.device)], dim=0
+            # Image-to-image: 1 target grid only
+            return torch.tensor(
+                [
+                    [1, token_h, token_w],
+                ],
             )
 
 

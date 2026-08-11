@@ -18,7 +18,8 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils_base import AudioInput
 from ...utils import is_torch_available, is_torchaudio_available, logging
 from ...utils.import_utils import requires_backends
@@ -33,7 +34,7 @@ if is_torchaudio_available():
     import torchaudio
 
 
-class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
+class GraniteSpeechFeatureExtractor(SequenceFeatureExtractor):
     model_input_names = ["input_features"]
 
     def __init__(
@@ -45,9 +46,19 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         n_mels: int = 80,
         projector_window_size: int = 15,
         projector_downsample_rate: int = 5,
+        padding_value: float = 0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        # Saving a processor will save `feature_size` which conflict with n-mels
+        # While both are the same concept, the naming is different so we pop `feature_size`
+        # before calling `super`
+        feature_size = n_mels if kwargs.get("feature_size") is None else kwargs.pop("feature_size")
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
         self.sampling_rate = sampling_rate
         self.melspec_kwargs = {
             "sample_rate": sampling_rate,

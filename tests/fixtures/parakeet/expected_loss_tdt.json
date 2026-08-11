@@ -1,0 +1,5 @@
+{
+  "num_samples": 2,
+  "expected_mean_loss": 0.528089,
+  "comment": "NeMo reference with sigma=0, HF-style mean reduction (per-sample / target_length, then average). Generated with https://gist.github.com/883ea42bf7d8ce2af42f3055627476a7"
+}

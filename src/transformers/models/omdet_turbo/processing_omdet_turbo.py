@@ -188,6 +188,8 @@ def _post_process_boxes_for_image(
 @requires(backends=("vision", "torchvision"))
 @auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
+    valid_processor_kwargs = OmDetTurboProcessorKwargs
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -215,7 +217,7 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         task = output_kwargs["text_kwargs"].pop("task", None)
         if task is None:
-            task = ["Detect {}.".format(", ".join(text_single)) for text_single in text]
+            task = [f"Detect {', '.join(text_single)}." for text_single in text]
         elif not isinstance(task, (list, tuple)):
             task = [task]
 

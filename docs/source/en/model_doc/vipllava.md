@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2023-12-13.*
+*This model was published in HF papers on 2023-12-01 and contributed to Hugging Face Transformers on 2023-12-13.*
 
 # VipLlava
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -39,7 +38,7 @@ This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada)
 
 ## Usage tips
 
-- The architecture is similar than llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
+- The architecture is similar to llava architecture except that the multi-modal projector takes a set of concatenated vision hidden states and has an additional layernorm layer on that module.
 
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
 
@@ -54,6 +53,7 @@ The attributes can be obtained from model config, as `model.config.vision_config
 
 ```python
 from transformers import AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
@@ -82,7 +82,7 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
->>> "###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
+"###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:
@@ -109,3 +109,4 @@ A chat between a curious human and an artificial intelligence assistant. The ass
 
 [[autodoc]] VipLlavaForConditionalGeneration
     - forward
+    - get_image_features

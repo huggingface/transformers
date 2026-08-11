@@ -17,12 +17,19 @@ IMPORTANT NOTICE: Every class and function in this file is deprecated in favor o
 and will be removed in the future.
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import Union
 
 import torch
 
 from .utils.import_utils import is_torchdynamo_compiling, is_tracing
+
+
+DEPRECATION_MESSAGE = (
+    "The attention mask API under `transformers.modeling_attn_mask_utils` (`AttentionMaskConverter`) "
+    "is deprecated and will be removed in Transformers v5.10. Please use the new API in `transformers.masking_utils`."
+)
 
 
 @dataclass
@@ -61,6 +68,8 @@ class AttentionMaskConverter:
     sliding_window: int
 
     def __init__(self, is_causal: bool, sliding_window: int | None = None):
+        warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
+
         self.is_causal = is_causal
         self.sliding_window = sliding_window
 
@@ -160,6 +169,8 @@ class AttentionMaskConverter:
         """
         Make causal mask used for bi-directional self-attention.
         """
+        warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
+
         bsz, tgt_len = input_ids_shape
         mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
         mask_cond = torch.arange(mask.size(-1), device=device)
@@ -188,6 +199,8 @@ class AttentionMaskConverter:
         """
         Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
         """
+        warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
+
         bsz, src_len = mask.size()
         tgt_len = tgt_len if tgt_len is not None else src_len
 
@@ -238,6 +251,8 @@ class AttentionMaskConverter:
            [0, 1, 1]]]]
         ```
         """
+        warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
+
         # fmt: on
         if expanded_mask.dtype == torch.bool:
             raise ValueError(
@@ -263,6 +278,7 @@ class AttentionMaskConverter:
         allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
         passed).
         """
+        warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
 
         _, query_length = inputs_embeds.shape[0], inputs_embeds.shape[1]
         key_value_length = query_length + past_key_values_length
@@ -445,6 +461,8 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
         tgt_len (`int`):
             The target length or query length the created mask shall have.
     """
+    warnings.warn(DEPRECATION_MESSAGE, FutureWarning)
+
     _, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
 

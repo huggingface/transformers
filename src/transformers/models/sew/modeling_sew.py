@@ -33,7 +33,7 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
@@ -246,7 +246,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -309,22 +308,21 @@ class SEWAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+        key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -338,7 +336,7 @@ class SEWAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights, None
@@ -437,23 +435,23 @@ class SEWEncoder(nn.Module):
             else:
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
-                input_lengths = (attention_mask.long()).sum(-1)
-                # apply pooling formula to get real output_lengths
-                output_lengths = input_lengths // self.config.squeeze_factor
-                max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
-                attention_ids = (
-                    torch.arange(0, max_encoder_length, device=output_lengths.device)
-                    .view(1, -1)
-                    .expand(output_lengths.shape[0], -1)
+                # Pool the attention mask to match the pooled hidden_states shape.
+                # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+                # the sequence length as a constant during ONNX export.
+                attention_mask = (
+                    nn.functional.max_pool1d(
+                        attention_mask.float().unsqueeze(1),
+                        kernel_size=self.config.squeeze_factor,
+                        stride=self.config.squeeze_factor,
+                    )
+                    .squeeze(1)
+                    .long()
                 )
-                attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
 
-                # extend attention_mask
+                # extend attention_mask — keep {batch,1,1,seq} so the key-seq dimension
+                # stays symbolic during ONNX export (no square seq×seq materialization).
                 attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-                attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-                )
 
         n_input_timesteps = hidden_states.shape[1]
 
@@ -520,6 +518,7 @@ class SEWPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, SEWPositionalConvEmbedding):
             init.normal_(
                 module.conv.weight,
@@ -527,11 +526,6 @@ class SEWPreTrainedModel(PreTrainedModel):
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
             init.constant_(module.conv.bias, 0)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
@@ -544,9 +538,6 @@ class SEWPreTrainedModel(PreTrainedModel):
                         init.kaiming_normal_(module.weight)
             else:
                 init.kaiming_normal_(module.weight)
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            init.zeros_(module.bias)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -565,15 +556,11 @@ class SEWPreTrainedModel(PreTrainedModel):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
+        # Build the feature mask via arange broadcast comparison.  This keeps feature_vector_length
+        # as a symbolic SymInt in torch.export / torch.onnx.export (ONNX Range op), avoiding the
+        # data-dependent scatter + cumsum pattern that bakes the length as a constant.
+        attention_ids = torch.arange(feature_vector_length, device=attention_mask.device)
+        return attention_ids.unsqueeze(0) < output_lengths.unsqueeze(1)
 
 
 def _compute_mask_indices(
@@ -783,7 +770,7 @@ class SEWModel(SEWPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -865,6 +852,9 @@ class SEWForCTC(SEWPreTrainedModel):
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
 
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
+
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for SEW so that we do not have to introduce a new API to
         # [`PreTrainedModel`]. While slightly hacky, SEW never has to tie input and output embeddings, so that it is
@@ -911,7 +901,7 @@ class SEWForCTC(SEWPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1029,7 +1019,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.sew(

@@ -5,7 +5,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 
@@ -72,7 +72,7 @@ pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options
 </hfoption>
 </hfoptions>
 
-If your torchao version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
+torchao >= 0.15.0 is required. The string-based API (e.g., `TorchAoConfig("int4_weight_only")`) has been removed — use `AOBaseConfig` objects instead (see examples below).
 
 ## Quantization examples
 
@@ -153,38 +153,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-</hfoption>
-<hfoption id="int4-weight-only-24sparse">
-
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import MarlinSparseLayout
-
-quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
-quantization_config = TorchAoConfig(quant_type=quant_config)
-
-# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
-    dtype=torch.float16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-</hfoptions>
-
 ### A100 GPU
 
 <hfoptions id="examples-A100-GPU">
@@ -256,38 +224,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
-</hfoption>
-<hfoption id="int4-weight-only-24sparse">
-
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import MarlinSparseLayout
-
-quant_config = Int4WeightOnlyConfig(layout=MarlinSparseLayout())
-quantization_config = TorchAoConfig(quant_type=quant_config)
-
-# Load and quantize the model with sparsity. A sparse checkpoint is needed to accelerate without accuracy loss
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "RedHatAI/Sparse-Llama-3.1-8B-2of4",
-    dtype=torch.float16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("RedHatAI/Sparse-Llama-3.1-8B-2of4")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-</hfoptions>
-
 ### Intel XPU
 
 <hfoptions id="examples-Intel-XPU">
@@ -328,11 +264,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4XPULayout
-from torchao.quantization.quant_primitives import ZeroPointDomain
 
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4XPULayout(), zero_point_domain=ZeroPointDomain.INT, int4_packing_format="plain_int32")
+quant_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain_int32")
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
@@ -345,7 +279,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -395,9 +329,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.prototype.int4_opaque_tensor import Int4WeightOnlyOpaqueTensorConfig
+from torchao.prototype.quantization.int4 import PrototypeInt4WeightOnlyConfig
 
-quantization_config = TorchAoConfig(Int4WeightOnlyOpaqueTensorConfig(group_size=128))
+quantization_config = TorchAoConfig(PrototypeInt4WeightOnlyConfig(group_size=128, int4_choose_qparams_algorithm="tinygemm"))
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -409,7 +343,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device, quantized_model.dtype)
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device).to(quantized_model.dtype)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speed up
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -591,7 +525,7 @@ print("Response:", correct_output_text[0][len(prompt) :])
 # Load model from saved checkpoint
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     save_to,
-    device_map="cuda:0",
+    device_map=torch.accelerator.current_accelerator(),
     torch_dtype=torch.bfloat16,
     # quantization_config=quantization_config,
 )
@@ -603,39 +537,6 @@ output_text = tokenizer.batch_decode(
 print("Response:", output_text[0][len(prompt) :])
 
 assert(correct_output_text == output_text)
-```
-
-### Autoquant
-
-If you want to automatically choose a quantization type for quantizable layers (`nn.Linear`) you can use the [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API.
-
-The `autoquant` API automatically chooses a quantization type by micro-benchmarking on input type and shape and compiling a single linear layer.
-
-Note: autoquant is for GPU only right now.
-
-Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes.
-
-```py
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-
-quantization_config = TorchAoConfig("autoquant", min_sqnr=None)
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B-Instruct",
-    dtype="auto",
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
-
-# auto-compile the quantized model with `cache_implementation="static"` to get speed up
-output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
-# explicitly call `finalize_autoquant` (may be refactored and removed in the future)
-quantized_model.finalize_autoquant()
-print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Serialization
@@ -715,9 +616,9 @@ For int4, the model can only be loaded on the same device it was quantized on be
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4CPULayout
+from torchao.quantization.quantize_.workflows import Int4PackingFormat
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout())
+quant_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format=Int4PackingFormat.PLAIN_INT32)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 
 # Load and quantize the model
@@ -745,36 +646,6 @@ output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
-
-## ⚠️ Deprecation Notice
-
-> Starting with version 0.10.0, the string-based API for quantization configuration (e.g., `TorchAoConfig("int4_weight_only", group_size=128)`) is **deprecated** and will be removed in a future release.
->
-> Please use the new `AOBaseConfig`-based approach instead:
->
-> ```python
-> # Old way (deprecated)
-> quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
->
-> # New way (recommended)
-> from torchao.quantization import Int4WeightOnlyConfig
-> quant_config = Int4WeightOnlyConfig(group_size=128)
-> quantization_config = TorchAoConfig(quant_type=quant_config)
-> ```
->
-> The new API offers greater flexibility, better type safety, and access to the full range of features available in torchao.
->
-> [Migration Guide](#migration-guide)
->
-> Here's how to migrate from common string identifiers to their `AOBaseConfig` equivalents:
->
-> | Old String API | New `AOBaseConfig` API |
-> |----------------|------------------------|
-> | `"int4_weight_only"` | `Int4WeightOnlyConfig()` |
-> | `"int8_weight_only"` | `Int8WeightOnlyConfig()` |
-> | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
->
-> All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
 
 ## Resources
 

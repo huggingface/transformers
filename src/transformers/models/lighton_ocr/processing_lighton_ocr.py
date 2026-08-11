@@ -22,10 +22,8 @@ import math
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
@@ -101,6 +99,8 @@ def get_resize_output_image_size(
 
 
 class LightOnOcrProcessor(ProcessorMixin):
+    valid_processor_kwargs = LightOnOcrProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
@@ -110,6 +110,8 @@ class LightOnOcrProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         # Calculate effective patch size for image processing
@@ -123,72 +125,15 @@ class LightOnOcrProcessor(ProcessorMixin):
         self.image_break_token_id = tokenizer.image_break_token_id
         self.image_end_token_id = tokenizer.image_end_token_id
 
-        self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[LightOnOcrProcessorKwargs],
-    ) -> BatchFeature:
-        if images is None and text is None:
-            raise ValueError("You must provide either text or images")
-        output_kwargs = self._merge_kwargs(
-            LightOnOcrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            image_inputs = {}
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        if image_inputs.get("pixel_values") is not None:
-            image_sizes_iter = iter(image_inputs["image_sizes"])
-            prompt_strings = []
-
-            for sample in text:
-                replace_strings = []
-
-                while self.image_token in sample:
-                    image_height, image_width = next(image_sizes_iter)
-                    num_height_tokens = image_height // self.effective_patch_size
-                    num_width_tokens = image_width // self.effective_patch_size
-                    num_patches = num_height_tokens * num_width_tokens
-
-                    replace_str = self.image_token * num_patches
-                    replace_strings.append(replace_str)
-
-                    sample = sample.replace(self.image_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    replace_str = replace_strings.pop(0)
-                    sample = sample.replace("<placeholder>", replace_str, 1)
-
-                prompt_strings.append(sample)
-        else:
-            prompt_strings = text
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_height, image_width = image_inputs["image_sizes"][image_idx]
+        num_height_tokens = image_height // self.effective_patch_size
+        num_width_tokens = image_width // self.effective_patch_size
+        return self.image_token * (num_height_tokens * num_width_tokens)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
@@ -208,13 +153,16 @@ class LightOnOcrProcessor(ProcessorMixin):
             images_kwargs.update(kwargs)
 
             size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
+            if isinstance(patch_size, dict) and "height" in patch_size and "width" in patch_size:
+                patch_size = (patch_size["height"], patch_size["width"])
 
             num_image_tokens = []
             for height, width in image_sizes:
                 resized_height, resized_width = get_resize_output_image_size(
                     np.zeros((height, width, 3)),
                     size=(size["longest_edge"], size["longest_edge"]),
-                    patch_size=(self.effective_patch_size, self.effective_patch_size),
+                    patch_size=patch_size,
                 )
                 num_height_tokens = resized_height // self.effective_patch_size
                 num_width_tokens = resized_width // self.effective_patch_size

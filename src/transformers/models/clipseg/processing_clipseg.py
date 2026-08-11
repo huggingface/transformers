@@ -48,14 +48,22 @@ class CLIPSegProcessor(ProcessorMixin):
         if text is not None and visual_prompt is not None:
             raise ValueError("You have to specify exactly one type of prompt. Either text or visual prompt.")
 
+        output_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **output_kwargs["text_kwargs"])
 
         if visual_prompt is not None:
-            prompt_features = self.image_processor(visual_prompt, return_tensors=return_tensors, **kwargs)
+            prompt_features = self.image_processor(
+                visual_prompt, return_tensors=return_tensors, **output_kwargs["images_kwargs"]
+            )
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(
+                images, return_tensors=return_tensors, **output_kwargs["images_kwargs"]
+            )
 
         if visual_prompt is not None and images is not None:
             encoding = {

@@ -17,6 +17,7 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
 from datasets import load_dataset
 
 from transformers import UdopConfig, is_torch_available
@@ -253,7 +254,6 @@ class UdopModelTester:
             "bbox": bbox,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -279,10 +279,18 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
+    # UDOP requires `bbox` for its 2D relative position bias, so it must be forwarded by the generic tests
+    additional_model_inputs = ["bbox"]
 
     def setUp(self):
         self.model_tester = UdopModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=32)
+
+    @unittest.skip(
+        reason="Udop always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -314,21 +322,17 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    @unittest.skip(reason="Gradient checkpointing is not supported by this model")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(reason="Udop has no separate base model without a head.")
     def test_model_base_model_prefix(self):
@@ -346,7 +350,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             expected_arg_names = [
                 "attention_mask",
                 "bbox",
-                "cache_position",
                 "decoder_attention_mask",
                 "decoder_input_ids",
                 "decoder_inputs_embeds",
@@ -550,10 +553,18 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
+    # UDOP requires `bbox` for its 2D relative position bias, so it must be forwarded by the generic tests
+    additional_model_inputs = ["bbox"]
 
     def setUp(self):
         self.model_tester = UdopEncoderOnlyModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=32)
+
+    @unittest.skip(
+        reason="Udop always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

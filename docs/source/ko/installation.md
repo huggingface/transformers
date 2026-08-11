@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers를 사용 중인 딥러닝 라이브러리에 맞춰 설치하고, 캐시를 구성하거나 선택적으로 오프라인에서도 실행할 수 있도록 🤗 Transformers를 설정하는 방법을 배우겠습니다.
 
-🤗 Transformers는 Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+ 및 Flax에서 테스트되었습니다. 딥러닝 라이브러리를 설치하려면 아래 링크된 저마다의 공식 사이트를 참고해주세요.
+🤗 Transformers는 Python 3.10+ 및 PyTorch 2.4+에서 테스트되었습니다. 딥러닝 라이브러리를 설치하려면 아래 링크된 공식 사이트를 참고해주세요.
 
 * [PyTorch](https://pytorch.org/get-started/locally/) 설치하기
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip) 설치하기
-* [Flax](https://flax.readthedocs.io/en/latest/) 설치하기
 
 ## pip으로 설치하기[[install-with-pip]]
 
@@ -59,18 +57,6 @@ CPU만 써도 된다면, 🤗 Transformers와 딥러닝 라이브러리를 단 1
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers와 TensorFlow 2.0의 경우:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers와 Flax의 경우:
-
-```bash
-pip install transformers[flax]
 ```
 
 마지막으로 🤗 Transformers가 제대로 설치되었는지 확인할 차례입니다. 사전훈련된 모델을 다운로드하는 코드입니다.
@@ -116,7 +102,7 @@ cd transformers
 pip install -e .
 ```
 
-위 명령은 리포지터리를 복제한 위치의 폴더와 Python 라이브러리의 경로를 연결시킵니다. Python이 일반 라이브러리 경로 외에 복제한 폴더 내부를 확인할 것입니다. 예를 들어 Python 패키지가 일반적으로 `~/anaconda3/envs/main/lib/python3.7/site-packages/`에 설치되어 있는데, 명령을 받은 Python이 이제 복제한 폴더인 `~/transformers/`도 검색하게 됩니다.
+위 명령은 리포지터리를 복제한 위치의 폴더와 Python 라이브러리의 경로를 연결시킵니다. Python이 일반 라이브러리 경로 외에 복제한 폴더 내부를 확인할 것입니다. 예를 들어 Python 패키지가 일반적으로 `~/anaconda3/envs/main/lib/python3.10/site-packages/`에 설치되어 있는데, 명령을 받은 Python이 이제 복제한 폴더인 `~/transformers/`도 검색하게 됩니다.
 
 <Tip warning={true}>
 

@@ -22,6 +22,7 @@ import numpy as np
 from datasets import Audio, load_dataset
 from parameterized import parameterized
 
+from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, EncodecConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -146,6 +147,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent control flow in `_pad1d` (`if length <= max_pad`)
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -160,7 +162,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=EncodecConfig, hidden_size=32, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -222,7 +224,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             torch.manual_seed(0)
             config.chunk_length_s = 2
-            config.overlap = 0
+            config.overlap = 0.0
             config.sampling_rate = 20
 
             model = model_class(config)
@@ -315,23 +317,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_forward_with_normalization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
-
-
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
 """

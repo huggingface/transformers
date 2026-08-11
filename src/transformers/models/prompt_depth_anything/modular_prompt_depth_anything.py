@@ -14,8 +14,14 @@
 import torch
 import torch.nn as nn
 
-from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
-from transformers.models.depth_anything.modeling_depth_anything import (
+from ...modeling_outputs import DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults, torch_int
+from ...utils.output_capturing import capture_outputs
+from ..depth_anything.configuration_depth_anything import DepthAnythingConfig
+from ..depth_anything.modeling_depth_anything import (
     DepthAnythingDepthEstimationHead,
     DepthAnythingFeatureFusionLayer,
     DepthAnythingFeatureFusionStage,
@@ -23,15 +29,10 @@ from transformers.models.depth_anything.modeling_depth_anything import (
     DepthAnythingNeck,
     DepthAnythingReassembleStage,
 )
-from transformers.utils.generic import torch_int
-
-from ...modeling_outputs import DepthEstimatorOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
 
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
-    model_type = "prompt_depth_anything"
+    pass
 
 
 class PromptDepthAnythingLayer(nn.Module):
@@ -227,15 +228,15 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
     """
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         prompt_depth: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
         prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
@@ -252,16 +253,19 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
-        >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
+        >>> with httpx.stream("GET", prompt_depth_url) as response:
+        ...     prompt_depth = Image.open(BytesIO(response.read()))
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
@@ -286,15 +290,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
@@ -303,35 +299,24 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         patch_width = width // patch_size
 
         if prompt_depth is not None:
-            # normalize prompt depth
             batch_size = prompt_depth.shape[0]
             depth_min = torch.min(prompt_depth.reshape(batch_size, -1), dim=1).values
             depth_max = torch.max(prompt_depth.reshape(batch_size, -1), dim=1).values
             depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(batch_size, 1, 1, 1)
             prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
-            # normalize done
 
         hidden_states = self.neck(hidden_states, patch_height, patch_width, prompt_depth=prompt_depth)
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
         if prompt_depth is not None:
-            # denormalize predicted depth
             depth_min = depth_min.squeeze(1).to(predicted_depth.device)
             depth_max = depth_max.squeeze(1).to(predicted_depth.device)
             predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
-            # denormalize done
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
-            else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

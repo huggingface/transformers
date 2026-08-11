@@ -64,7 +64,7 @@ class ShieldGemma2Processor(Gemma3Processor):
         """A processor for the ShieldGemma 2 model.
 
         Args:
-            image_processor: The image processor to use, typically a `Gemma3ImageProcessorFast` instance.
+            image_processor: The image processor to use, typically a `Gemma3ImageProcessor` instance.
             tokenizer: The tokenizer to use, typically a `GemmaTokenizerFast` instance.
             chat_template: The chat template to use with this processor. Typically, this is unset as the processor
                 configuration on Hugging Face Hub includes this value already.
@@ -155,7 +155,7 @@ class ShieldGemma2Processor(Gemma3Processor):
             if not isinstance(img, list):
                 img = [img]
             elif len(img) > 1:
-                raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
+                raise ValueError(f"ShieldGemma can process at most one image per sample, but got {len(img)} images")
 
             for policy in policies:
                 if img:

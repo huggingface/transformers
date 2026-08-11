@@ -1,0 +1,4 @@
+distributed_type: DEEPSPEED
+deepspeed_config:
+  deepspeed_config_file: tests/trainer/distributed/scripts/ds_config_zero3.json
+num_processes: 2

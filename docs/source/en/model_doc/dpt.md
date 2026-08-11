@@ -9,16 +9,15 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-24 and added to Hugging Face Transformers on 2022-03-28.*
+*This model was published in HF papers on 2021-03-24 and contributed to Hugging Face Transformers on 2022-03-28.*
 
 # DPT
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -45,6 +44,7 @@ DPT is compatible with the [`AutoBackbone`] class. This allows to use the DPT fr
 
 ```python
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
+
 
 # initialize with a Transformer-based backbone such as DINOv2
 # in that case, we also specify `reshape_hidden_states=False` to get feature maps of shape (batch_size, num_channels, height, width)
@@ -74,9 +74,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DPTImageProcessor
     - preprocess
 
-## DPTImageProcessorFast
+## DPTImageProcessorPil
 
-[[autodoc]] DPTImageProcessorFast
+[[autodoc]] DPTImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_depth_estimation

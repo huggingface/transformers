@@ -131,7 +131,7 @@ class TextToAudioPipeline(Pipeline):
             config = self.model.config
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
-                config.update(gen_config.to_dict())
+                config.update({k: v for k, v in gen_config.to_dict().items() if v is not None})
 
             for sampling_rate_name in ["sample_rate", "sampling_rate"]:
                 sampling_rate = getattr(config, sampling_rate_name, None)
@@ -152,8 +152,12 @@ class TextToAudioPipeline(Pipeline):
 
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
+            # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
+            max_length = 256
+            if hasattr(self.generation_config, "semantic_config"):
+                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
-                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": max_length,
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
@@ -175,6 +179,7 @@ class TextToAudioPipeline(Pipeline):
             # Add speaker ID if needed and user didn't insert at start of text
             if self.model.config.model_type == "csm":
                 text = [f"[0]{t}" if not t.startswith("[") else t for t in text]
+                kwargs.setdefault("add_special_tokens", True)
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")

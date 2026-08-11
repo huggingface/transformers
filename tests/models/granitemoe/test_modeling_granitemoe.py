@@ -52,7 +52,7 @@ class GraniteMoeModelTester:
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
+        intermediate_size=40,  # multiple of 4 for grouped_mm 16-byte alignment
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -179,7 +179,7 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = GraniteMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteMoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GraniteMoeConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

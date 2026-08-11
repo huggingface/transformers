@@ -1,14 +1,14 @@
 # Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License=, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing=, software
-# distributed under the License is distributed on an "AS IS" BASIS=,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch TVP Model"""
@@ -21,19 +21,20 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TvpVideoGroundingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -524,20 +525,14 @@ class TvpPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Conv2d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.constant_(module.bias, 0)
         elif isinstance(module, TvpModel):
             init.normal_(module.text_prompt)
 
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
         if hasattr(module, "pad_up"):
             init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):
@@ -754,12 +749,16 @@ class TvpModel(TvpPreTrainedModel):
                 device=attention_mask.device, dtype=attention_mask.dtype
             )
             attention_mask = torch.cat([pt_mask, attention_mask, visual_attention_mask], dim=-1)
-            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-            # ourselves in which case we just need to make it broadcastable to all heads.
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_ids.size()).to(input_ids.device)
+
         text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)
         # (batch_size, sequence_length + visual_sequence_length, hidden_size)
         embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,

@@ -60,16 +60,6 @@ class AutoConfigTest(unittest.TestCase):
         config = AutoConfig.for_model("roberta")
         self.assertIsInstance(config, RobertaConfig)
 
-    def test_pattern_matching_fallback(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # This model name contains bert and roberta, but roberta ends up being picked.
-            folder = os.path.join(tmp_dir, "fake-roberta")
-            os.makedirs(folder, exist_ok=True)
-            with open(os.path.join(folder, "config.json"), "w") as f:
-                f.write(json.dumps({}))
-            config = AutoConfig.from_pretrained(folder)
-            self.assertEqual(type(config), RobertaConfig)
-
     def test_new_config_registration(self):
         try:
             AutoConfig.register("custom", CustomConfig)
@@ -131,6 +121,9 @@ class AutoConfigTest(unittest.TestCase):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
 
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
         try:
             AutoConfig.register("new-model", NewModelConfigLocal)
             # If remote code is not set, the default is to use local
@@ -141,10 +134,30 @@ class AutoConfigTest(unittest.TestCase):
             config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
             self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
 
-            # If remote is enabled, we load from the Hub
+            # If remote code is enabled but the user explicitly registered the local one, we load the local one.
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is enabled but local code originated from transformers, we load the remote one.
+            NewModelConfigLocal.__module__ = "transformers.models.new_model.configuration_new_model"
             config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
         finally:
             if "new-model" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["new-model"]
+
+    def test_config_missing_model_type(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dict = {
+                "hidden_size": 768,
+                "num_attention_heads": 12,
+                "num_hidden_layers": 12,
+            }
+            config_path = os.path.join(tmp_dir, "config.json")
+
+            with open(config_path, "w") as f:
+                json.dump(config_dict, f)
+
+            with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):
+                AutoConfig.from_pretrained(tmp_dir)

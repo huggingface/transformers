@@ -51,12 +51,12 @@ from .openfold_utils import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`EsmForProteinFoldingOutput`].
     """
 )
+@dataclass
 class EsmForProteinFoldingOutput(ModelOutput):
     r"""
     frames (`torch.FloatTensor`):
@@ -136,14 +136,9 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
 def is_fp16_enabled(device_type):
     # Autocast world
-    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
-    autocast_dtype = (
-        torch.get_autocast_dtype(device_type)
-        if hasattr(torch, "get_autocast_dtype")
-        else torch.get_autocast_gpu_dtype()
-    )
+    autocast_dtype = torch.get_autocast_dtype(device_type)
     fp16_enabled = autocast_dtype == torch.float16
-    fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
+    fp16_enabled = fp16_enabled and torch.is_autocast_enabled(device_type)
 
     return fp16_enabled
 
@@ -1778,8 +1773,7 @@ class EsmFoldStructureModule(nn.Module):
 
     def _init_residue_constants(self, float_dtype, device):
         if not hasattr(self, "default_frames"):
-            self.register_buffer(
-                "default_frames",
+            self.default_frames = nn.Buffer(
                 torch.tensor(
                     residue_constants.restype_rigid_group_default_frame,
                     dtype=float_dtype,
@@ -1789,8 +1783,7 @@ class EsmFoldStructureModule(nn.Module):
                 persistent=False,
             )
         if not hasattr(self, "group_idx"):
-            self.register_buffer(
-                "group_idx",
+            self.group_idx = nn.Buffer(
                 torch.tensor(
                     residue_constants.restype_atom14_to_rigid_group,
                     device=device,
@@ -1799,8 +1792,7 @@ class EsmFoldStructureModule(nn.Module):
                 persistent=False,
             )
         if not hasattr(self, "atom_mask"):
-            self.register_buffer(
-                "atom_mask",
+            self.atom_mask = nn.Buffer(
                 torch.tensor(
                     residue_constants.restype_atom14_mask,
                     dtype=float_dtype,
@@ -1810,8 +1802,7 @@ class EsmFoldStructureModule(nn.Module):
                 persistent=False,
             )
         if not hasattr(self, "lit_positions"):
-            self.register_buffer(
-                "lit_positions",
+            self.lit_positions = nn.Buffer(
                 torch.tensor(
                     residue_constants.restype_atom14_rigid_group_positions,
                     dtype=float_dtype,
@@ -1867,7 +1858,7 @@ class EsmFoldingTrunk(nn.Module):
     def set_chunk_size(self, chunk_size):
         # This parameter means the axial attention will be computed
         # in a chunked manner. This should make the memory used more or less O(L) instead of O(L^2).
-        # It's equivalent to running a for loop over chunks of the dimension we're iterative over,
+        # It's equivalent to running a for loop over chunks of the dimension we're iterating over,
         # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-length chunks.
         self.chunk_size = chunk_size
 
@@ -1998,7 +1989,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         self.esm_feats = self.config.hidden_size
         self.esm_attns = self.config.num_hidden_layers * self.config.num_attention_heads
         self.esm_layers = self.config.num_hidden_layers
-        self.register_buffer("af2_to_esm", self._af2_to_esm_from_vocab_list(config.vocab_list))
+        self.af2_to_esm = nn.Buffer(self._af2_to_esm_from_vocab_list(config.vocab_list))
         self.esm_s_combine = nn.Parameter(torch.zeros(self.esm_layers + 1))
 
         trunk_config = self.config.esmfold_config.trunk
@@ -2054,6 +2045,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         masking_pattern: torch.Tensor | None = None,
         num_recycles: int | None = None,
         output_hidden_states: bool | None = False,
+        **kwargs,
     ) -> EsmForProteinFoldingOutput:
         r"""
         masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

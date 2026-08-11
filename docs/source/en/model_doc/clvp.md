@@ -9,17 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-05-12 and added to Hugging Face Transformers on 2023-11-10.*
+*This model was published in HF papers on 2023-05-12 and contributed to Hugging Face Transformers on 2023-11-10.*
 
 # CLVP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -37,7 +34,7 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 1. CLVP is an integral part of the Tortoise TTS model.
 2. CLVP can be used to compare different generated speech candidates with the provided text, and the best speech tokens are forwarded to the diffusion model.
 3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
-4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz.
+4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expect 16 kHz.
 
 ## Brief Explanation
 
@@ -51,23 +48,25 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 Example :
 
 ```python
->>> import datasets
->>> from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
+import datasets
 
->>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
->>> text = "This is an example text."
+from transformers import ClvpModelForConditionalGeneration, ClvpProcessor
 
->>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
->>> sample = ds[0]["audio"]
 
->>> # Define processor and model.
->>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
->>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
+# Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
+text = "This is an example text."
 
->>> # Generate processor output and model output.
->>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
->>> generated_output = model.generate(**processor_output)
+ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+sample = ds[0]["audio"]
+
+# Define processor and model.
+processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
+model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev", device_map="auto")
+
+# Generate processor output and model output.
+processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt").to(model.device)
+generated_output = model.generate(**processor_output)
 ```
 
 ## ClvpConfig

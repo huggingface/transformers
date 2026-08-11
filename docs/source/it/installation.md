@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 Installa 🤗 Transformers per qualsiasi libreria di deep learning con cui stai lavorando, imposta la tua cache, e opzionalmente configura 🤗 Transformers per l'esecuzione offline.
 
-🤗 Transformers è testato su Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, e Flax. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
+🤗 Transformers è testato su Python 3.10+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
 
 * [PyTorch](https://pytorch.org/get-started/locally/) istruzioni di installazione.
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip) istruzioni di installazione.
-* [Flax](https://flax.readthedocs.io/en/latest/) istruzioni di installazione.
 
 ## Installazione con pip
 
@@ -54,18 +52,6 @@ Per il solo supporto della CPU, puoi installare facilmente 🤗 Transformers e u
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers e TensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers e Flax:
-
-```bash
-pip install transformers[flax]
 ```
 
 Infine, verifica se 🤗 Transformers è stato installato in modo appropriato eseguendo il seguente comando. Questo scaricherà un modello pre-allenato:
@@ -111,7 +97,7 @@ cd transformers
 pip install -e .
 ```
 
-Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
+Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
 
 <Tip warning={true}>
 
