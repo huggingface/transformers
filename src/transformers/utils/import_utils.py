@@ -1181,10 +1181,12 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
         pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
 
-    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
-    if is_available and (is_torch_cuda_available() or is_torch_mlu_available()):
+    musa_available = is_available and is_torch_musa_available()
+    if is_available and (is_torch_cuda_available() or is_torch_mlu_available() or musa_available):
         try:
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+            # MUSA supports Flash Attention starting from flash-attn 2.1.0.
+            minimum_version = "2.1.0" if musa_available else "2.3.3"
+            return version.parse(flash_attn_version) >= version.parse(minimum_version)
         except packaging.version.InvalidVersion:
             return False
 

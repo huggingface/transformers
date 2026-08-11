@@ -63,6 +63,7 @@ def test_is_package_available_edge_cases():
 def mock_flash_attn_env(
     installed_packages: dict[str, str] | None = None,
     cuda_available: bool = False,
+    musa_available: bool = False,
     kernels_available: bool = False,
     kernel_download_fails: bool = False,
 ):
@@ -71,6 +72,7 @@ def mock_flash_attn_env(
       assumed to match the import name (with underscores replaced by hyphens), except for `flash_attn_interface`
       which is distributed as `flash-attn-3`.
     - `cuda_available`: whether CUDA is available or not.
+    - `musa_available`: whether MUSA is available or not.
     - `kernels_available`: whether the kernels library is available.
     - `kernel_download_fails`: if this flag is set to True, the get_kernel method of the fake kernels module will raise
         a RuntimeError to simulate a kernel download failure.
@@ -99,6 +101,7 @@ def mock_flash_attn_env(
             patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=musa_available),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):
@@ -124,6 +127,12 @@ def test_flash_attn_2_available_with_package(version: str):
         # Ensure the kernels fallback is not probed (should not happen when the package is present and cuda available)
         assert is_flash_attn_2_available(kernels_fallback_ok=True) == expected
         get_kernel.assert_not_called()
+
+
+@parameterized.expand([("2.0.0", False), ("2.1.0", True), ("2.6.0", True)])
+def test_flash_attn_2_available_with_musa(version: str, expected: bool):
+    with mock_flash_attn_env(installed_packages={"flash_attn": version}, musa_available=True):
+        assert is_flash_attn_2_available() == expected
 
 
 def test_flash_attn_3_available_with_package():
