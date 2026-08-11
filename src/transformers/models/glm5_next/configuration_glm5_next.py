@@ -231,6 +231,47 @@ class Glm5NextTextConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
+class Glm5NextVisionConfig(PreTrainedConfig):
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 1536):
+        The output hidden size of the vision model.
+    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The projection_intermediate_size size for the vision patch merger.
+    swiglu_limit (`float`, *optional*, defaults to 10.0):
+        Clamp limit applied to the vision SwiGLU gate/up projections.
+    """
+
+    model_type = "glm5_next_vision"
+    base_config_key = "vision_config"
+
+    depth: int = 24
+
+    hidden_size: int = 1024
+    hidden_act: str = "silu"
+    attention_bias: bool = True
+    attention_dropout: float | int = 0.0
+    num_heads: int = 16
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    rms_norm_eps: float = 1e-05
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 1536
+    intermediate_size: int = 4096
+    initializer_range: float = 0.02
+    projection_intermediate_size: int | None = None
+    swiglu_limit: float | None = 10.0
+
+    def __post_init__(self, **kwargs):
+        if self.projection_intermediate_size is None:
+            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
+
+        super().__post_init__(**kwargs)
+
+
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
     image_token_id (`int`, *optional*, defaults to 154854):
@@ -268,12 +309,6 @@ class Glm5NextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm_ocr_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm_ocr_vision"]()
-
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
@@ -281,7 +316,15 @@ class Glm5NextConfig(PreTrainedConfig):
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
+        swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = "glm5_next_vision"
+            self.vision_config.setdefault("swiglu_limit", swiglu_limit)
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=swiglu_limit)
+
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Glm5NextConfig", "Glm5NextTextConfig"]
+__all__ = ["Glm5NextConfig", "Glm5NextTextConfig", "Glm5NextVisionConfig"]

@@ -56,6 +56,13 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
+from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
+from ..glm_ocr.modeling_glm_ocr import (
+    GlmOcrVisionBlock,
+    GlmOcrVisionMlp,
+    GlmOcrVisionModel,
+    GlmOcrVisionPatchMerger,
+)
 from ..glmga.video_processing_glmga import GlmgaVideoProcessor, GlmgaVideoProcessorInitKwargs
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
@@ -227,6 +234,22 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
 @strict
+class Glm5NextVisionConfig(GlmOcrVisionConfig):
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 1536):
+        The output hidden size of the vision model.
+    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+        The projection_intermediate_size size for the vision patch merger.
+    swiglu_limit (`float`, *optional*, defaults to 10.0):
+        Clamp limit applied to the vision SwiGLU gate/up projections.
+    """
+
+    model_type = "glm5_next_vision"
+    swiglu_limit: float | None = 10.0
+
+
+@auto_docstring(checkpoint="zai-org/GLM-5-Next")
+@strict
 class Glm5NextConfig(PreTrainedConfig):
     r"""
     image_token_id (`int`, *optional*, defaults to 154854):
@@ -264,18 +287,20 @@ class Glm5NextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "glm_ocr_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm_ocr_vision"]()
-
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             # Flat (text-only) GLM-5-Next checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = "glm5_next_vision"
+            self.vision_config.setdefault("swiglu_limit", swiglu_limit)
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=swiglu_limit)
 
         super().__post_init__(**kwargs)
 
@@ -1336,6 +1361,54 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+class Glm5NextVisionMLP(GlmOcrVisionMlp):
+    def __init__(self, config, bias: bool = True):
+        super().__init__(config, bias=bias)
+        self.swiglu_limit = config.swiglu_limit
+
+    def forward(self, hidden_state):
+        gate = self.gate_proj(hidden_state)
+        up = self.up_proj(hidden_state)
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
+    def __init__(self, dim: int, context_dim: int, hidden_act: str, swiglu_limit: float, bias: bool = False) -> None:
+        super().__init__(dim=dim, context_dim=context_dim, hidden_act=hidden_act, bias=bias)
+        self.swiglu_limit = swiglu_limit
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.proj(hidden_state)
+        hidden_state = self.act1(self.post_projection_norm(hidden_state))
+        gate = self.gate_proj(hidden_state)
+        up = self.up_proj(hidden_state)
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(min=None, max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+class Glm5NextVisionBlock(GlmOcrVisionBlock):
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        self.mlp = Glm5NextVisionMLP(config, bias=config.attention_bias)
+
+
+class Glm5NextVisionModel(GlmOcrVisionModel):
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
+        self.merger = Glm5NextVisionPatchMerger(
+            dim=config.out_hidden_size,
+            context_dim=config.projection_intermediate_size,
+            hidden_act=config.hidden_act,
+            swiglu_limit=config.swiglu_limit,
+        )
+
+
 class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     config: Glm5NextConfig
     _no_split_modules = AttributeError()
@@ -1771,8 +1844,10 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
 __all__ = [
     "Glm5NextConfig",
     "Glm5NextTextConfig",
+    "Glm5NextVisionConfig",
     "Glm5NextPreTrainedModel",
     "Glm5NextTextModel",
+    "Glm5NextVisionModel",
     "Glm5NextModel",
     "Glm5NextForConditionalGeneration",
     "Glm5NextVideoProcessor",
