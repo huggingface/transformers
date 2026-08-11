@@ -1011,48 +1011,155 @@ Hey how are you doing"""  # noqa: W293
         with self.assertRaises(ValueError, msg="Cannot apply chat template to an empty conversation"):
             tokenizer.apply_chat_template([], tokenize=False)
 
+    def _named_special_token(self, tokenizer):
+        """Returns `(attribute_name, token_text, token_id)` for a named special token of the tokenizer, or
+        `None`. Chat templates can reference these by name (e.g. `{{ eos_token }}`), which lets sanitization
+        tests emit a special token from the template itself rather than from (sanitized) user input."""
+        for name in ("eos_token", "sep_token", "bos_token", "cls_token"):
+            token = getattr(tokenizer, name, None)
+            if token is not None:
+                return name, str(token), tokenizer.convert_tokens_to_ids(str(token))
+        return None
+
     @require_jinja
     def test_chat_template_sanitize_special_tokens(self):
-        # This template just concatenates role + content, so it adds no special tokens of its own: any special
-        # token in the output must have come from the (user-supplied) content.
-        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        # The named token below comes from the tokenizer's own special_tokens_map (not from user input), so
+        # the template emits exactly one special token of its own per conversation; any other special token id
+        # in the output must have been injected through the (user-supplied) content.
         tokenizer = self.get_tokenizer()
-        special_tokens = tokenizer.all_special_tokens
-        if not special_tokens:
-            self.skipTest("Tokenizer has no special tokens to test sanitization with")
-        special_token = special_tokens[0]
-
-        # Inject a raw special token, plus a nested "smuggle" that reconstructs the token after a single naive
-        # strip (prefix + full token + suffix), which only the fixpoint loop catches.
-        split = len(special_token) // 2
-        smuggled = special_token[:split] + special_token + special_token[split:]
-        conversation = [{"role": "user", "content": f"hello {special_token} {smuggled} world"}]
+        if (named_token := self._named_special_token(tokenizer)) is None:
+            self.skipTest("Tokenizer has no named special token to test sanitization with")
+        token_name, eos, eos_id = named_token
+        dummy_template = "{% for message in messages %}{{ message['content'] }}{% endfor %}{{ " + token_name + " }}"
+        conversation = [{"role": "user", "content": f"hello {eos} world"}]
 
         unsanitized = tokenizer.apply_chat_template(
-            conversation, chat_template=dummy_template, tokenize=False, return_dict=False
-        )
-        self.assertIn(special_token, unsanitized)  # by default the injected token survives
+            conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+        )["input_ids"]
+        if unsanitized.count(eos_id) != 2:  # template's own EOS + the injected copy encoding as a special token
+            self.skipTest("Tokenizer does not match EOS text inside content, so there is nothing to sanitize")
 
-        sanitized = tokenizer.apply_chat_template(
+        output = tokenizer.apply_chat_template(
             conversation,
             chat_template=dummy_template,
-            tokenize=False,
+            tokenize=True,
+            return_dict=True,
             sanitize_special_tokens=True,
-            return_dict=False,
-        )
-        self.assertNotIn(special_token, sanitized)  # sanitization removes it, including the smuggled copy
+        )["input_ids"]
+        # the injected copy is encoded with ordinary tokens; only the template's own EOS stays special
+        self.assertEqual(output.count(eos_id), 1)
 
-        # Batched conversations are each sanitized
-        batched = tokenizer.apply_chat_template(
-            [conversation, conversation],
-            chat_template=dummy_template,
-            tokenize=False,
-            sanitize_special_tokens=True,
-            return_dict=False,
+        # When the tokenizer can losslessly re-encode the token text as ordinary tokens, sanitization must
+        # preserve it. (Tokenizers that can't - e.g. lowercasing ones, or ones whose vocab can assemble the
+        # special token from ordinary pieces - fall back to lossy behavior and are not checked here.)
+        split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
+        if eos_id not in split_ids and tokenizer.decode(split_ids) == eos:
+            self.assertIn(f"hello {eos} world", tokenizer.decode(output))
+
+        # A conversation with nothing to sanitize takes the standard encoding path and is byte-identical
+        clean = [{"role": "user", "content": "hello world"}]
+        clean_ids = tokenizer.apply_chat_template(
+            clean, chat_template=dummy_template, tokenize=True, return_dict=True
+        )["input_ids"]
+        self.assertEqual(
+            tokenizer.apply_chat_template(
+                clean, chat_template=dummy_template, tokenize=True, return_dict=True, sanitize_special_tokens=True
+            )["input_ids"],
+            clean_ids,
         )
-        self.assertEqual(len(batched), 2)
-        for rendered in batched:
-            self.assertNotIn(special_token, rendered)
+
+        # Batched: the clean conversation encodes identically even when its batch partner needs sanitizing
+        batch = tokenizer.apply_chat_template(
+            [conversation, clean],
+            chat_template=dummy_template,
+            tokenize=True,
+            return_dict=True,
+            sanitize_special_tokens=True,
+        )["input_ids"]
+        self.assertEqual(batch[0], output)
+        self.assertEqual(batch[1], clean_ids)
+
+        # String output cannot mark special-token text as inert, so sanitization requires tokenize=True
+        with self.assertRaises(ValueError):
+            tokenizer.apply_chat_template(
+                conversation, chat_template=dummy_template, tokenize=False, sanitize_special_tokens=True
+            )
+
+    @require_jinja
+    def test_chat_template_sanitize_padding_and_truncation(self):
+        tokenizer = self.get_tokenizer()
+        if (named_token := self._named_special_token(tokenizer)) is None:
+            self.skipTest("Tokenizer has no named special token to test sanitization with")
+        token_name, eos, _ = named_token
+        dummy_template = "{% for message in messages %}{{ message['content'] }}{% endfor %}{{ " + token_name + " }}"
+        conversation = [{"role": "user", "content": f"hello {eos} world"}]
+        shared_kwargs = {
+            "chat_template": dummy_template,
+            "tokenize": True,
+            "return_dict": True,
+            "sanitize_special_tokens": True,
+        }
+        base = tokenizer.apply_chat_template(conversation, **shared_kwargs)["input_ids"]
+
+        if tokenizer.pad_token is not None:
+            padded = tokenizer.apply_chat_template(
+                conversation, padding="max_length", max_length=len(base) + 5, **shared_kwargs
+            )
+            self.assertEqual(len(padded["input_ids"]), len(base) + 5)
+            self.assertEqual(sum(padded["attention_mask"]), len(base))
+            unpadded = [t for t, m in zip(padded["input_ids"], padded["attention_mask"]) if m]
+            self.assertEqual(unpadded, base)  # padding must not disturb the sanitized content
+
+        if len(base) > 2:
+            truncated = tokenizer.apply_chat_template(
+                conversation, truncation=True, max_length=len(base) - 2, **shared_kwargs
+            )["input_ids"]
+            self.assertEqual(len(truncated), len(base) - 2)
+            if tokenizer.truncation_side == "right":
+                self.assertEqual(truncated, base[: len(base) - 2])
+
+    @require_jinja
+    def test_chat_template_sanitize_assistant_mask(self):
+        tokenizer = self.get_tokenizer()
+        if tokenizer.backend != "tokenizers":
+            self.skipTest("Assistant token masks require the tokenizers backend for char_to_token")
+        if (named_token := self._named_special_token(tokenizer)) is None:
+            self.skipTest("Tokenizer has no named special token to test sanitization with")
+        token_name, eos, eos_id = named_token
+        dummy_template = (
+            "{% for message in messages %}{{ message['role'] + ': ' }}"
+            "{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}{{ message['content'] }}{% endif %}{{ " + token_name + " }}{% endfor %}"
+        )
+        split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
+        if eos_id in split_ids or tokenizer.decode(split_ids) != eos:
+            self.skipTest("Tokenizer cannot losslessly re-encode its EOS text as ordinary tokens")
+
+        # Special tokens injected into the assistant turn must be defused but still carry the assistant mask
+        conversation = [
+            {"role": "user", "content": f"hi {eos} there"},
+            {"role": "assistant", "content": f"sure {eos} thing"},
+        ]
+        unsanitized = tokenizer.apply_chat_template(
+            conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+        )["input_ids"]
+        if unsanitized.count(eos_id) != 4:  # 2 from the template, 2 injected
+            self.skipTest("Tokenizer does not match EOS text inside content, so there is nothing to sanitize")
+        output = tokenizer.apply_chat_template(
+            conversation,
+            chat_template=dummy_template,
+            tokenize=True,
+            return_dict=True,
+            return_assistant_tokens_mask=True,
+            sanitize_special_tokens=True,
+        )
+        self.assertEqual(len(output["assistant_masks"]), len(output["input_ids"]))
+        masked_ids = [token for token, mask in zip(output["input_ids"], output["assistant_masks"]) if mask]
+        self.assertGreater(len(masked_ids), 0)
+        self.assertNotIn(eos_id, masked_ids)  # the injected copy inside the assistant turn stays ordinary
+        self.assertIn(f"sure {eos} thing", tokenizer.decode(masked_ids))
+        # the template's own EOS tokens are outside the generation block and unmasked
+        self.assertEqual(output["input_ids"].count(eos_id), 2)
 
     @require_jinja
     def test_chat_template_save_loading(self):

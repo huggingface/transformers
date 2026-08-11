@@ -15,6 +15,7 @@
 import inspect
 import json
 import re
+import secrets
 import types
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -640,31 +641,72 @@ def _compile_special_token_pattern(all_special_tokens: tuple[str, ...]) -> re.Pa
     return re.compile("|".join(escaped))
 
 
-def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str]) -> Any:
-    """Strip any special tokens out of chat inputs. Rather than break them up, we simply mask them out entirely,
-    similar to `tokenizer.decode(skip_special_tokens=True)`."""
-    return _sanitize_chat_input(chat_input, _compile_special_token_pattern(tuple(all_special_tokens)))
+def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str], substitutions: dict[str, str]) -> Any:
+    """Sanitize special tokens out of chat inputs by replacing each occurrence with a unique placeholder,
+    recorded in `substitutions` as `{placeholder: original_text}`. After the chat template has been rendered,
+    the placeholders can be resolved back to the original text with `resolve_sanitization_placeholders` and
+    encoded as ordinary (non-special) tokens."""
+    return _sanitize_chat_input(chat_input, _compile_special_token_pattern(tuple(all_special_tokens)), substitutions)
 
 
-def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None) -> Any:
+def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None, substitutions: dict[str, str]) -> Any:
     if pattern is None:
         return chat_input
     if hasattr(chat_input, "messages"):
         # catches Chat objects
-        chat_input.messages = _sanitize_chat_input(chat_input.messages, pattern)
+        chat_input.messages = _sanitize_chat_input(chat_input.messages, pattern, substitutions)
         return chat_input
     if isinstance(chat_input, dict):
-        return {key: _sanitize_chat_input(value, pattern) for key, value in chat_input.items()}
+        return {key: _sanitize_chat_input(value, pattern, substitutions) for key, value in chat_input.items()}
     elif isinstance(chat_input, list):
-        return [_sanitize_chat_input(item, pattern) for item in chat_input]
+        return [_sanitize_chat_input(item, pattern, substitutions) for item in chat_input]
     elif isinstance(chat_input, tuple):
-        return tuple(_sanitize_chat_input(item, pattern) for item in chat_input)
+        return tuple(_sanitize_chat_input(item, pattern, substitutions) for item in chat_input)
     elif isinstance(chat_input, str):
-        # Keep repeating until the string stops changing, since a malicious user could nest special tokens
-        # inside each other that survive a single sub()
-        previous = None
-        while previous != chat_input:
-            previous, chat_input = chat_input, pattern.sub("", chat_input)
+
+        def replacement(match: re.Match) -> str:
+            # Pure-digit placeholders survive template filters like tojson/trim/upper unchanged
+            placeholder = str(int.from_bytes(secrets.token_bytes(10), "big"))
+            substitutions[placeholder] = match.group(0)
+            return placeholder
+
+        # Substitution cannot splice fragments of nested tokens into new ones (the placeholder physically
+        # interrupts them), but we re-check to fixpoint anyway as cheap insurance
+        while pattern.search(chat_input):
+            chat_input = pattern.sub(replacement, chat_input)
         return chat_input
     else:
         return chat_input
+
+
+def resolve_sanitization_placeholders(
+    rendered: str, substitutions: dict[str, str]
+) -> tuple[list[tuple[str, bool]], list[tuple[int, int]], set[str]]:
+    """Split a rendered chat string at the placeholders inserted by `sanitize_chat_input`, restoring the
+    original special-token text. Returns `(segments, shifts, seen)`:
+
+    - `segments`: `(text, defused)` pairs that concatenate to the final chat string. Segments with
+      `defused=True` hold restored special-token text and must be encoded *without* special-token matching.
+    - `shifts`: `(position, delta)` pairs recording how character indices in `rendered` map to indices in the
+      final string (see `shift_sanitized_index`), since placeholders and their originals differ in length.
+    - `seen`: the placeholder keys that were found, so callers can detect placeholders that a template mangled.
+    """
+    pattern = re.compile("|".join(map(re.escape, substitutions)))
+    segments, shifts, seen = [], [], set()
+    last = 0
+    for match in pattern.finditer(rendered):
+        original = substitutions[match.group(0)]
+        seen.add(match.group(0))
+        segments.append((rendered[last : match.start()], False))
+        segments.append((original, True))
+        shifts.append((match.end(), len(original) - (match.end() - match.start())))
+        last = match.end()
+    segments.append((rendered[last:], False))
+    return segments, shifts, seen
+
+
+def shift_sanitized_index(index: int, shifts: list[tuple[int, int]]) -> int:
+    """Translate a character index in a placeholder-bearing rendered chat string (as produced by rendering
+    inputs processed by `sanitize_chat_input`) to the corresponding index in the final string in which the
+    placeholders have been resolved back to their original text."""
+    return index + sum(delta for position, delta in shifts if position <= index)

@@ -699,6 +699,67 @@ class PythonBackend(PreTrainedTokenizerBase):
     def _convert_token_to_id(self, token):
         raise NotImplementedError
 
+    def _encode_sanitized_segments(
+        self,
+        batch_segments: list[list[tuple[str, bool]]],
+        is_batched: bool,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **tokenizer_kwargs,
+    ) -> BatchEncoding:
+        """Encode `(text, defused)` chat segments produced by `sanitize_special_tokens=True`. Defused
+        segments hold special-token text from untrusted chat input and are tokenized with
+        `split_special_tokens=True`, so they cannot act as control tokens. Since this backend already
+        tokenizes the text between added tokens segment-by-segment, encoding the chat piecewise is otherwise
+        equivalent to encoding the full string."""
+        verbose = tokenizer_kwargs.pop("verbose", True)
+        # A defused segment must never contain a special or added token id; fall back to dropping it
+        protected_ids = set(self.added_tokens_decoder.keys()).union(self.all_special_ids)
+        batch_outputs = []
+        for segments in batch_segments:
+            ids = []
+            for text, defused in segments:
+                if not text:
+                    continue
+                segment_ids = self.convert_tokens_to_ids(self.tokenize(text, split_special_tokens=defused))
+                if defused and protected_ids.intersection(segment_ids):
+                    logger.warning_once(
+                        "Sanitized special-token text could not be encoded as ordinary tokens with this "
+                        "tokenizer, so it was dropped from the chat instead."
+                    )
+                    continue
+                ids.extend(segment_ids)
+            batch_outputs.append(
+                self.prepare_for_model(
+                    ids,
+                    add_special_tokens=False,
+                    padding=False,
+                    truncation=truncation,
+                    max_length=max_length,
+                    verbose=verbose,
+                    **tokenizer_kwargs,
+                )
+            )
+        batched_output = self.pad(
+            batch_outputs,
+            padding=padding,
+            max_length=max_length,
+            pad_to_multiple_of=tokenizer_kwargs.get("pad_to_multiple_of"),
+            padding_side=tokenizer_kwargs.get("padding_side"),
+            return_tensors=return_tensors,
+            verbose=verbose,
+        )
+        if not is_batched and return_tensors is None:
+            batched_output = BatchEncoding(
+                {
+                    key: (value[0] if len(value) > 0 and isinstance(value[0], list) else value)
+                    for key, value in batched_output.items()
+                }
+            )
+        return batched_output
+
     def _encode_plus(
         self,
         text: TextInput | PreTokenizedInput | EncodedInput,
