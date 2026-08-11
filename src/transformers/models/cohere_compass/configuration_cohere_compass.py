@@ -127,6 +127,12 @@ class CohereCompassTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # allow per layer rope with optional NoPE layers
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        self.standardize_rope_params()
+        return kwargs
+
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
 @strict
