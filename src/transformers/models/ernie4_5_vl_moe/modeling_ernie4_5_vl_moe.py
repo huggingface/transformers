@@ -125,6 +125,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
+        # This is doing same as qwen2VL.apply_multimodal_rotary_pos_emb
         sin = self.recomposition_to_3d(sin)
         cos = self.recomposition_to_3d(cos)
 
@@ -132,8 +133,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
     def recomposition_to_3d(self, freq):
         freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
+        freq_hwt = torch.cat([freq_h, freq_w, freq_t], dim=-1)
         return freq_hwt.repeat_interleave(2, dim=-1)
 
 

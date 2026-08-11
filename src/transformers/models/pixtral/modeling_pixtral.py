@@ -40,8 +40,8 @@ def position_ids_in_meshgrid(patch_embeds_list, max_width):
         height, width = patch.shape[-2:]
         mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
         h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2, -1)
-        ids = h_grid * max_width + v_grid
-        positions.append(ids[:, 0])
+        ids = torch.stack([h_grid, v_grid], dim=-1)
+        positions.append(ids)
     return torch.cat(positions)
 
 
@@ -70,14 +70,14 @@ class PixtralRotaryEmbedding(nn.Module):
             )
 
         inv_freq, attention_scaling = rope_init_fn(self.config, device)
+        self.attention_scaling = attention_scaling
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        self.max_patches_per_side = config.image_size // config.patch_size
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: PixtralVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -92,38 +92,34 @@ class PixtralRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
-        # Here is the diff from Llama RoPE
-        max_patches_per_side = config.image_size // config.patch_size
-        h = torch.arange(max_patches_per_side)
-        w = torch.arange(max_patches_per_side)
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
-        freqs = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        freqs_h = torch.outer(h, freqs[::2]).float()
-        freqs_w = torch.outer(w, freqs[1::2]).float()
-        inv_freq = torch.cat(
-            [
-                freqs_h[:, None, :].repeat(1, max_patches_per_side, 1),
-                freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
-            ],
-            dim=-1,
-        ).reshape(-1, dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-
-        # TODO maybe make it torch compatible later on. We can also just slice
-        inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        freqs = self.inv_freq[position_ids]
+        # Pixtral uses axial 2D rope with interleaved HW grids
+        inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids_expanded = position_ids.permute(0, 2, 1).float()  # shape (positions, 2, 1)
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = freqs
-            cos = emb.cos()
-            sin = emb.sin()
+            freqs = (position_ids_expanded @ inv_freq_expanded)
+            cos = freqs.cos() * self.attention_scaling  # (722, 2, 32)
+            sin = freqs.sin() * self.attention_scaling
 
+        cos = self.recomposition_to_2d(cos)
+        sin = self.recomposition_to_2d(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_to_2d(self, freq):
+        freq = freq.view(*freq.shape[:-2], 2, -1, 2)
+        freq_h = freq[..., 0, :, 0]  # h-row is even
+        freq_w = freq[..., 1, :, 1]  # w-row is odd
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -454,8 +450,8 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         # positional embeddings
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
-        )
-        kwargs["position_ids"] = position_ids.unsqueeze(0).to(patch_embeds.device, non_blocking=True)
+        ).to(patch_embeds.device, non_blocking=True)
+        kwargs["position_ids"] = position_ids
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
