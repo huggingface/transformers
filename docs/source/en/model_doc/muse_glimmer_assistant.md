@@ -18,28 +18,24 @@ limitations under the License.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-08-09.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # MuseGlimmerAssistant
 
-## Overview
+[Muse Glimmer Assistant](https://huggingface.co/meta-models/Muse-Glimmer-30B-assistant) is the speculative-decoding drafter shipped with [MuseGlimmer](./muse_glimmer). It implements [DFlash](https://huggingface.co/papers/2602.06036): instead of proposing one token at a time, it denoises a block of 16 tokens in a single forward pass, which the target model then verifies in parallel, leaving output quality unchanged. It is small — 5 decoder layers, sliding-window attention (2048) on every layer, 32 query heads and 8 key/value heads.
 
-The MuseGlimmer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+[`MuseGlimmerAssistantModel`] does not read token ids. It is conditioned on `noise_embeds` (the last generated token plus the mask tokens to denoise) and `context_hidden_states` (hidden states from layers `[1, 13, 25, 37, 49]` of the target, concatenated). Both come from a running target model, so the drafter is a building block rather than a standalone model, and it is not wired into [`~GenerationMixin.generate`] — the speculative-decoding loop lives in the serving stack.
 
-The abstract from the paper is the following:
+```python
+from transformers import AutoModel
 
-<INSERT PAPER ABSTRACT HERE>
-
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
-
-## Usage examples
-
-<INSERT SOME NICE EXAMPLES HERE>
+drafter = AutoModel.from_pretrained("meta-models/Muse-Glimmer-30B-assistant", device_map="auto")
+```
 
 ## MuseGlimmerAssistantConfig
 
