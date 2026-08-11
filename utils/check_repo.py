@@ -301,6 +301,8 @@ IGNORE_NON_TESTED = (
         "DiffusionGemmaEncoderModel",  # TODO(joaogante)
         "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
         "Kimi_K25VisionModel",
+        "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.

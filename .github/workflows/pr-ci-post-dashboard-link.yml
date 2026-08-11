@@ -36,9 +36,13 @@ jobs:
         run: python3 update_pr_ci_dashboard_recap.py
 
   post-mlinter-review:
-    if: github.event.workflow_run.event == 'pull_request'
+    if: always() && github.event.workflow_run.event == 'pull_request'
+    needs: post-link
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout repo (for post_mlinter_review.py and github_utils.py)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
       - name: Download mlinter findings artifact
         id: download
         continue-on-error: true
@@ -48,10 +52,8 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Show mlinter findings
+      - name: Post mlinter review
         if: steps.download.outcome == 'success'
-        run: |
-          echo "=== mlinter-pr-number.txt ==="
-          cat mlinter-pr-number.txt
-          echo "=== mlinter-findings.json ==="
-          cat mlinter-findings.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 utils/post_mlinter_review.py

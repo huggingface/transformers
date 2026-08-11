@@ -214,9 +214,7 @@ class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class AXK2Indexer(DeepseekV32Indexer):
-    def __init__(self, config: AXK2Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
+    pass
 
 
 class AXK2TopkRouter(DeepseekV32TopkRouter):
@@ -357,7 +355,7 @@ class AXK2Attention(DeepseekV32Attention):
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states,
-            q_compressed,
+            q_resid,
             position_embeddings,
             indexer_mask,
             position_ids,
