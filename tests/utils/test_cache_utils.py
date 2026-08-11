@@ -66,7 +66,7 @@ if is_torch_available():
         LinearAttentionLayer,
         StaticLayer,
     )
-    from transformers.integrations.executorch import export_with_dynamic_cache
+    from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -688,6 +688,59 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+class DynamicCacheExportPytreeTest(unittest.TestCase):
+    @pytest.mark.torch_export_test
+    def test_export_preserves_layer_layout(self):
+        # `torch.export` requires an `nn.Module`, so use a minimal module that updates both cache layers.
+        class CacheUpdateModule(torch.nn.Module):
+            def forward(self, new_states, past_key_values):
+                past_key_values.update(new_states, new_states, layer_idx=0)
+                past_key_values.update(new_states, new_states, layer_idx=1)
+                return past_key_values
+
+        # Use both supported dynamic cache layer classes to verify that export preserves their types and metadata.
+        new_states = torch.arange(4.0).reshape(1, 1, 2, 2)
+        cache_config = LlamaConfig(
+            num_hidden_layers=2,
+            sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
+        )
+
+        register_dynamic_cache_export_support()
+
+        # An empty DynamicCache should match an exported layout whose layers are all unpopulated.
+        example_cache = DynamicCache(config=cache_config)
+        _, cache_spec = torch.utils._pytree.tree_flatten(example_cache)
+        cache_spec = torch.utils._pytree.treespec_loads(torch.utils._pytree.treespec_dumps(cache_spec))
+        self.assertEqual(torch.fx._pytree.tree_flatten_spec(DynamicCache(), cache_spec), [])
+
+        # Exporting and running the module populates both layers; compare the reconstructed output with eager execution.
+        exported_program = torch.export.export(
+            CacheUpdateModule(),
+            (),
+            {"new_states": new_states, "past_key_values": example_cache},
+            strict=False,
+        )
+        exported_input_cache = DynamicCache(config=cache_config)
+        eager_input_cache = DynamicCache(config=cache_config)
+        exported_cache = exported_program.module()(new_states=new_states, past_key_values=exported_input_cache)
+        eager_cache = CacheUpdateModule()(new_states, eager_input_cache)
+
+        self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
+        self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
+        for exported_layer, eager_layer in zip(exported_cache.layers, eager_cache.layers):
+            torch.testing.assert_close(exported_layer.keys, eager_layer.keys)
+            torch.testing.assert_close(exported_layer.values, eager_layer.values)
+
+        # A direct pytree round-trip should preserve automatic layer creation for an empty DynamicCache.
+        empty_cache_leaves, empty_cache_spec = torch.utils._pytree.tree_flatten(DynamicCache())
+        restored_empty_cache = torch.utils._pytree.tree_unflatten(empty_cache_leaves, empty_cache_spec)
+        restored_empty_cache.update(new_states, new_states, layer_idx=0)
+        self.assertIs(type(restored_empty_cache.layers[0]), DynamicLayer)
+
+
+@require_torch
 class CacheExportIntegrationTest(unittest.TestCase):
     """Cache tests that rely on `torch.export()` and model loading"""
 
@@ -1146,6 +1199,22 @@ class SyntheticCacheTest(unittest.TestCase):
             [10.0, 20.0, 30.0, 40.0],
             "DynamicCache Scenario 2 layer 1 failed",
         )
+
+    def test_dynamic_cache_from_layers(self):
+        # Pre-created layers define a fixed cache layout instead of creating DynamicLayers automatically.
+        layers = [DynamicSlidingWindowLayer(4), DynamicLayer()]
+        cache = DynamicCache(layers=layers)
+        self.assertListEqual(cache.layers, layers)
+        self.assertIsNone(cache.layer_class_to_replicate)
+
+        # An explicitly empty list still defines a fixed layout rather than enabling automatic layer creation.
+        empty_cache = DynamicCache(layers=[])
+        self.assertListEqual(empty_cache.layers, [])
+        self.assertIsNone(empty_cache.layer_class_to_replicate)
+
+        # Explicit layers and config-based initialization are mutually exclusive, even when the list is empty.
+        with self.assertRaisesRegex(ValueError, "cannot be used together"):
+            DynamicCache(config=LlamaConfig(), layers=[])
 
     def test_dynamic_cache_batch_select_indices(self):
         """Select a subset of batches in-place using batch_select_indices."""
