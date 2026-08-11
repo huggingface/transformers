@@ -126,7 +126,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 log_mel="log10",
             )
             log_spec = log_spec[:, :-1]
-            log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+            max_val = np.nanmax(log_spec) if not np.all(np.isnan(log_spec)) else -8.0
+            log_spec = np.maximum(log_spec, max_val - 8.0)
             log_spec = (log_spec + 4.0) / 4.0
             log_spec_batch.append(log_spec)
         log_spec_batch = np.array(log_spec_batch)
@@ -154,10 +155,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         if waveform.dim() == 2:
-            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            max_val = torch.nanmax(log_spec.flatten(1), dim=1, keepdim=True).values.unsqueeze(2) if hasattr(torch, "nanmax") else log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            max_val = torch.nan_to_num(max_val, nan=0.0)
             log_spec = torch.maximum(log_spec, max_val - 8.0)
         else:
-            log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+            max_val = torch.nanmax(log_spec) if hasattr(torch, "nanmax") else log_spec.max()
+            max_val = torch.nan_to_num(max_val, nan=0.0)
+            log_spec = torch.maximum(log_spec, max_val - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
         if device != "cpu":
             log_spec = log_spec.detach().cpu()

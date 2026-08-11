@@ -374,3 +374,12 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             input_features = feature_extractor(input_speech, return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (3, 80, 3000))
         torch.testing.assert_close(input_features[:, 0, :30], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
+
+    def test_nan_sample_propagation(self):
+        feature_extractor = WhisperFeatureExtractor()
+        audio = np.random.randn(16000).astype(np.float32) * 0.05
+        audio[8000] = np.nan
+        feats = feature_extractor(audio, sampling_rate=16000, return_tensors="np")["input_features"]
+        # One NaN sample should not make the entire 80x3000 matrix NaN
+        self.assertLess(np.isnan(feats).mean(), 1.0)
+
