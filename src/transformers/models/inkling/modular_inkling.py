@@ -57,8 +57,6 @@ from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causa
 logger = logging.get_logger(__name__)
 
 
-# TODO: Fix the undocumented attributes then uncomment
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
@@ -184,8 +182,6 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
-# TODO: Fix the undocumented attributes then uncomment
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
@@ -203,8 +199,6 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-# TODO: Fix the undocumented attributes then uncomment
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingVisionConfig(PreTrainedConfig):
     model_type = "inkling_vision"
@@ -222,8 +216,6 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-# TODO: Fix the undocumented attributes then uncomment
-# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
