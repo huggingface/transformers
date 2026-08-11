@@ -57,7 +57,9 @@ from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causa
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling")
+# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
+# InklingTextConfig.__init__'s signature, but not documented):
+# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
@@ -183,7 +185,9 @@ class InklingTextConfig(PreTrainedConfig):
         return None
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling")
+# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
+# InklingAudioConfig.__init__'s signature, but not documented):
+# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingAudioConfig(PreTrainedConfig):
     model_type = "inkling_audio"
@@ -201,7 +205,9 @@ class InklingAudioConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling")
+# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
+# InklingVisionConfig.__init__'s signature, but not documented):
+# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingVisionConfig(PreTrainedConfig):
     model_type = "inkling_vision"
@@ -219,7 +225,9 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling")
+# TODO: uncomment once all fields below are documented (currently raises [ERROR] `<field>` is part of
+# InklingConfig.__init__'s signature, but not documented):
+# @auto_docstring(checkpoint="thinkingmachines/Inkling")
 @strict
 class InklingConfig(PreTrainedConfig):
     """Top-level multimodal config (`InklingMMConfig` in the SGLang source)."""
