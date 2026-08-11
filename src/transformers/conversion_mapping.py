@@ -839,6 +839,15 @@ def _build_checkpoint_conversion_mapping():
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
+            WeightConverter(
+                source_patterns=[
+                    "linear_attn.q_conv1d.weight",
+                    "linear_attn.k_conv1d.weight",
+                    "linear_attn.v_conv1d.weight",
+                ],
+                target_patterns="linear_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [

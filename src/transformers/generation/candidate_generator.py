@@ -1542,6 +1542,164 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         return
 
 
+class DFlashTokenCandidateGenerator(CandidateGenerator):
+    """
+    Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
+    Dflash reuses the main model's `hidden_states` at several `config.target_layer_ids` to populate the kv cache of the assistant,
+    and then uses the last "bonus" decoded token from the main model, along with `config.block_size` as its main forward to
+    draft `config.block_size` new tokens at every iteration, similar to a diffusion window.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model.
+        main_model_input_embeddings (`torch.nn.Embedding`):
+            The input embedding table from main model, used to get the embeddings from the last seen token.
+        main_model_output_embeddings (`torch.nn.Linear`):
+            The output embedding table from main model, used to get the candidate logits.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    requires_model_outputs: bool = True
+    # We always need to pass the hidden states at `draft_config.target_layer_ids` from the main model
+    model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
+
+    def __init__(
+        self,
+        assistant_model: "PreTrainedModel",
+        main_model_input_embeddings: nn.Embedding,
+        main_model_output_embeddings: nn.Linear,
+        generation_config: "GenerationConfig",
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        **kwargs,
+    ):
+        from ..cache_utils import DFlashCache
+
+        # Get the assistant model and the embeddings of the main model
+        self.assistant_model = assistant_model
+        self.main_model_max_length = generation_config.max_length
+        self.main_model_input_embeddings = main_model_input_embeddings
+        self.main_model_output_embeddings = main_model_output_embeddings
+
+        # Get the layers used to obtain the intermediate hidden_states from main model, and prepare the diffusion window ids tensor
+        self.target_layer_ids = assistant_model.config.target_layer_ids
+        self.block_size = assistant_model.config.block_size
+        self.mask_token_id = assistant_model.config.mask_token_id
+        self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
+
+        # Prepare a cache for the assistant, and activate the past recording
+        self.cache = DFlashCache(config=self.assistant_model.config)
+        self.cache.activate_past_recording()
+
+        # Save those to allow logits manipulations
+        self.do_sample = generation_config.do_sample
+        self.logits_processor = logits_processor
+
+        self.is_main_model_prefill = True
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        # Make sure we correctly collected all the main model outputs we needed
+        if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
+            raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
+
+        num_last_main_model_tokens = n_last_matches + 1 if not self.is_main_model_prefill else input_ids.shape[1] - 1
+        # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
+        # hidden states of only accepted tokens thus crop out the rest
+        context_hidden_states: torch.Tensor = torch.cat(
+            [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
+        )
+
+        # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
+        self.cache.set_previous_accepted_tokens(num_last_main_model_tokens)
+        # We need to remvoe the previous "noise" from the cache
+        if not self.is_main_model_prefill:
+            self.cache.crop(-self.block_size)
+
+        # Here `position_ids`/`attention_mask` are the full sequence inputs, including the last "bonus" token that was just drafted
+        # from the main model. We need to slice to get only what the main model just processed. Say the main model just had token
+        # positions [2, 3] as input, the tensors contains the data for position [0, 1, 2, 3, 4], i.e. full inputs + new drafted token
+        # from last position 3 that was processed
+        # For `position_ids`, we need only the last token positions, whereas the `attention_mask` should be passed fully (except last "bonus" token)
+        position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - 1 : -1]
+        attention_mask = model_kwargs["attention_mask"][:, :-1]
+
+        # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
+        # the main model, and the noise tokens
+        noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
+        # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
+        noise_embeds = torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
+
+        # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
+        # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
+        noise_position_ids = torch.arange(self.block_size, device=position_ids.device) + position_ids[..., -1:] + 1
+        position_ids = torch.cat([position_ids, noise_position_ids], dim=-1)
+        noise_attention_mask = torch.ones(1, self.block_size, device=attention_mask.device, dtype=attention_mask.dtype)
+        attention_mask = torch.cat([attention_mask, noise_attention_mask], dim=-1)
+
+        # Get assistant model outputs
+        outputs = self.assistant_model(
+            noise_embeds=noise_embeds,
+            context_hidden_states=context_hidden_states,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=self.cache,
+        )
+
+        # Once we arrive here the first time, it's no longer the case
+        self.is_main_model_prefill = False
+
+        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
+
+        # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
+        if self.logits_processor is not None:
+            candidate_ids = input_ids
+            # We need to sample 1 by 1 for the processors
+            for i in range(candidate_logits.shape[1]):
+                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                if self.do_sample:
+                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+                # Append it to the full sequence
+                candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+        # Here we can vectorize as we don't have any processors
+        else:
+            if self.do_sample:
+                probs = nn.functional.softmax(candidate_logits, dim=-1, dtype=torch.float32)
+                # Multinomial only works on 2d matrices, and assisted decoding restrict to batch size == 1 anyway
+                candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
+            else:
+                candidate_ids = candidate_logits.argmax(dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        return candidate_ids, candidate_logits
+
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+        # not used but has to be overriden from an abstract parent
+        return
+
+
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
