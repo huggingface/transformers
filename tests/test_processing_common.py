@@ -72,6 +72,13 @@ MODALITY_INPUT_DATA = {
 for modality, urls in MODALITY_INPUT_DATA.items():
     MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
 
+MODALITY_PARAMETERIZED_DATA = {
+    "text": {"processing_class": "tokenizer", "kwargs": {"padding": False, "truncation": False}},
+    "images": {"processing_class": "image_processor", "kwargs": {"do_normalize": False}},
+    "videos": {"processing_class": "videoe_processor", "kwargs": {"do_sample_frames": False}},
+    "audio": {"processing_class": "audio_processor", "kwargs": {}},
+}
+
 
 def prepare_image_inputs():
     """This function prepares a list of PIL images"""
@@ -473,6 +480,12 @@ class ProcessorTesterMixin:
             return raw_speech
         return raw_speech * batch_size
 
+    def prepare_modality_inputs(self, modality, batch_size: int | None = None):
+        if modality in ["images", "videos"]:
+            modality = modality[:-1]  # FIXME
+        func = getattr(self, f"prepare_{modality}_inputs")
+        return func(batch_size=batch_size)
+
     def test_processor_to_json_string(self):
         processor = self.get_processor()
         obj = json.loads(processor.to_json_string())
@@ -614,139 +627,54 @@ class ProcessorTesterMixin:
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    def test_image_processor_defaults(self):
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
+    def test_subprocessor_defaults(self, modality):
         """
-        Tests that image processor is called correctly when passing images to the processor.
-        This test verifies that processor(images=X) produces the same output as image_processor(X).
+        Tests that sub-processor is called correctly when passing each modality input to the processor.
+        This test verifies that processor(single_modality_data) produces the same output as subprocessor(single_modality_data).
         """
         # Skip if processor doesn't have image_processor
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        parameterized_data = MODALITY_PARAMETERIZED_DATA[modality]
+        if parameterized_data["processing_class"] not in self.processor_class.get_attributes():
+            self.skipTest(f"{parameterized_data['processing_class']} attribute not present in {self.processor_class}")
 
-        image_processor = self.get_component("image_processor")
+        subprocessor = self.get_component(parameterized_data["processing_class"])
 
-        # Get all required components for processor
+        # Get all other required components for processor
         components = {}
         for attribute in self.processor_class.get_attributes():
             components[attribute] = self.get_component(attribute)
 
-        processor = self.processor_class(**components)
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self.prepare_modality_inputs(modality)
 
-        image_input = self.prepare_image_inputs()
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_data["kwargs"]
+        kwargs["return_tensors"] = "pt"
+        merged_kwargs = processor._merge_kwargs(
+            processor.valid_processor_kwargs,
+            tokenizer_init_kwargs=None,
+            **kwargs,
+        )
+        kwargs = merged_kwargs[f"{modality}_kwargs"]
 
-        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_subproc = subprocessor(modality_input, **kwargs)
         try:
-            input_processor = processor(images=image_input, return_tensors="pt")
+            input_processor = processor(**{modality: modality_input, **kwargs})
         except Exception:
-            # The processor does not accept image only input, so we can skip this test
-            self.skipTest("Processor does not accept image-only input.")
+            input_processor = {}
 
         # Verify outputs match
-        for key in input_image_proc:
-            if key in processor.model_input_names:
-                torch.testing.assert_close(input_image_proc[key], input_processor[key])
-
-    def test_tokenizer_defaults(self):
-        """
-        Tests that tokenizer is called correctly when passing text to the processor.
-        This test verifies that processor(text=X) produces the same output as tokenizer(X).
-        """
-        # Skip if processor doesn't have tokenizer
-        if "tokenizer" not in self.processor_class.get_attributes():
-            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-        tokenizer = components["tokenizer"]
-
-        input_str = ["lower newer"]
-
-        # Process with both tokenizer and processor (disable padding to ensure same output)
-        try:
-            encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
-        except Exception:
-            # The processor does not accept text only input, so we can skip this test
-            self.skipTest("Processor does not accept text-only input.")
-        encoded_tok = tokenizer(input_str, padding=False, return_tensors="pt")
-
-        # Verify outputs match (handle processors that might not return token_type_ids)
-        for key in encoded_tok:
-            if key in encoded_processor:
-                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
-
-    def test_feature_extractor_defaults(self):
-        """
-        Tests that feature extractor is called correctly when passing audio to the processor.
-        This test verifies that processor(audio=X) produces the same output as feature_extractor(X).
-        """
-        # Skip if processor doesn't have feature_extractor
-        if (
-            "feature_extractor" not in self.processor_class.get_attributes()
-            and "audio_processor" not in self.processor_class.get_attributes()
-        ):
-            self.skipTest(f"feature_extractor or audio_processor attribute not present in {self.processor_class}")
-
-        if "feature_extractor" in self.processor_class.get_attributes():
-            feature_extractor = self.get_component("feature_extractor")
-        else:
-            feature_extractor = self.get_component("audio_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-
-        audio_input = self.prepare_audio_inputs()
-
-        # Process with both feature_extractor and processor
-        input_feat_extract = feature_extractor(audio_input, return_tensors="pt")
-        try:
-            input_processor = processor(audio=audio_input, return_tensors="pt")
-        except Exception:
-            # The processor does not accept audio only input, so we can skip this test
-            self.skipTest("Processor does not accept audio-only input.")
-
-        # Verify outputs match
-        for key in input_feat_extract:
-            torch.testing.assert_close(input_feat_extract[key], input_processor[key])
-
-    def test_video_processor_defaults(self):
-        """
-        Tests that video processor is called correctly when passing videos to the processor.
-        This test verifies that processor(videos=X) produces the same output as video_processor(X).
-        """
-        # Skip if processor doesn't have video_processor
-        if "video_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
-
-        video_processor = self.get_component("video_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-
-        video_input = self.prepare_video_inputs()
-
-        # Process with both video_processor and processor
-        input_video_proc = video_processor(video_input, do_sample_frames=False, return_tensors="pt")
-        try:
-            input_processor = processor(videos=video_input, do_sample_frames=False, return_tensors="pt")
-        except Exception:
-            # The processor does not accept video only input, so we can skip this test
-            self.skipTest("Processor does not accept video-only input.")
-
-        # Verify outputs match
-        for key in input_video_proc:
-            torch.testing.assert_close(input_video_proc[key], input_processor[key])
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])
 
     def test_tokenizer_decode_defaults(self):
         """

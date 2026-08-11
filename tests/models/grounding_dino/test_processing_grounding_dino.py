@@ -160,3 +160,7 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
+
+    @unittest.skip("Processor changes input text by adding dots before anf after")
+    def test_subprocessor_defaults_0_text(self):
+        pass

@@ -57,6 +57,18 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_replacement_offsets(self):
         pass
 
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
+    @unittest.skip("Processor changes the input content/shape which subprocessor doesn't")
+    def test_subprocessor_defaults(self, modality):
+        pass
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

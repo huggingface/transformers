@@ -37,7 +37,7 @@ if is_torch_available():
 class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Sam2Processor
 
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, **kwargs):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """

@@ -49,12 +49,8 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
 
-    @unittest.skip("MllamaProcessor does not return tensors")
-    def test_image_processor_defaults(self):
-        pass
-
     @unittest.skip("MllamaProcessor modifies input text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     # Override as Mllama needs images to be an explicitly nested batch

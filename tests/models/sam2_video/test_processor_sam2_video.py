@@ -41,7 +41,7 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    def prepare_image_inputs(self):
+    def prepare_image_inputs(self, **kwargs):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """

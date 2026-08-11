@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
+from parameterized import parameterized
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
@@ -71,8 +72,16 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(do_center_crop=False)
 
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
     @unittest.skip("Kosmos2Processor adds special tokens to the text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults(self, modality):
         pass
 
     def test_image_processor_load_save_reload(self):

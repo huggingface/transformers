@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 from PIL import Image
 
 from transformers.testing_utils import require_av, require_torch, require_vision
@@ -172,4 +173,16 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # tiny model has too little tokens and collapses everything to UNK which is not defined
     def test_replacement_offsets(self):
+        pass
+
+    @parameterized.expand(
+        [
+            ("text",),
+            ("images",),
+            ("videos",),
+            ("audio",),
+        ]
+    )
+    @unittest.skip("Model changes input content as it is used by diffusers and thus is special")
+    def test_subprocessor_defaults(self, modality):
         pass
