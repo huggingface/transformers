@@ -63,7 +63,7 @@ from .utils import (
     list_repo_templates,
     logging,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template, sanitize_chat_input
+from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -2015,8 +2015,9 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
             sanitize_special_tokens (`bool`, defaults to `False`):
-                Whether to sanitize the inputs before passing them to the template. Input sanitization drops
-                special tokens, ensuring that malicious user-supplied content can't interfere with model behavior.
+                Sanitization of chat inputs (see [`~PreTrainedTokenizerBase.apply_chat_template`]) is not yet
+                supported for processors, and passing `True` raises an error. The argument exists so that the
+                request fails loudly instead of being silently forwarded to the template as a variable.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2174,10 +2175,11 @@ class ProcessorMixin(PushToHubMixin):
                 batch_videos.append(videos)
 
         if sanitize_special_tokens:
-            conversations = sanitize_chat_input(conversations, self.tokenizer.all_special_tokens)
-            tools = sanitize_chat_input(tools, self.tokenizer.all_special_tokens)
-            documents = sanitize_chat_input(documents, self.tokenizer.all_special_tokens)
-            kwargs = {k: sanitize_chat_input(v, self.tokenizer.all_special_tokens) for k, v in kwargs.items()}
+            # Explicitly rejected rather than left out of the signature: an unknown kwarg would silently
+            # become a template variable via `template_kwargs`, which is a dangerous no-op for a security flag
+            raise NotImplementedError(
+                "`sanitize_special_tokens` is not yet supported for processors, only for tokenizers."
+            )
 
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}

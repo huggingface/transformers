@@ -64,7 +64,12 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import render_jinja_template, sanitize_chat_input
+from .utils.chat_template_utils import (
+    render_jinja_template,
+    resolve_sanitization_placeholders,
+    sanitize_chat_input,
+    shift_sanitized_index,
+)
 
 
 if TYPE_CHECKING:
@@ -2986,6 +2991,33 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         cls._auto_class = auto_class
 
+    @property
+    def _sanitization_special_tokens(self) -> list[str]:
+        """The token strings protected by the `sanitize_special_tokens` argument of `apply_chat_template`:
+        every added token flagged as special, plus the named special tokens. Note that this is a superset of
+        `all_special_tokens`, which only contains named special tokens and `additional_special_tokens` — chat
+        control tokens like `<|start_header_id|>` are frequently special added tokens without a name."""
+        protected = {token.content for token in self.added_tokens_decoder.values() if token.special}
+        protected.update(str(token) for token in self.all_special_tokens)
+        return sorted(protected)
+
+    def _encode_sanitized_segments(
+        self,
+        batch_segments: list[list[tuple[str, bool]]],
+        is_batched: bool,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        **tokenizer_kwargs,
+    ) -> BatchEncoding:
+        """Encode chats that have been split into `(text, defused)` segments by
+        [`~utils.chat_template_utils.resolve_sanitization_placeholders`]. Segments marked as defused contain
+        special-token text originating from untrusted chat input, and are encoded with ordinary tokens
+        (as with `split_special_tokens=True`) so that they cannot act as control tokens. The concatenated
+        result is otherwise equivalent to encoding the full chat string with `self.__call__`."""
+        raise NotImplementedError(f"{self.__class__.__name__} does not support `sanitize_special_tokens`.")
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -3040,8 +3072,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             sanitize_special_tokens (`bool`, defaults to `False`):
-                Whether to sanitize the inputs before passing them to the template. Input sanitization drops
-                special tokens, ensuring that malicious user-supplied content can't interfere with model behavior.
+                Whether to sanitize the chat inputs before passing them to the template, ensuring that special
+                tokens in user-supplied content (e.g. a typed `<|assistant|>`) can't interfere with the chat
+                structure. Sanitization preserves the text, but encodes it with ordinary (non-special) tokens,
+                like `split_special_tokens=True`. Special tokens added by the chat template itself are
+                unaffected. Requires `tokenize=True`, since token-level sanitization cannot be expressed in
+                string output.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3108,11 +3144,19 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
+        substitutions = None
         if sanitize_special_tokens:
-            conversations = sanitize_chat_input(conversations, self.all_special_tokens)
-            tools = sanitize_chat_input(tools, self.all_special_tokens)
-            documents = sanitize_chat_input(documents, self.all_special_tokens)
-            kwargs = {k: sanitize_chat_input(v, self.all_special_tokens) for k, v in kwargs.items()}
+            if not tokenize:
+                raise ValueError(
+                    "`sanitize_special_tokens=True` requires `tokenize=True`: sanitization encodes special-token "
+                    "text from the chat inputs with ordinary tokens, which cannot be expressed in string output."
+                )
+            substitutions = {}
+            protected_tokens = self._sanitization_special_tokens
+            conversations = sanitize_chat_input(conversations, protected_tokens, substitutions)
+            tools = sanitize_chat_input(tools, protected_tokens, substitutions)
+            documents = sanitize_chat_input(documents, protected_tokens, substitutions)
+            kwargs = {k: sanitize_chat_input(v, protected_tokens, substitutions) for k, v in kwargs.items()}
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3130,15 +3174,37 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            out = self(
-                rendered_chat,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
+            if substitutions:
+                # Sanitization replaced special tokens in the inputs with placeholders. Restore their text and
+                # encode it with ordinary tokens, so that it can never act as chat control tokens.
+                rendered_batch = rendered_chat if is_batched else [rendered_chat]
+                segmented = [resolve_sanitization_placeholders(rendered, substitutions) for rendered in rendered_batch]
+                placeholders_seen = set().union(*(seen for _, _, seen in segmented))
+                if placeholders_seen != set(substitutions):
+                    logger.warning_once(
+                        "Some special tokens in the chat inputs were transformed or dropped by the chat template, "
+                        "so their original text could not be restored after sanitization."
+                    )
+                shift_sites = [shifts for _, shifts, _ in segmented]
+                out = self._encode_sanitized_segments(
+                    [segments for segments, _, _ in segmented],
+                    is_batched=is_batched,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+            else:
+                out = self(
+                    rendered_chat,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
@@ -3149,6 +3215,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            if substitutions:
+                                # The generation indices refer to the placeholder-bearing rendered string;
+                                # translate them to the final string with the placeholders resolved
+                                assistant_start_char = shift_sanitized_index(assistant_start_char, shift_sites[i])
+                                assistant_end_char = shift_sanitized_index(assistant_end_char, shift_sites[i])
                             start_token = out.char_to_token(i, assistant_start_char)
                             end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
