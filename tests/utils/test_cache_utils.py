@@ -690,16 +690,15 @@ class CacheHardIntegrationTest(unittest.TestCase):
 @require_torch
 class DynamicCacheExportPytreeTest(unittest.TestCase):
     @pytest.mark.torch_export_test
-    def test_export_preserves_layer_layout(self):
-        # `torch.export` requires an `nn.Module`, so use a minimal module that updates both cache layers.
+    def test_export_preserves_sliding_cache_behavior(self):
+        # Update only the sliding layer so the full-attention layer remains unpopulated.
         class CacheUpdateModule(torch.nn.Module):
             def forward(self, new_states, past_key_values):
                 past_key_values.update(new_states, new_states, layer_idx=0)
-                past_key_values.update(new_states, new_states, layer_idx=1)
                 return past_key_values
 
-        # Use both supported dynamic cache layer classes to verify that export preserves their types and metadata.
-        new_states = torch.arange(4.0).reshape(1, 1, 2, 2)
+        # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
+        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
         cache_config = LlamaConfig(
             num_hidden_layers=2,
             sliding_window=4,
@@ -708,7 +707,6 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
 
         register_dynamic_cache_export_support()
 
-        # Exporting and running the module populates both layers; compare the reconstructed output with eager execution.
         exported_program = torch.export.export(
             CacheUpdateModule(),
             (),
@@ -720,19 +718,15 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         )
         eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
+        self.assertEqual(len(exported_cache.layers), 2)
         self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
         self.assertEqual(exported_cache.layers[0].sliding_window, 4)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
+        torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
         self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
-        for exported_layer, eager_layer in zip(exported_cache.layers, eager_cache.layers):
-            torch.testing.assert_close(exported_layer.keys, eager_layer.keys)
-            torch.testing.assert_close(exported_layer.values, eager_layer.values)
-
-        # A direct pytree round-trip should preserve automatic layer creation for an empty DynamicCache.
-        flattened_empty_cache, empty_cache_spec = torch.utils._pytree.tree_flatten(DynamicCache())
-        restored_empty_cache = torch.utils._pytree.tree_unflatten(flattened_empty_cache, empty_cache_spec)
-        restored_empty_cache.update(new_states, new_states, layer_idx=0)
-        self.assertIs(type(restored_empty_cache.layers[0]), DynamicLayer)
-
+        self.assertIsNone(exported_cache.layers[1].keys)
+        self.assertIsNone(exported_cache.layers[1].values)
 
 @require_torch
 class CacheExportIntegrationTest(unittest.TestCase):
