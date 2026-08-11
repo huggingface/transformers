@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -88,6 +88,11 @@ message, final_events = parser.finalize()
 for event in final_events:
     render(event)
 ```
+
+If the request includes tools, pass them through as well (`get_response_parser(..., tools=tools)`).
+Tool-call arguments are then typed from the calling tool's JSON Schema as each region closes, so
+streaming consumers see schema-typed arguments on `region_close` rather than only after `finalize()`.
+See [Typing tool-call arguments](#typing-tool-call-arguments) for details.
 
 The parser will emit **events** as text from the generation process is fed in. This indicates which region is currently being generated. When
 the region is complete, it will be emitted in a separate event with the fully parsed content. At the end of generation,
@@ -388,6 +393,36 @@ input = "<meta>name: alice\nage: 30</meta>"
 ```
 
 Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` to parse it to `30`.
+
+### Typing tool-call arguments
+
+Sometimes, the response parser may parse model outputs with the wrong type. For example,
+it might parse the float `1.5` as "1.50". This can cause problems with tool calling, if tools expect
+an argument in one type but receive it in another. To avoid this,
+you can pass the request's `tools` to [`~PreTrainedTokenizerBase.parse_response`] or
+[`~utils.chat_parsing.ResponseParser`] to cast them using each tool's JSON Schema `parameters`.
+Tools are accepted in the same format as [`~PreTrainedTokenizerBase.apply_chat_template`]: JSON
+schemas, or Python functions with type hints and docstrings that are auto-converted to schemas.
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "set_alarm",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "hour": {"type": "integer"},
+                "enabled": {"type": "boolean"},
+                "label": {"type": "string"},
+            },
+        },
+    },
+}]
+message = parse_response(model_out, template, prefix="", tools=tools)
+# message["tool_calls"][0]["function"]["arguments"] ==
+# {"hour": 7, "enabled": True, "label": "wake up"}
+```
 
 
 ### Transform

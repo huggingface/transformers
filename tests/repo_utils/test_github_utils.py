@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import sys
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest.mock import patch
 
 
@@ -257,6 +260,29 @@ class GithubRequestTest(unittest.TestCase):
         self.assertEqual(headers["Content-Type"], "application/json")
         self.assertEqual(mock.call_args.kwargs["method"], "POST")
         self.assertEqual(mock.call_args.kwargs["data"], b'{"body": "hi"}')
+
+
+def test_github_diagnostics_logger_uses_stream_handler_not_stdout():
+    assert any(
+        isinstance(handler, logging.StreamHandler) and getattr(handler, "stream", None) is not sys.stdout
+        for handler in gh.logger.handlers
+    )
+
+
+def test_github_request_diagnostics_are_logged_not_printed_to_stdout():
+    stdout = StringIO()
+    with (
+        patch.object(gh, "_log_token_status", return_value=None),
+        patch.object(gh, "_request", return_value=_response(200, {"X-RateLimit-Limit": "5000"}, '{"ok": true}')),
+        redirect_stdout(stdout),
+        unittest.TestCase().assertLogs(gh.logger, level="INFO") as logs,
+    ):
+        assert github_request("https://api.github.com/x", token="t") == {"ok": True}
+
+    assert stdout.getvalue() == ""
+    output = "\n".join(logs.output)
+    assert "[initial] GET https://api.github.com/x" in output
+    assert "GitHub rate-limit" in output
 
 
 if __name__ == "__main__":

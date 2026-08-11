@@ -86,6 +86,7 @@ jobs:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
             REF=main
+            CUDA=cu126
             PYTORCH=2.8.0
             TORCHCODEC=0.7.0
             FLASH_ATTN=yes

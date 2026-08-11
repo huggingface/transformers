@@ -393,8 +393,8 @@ class LogBinomialSoftmax(nn.Module):
         super().__init__()
         self.k = n_classes
         self.act = act
-        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
-        self.register_buffer("k_minus_1", torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
+        self.k_idx = nn.Buffer(torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
+        self.k_minus_1 = nn.Buffer(torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
 
     def forward(self, probabilities, temperature=1.0, eps=1e-4):
         """Compute the log binomial distribution for probabilities.

@@ -180,7 +180,7 @@ class Gemma3Config(PreTrainedConfig):
     >>> configuration = Gemma3Config(vision_config, text_config)
 
     >>> # Initializing a model from the gemma-3-4b style configuration
-    >>> model = Gemma3TextConfig(configuration)
+    >>> model = Gemma3ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

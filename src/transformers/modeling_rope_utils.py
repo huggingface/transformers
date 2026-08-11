@@ -420,7 +420,7 @@ def _compute_yarn_parameters(
     mscale_all_dim = rope_parameters_dict.get("mscale_all_dim")
     original_max_position_embeddings = rope_parameters_dict["original_max_position_embeddings"]
 
-    # NOTE: DeekSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
+    # NOTE: DeepSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
     # containing the pretrained value. They use the ratio between `max_position_embeddings` and this value
     # to compute the default attention scaling factor, instead of using `factor`.
     if factor is None:

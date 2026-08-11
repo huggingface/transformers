@@ -316,7 +316,7 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         seq = torch.arange(config.context_size)
         relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
         attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
-        self.register_buffer("attention_dists", attention_dists, persistent=False)
+        self.attention_dists = nn.Buffer(attention_dists, persistent=False)
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
 
@@ -581,36 +581,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        input_features=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # If we're in cached decoding stage, input_features should be None because
-        # input ids do not contain special audio token anymore Otherwise we need
-        # input feature values to be passed to the model
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["input_features"] = input_features
-        return model_inputs
 
     def generate(self, *args, **kwargs) -> torch.LongTensor:
         # This model is expected to have a lora adapter, which is only

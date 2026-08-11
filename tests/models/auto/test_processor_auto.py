@@ -62,7 +62,9 @@ from transformers.testing_utils import (
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
+    IMAGE_PROCESSOR_NAME,
     PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
 )
 
 
@@ -165,6 +167,47 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             video_processor_2 = LlavaOnevisionVideoProcessor(**config_dict_2)
             self.assertIsInstance(video_processor_2, LlavaOnevisionVideoProcessor)
             self.assertEqual(config_dict_1, config_dict_2)
+
+    def test_subcomponent_get_config_dict_falls_back_to_standalone_config(self):
+        """
+        Tests that we can get config dict of a subcomponents of a processor
+        in the following cases:
+        1. `processor_config.json` doesn't exist in the repo at all
+        2. `processor_config.json` exists but does not contain a nested key
+        """
+        # case 1: `processor_config.json` doesn't exist in the repo at all
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
+                json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
+            image_processor_dict = get_image_processor_config(tmpdirname)
+            self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
+
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+                json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
+            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
+                json.dump({"video_processor_type": "SomeVideoProcessor"}, f)
+            feature_extractor_dict = get_feature_extractor_config(tmpdirname)
+            self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
+            video_processor_dict = get_video_processor_config(tmpdirname)
+            self.assertEqual(video_processor_dict, {"video_processor_type": "SomeVideoProcessor"})
+
+        # case 2: `processor_config.json` exists but does not contain a nested key
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
+                json.dump({"processor_class": "SomeProcessor"}, f)
+            with open(os.path.join(tmpdirname, IMAGE_PROCESSOR_NAME), "w") as f:
+                json.dump({"image_processor_type": "SomeImageProcessor", "size": 224}, f)
+            image_processor_dict = get_image_processor_config(tmpdirname)
+            self.assertEqual(image_processor_dict, {"image_processor_type": "SomeImageProcessor", "size": 224})
+
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
+                json.dump({"feature_extractor_type": "SomeFeatureExtractor"}, f)
+            with open(os.path.join(tmpdirname, VIDEO_PROCESSOR_NAME), "w") as f:
+                json.dump({"video_processor_type": "SomeVideoProcessor"}, f)
+            feature_extractor_dict = get_feature_extractor_config(tmpdirname)
+            self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
+            video_processor_dict = get_video_processor_config(tmpdirname)
+            self.assertEqual(video_processor_dict, {"video_processor_type": "SomeVideoProcessor"})
 
     def test_processor_from_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
