@@ -94,8 +94,9 @@ class PixtralRotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq_2d = torch.cat([inv_freq[0::2], inv_freq[1::2]])
 
-        return inv_freq.to(device), attention_factor
+        return inv_freq_2d.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -115,10 +116,9 @@ class PixtralRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_to_2d(self, freq):
-        freq = freq.view(*freq.shape[:-2], 2, -1, 2)
-        freq_h = freq[..., 0, :, 0]  # h-row is even
-        freq_w = freq[..., 1, :, 1]  # w-row is odd
+        freq_h, freq_w = (m[:, i % 2] for i, m in enumerate(freq.chunk(2, dim=-1)))
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        print(freq_hw.shape, freq_h.shape)
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
