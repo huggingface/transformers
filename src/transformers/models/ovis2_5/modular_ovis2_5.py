@@ -37,6 +37,7 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..ovis2.modeling_ovis2 import Ovis2ForConditionalGeneration, Ovis2Model
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -530,9 +531,9 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 
 
 @auto_docstring(custom_intro="The bare Ovis2.5 multimodal model, without the language modeling head.")
-class Ovis2_5Model(Ovis2_5PreTrainedModel):
+class Ovis2_5Model(Ovis2Model):
     def __init__(self, config: Ovis2_5Config):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
         vision_config = config.vision_config
         text_config = config.text_config
         self.vision_tower = Ovis2_5VisionModel(vision_config)

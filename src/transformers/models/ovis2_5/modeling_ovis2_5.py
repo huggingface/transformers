@@ -618,19 +618,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         self.language_model = AutoModel.from_config(text_config)
         self.post_init()
 
-    def _get_token_mask(
-        self,
-        token_id: int,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-    ) -> torch.BoolTensor:
-        if input_ids is not None:
-            return input_ids == token_id
-        token_embedding = self.get_input_embeddings()(
-            torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
-        )
-        return (inputs_embeds == token_embedding).all(dim=-1)
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into Ovis2.5 visual embeddings.")
@@ -669,74 +656,29 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             visual_indicator_features=visual_indicator_features,
         )
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring(custom_intro="Encodes videos into Ovis2.5 visual embeddings.")
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed video.
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
         """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            **kwargs,
-        )
-
-    def _merge_visual_features(
-        self,
-        inputs_embeds: torch.FloatTensor,
-        input_ids: torch.LongTensor | None,
-        visual_features: torch.FloatTensor,
-        visual_indicator_features: torch.FloatTensor,
-        grid_thw: torch.LongTensor,
-        is_video: bool,
-    ) -> torch.FloatTensor:
-        atom_token_id = self.config.video_token_id if is_video else self.config.image_token_id
-        atom_mask = self._get_token_mask(atom_token_id, input_ids, inputs_embeds)
-        torch_compilable_check(
-            atom_mask.sum() * inputs_embeds.shape[-1] == visual_features.numel(),
-            lambda: (
-                f"Visual features and visual atom tokens do not match: found {atom_mask.sum().item()} tokens and "
-                f"{visual_features.shape[0]} features."
-            ),
-        )
-        inputs_embeds = inputs_embeds.masked_scatter(
-            atom_mask.unsqueeze(-1).to(inputs_embeds.device),
-            visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
-        )
-
-        if is_video:
-            boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
-            indicator_indexes = (2, 3)
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
         else:
-            boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
-            indicator_indexes = (0, 1)
+            special_image_mask = input_ids == self.config.image_token_id
 
-        for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
-            boundary_mask = self._get_token_mask(boundary_token_id, input_ids, inputs_embeds)
-            torch_compilable_check(
-                boundary_mask.sum() == grid_thw.shape[0],
-                lambda: (
-                    f"Expected {grid_thw.shape[0]} visual boundary tokens with id {boundary_token_id}, but found "
-                    f"{boundary_mask.sum().item()}."
-                ),
-            )
-            boundary_features = visual_indicator_features[indicator_index].to(
-                inputs_embeds.device,
-                inputs_embeds.dtype,
-            )
-            inputs_embeds = torch.where(
-                boundary_mask.unsqueeze(-1),
-                boundary_features.expand_as(inputs_embeds),
-                inputs_embeds,
-            )
-        return inputs_embeds
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -824,6 +766,88 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             image_hidden_states=image_hidden_states,
             video_hidden_states=video_hidden_states,
         )
+
+    def _get_token_mask(
+        self,
+        token_id: int,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor,
+    ) -> torch.BoolTensor:
+        if input_ids is not None:
+            return input_ids == token_id
+        token_embedding = self.get_input_embeddings()(
+            torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
+        )
+        return (inputs_embeds == token_embedding).all(dim=-1)
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encodes videos into Ovis2.5 visual embeddings.")
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Ovis2_5VisualFeaturesOutput:
+        r"""
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
+            Temporal, height, and width patch-grid dimensions for each packed video.
+        """
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            **kwargs,
+        )
+
+    def _merge_visual_features(
+        self,
+        inputs_embeds: torch.FloatTensor,
+        input_ids: torch.LongTensor | None,
+        visual_features: torch.FloatTensor,
+        visual_indicator_features: torch.FloatTensor,
+        grid_thw: torch.LongTensor,
+        is_video: bool,
+    ) -> torch.FloatTensor:
+        atom_token_id = self.config.video_token_id if is_video else self.config.image_token_id
+        atom_mask = self._get_token_mask(atom_token_id, input_ids, inputs_embeds)
+        torch_compilable_check(
+            atom_mask.sum() * inputs_embeds.shape[-1] == visual_features.numel(),
+            lambda: (
+                f"Visual features and visual atom tokens do not match: found {atom_mask.sum().item()} tokens and "
+                f"{visual_features.shape[0]} features."
+            ),
+        )
+        inputs_embeds = inputs_embeds.masked_scatter(
+            atom_mask.unsqueeze(-1).to(inputs_embeds.device),
+            visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
+        )
+
+        if is_video:
+            boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
+            indicator_indexes = (2, 3)
+        else:
+            boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
+            indicator_indexes = (0, 1)
+
+        for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
+            boundary_mask = self._get_token_mask(boundary_token_id, input_ids, inputs_embeds)
+            torch_compilable_check(
+                boundary_mask.sum() == grid_thw.shape[0],
+                lambda: (
+                    f"Expected {grid_thw.shape[0]} visual boundary tokens with id {boundary_token_id}, but found "
+                    f"{boundary_mask.sum().item()}."
+                ),
+            )
+            boundary_features = visual_indicator_features[indicator_index].to(
+                inputs_embeds.device,
+                inputs_embeds.dtype,
+            )
+            inputs_embeds = torch.where(
+                boundary_mask.unsqueeze(-1),
+                boundary_features.expand_as(inputs_embeds),
+                inputs_embeds,
+            )
+        return inputs_embeds
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
