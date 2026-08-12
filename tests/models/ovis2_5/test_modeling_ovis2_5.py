@@ -650,6 +650,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_vision_hidden_states_preserve_patch_order(self):
         config = self.model_tester.get_vision_config()
+        config.num_hidden_layers = 3
+        config.layer_types = ["full_attention"] * config.num_hidden_layers
         config.window_size = 8
         model = Ovis2_5VisionModel(config).to(torch_device).eval()
         grid_thw = torch.tensor([[1, 4, 8]], dtype=torch.long, device=torch_device)
