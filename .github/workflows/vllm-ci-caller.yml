@@ -152,7 +152,7 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only (fast, no sharding needed).
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
-    name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 8)"
+    name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -161,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3]
     env:
       SHARD_ID: ${{ matrix.shard }}
 
@@ -262,11 +262,11 @@ jobs:
           # sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
           # grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
-      - name: "Test: test_initialization (small subset, shard ${{ matrix.shard }} / 8)"
+      - name: "Test: test_initialization (small subset, shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py::test_can_initialize_small_subset \
-            --num-shards=8 --shard-id=$SHARD_ID
+            --num-shards=4 --shard-id=$SHARD_ID
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
