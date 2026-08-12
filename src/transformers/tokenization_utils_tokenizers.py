@@ -48,7 +48,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
     generate_merges,
 )
-from .utils import PaddingStrategy, TensorType, add_end_docstrings, hf_api, logging
+from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
 
 
 logger = logging.get_logger(__name__)
@@ -1074,127 +1074,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 batched_output.encodings,
             )
 
-        return batched_output
-
-    def _encode_sanitized_segments(
-        self,
-        batch_segments: list[list[tuple[str, bool]]],
-        is_batched: bool,
-        padding: bool | str | PaddingStrategy = False,
-        truncation: bool = False,
-        max_length: int | None = None,
-        return_tensors: str | TensorType | None = None,
-        **tokenizer_kwargs,
-    ) -> BatchEncoding:
-        """Encode `(text, defused)` chat segments produced by `sanitize_special_tokens=True`. Defused
-        segments hold special-token text from untrusted chat input and are encoded with ordinary tokens
-        (`encode_special_tokens=True` on the backend), so they cannot act as control tokens.
-
-        Each segment is encoded separately and the results are merged with `tokenizers.Encoding.merge` using
-        growing offsets, so the returned offsets (and `char_to_token`) refer to the concatenated final string.
-        Truncation and padding are applied to the merged encodings afterwards, since applying them per-segment
-        would be incorrect."""
-        verbose = tokenizer_kwargs.pop("verbose", True)
-        padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=tokenizer_kwargs.get("pad_to_multiple_of"),
-            verbose=verbose,
-        )
-        return_flags = {
-            "return_token_type_ids": tokenizer_kwargs.pop("return_token_type_ids", None),
-            "return_attention_mask": tokenizer_kwargs.pop("return_attention_mask", None),
-            "return_special_tokens_mask": tokenizer_kwargs.pop("return_special_tokens_mask", False),
-            "return_offsets_mapping": tokenizer_kwargs.pop("return_offsets_mapping", False),
-            "return_length": tokenizer_kwargs.pop("return_length", False),
-        }
-
-        # Encode all segments across the batch in two backend calls, with truncation and padding disabled
-        self.set_truncation_and_padding(
-            PaddingStrategy.DO_NOT_PAD, TruncationStrategy.DO_NOT_TRUNCATE, None, 0, None, None
-        )
-        normal_texts = [text for segments in batch_segments for text, defused in segments if not defused]
-        defused_texts = [text for segments in batch_segments for text, defused in segments if defused]
-        normal_encodings = self._tokenizer.encode_batch(normal_texts, add_special_tokens=False) if normal_texts else []
-        self._tokenizer.encode_special_tokens = True
-        try:
-            defused_encodings = (
-                self._tokenizer.encode_batch(defused_texts, add_special_tokens=False) if defused_texts else []
-            )
-        finally:
-            self._tokenizer.encode_special_tokens = self.split_special_tokens
-
-        # Belt-and-braces: a defused segment must never contain a special or added token id. This can only
-        # happen if the vocabulary can assemble one from ordinary pieces (e.g. some Unigram vocabs), or if an
-        # added token's text is embedded in a special token's text. Fall back to dropping the segment.
-        protected_ids = set(self.added_tokens_decoder.keys()).union(self.all_special_ids)
-        empty_encoding = None
-        for i, encoding in enumerate(defused_encodings):
-            if protected_ids.intersection(encoding.ids):
-                logger.warning_once(
-                    "Sanitized special-token text could not be encoded as ordinary tokens with this tokenizer, "
-                    "so it was dropped from the chat instead."
-                )
-                if empty_encoding is None:
-                    empty_encoding = self._tokenizer.encode("", add_special_tokens=False)
-                defused_encodings[i] = empty_encoding
-
-        normal_iterator, defused_iterator = iter(normal_encodings), iter(defused_encodings)
-        merged = [
-            EncodingFast.merge(
-                [next(defused_iterator if defused else normal_iterator) for _, defused in segments],
-                growing_offsets=True,
-            )
-            for segments in batch_segments
-        ]
-
-        # Truncate and pad the merged encodings directly, mirroring what the backend's `post_process` does
-        # (truncate, then assign sequence ids, then pad). Merging leaves the sequence ranges unset, so without
-        # `set_sequence_id` lookups like `char_to_token` would fail on the merged encodings.
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
-            for encoding in merged:
-                encoding.truncate(max_length, stride=0, direction=self.truncation_side)
-        for encoding in merged:
-            encoding.set_sequence_id(0)
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                pad_length = max_length
-            else:
-                pad_length = max(len(encoding.ids) for encoding in merged)
-            if pad_to_multiple_of := tokenizer_kwargs.get("pad_to_multiple_of"):
-                pad_length = ((pad_length + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
-            padding_side = tokenizer_kwargs.get("padding_side") or self.padding_side
-            for encoding in merged:
-                encoding.pad(
-                    pad_length,
-                    direction=padding_side,
-                    pad_id=self.pad_token_id,
-                    pad_type_id=self.pad_token_type_id,
-                    pad_token=self.pad_token,
-                )
-
-        # Convert to a BatchEncoding (mirrors the tail of `_encode_plus`)
-        tokens_and_encodings = [
-            self._convert_encoding(encoding=encoding, verbose=verbose, **return_flags) for encoding in merged
-        ]
-        sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0]:
-            sanitized_tokens[key] = [e for item, _ in tokens_and_encodings for e in item[key]]
-        sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
-
-        for input_ids in sanitized_tokens["input_ids"]:
-            self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
-
-        batched_output = BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
-        if not is_batched and return_tensors is None:
-            batched_output = BatchEncoding(
-                {
-                    key: (value[0] if len(value) > 0 and isinstance(value[0], list) else value)
-                    for key, value in batched_output.items()
-                },
-                batched_output.encodings,
-            )
         return batched_output
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:

@@ -18,9 +18,11 @@ from typing import Literal
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from transformers.utils.chat_template_utils import (
     Chat,
+    SanitizedTokenMap,
     resolve_sanitization_placeholders,
     sanitize_chat_input,
     shift_sanitized_index,
+    split_at_trusted_special_tokens,
 )
 
 
@@ -768,18 +770,81 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertNotIn("<|im_end|>", sanitized.messages[0]["content"])
         self.assertEqual(len(substitutions), 1)
 
-    def test_resolve_placeholders_segments_and_shifts(self):
+    def test_resolve_placeholders_spans_and_shifts(self):
         substitutions = {"12345": "<|im_end|>"}
         rendered = "a12345b12345"
-        segments, shifts, seen = resolve_sanitization_placeholders(rendered, substitutions)
-        self.assertEqual(
-            segments,
-            [("a", False), ("<|im_end|>", True), ("b", False), ("<|im_end|>", True), ("", False)],
-        )
-        self.assertEqual(seen, {"12345"})
-        final = "".join(text for text, _ in segments)
+        final, untrusted_spans, shifts, seen = resolve_sanitization_placeholders(rendered, substitutions)
         self.assertEqual(final, "a<|im_end|>b<|im_end|>")
+        self.assertEqual(seen, {"12345"})
+        # the untrusted spans cover exactly the restored special-token text in the final string
+        self.assertEqual([final[start:end] for start, end in untrusted_spans], ["<|im_end|>", "<|im_end|>"])
         # shifts translate char indices in the rendered (placeholder-bearing) string to the final string
         self.assertEqual(shift_sanitized_index(0, shifts), 0)
         self.assertEqual(final[shift_sanitized_index(6, shifts)], rendered[6])  # the "b"
         self.assertEqual(shift_sanitized_index(len(rendered), shifts), len(final))
+
+
+class SplitAtTrustedSpecialTokensTest(unittest.TestCase):
+    def split(self, final, untrusted_spans, tokens, token_flags=None):
+        return split_at_trusted_special_tokens(final, untrusted_spans, tokens, token_flags or {})
+
+    def test_trusted_tokens_split_untrusted_stay_inline(self):
+        # "hi </s> there</s>": the first </s> is untrusted input, the second was emitted by the template
+        final = "hi </s> there</s>"
+        parts = self.split(final, [(3, 7)], ["</s>"])
+        self.assertEqual(parts, [("text", "hi </s> there", 0, 13), ("special", "</s>", 13, 17)])
+        # every part span tiles the final string
+        self.assertEqual("".join(final[start:end] for _, _, start, end in parts), final)
+
+    def test_no_trusted_tokens_is_single_text_part(self):
+        final = "just some text"
+        self.assertEqual(self.split(final, [], ["</s>"]), [("text", final, 0, len(final))])
+
+    def test_splice_attack_is_untrusted(self):
+        # Untrusted text supplies the tail of a token whose head is trusted template text; the spliced match
+        # overlaps an untrusted span and must not be treated as a trusted control token
+        final = "<|im_end|>"
+        parts = self.split(final, [(5, 10)], ["<|im_end|>"])
+        self.assertEqual(parts, [("text", final, 0, len(final))])
+
+    def test_lstrip_rstrip_absorb_whitespace(self):
+        # Mirrors the tokenizer's added-token matching: a token with lstrip/rstrip consumes the adjacent
+        # whitespace into its own span, so it must not be encoded as part of the neighboring text
+        final = "A <mask> B"
+        parts = self.split(final, [], ["<mask>"], {"<mask>": (True, True)})
+        self.assertEqual(parts, [("text", "A", 0, 1), ("special", "<mask>", 1, 9), ("text", "B", 9, 10)])
+
+    def test_longest_token_wins(self):
+        final = "keep <|end|>_extra keep"
+        parts = self.split(final, [], ["<|end|>", "<|end|>_extra"])
+        self.assertEqual(
+            parts,
+            [("text", "keep ", 0, 5), ("special", "<|end|>_extra", 5, 18), ("text", " keep", 18, 23)],
+        )
+
+    def test_adjacent_trusted_tokens(self):
+        final = "</s></s>x"
+        parts = self.split(final, [], ["</s>"])
+        self.assertEqual(
+            parts,
+            [("special", "</s>", 0, 4), ("special", "</s>", 4, 8), ("text", "x", 8, 9)],
+        )
+
+
+class SanitizedTokenMapTest(unittest.TestCase):
+    def test_lookup_with_gaps_and_shift(self):
+        # Tokens covering "ab", "cd" with an uncovered gap at char 4, then a special token at (5, 9)
+        spans = [(0, 2), (2, 4), (5, 9)]
+        token_map = SanitizedTokenMap(spans)
+        self.assertEqual(token_map.start_token(0), 0)
+        self.assertEqual(token_map.end_token(3), 1)
+        # chars the tokenization skipped resolve to the nearest token on the requested side
+        self.assertEqual(token_map.start_token(4), 2)
+        self.assertEqual(token_map.end_token(4), 1)
+        # out-of-range lookups return None instead of spilling onto neighboring tokens
+        self.assertIsNone(token_map.start_token(9))
+        self.assertIsNone(token_map.end_token(-1))
+        # left-padding shifts every token index
+        shifted = SanitizedTokenMap(spans, token_shift=3)
+        self.assertEqual(shifted.start_token(0), 3)
+        self.assertEqual(shifted.end_token(8), 5)
