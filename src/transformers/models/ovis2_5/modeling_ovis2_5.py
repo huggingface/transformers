@@ -652,9 +652,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         self.language_model = AutoModel.from_config(text_config)
         self.post_init()
 
-    def set_input_embeddings(self, value: nn.Module):
-        self.language_model.set_input_embeddings(value)
-
     def _get_token_mask(
         self,
         token_id: int,
