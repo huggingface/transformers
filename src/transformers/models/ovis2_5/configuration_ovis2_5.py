@@ -121,15 +121,6 @@ class Ovis2_5Config(PreTrainedConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
-        # The original remote-code checkpoints use `llm_config` and `vit_config`. Normalize those aliases before
-        # constructing native Transformers sub-configs so the public 2B and 9B configs load without editing.
-        legacy_text_config = kwargs.pop("llm_config", None)
-        legacy_vision_config = kwargs.pop("vit_config", None)
-        if self.text_config is None:
-            self.text_config = legacy_text_config
-        if self.vision_config is None:
-            self.vision_config = legacy_vision_config
-
         if isinstance(self.vision_config, dict):
             vision_config = dict(self.vision_config)
             vision_config.pop("model_type", None)

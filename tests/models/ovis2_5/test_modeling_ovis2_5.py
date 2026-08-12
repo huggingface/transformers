@@ -14,8 +14,10 @@
 """Testing suite for the PyTorch Ovis2.5 model."""
 
 import copy
+import json
 import tempfile
 import unittest
+from pathlib import Path
 
 from parameterized import parameterized
 
@@ -500,12 +502,12 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             two_prompt_inputs["image_grid_thw"] = one_image_inputs["image_grid_thw"].repeat(2, 1)
             model(**two_prompt_inputs)
 
-    def test_legacy_subconfig_names(self):
+    def test_native_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()
         vision_config = self.model_tester.get_vision_config().to_dict()
         config = Ovis2_5Config(
-            llm_config=text_config,
-            vit_config=vision_config,
+            text_config=text_config,
+            vision_config=vision_config,
             visual_vocab_size=self.model_tester.visual_vocab_size,
             visual_atom_token_id=self.model_tester.visual_atom_token_id,
             image_start_token_id=self.model_tester.image_start_token_id,
@@ -521,6 +523,28 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIn("vision_config", serialized_config)
         self.assertNotIn("llm_config", serialized_config)
         self.assertNotIn("vit_config", serialized_config)
+
+    def test_converter_translates_original_subconfig_names(self):
+        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
+
+        text_config = self.model_tester.get_text_config().to_dict()
+        text_config["hidden_size"] = 2048
+        original_config = {
+            "llm_config": text_config,
+            "vit_config": self.model_tester.get_vision_config().to_dict(),
+            "visual_vocab_size": self.model_tester.visual_vocab_size,
+            "torch_dtype": "bfloat16",
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir)
+            (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
+            config, max_pixels = convert_config(source)
+
+        self.assertIsInstance(config.text_config, Qwen3Config)
+        self.assertIsInstance(config.vision_config, Ovis2_5VisionConfig)
+        self.assertEqual(config.text_config.hidden_size, 2048)
+        self.assertEqual(config.architectures, ["Ovis2_5ForConditionalGeneration"])
+        self.assertEqual(max_pixels, 1344 * 1792)
 
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
