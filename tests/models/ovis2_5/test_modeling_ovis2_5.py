@@ -792,7 +792,3 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIn("model.visual_tokenizer.head.0.weight", state_dict)
         self.assertFalse(any("vision_tower.transformer" in key for key in state_dict))
         self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
-
-
-if __name__ == "__main__":
-    unittest.main()

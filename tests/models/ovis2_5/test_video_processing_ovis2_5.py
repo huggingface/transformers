@@ -255,7 +255,3 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(output.pixel_values_videos.shape), (48, 1536))
         self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 6]])
         self.assertEqual(video_processor.get_number_of_video_patches(3, 64, 96), 48)
-
-
-if __name__ == "__main__":
-    unittest.main()

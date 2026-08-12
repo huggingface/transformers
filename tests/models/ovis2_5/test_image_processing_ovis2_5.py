@@ -200,7 +200,3 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 images_kwargs={},
             )
             self.assertEqual(num_patches, 864)
-
-
-if __name__ == "__main__":
-    unittest.main()

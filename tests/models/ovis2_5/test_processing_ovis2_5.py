@@ -258,7 +258,3 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs.input_ids.shape[0], 3)
         self.assertEqual(inputs.image_grid_thw.shape[0], 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
