@@ -22,13 +22,14 @@ from transformers import (
     Glm5NextConfig,
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
+    Glm5NextVisionConfig,
+    Glm5NextVisionModel,
     is_torch_available,
     logging,
 )
 from transformers.cache_utils import DynamicCache
 from transformers.generation import CompileConfig
 from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
-from transformers.models.glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
@@ -56,7 +57,7 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
     base_model_class = Glm5NextModel
     config_class = Glm5NextConfig
     text_config_class = Glm5NextTextConfig
-    vision_config_class = GlmOcrVisionConfig
+    vision_config_class = Glm5NextVisionConfig
     conditional_generation_class = Glm5NextForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -160,10 +161,54 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
 
 
 @require_torch
+class Glm5NextVisionModelTest(unittest.TestCase):
+    all_model_classes = (Glm5NextVisionModel,) if is_torch_available() else ()
+
+    def test_model_forward(self):
+        config = Glm5NextVisionConfig(
+            depth=2,
+            hidden_size=16,
+            intermediate_size=32,
+            num_heads=2,
+            out_hidden_size=16,
+            projection_intermediate_size=32,
+            patch_size=2,
+            temporal_patch_size=1,
+            spatial_merge_size=1,
+        )
+        model = Glm5NextVisionModel(config).to(torch_device).eval()
+        hidden_states = floats_tensor([8, config.in_channels * config.patch_size**2]).to(torch_device)
+        grid_thw = torch.tensor([[1, 2, 2], [1, 2, 2]], device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(hidden_states, grid_thw)
+
+        self.assertEqual(outputs.last_hidden_state.shape, (8, config.out_hidden_size))
+        self.assertEqual(outputs.pooler_output.shape, (8, config.out_hidden_size))
+
+
+@require_torch
 class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Glm5NextVisionText2TextModelTester
     test_all_params_have_gradient = False  # MoE
     model_split_percents = [0.5, 0.8, 0.9]
+
+    def test_vision_swiglu_limit_precedence(self):
+        text_config = self.model_tester.get_text_config()
+        text_config.swiglu_limit = 12.0
+        vision_config = self.model_tester.get_vision_config().to_dict()
+
+        vision_config["swiglu_limit"] = 7.0
+        config = Glm5NextConfig(text_config=text_config, vision_config=vision_config)
+        self.assertEqual(config.vision_config.swiglu_limit, 7.0)
+
+        vision_config.pop("swiglu_limit")
+        config = Glm5NextConfig(text_config=text_config, vision_config=vision_config)
+        self.assertEqual(config.vision_config.swiglu_limit, 12.0)
+
+        vision_config["swiglu_limit"] = None
+        with self.assertRaisesRegex(ValueError, "vision_config requires swiglu_limit"):
+            Glm5NextConfig(text_config=text_config, vision_config=vision_config)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Override similar to GLM4V: images shaped as (bs*patch_len, dim) so we can't slice to batches in generate"""

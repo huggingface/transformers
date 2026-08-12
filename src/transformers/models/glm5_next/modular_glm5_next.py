@@ -294,13 +294,19 @@ class Glm5NextConfig(PreTrainedConfig):
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
+        text_swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
         if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "glm5_next_vision"
-            self.vision_config.setdefault("swiglu_limit", swiglu_limit)
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+            vision_config = dict(self.vision_config)
+            vision_config["model_type"] = "glm5_next_vision"
+            swiglu_limit = vision_config.get("swiglu_limit", text_swiglu_limit)
+            if swiglu_limit is None:
+                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
+            vision_config["swiglu_limit"] = swiglu_limit
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=swiglu_limit)
+            if text_swiglu_limit is None:
+                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
+            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=text_swiglu_limit)
 
         super().__post_init__(**kwargs)
 

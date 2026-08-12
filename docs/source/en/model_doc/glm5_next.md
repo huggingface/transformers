@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-07-29.*
+*This model was contributed to Hugging Face Transformers on 2026-08-12.*
 
 
 # Glm5Next
@@ -49,6 +49,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Glm5NextTextConfig
 
+## Glm5NextVisionConfig
+
+[[autodoc]] Glm5NextVisionConfig
+
 ## Glm5NextPreTrainedModel
 
 [[autodoc]] Glm5NextPreTrainedModel
@@ -60,6 +64,11 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
     - forward
 
 ## Glm5NextModel
+## Glm5NextVisionModel
+
+[[autodoc]] Glm5NextVisionModel
+    - forward
+
 
 [[autodoc]] Glm5NextModel
     - forward
