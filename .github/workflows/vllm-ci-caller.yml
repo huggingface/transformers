@@ -268,15 +268,21 @@ jobs:
             --num-shards=4 --shard-id=$SHARD_ID \
             --deselect 'tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]'
 
-  # Runs tests/models/transformers/ on a dedicated fresh runner so RAM is not shared
+  # Runs tests/models/transformers/ on dedicated fresh runners so RAM is not shared
   # with other jobs (previously ran as a step in the vllm job but hit OOM on the 32 GiB runner).
   vllm-test-transformers:
-    name: "Test vLLM transformers backend"
+    name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      SHARD_ID: ${{ matrix.shard }}
 
     steps:
       - name: Checkout Transformers
@@ -326,7 +332,7 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
+          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: Patch vLLM gpu_memory_utilization for CPU
         run: |
@@ -351,10 +357,11 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
-      - name: "Test: test_transformers"
+      - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         run: |
-          pytest -v -s tests/models/transformers/
+          pytest -v -s tests/models/transformers/ \
+            --num-shards=4 --shard-id=$SHARD_ID
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
