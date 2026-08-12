@@ -764,19 +764,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
         self.post_init()
 
     @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed image.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,

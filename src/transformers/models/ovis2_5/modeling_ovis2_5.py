@@ -850,6 +850,17 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         return inputs_embeds
 
 
+@auto_docstring
+@dataclass
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
+    r"""
+    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    """
+
+    visual_indicator_features: torch.FloatTensor | None = None
+
+
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
 class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -866,16 +877,9 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
 
     @auto_docstring
     def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed image.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
