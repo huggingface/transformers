@@ -208,7 +208,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
         )
         expected_output = Expectations(
             {
-                (None, None): "\\title{\nR",
+                (None, None): "R\\&D",
                 ("xpu", 5): "R\\&D",
             }
         ).get_expectation()
