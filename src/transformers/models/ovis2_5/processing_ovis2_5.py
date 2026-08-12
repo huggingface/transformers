@@ -80,8 +80,6 @@ class Ovis2_5Processor(ProcessorMixin):
 
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-        if audio is not None:
-            raise ValueError("Ovis2.5 does not support audio inputs.")
 
         image_count = 0
         if images is not None:
