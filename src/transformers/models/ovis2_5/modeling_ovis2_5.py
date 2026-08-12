@@ -864,9 +864,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings: nn.Module):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def get_image_features(
         self,
@@ -879,19 +876,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             Temporal, height, and width patch-grid dimensions for each packed image.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        r"""
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            Temporal, height, and width patch-grid dimensions for each packed video.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -955,6 +939,22 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
+
+    def set_output_embeddings(self, new_embeddings: nn.Module):
+        self.lm_head = new_embeddings
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Ovis2_5VisualFeaturesOutput:
+        r"""
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
+            Temporal, height, and width patch-grid dimensions for each packed video.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     def _get_image_nums_and_video_nums(
         self,

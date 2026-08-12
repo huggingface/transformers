@@ -23,7 +23,6 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -754,11 +753,11 @@ class Ovis2_5Model(Ovis2Model):
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
-class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
+class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2_5Config):
-        super().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.model = Ovis2_5Model(config)
         text_config = config.text_config
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
