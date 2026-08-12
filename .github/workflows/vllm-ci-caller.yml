@@ -274,7 +274,7 @@ jobs:
       group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: "--gpus all --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+      options: "--gpus all --shm-size=16gb --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/"
     env:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
@@ -287,12 +287,16 @@ jobs:
         run: |
           git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
+      - name: Reinstall transformers in edit mode
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: Find latest vLLM commit with built CPU wheel
+        shell: bash
         run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
+          VLLM_COMMIT=$(python3 -c "
+          import json, urllib.request
+          data = json.loads(urllib.request.urlopen('https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json').read())
           wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
           print(wheel['path'].split('/')[3])
           ")
@@ -312,9 +316,7 @@ jobs:
           path: vllm
 
       - name: Install vLLM and test dependencies
-        run: |
-          pip install vllm
-          pip install pytest pytest-shard cloudpickle tblib
+        run: python3 -m pip install vllm pytest pytest-shard cloudpickle tblib
 
       - name: Pip freeze
         run: pip freeze
