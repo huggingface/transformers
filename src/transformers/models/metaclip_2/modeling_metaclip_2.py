@@ -288,12 +288,7 @@ class MetaClip2EncoderLayer(GradientCheckpointingLayer):
 
 
 def _init_child_weight(child: nn.Module, std: float) -> None:
-    """Initialize `child.weight` if the child module still carries one.
-
-    `MetaClip2PreTrainedModel._init_weights` initializes the parameters of child modules by name, and a quantized
-    checkpoint replaces `weight` on those children with packed tensors (`weight_packed` for compressed-tensors,
-    `qweight` for GPTQ/AWQ). Reading `.weight` unconditionally would then raise an `AttributeError` while
-    `from_pretrained` initializes the keys that are missing from the checkpoint.
+    """Initialize `child.weight` if the child module still carries one. Guards against quantization methods that set `weight` to `None`.
     """
     if getattr(child, "weight", None) is not None:
         init.normal_(child.weight, std=std)
