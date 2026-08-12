@@ -105,6 +105,11 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
     hidden_size_per_layer_input = AttributeError()
     use_cache = AttributeError()
 
+    @property
+    def kv_sharing_roles(self) -> list[str]:
+        """DiffusionGemma does not use KV cache sharing."""
+        return ["independent"] * self.num_hidden_layers
+
 
 @auto_docstring(checkpoint="google/diffusiongemma-26B-A4B-it")
 @strict

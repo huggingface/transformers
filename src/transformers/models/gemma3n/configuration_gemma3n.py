@@ -196,6 +196,28 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.standardize_rope_params()
         return kwargs
 
+    @property
+    def kv_sharing_roles(self) -> list[str]:
+        # After this index, all layers are consumers
+        layer_sharing_boundary = self.num_hidden_layers - self.num_kv_shared_layers
+        # Accumulators to build the list of roles in one pass
+        last_non_consumer_index = {"full_attention": None, "sliding_attention": None}
+        kv_sharing_roles = []
+
+        for index, layer_type in enumerate(self.layer_types):
+            # Before the layer sharing boundary, all layers compute their cache. The layer role is "independent" (does
+            # not participate in cache sharing) but it can later be upgraded to "producer" (other layers read the cache)
+            if index < layer_sharing_boundary:
+                kv_sharing_roles.append("independent")
+                last_non_consumer_index[layer_type] = index
+            # After the boundary, all layers read cache computed by another layer. This other layer is the producer.
+            else:
+                kv_sharing_roles.append("consumer")
+                producer_index = last_non_consumer_index[layer_type]
+                if producer_index is not None:
+                    kv_sharing_roles[producer_index] = "producer"
+        return kv_sharing_roles
+
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
 @strict
