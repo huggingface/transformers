@@ -138,23 +138,6 @@ class Ovis2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(output.pixel_values.shape), expected_shape)
             self.assertEqual(output.image_grid_thw.tolist(), expected_grid)
 
-    def _check_backends_equivalence(self, image_inputs):
-        outputs = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            outputs[backend_name] = image_processor(image_inputs, return_tensors="pt")
-
-        reference = next(iter(outputs.values()))
-        for output in list(outputs.values())[1:]:
-            self._assert_tensors_equivalence(reference.pixel_values, output.pixel_values)
-            torch.testing.assert_close(reference.image_grid_thw, output.image_grid_thw)
-
-    def test_backends_equivalence(self):
-        self._check_backends_equivalence(self.image_processor_tester.prepare_image_inputs(equal_resolution=False)[0])
-
-    def test_backends_equivalence_batched(self):
-        self._check_backends_equivalence(self.image_processor_tester.prepare_image_inputs(equal_resolution=False))
-
     def test_call_pil(self):
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         self.assertTrue(all(isinstance(image, Image.Image) for image in image_inputs))
