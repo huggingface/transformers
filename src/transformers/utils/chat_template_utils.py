@@ -817,6 +817,10 @@ def encode_sanitized_chats(
     (`legacy=False`) only prepend their dummy space to the first split of a call and may therefore gain an
     extra space token where a text part directly follows a special token.
 
+    Sanitization is all-or-nothing: if untrusted special-token text would still produce special token ids
+    even when encoded as ordinary text (some vocabularies can assemble special tokens from ordinary pieces),
+    a `ValueError` is raised rather than deleting or rewriting the offending text.
+
     Returns `(batch_encoding, token_maps)`, where `token_maps` (one `SanitizedTokenMap` per chat, or `None`
     unless `return_token_maps=True`) supports the character-to-token lookups needed for assistant masks."""
     verbose = tokenizer_kwargs.pop("verbose", True)
@@ -837,8 +841,11 @@ def encode_sanitized_chats(
         verbose=verbose,
     )
 
-    # Encode every text part across the batch in a single call, without special-token matching
+    # Encode every text part across the batch in a single call, without special-token matching. Offsets are
+    # requested whenever the backend can produce them: they drive both the assistant-mask token maps and the
+    # precise protected-id check below.
     texts = [text for parts in batch_parts for kind, text, _, _ in parts if kind == "text"]
+    with_offsets = getattr(tokenizer, "backend", None) == "tokenizers" or return_token_maps
     encoded_texts = None
     if texts:
         try:
@@ -846,7 +853,7 @@ def encode_sanitized_chats(
                 texts,
                 add_special_tokens=False,
                 split_special_tokens=True,
-                return_offsets_mapping=return_token_maps,
+                return_offsets_mapping=with_offsets,
                 return_attention_mask=False,
             )
         except (TypeError, ValueError, NotImplementedError) as exc:
@@ -855,7 +862,7 @@ def encode_sanitized_chats(
                 "does not support."
             ) from exc
     text_ids = iter(encoded_texts["input_ids"]) if encoded_texts is not None else iter(())
-    text_offsets = iter(encoded_texts["offset_mapping"]) if encoded_texts is not None and return_token_maps else None
+    text_offsets = iter(encoded_texts["offset_mapping"]) if encoded_texts is not None and with_offsets else None
 
     protected_ids = {token_id for token_id, token in tokenizer.added_tokens_decoder.items() if token.special}
     protected_ids.update(tokenizer.all_special_ids)
@@ -873,24 +880,33 @@ def encode_sanitized_chats(
                 continue
             part_ids = next(text_ids)
             part_offsets = next(text_offsets) if text_offsets is not None else None
-            has_untrusted = any(
-                char_start < span_end and span_start < char_end for span_start, span_end in untrusted_spans
-            )
-            if has_untrusted and protected_ids.intersection(part_ids):
-                # With special-token matching disabled, a protected id here means the vocabulary can assemble
-                # a special token out of ordinary pieces. Drop those ids rather than let them through. Only
-                # parts overlapping untrusted input are checked: some tokenizers produce special ids from
-                # ordinary text by design (e.g. wav2vec2's word delimiter), which is native behavior wherever
-                # the text is trusted.
-                logger.warning_once(
-                    "Special-token text from the chat inputs could not be encoded as ordinary tokens with "
-                    "this tokenizer, so it was dropped from the chat instead."
-                )
-                keep = [i for i, token_id in enumerate(part_ids) if token_id not in protected_ids]
-                part_ids = [part_ids[i] for i in keep]
-                part_offsets = [part_offsets[i] for i in keep] if part_offsets is not None else None
-            ids.extend(part_ids)
+            # A protected id must never come from untrusted text, which is possible when the vocabulary can
+            # assemble a special token out of ordinary pieces. Protected ids arising from trusted text are
+            # native tokenizer behavior (e.g. wav2vec2's word delimiter) and pass through. With offsets each
+            # id is attributed to its characters exactly; without them (Python backends), any protected id in
+            # a part that overlaps untrusted text is conservatively treated as unsafe.
             if part_offsets is not None:
+                unsafe = any(
+                    token_id in protected_ids
+                    and any(
+                        char_start + start < span_end and span_start < char_start + end
+                        for span_start, span_end in untrusted_spans
+                    )
+                    for token_id, (start, end) in zip(part_ids, part_offsets)
+                )
+            else:
+                unsafe = any(
+                    char_start < span_end and span_start < char_end for span_start, span_end in untrusted_spans
+                ) and bool(protected_ids.intersection(part_ids))
+            if unsafe:
+                raise ValueError(
+                    "`sanitize_special_tokens=True` cannot safely encode these chat inputs: special-token "
+                    "text from the inputs would still produce special token ids even when encoded as "
+                    "ordinary text. Rather than delete or rewrite the offending text, sanitization refuses "
+                    "to encode the chat."
+                )
+            ids.extend(part_ids)
+            if return_token_maps and part_offsets is not None:
                 spans.extend((char_start + start, char_start + end) for start, end in part_offsets)
         batch_ids.append(ids)
         batch_spans.append(spans)

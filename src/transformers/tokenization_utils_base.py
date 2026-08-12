@@ -3053,7 +3053,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 structure. Sanitization preserves the text, but encodes it with ordinary (non-special) tokens,
                 like `split_special_tokens=True`. Special tokens added by the chat template itself are
                 unaffected. Requires `tokenize=True`, since token-level sanitization cannot be expressed in
-                string output.
+                string output. Sanitization never deletes or rewrites input text: if the text cannot be
+                represented with ordinary tokens, a `ValueError` is raised instead.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
