@@ -316,20 +316,8 @@ jobs:
           persist-credentials: false
           path: vllm
 
-      - name: Install vLLM (CUDA 13.0 nightly wheel) and test dependencies
-        shell: bash
-        run: |
-          WHEEL_URL=$(python3 -c "
-          import json, urllib.request
-          from urllib.parse import urljoin
-          base = 'https://wheels.vllm.ai/nightly/cu130/vllm/metadata.json'
-          data = json.loads(urllib.request.urlopen(base).read())
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(urljoin(base, wheel['path']))
-          ")
-          echo "Installing vLLM wheel: $WHEEL_URL"
-          python3 -m pip install "$WHEEL_URL"
-          python3 -m pip install pytest pytest-shard cloudpickle tblib
+      - name: Install vLLM and test dependencies
+        run: python3 -m pip install vllm pytest pytest-shard cloudpickle tblib
 
       - name: Pip freeze
         run: pip freeze
