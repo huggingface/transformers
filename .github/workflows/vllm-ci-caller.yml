@@ -20,6 +20,8 @@ permissions:
 jobs:
   vllm:
     name: Test vLLM integration
+    # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
+    # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -148,6 +150,7 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only (fast, no sharding needed).
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
@@ -270,6 +273,7 @@ jobs:
   # Runs tests/models/transformers/ on dedicated fresh runners so RAM is not shared
   # with other jobs (previously ran as a step in the vllm job but hit OOM on the 32 GiB runner).
   vllm-test-transformers:
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
@@ -434,6 +438,7 @@ jobs:
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
