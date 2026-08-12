@@ -19,7 +19,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 import torch
 from torch import nn
@@ -880,8 +880,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.model = Ovis2_5Model(config)
-        # Ovis2_5Config.__post_init__ constructs the Qwen3 sub-config.
-        text_config = cast(Any, config.text_config)
+        text_config = config.text_config
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.post_init()
 
