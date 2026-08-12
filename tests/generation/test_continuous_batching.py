@@ -539,8 +539,8 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.block_table["req"] = block_table
 
         # Read indices: cache positions followed by one sentinel per query token
-        read_start = 0 if past_length < sliding_window else past_length % sliding_window
         read_cache_length = min(past_length, sliding_window - 1)
+        read_start = (past_length - read_cache_length) % sliding_window
         expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
