@@ -151,7 +151,7 @@ jobs:
 
   # test_initialization split across 8 parallel shards (test takes ~6 hours when run sequentially).
   vllm-test-init:
-    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 1, JambaForCausalLM only)"
+    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 1, FalconMambaForCausalLM only)"
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -222,11 +222,11 @@ jobs:
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
           grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
 
-      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 1, JambaForCausalLM only)"
+      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 1, FalconMambaForCausalLM only)"
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py \
-            -k JambaForCausalLM \
+            -k FalconMambaForCausalLM \
             --num-shards=1 --shard-id=$SHARD_ID
 
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
