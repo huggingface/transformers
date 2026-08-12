@@ -606,7 +606,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        visual_features = self.visual_embeddings_table(vision_outputs.pooler_output)
+        visual_features = torch.matmul(vision_outputs.pooler_output, self.visual_embeddings_table.weight)
         indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
         indicator_token_ids = torch.arange(
             indicator_start,
