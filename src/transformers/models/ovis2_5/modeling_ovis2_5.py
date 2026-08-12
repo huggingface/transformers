@@ -712,10 +712,11 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed video.
         """
-        outputs = self._get_visual_features(pixel_values_videos, video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(dim=1) // self.vision_tower.config.hidden_stride**2).tolist()
-        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-        return outputs
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            **kwargs,
+        )
 
     def _merge_visual_features(
         self,
