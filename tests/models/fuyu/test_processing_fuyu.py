@@ -147,7 +147,7 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Batch of two images - equally sized
         images = [self.bus_image_pil, self.bus_image_pil]
-        processor_outputs = processor(text=[self.text_prompt, self.text_prompt], images=images)
+        processor_outputs = processor(text=[self.text_prompt, "Generate another coco-style caption please please please.\\n"], images=images)
 
         self.assertTrue(
             (

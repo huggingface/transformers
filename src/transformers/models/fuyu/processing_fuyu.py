@@ -106,25 +106,18 @@ def construct_full_unpacked_stream(
     input_stream: "torch.Tensor",
     image_tokens: list[list["torch.Tensor"]],
     batch_size: int,
-    num_sub_sequences: int,
 ) -> list["torch.Tensor"]:
     """Takes an input_stream tensor of shape B x S x ?. For each subsequence, adds any required
     padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
     Returns a list of tensors, one for each item in the batch."""
 
-    all_bi_stream = []
-
-    for batch_index in range(batch_size):
-        all_si_stream = []
-
-        # First, construct full token stream (including image placeholder tokens) and loss mask for each subsequence
-        # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
-        # TODO Remove this logic in a subsequent release since subsequences are not supported.
-        image_adjustment = image_tokens[batch_index][0]
-        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0)
-        num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
-        all_si_stream.append(subsequence_stream[:num_real_tokens])
-        all_bi_stream.append(torch.cat(all_si_stream, dim=0))
+    # First, construct full token stream (including image placeholder tokens) and loss mask for each subsequence
+    # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
+    # TODO Remove this logic in a subsequent release since subsequences are not supported.
+    image_adjustment = image_tokens[0][0]
+    subsequence_stream = torch.cat([image_adjustment, input_stream[0, 0]], dim=0)
+    num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[0][0]
+    all_bi_stream = [torch.cat([subsequence_stream[:num_real_tokens]], dim=0)]
 
     return all_bi_stream
 
@@ -449,12 +442,12 @@ class FuyuProcessor(ProcessorMixin):
             add_BOS=True,
             add_beginning_of_answer_token=True,
         )
+        print("WTF", prompts_length.tolist(), prompt_tokens[0][0].shape, model_image_input["image_input_ids"][0][0].shape)
         image_padded_unpacked_tokens = construct_full_unpacked_stream(
             num_real_text_tokens=prompts_length,
             input_stream=prompt_tokens,
             image_tokens=model_image_input["image_input_ids"],
             batch_size=1,
-            num_sub_sequences=self.subsequence_length,
         )
         # Construct inputs for image patch indices.
         unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
@@ -462,7 +455,6 @@ class FuyuProcessor(ProcessorMixin):
             input_stream=torch.full_like(prompt_tokens, -1),
             image_tokens=model_image_input["image_patch_indices_per_batch"],
             batch_size=1,
-            num_sub_sequences=self.subsequence_length,
         )
         max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
         max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
@@ -547,6 +539,7 @@ class FuyuProcessor(ProcessorMixin):
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
+        print("START")
 
         for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
             prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, batch_images
