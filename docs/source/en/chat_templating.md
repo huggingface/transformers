@@ -228,9 +228,17 @@ print(tokenizer.decode(input_ids))
 # not as the special token - only the template's own control tokens are special.
 ```
 
+Internally, the rendered chat is split at the special tokens that the template itself emitted, and everything in
+between - including any special-token text from the messages - is encoded without special-token matching. Since
+those tokens are split points in the tokenizer's own pipeline anyway, a chat with nothing to sanitize encodes
+byte-identically to the unsanitized call. One known caveat: some SentencePiece tokenizers (`legacy=False`) only
+prepend their dummy space to the start of a call, so a chat that actually contained an injection may gain an
+extra space token where text directly follows a template special token.
+
 Because sanitization works at the token level, it requires `tokenize=True` - there is no way to mark special-token
 text as inert in string output, so requesting it with `tokenize=False` raises an error. It is also currently only
-supported by tokenizers: processors (for multimodal models) will raise an error if you request it.
+supported by tokenizers: processors (for multimodal models) will raise an error if you request it, as will the few
+tokenizers that cannot encode plain text (for example, layout-aware tokenizers that require word boxes).
 
 ## Model training
 

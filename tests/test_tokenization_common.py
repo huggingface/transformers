@@ -1033,19 +1033,25 @@ Hey how are you doing"""  # noqa: W293
         dummy_template = "{% for message in messages %}{{ message['content'] }}{% endfor %}{{ " + token_name + " }}"
         conversation = [{"role": "user", "content": f"hello {eos} world"}]
 
-        unsanitized = tokenizer.apply_chat_template(
-            conversation, chat_template=dummy_template, tokenize=True, return_dict=True
-        )["input_ids"]
+        try:
+            unsanitized = tokenizer.apply_chat_template(
+                conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+            )["input_ids"]
+        except (TypeError, ValueError):
+            self.skipTest("Tokenizer does not support standard text encoding")
         if unsanitized.count(eos_id) != 2:  # template's own EOS + the injected copy encoding as a special token
             self.skipTest("Tokenizer does not match EOS text inside content, so there is nothing to sanitize")
 
-        output = tokenizer.apply_chat_template(
-            conversation,
-            chat_template=dummy_template,
-            tokenize=True,
-            return_dict=True,
-            sanitize_special_tokens=True,
-        )["input_ids"]
+        try:
+            output = tokenizer.apply_chat_template(
+                conversation,
+                chat_template=dummy_template,
+                tokenize=True,
+                return_dict=True,
+                sanitize_special_tokens=True,
+            )["input_ids"]
+        except NotImplementedError:
+            self.skipTest("Tokenizer does not support sanitize_special_tokens")
         # the injected copy is encoded with ordinary tokens; only the template's own EOS stays special
         self.assertEqual(output.count(eos_id), 1)
 
@@ -1099,7 +1105,10 @@ Hey how are you doing"""  # noqa: W293
             "return_dict": True,
             "sanitize_special_tokens": True,
         }
-        base = tokenizer.apply_chat_template(conversation, **shared_kwargs)["input_ids"]
+        try:
+            base = tokenizer.apply_chat_template(conversation, **shared_kwargs)["input_ids"]
+        except NotImplementedError:
+            self.skipTest("Tokenizer does not support sanitize_special_tokens")
 
         if tokenizer.pad_token is not None:
             padded = tokenizer.apply_chat_template(
@@ -1131,7 +1140,10 @@ Hey how are you doing"""  # noqa: W293
             "{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}"
             "{% else %}{{ message['content'] }}{% endif %}{{ " + token_name + " }}{% endfor %}"
         )
-        split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
+        try:
+            split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
+        except (TypeError, ValueError):
+            self.skipTest("Tokenizer does not support standard text encoding")
         if eos_id in split_ids or tokenizer.decode(split_ids) != eos:
             self.skipTest("Tokenizer cannot losslessly re-encode its EOS text as ordinary tokens")
 
@@ -1145,14 +1157,17 @@ Hey how are you doing"""  # noqa: W293
         )["input_ids"]
         if unsanitized.count(eos_id) != 4:  # 2 from the template, 2 injected
             self.skipTest("Tokenizer does not match EOS text inside content, so there is nothing to sanitize")
-        output = tokenizer.apply_chat_template(
-            conversation,
-            chat_template=dummy_template,
-            tokenize=True,
-            return_dict=True,
-            return_assistant_tokens_mask=True,
-            sanitize_special_tokens=True,
-        )
+        try:
+            output = tokenizer.apply_chat_template(
+                conversation,
+                chat_template=dummy_template,
+                tokenize=True,
+                return_dict=True,
+                return_assistant_tokens_mask=True,
+                sanitize_special_tokens=True,
+            )
+        except NotImplementedError:
+            self.skipTest("Tokenizer does not support sanitize_special_tokens")
         self.assertEqual(len(output["assistant_masks"]), len(output["input_ids"]))
         masked_ids = [token for token, mask in zip(output["input_ids"], output["assistant_masks"]) if mask]
         self.assertGreater(len(masked_ids), 0)
