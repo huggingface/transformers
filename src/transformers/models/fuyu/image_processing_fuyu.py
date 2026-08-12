@@ -211,6 +211,7 @@ class FuyuImageProcessor(TorchvisionBackend):
                 "image_unpadded_heights": image_unpadded_heights,
                 "image_unpadded_widths": image_unpadded_widths,
                 "image_scale_factors": image_scale_factors,
+                "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
             skip_tensor_conversion=["overflowing_values"],
