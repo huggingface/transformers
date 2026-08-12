@@ -808,17 +808,13 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         grid_thw: torch.LongTensor,
         is_video: bool,
     ) -> torch.FloatTensor:
-        atom_token_id = self.config.video_token_id if is_video else self.config.image_token_id
-        atom_mask = self._get_token_mask(atom_token_id, input_ids, inputs_embeds)
-        torch_compilable_check(
-            atom_mask.sum() * inputs_embeds.shape[-1] == visual_features.numel(),
-            lambda: (
-                f"Visual features and visual atom tokens do not match: found {atom_mask.sum().item()} tokens and "
-                f"{visual_features.shape[0]} features."
-            ),
+        atom_mask = self.get_placeholder_mask(
+            input_ids,
+            inputs_embeds=inputs_embeds,
+            image_features=visual_features,
         )
         inputs_embeds = inputs_embeds.masked_scatter(
-            atom_mask.unsqueeze(-1).to(inputs_embeds.device),
+            atom_mask,
             visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
         )
 
@@ -830,7 +826,13 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             indicator_indexes = (0, 1)
 
         for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
-            boundary_mask = self._get_token_mask(boundary_token_id, input_ids, inputs_embeds)
+            if input_ids is None:
+                boundary_embedding = self.get_input_embeddings()(
+                    torch.tensor(boundary_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                boundary_mask = (inputs_embeds == boundary_embedding).all(dim=-1)
+            else:
+                boundary_mask = input_ids == boundary_token_id
             torch_compilable_check(
                 boundary_mask.sum() == grid_thw.shape[0],
                 lambda: (
