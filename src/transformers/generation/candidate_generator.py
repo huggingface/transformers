@@ -1609,9 +1609,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
     def _prepare_context_hidden_states(
         self, model_outputs: ModelOutput, num_last_main_model_tokens: int
     ) -> torch.Tensor:
-        context_hidden_states = [
-            model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids
-        ]
+        hidden_states = model_outputs["hidden_states"]
+        context_hidden_states = [hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids]
 
         encoder_fc = getattr(getattr(self.assistant_model, "encoder", None), "fc", None)
         device_mesh = getattr(encoder_fc, "_hf_device_mesh", None)
