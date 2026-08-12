@@ -140,6 +140,18 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(input_ids[image_start : image_start + num_visual_tokens + 2], expected_image_ids)
 
+    def test_prepare_inputs_layout_normalizes_visual_inputs(self):
+        """Nested images and raw video frames are normalized before validation."""
+        processor = self.get_processor()
+        image = self.prepare_image_inputs()
+        video = self.prepare_video_inputs()
+
+        images, *_ = processor.prepare_inputs_layout(images=[[image]])
+        _, _, videos, _ = processor.prepare_inputs_layout(videos=video)
+
+        self.assertEqual(len(images), 1)
+        self.assertEqual(len(videos), 1)
+
     def test_multiple_images(self):
         processor = self.get_processor()
         image = self.prepare_image_inputs()
