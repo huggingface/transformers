@@ -763,9 +763,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2ForConditionalGeneration):
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
     def set_output_embeddings(self, new_embeddings: nn.Module):
         self.lm_head = new_embeddings
 
