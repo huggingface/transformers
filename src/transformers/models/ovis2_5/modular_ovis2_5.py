@@ -460,15 +460,6 @@ class Ovis2_5VisionTransformer(nn.Module):
         )
 
 
-class Ovis2_5VisualEmbeddingTable(nn.Embedding):
-    """Embedding table accepting either discrete visual ids or soft visual-token distributions."""
-
-    def forward(self, visual_tokens: torch.Tensor) -> torch.Tensor:
-        if visual_tokens.is_floating_point():
-            return torch.matmul(visual_tokens, self.weight)
-        return super().forward(visual_tokens)
-
-
 @auto_docstring
 @dataclass
 class Ovis2_5VisualFeaturesOutput(BaseModelOutputWithPooling):
