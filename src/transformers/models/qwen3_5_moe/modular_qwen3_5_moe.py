@@ -259,17 +259,10 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-
         Example:
         ```python
         >>> from transformers import AutoProcessor, Qwen3_5MoeForConditionalGeneration

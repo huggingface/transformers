@@ -1258,7 +1258,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             torch.where(
                 valid_mask,
                 vision_features,
-                torch.tensor(0.0, dtype=vision_features.dtype, device=vision_features.device),
+                torch.full((), 0.0, dtype=vision_features.dtype, device=vision_features.device),
             )
         )
 

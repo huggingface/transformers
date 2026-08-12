@@ -15,6 +15,8 @@ import socket
 import tempfile
 from abc import ABC, abstractmethod
 
+from parameterized import parameterized
+
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
@@ -498,13 +500,18 @@ class TensorParallelTesterMixin(ABC):
             return self.model_tester.causal_lm_class
         return self.all_model_classes[0]
 
-    def _get_tp_config(self):
+    def _get_tp_config(self, tie_word_embeddings: bool | None = None):
         """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
         config = self.model_tester.get_config()
         text_config = config.get_text_config()
         remainder = text_config.vocab_size % self.tensor_parallel_size
         if remainder:
             text_config.vocab_size += self.tensor_parallel_size - remainder
+        if tie_word_embeddings is not None:
+            if hasattr(text_config, "tie_word_embeddings"):
+                text_config.tie_word_embeddings = tie_word_embeddings
+            if hasattr(config, "tie_word_embeddings"):
+                config.tie_word_embeddings = tie_word_embeddings
         return config
 
     def _skip_if_not_supported(self, expert_parallel: bool = False):
@@ -551,11 +558,12 @@ class TensorParallelTesterMixin(ABC):
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
 
+    @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
-    def test_tp_forward(self):
+    def test_tp_forward(self, tie_word_embeddings):
         self._skip_if_not_supported()
 
-        config = self._get_tp_config()
+        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol
@@ -623,11 +631,12 @@ class TensorParallelTesterMixin(ABC):
                 tmp_dir, model_class, max_new_tokens
             )
 
+    @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
-    def test_ep_forward(self):
+    def test_ep_forward(self, tie_word_embeddings):
         self._skip_if_not_supported(expert_parallel=True)
 
-        config = self._get_tp_config()
+        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
         model_class = self._get_tp_model_class()
         atol = self.tensor_parallel_atol
         rtol = self.tensor_parallel_rtol

@@ -86,6 +86,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {
         "num_experts": "num_local_experts",
     }
@@ -137,7 +138,7 @@ class MiniMaxM2Experts(MixtralExperts):
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape

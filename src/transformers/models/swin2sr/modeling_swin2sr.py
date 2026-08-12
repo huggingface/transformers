@@ -217,8 +217,8 @@ class Swin2SRSelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
@@ -716,7 +716,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
         else:
             mean = torch.zeros(1, 1, 1, 1)
-        self.register_buffer("mean", mean, persistent=False)
+        self.mean = nn.Buffer(mean, persistent=False)
 
         self.img_range = config.img_range
 

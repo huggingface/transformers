@@ -163,7 +163,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.num_patches_w = config.image_size // config.patch_size
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape

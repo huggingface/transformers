@@ -1135,6 +1135,10 @@ class ContinuousMixin:
         # Retrieve continuous batching config, or create it if none is provided
         if continuous_batching_config is None:
             if isinstance(getattr(gen_config, "continuous_batching_config", None), ContinuousBatchingConfig):
+                logger.warning(
+                    "Passing ContinuousBatchingConfig through GenerationConfig is deprecated. Please pass it separately"
+                    " using the continuous_batching_config kwarg."
+                )
                 continuous_batching_config = gen_config.continuous_batching_config
             else:
                 continuous_batching_config = ContinuousBatchingConfig()

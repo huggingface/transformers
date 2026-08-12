@@ -15,14 +15,23 @@ name: serge verify (GPU)
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "verify (baseline+patched red→green gate) | reproduce (baseline only, confirm the failure is real before serge investigates)"
+        required: false
+        type: choice
+        options:
+          - verify
+          - reproduce
+        default: verify
       base_sha:
         description: "Pre-patch commit — targeted tests MUST be red here (baseline-red guard)"
         required: true
         type: string
       commit_sha:
-        description: "serge's candidate commit — targeted tests should be green here"
-        required: true
+        description: "serge's candidate commit — targeted tests should be green here (unused when mode=reproduce)"
+        required: false
         type: string
+        default: ""
       test_nodeids:
         description: "Space-separated pytest node-ids for the group"
         required: true
@@ -58,7 +67,7 @@ on:
 # The run name embeds the correlation id: a workflow_dispatch run's head_sha is
 # the ref (not serge's candidate commit), so serge correlates the run it just
 # dispatched by matching this id in the run name rather than by sha.
-run-name: "serge verify ${{ inputs.model }} ${{ inputs.machine_type }} [${{ inputs.correlation_id }}]"
+run-name: "serge ${{ inputs.mode }} ${{ inputs.model }} ${{ inputs.machine_type }} [${{ inputs.correlation_id }}]"
 
 # Granted here and bound onto the reusable workflow's job token.
 permissions:
@@ -69,6 +78,7 @@ jobs:
     if: github.repository == 'huggingface/transformers'
     uses: huggingface/transformers-ci/.github/workflows/serge-verify-slow.yml@main # main
     with:
+      mode: ${{ inputs.mode }}
       base_sha: ${{ inputs.base_sha }}
       commit_sha: ${{ inputs.commit_sha }}
       test_nodeids: ${{ inputs.test_nodeids }}

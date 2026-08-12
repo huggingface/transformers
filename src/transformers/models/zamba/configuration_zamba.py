@@ -17,7 +17,7 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...utils import auto_docstring
 
 
@@ -49,6 +49,8 @@ class ZambaConfig(PreTrainedConfig):
         `True` and kernels are not available
     mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
         Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+    layers_block_type (`str`, *optional*):
+        Alias for `layer_types` which is kept for BC purposes.
     """
 
     model_type = "zamba"
@@ -88,31 +90,31 @@ class ZambaConfig(PreTrainedConfig):
     time_step_floor: float = 1e-4
     mamba_conv_bias: bool = True
     mamba_proj_bias: bool = False
+    layers_block_type: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.attention_hidden_size = self.attention_hidden_size or 2 * self.hidden_size
         self.attention_head_dim = self.attention_head_dim or 2 * self.hidden_size // self.num_attention_heads
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if self.mamba_dt_rank == "auto" else self.mamba_dt_rank
-        self.layers_block_type = self._layers_block_type(
-            self.num_hidden_layers, self.attn_layer_period, self.attn_layer_offset
-        )
+
+        if self.layers_block_type is None:
+            self.layers_block_type = [
+                "linear_attention",
+                "linear_attention",
+                "hybrid",
+            ] + [
+                "hybrid" if i % self.attn_layer_period == self.attn_layer_offset else "linear_attention"
+                for i in range(self.num_hidden_layers - 3)
+            ]
+        else:
+            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type)
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if (self.mamba_expand * self.hidden_size) % self.n_mamba_heads != 0:
             raise ValueError("`intermediate_size` should be divisible by `n_mamba_heads`.")
-
-    def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
-        layers = [
-            "linear_attention",
-            "linear_attention",
-            "hybrid",
-        ] + [
-            "hybrid" if i % attn_layer_period == attn_layer_offset else "linear_attention"
-            for i in range(num_hidden_layers - 3)
-        ]
-        return layers
 
 
 __all__ = ["ZambaConfig"]

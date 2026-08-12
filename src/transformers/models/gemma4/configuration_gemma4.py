@@ -257,6 +257,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
         "encoder.layers.*.mlp.up_proj": "colwise",
         "encoder.layers.*.mlp.down_proj": "rowwise",
     }
+
     default_theta = 100.0
 
     hidden_size: int = 768
