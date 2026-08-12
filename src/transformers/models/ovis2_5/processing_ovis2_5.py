@@ -91,15 +91,8 @@ class Ovis2_5Processor(ProcessorMixin):
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-        image_count = 0
-        if images is not None:
-            if not (isinstance(images, (list, tuple)) and len(images) == 0):
-                image_count = len(make_flat_list_of_images(images))
-
-        video_count = 0
-        if videos is not None:
-            if not (isinstance(videos, (list, tuple)) and len(videos) == 0):
-                video_count = len(make_batched_videos(videos))
+        image_count = len(images) if images is not None else 0
+        video_count = len(videos) if videos is not None else 0
 
         if image_count and video_count:
             raise ValueError(
