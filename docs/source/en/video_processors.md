@@ -59,12 +59,9 @@ A video processor decodes a video and picks the frames the model actually sees. 
 Pass a path or URL and the processor decodes the video for you with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html), which is the default decoder and must be installed. Add `return_metadata=True` to get back the sampled frame indices, original dimensions, duration, and fps.
 
 ```python
-import torch
 from transformers import AutoVideoProcessor
 
-device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-
-processor = AutoVideoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device=device)
+processor = AutoVideoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
 inputs = processor(videos=["video.mp4"], do_sample_frames=True, fps=1, return_metadata=True, return_tensors="pt")
 
 print(inputs.pixel_values_videos.shape, inputs.video_grid_thw)
