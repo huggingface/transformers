@@ -21,7 +21,8 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
+from ..qwen3 import Qwen3Config
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
@@ -133,8 +134,8 @@ class Ovis2_5Config(PreTrainedConfig):
     sub_configs = {"vision_config": Ovis2_5VisionConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    text_config: dict | PreTrainedConfig | None = None
-    vision_config: dict | PreTrainedConfig | None = None
+    text_config: Qwen3Config | dict | None = None
+    vision_config: Ovis2_5VisionConfig | dict | None = None
     visual_vocab_size: int = 65536
     image_token_id: int = 151669
     video_token_id: int = 151669
@@ -146,23 +147,27 @@ class Ovis2_5Config(PreTrainedConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            vision_config = dict(self.vision_config)
+        vision_config = self.vision_config
+        if isinstance(vision_config, dict):
+            vision_config = dict(vision_config)
             vision_config.pop("model_type", None)
-            self.vision_config = Ovis2_5VisionConfig(**vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Ovis2_5VisionConfig()
+            vision_config = Ovis2_5VisionConfig(**vision_config)
+        elif vision_config is None:
+            vision_config = Ovis2_5VisionConfig()
+        self.vision_config = vision_config
 
-        if isinstance(self.text_config, dict):
-            text_config = dict(self.text_config)
+        text_config = self.text_config
+        if isinstance(text_config, dict):
+            text_config = dict(text_config)
             text_config.pop("model_type", None)
-            self.text_config = CONFIG_MAPPING["qwen3"](**text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"]()
+            text_config = Qwen3Config(**text_config)
+        elif text_config is None:
+            text_config = Qwen3Config()
+        self.text_config = text_config
 
-        self.vision_config.vocab_size = self.visual_vocab_size
-        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
-            self.tie_word_embeddings = self.text_config.tie_word_embeddings
+        vision_config.vocab_size = self.visual_vocab_size
+        if not self.tie_word_embeddings and text_config.tie_word_embeddings:
+            self.tie_word_embeddings = text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
 

@@ -42,6 +42,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids, get_vision_window_index
 from ..auto import AutoModel
+from ..qwen3 import Qwen3Config
 from .configuration_ovis2_5 import Ovis2_5Config, Ovis2_5VisionConfig
 
 
@@ -611,8 +612,8 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 class Ovis2_5Model(Ovis2_5PreTrainedModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
-        vision_config = config.vision_config
-        text_config = config.text_config
+        vision_config: Ovis2_5VisionConfig = config.vision_config
+        text_config: Qwen3Config = config.text_config
         self.vision_tower = Ovis2_5VisionModel(vision_config)
         self.visual_tokenizer = Ovis2_5VisualTokenProjector(vision_config)
         self.visual_embeddings_table = nn.Embedding(
@@ -710,8 +711,9 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+        merged_inputs_embeds: torch.Tensor = (
+            self.get_input_embeddings()(input_ids) if inputs_embeds is None else inputs_embeds
+        )
 
         image_hidden_states = None
         video_hidden_states = None
@@ -750,20 +752,20 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         if visual_features is not None and visual_indicator_features is not None:
             atom_mask = self.get_placeholder_mask(
                 input_ids,
-                inputs_embeds=inputs_embeds,
+                inputs_embeds=merged_inputs_embeds,
                 image_features=visual_features,
             )
-            inputs_embeds = inputs_embeds.masked_scatter(
+            merged_inputs_embeds = merged_inputs_embeds.masked_scatter(
                 atom_mask,
-                visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
+                visual_features.to(merged_inputs_embeds.device, merged_inputs_embeds.dtype),
             )
 
             for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
                 if input_ids is None:
                     boundary_embedding = self.get_input_embeddings()(
-                        torch.tensor(boundary_token_id, dtype=torch.long, device=inputs_embeds.device)
+                        torch.tensor(boundary_token_id, dtype=torch.long, device=merged_inputs_embeds.device)
                     )
-                    boundary_mask = (inputs_embeds == boundary_embedding).all(dim=-1)
+                    boundary_mask = (merged_inputs_embeds == boundary_embedding).all(dim=-1)
                 else:
                     boundary_mask = input_ids == boundary_token_id
                 torch_compilable_check(
@@ -774,20 +776,20 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                     ),
                 )
                 boundary_features = visual_indicator_features[indicator_index].to(
-                    inputs_embeds.device,
-                    inputs_embeds.dtype,
+                    merged_inputs_embeds.device,
+                    merged_inputs_embeds.dtype,
                 )
-                inputs_embeds = torch.where(
+                merged_inputs_embeds = torch.where(
                     boundary_mask.unsqueeze(-1),
-                    boundary_features.expand_as(inputs_embeds),
-                    inputs_embeds,
+                    boundary_features.expand_as(merged_inputs_embeds),
+                    merged_inputs_embeds,
                 )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=merged_inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
@@ -839,7 +841,7 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.model = Ovis2_5Model(config)
-        text_config = config.text_config
+        text_config: Qwen3Config = config.text_config
         self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
         self.post_init()
 
