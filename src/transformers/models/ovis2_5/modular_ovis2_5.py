@@ -325,34 +325,6 @@ class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer):
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Ovis2_5VisionMLP(config)
 
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        max_seqlen: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence boundaries for packed variable-length attention.
-        max_seqlen (`int`, *optional*):
-            Maximum packed sequence length, used by Flash Attention kernels.
-        """
-        residual = hidden_states
-        hidden_states, _ = self.self_attn(
-            self.layer_norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            position_embeddings=position_embeddings,
-            max_seqlen=max_seqlen,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-        hidden_states = hidden_states + self.mlp(self.layer_norm2(hidden_states))
-        return hidden_states
-
-
 class Ovis2_5VisionHiddenStateRecorder(nn.Module):
     """Restore encoder states from window order before output hooks record them."""
 
