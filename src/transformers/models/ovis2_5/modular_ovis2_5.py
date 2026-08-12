@@ -21,7 +21,6 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -496,13 +495,6 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     _supports_cache_class = True
     _supports_flex_attn = True
     _can_compile_fullgraph = False
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Ovis2_5VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 @auto_docstring(
     custom_intro="The Ovis2.5 vision tower and visual tokenizer, without the visual embedding table or language model."
