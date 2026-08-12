@@ -224,6 +224,9 @@ jobs:
           # Fix mamba_mixer: conv1d weight loses unsqueeze(1) under dummy loader → .size(2) fails on 2D tensor
           sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
           grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
+          # Fix mamba_mixer profile run: transpose() makes tensor non-contiguous → onednn_mm (CPU) requires stride(-1)==1
+          sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous()/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
+          grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
       - name: "Test: test_initialization (shard ${{ matrix.shard }} / 1, FalconMambaForCausalLM only)"
         working-directory: vllm
