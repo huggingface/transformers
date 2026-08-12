@@ -261,16 +261,13 @@ class Ovis2_5VisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         grid_values = grid_thw.tolist()
         target_dtype = self.patch_embedding.weight.dtype
-        if isinstance(self.patch_embedding, nn.Linear):
-            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        else:
-            pixel_values = pixel_values.view(
-                -1,
-                self.config.num_channels * self.config.temporal_patch_size,
-                self.patch_size,
-                self.patch_size,
-            )
-            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
+        pixel_values = pixel_values.view(
+            -1,
+            self.config.num_channels * self.config.temporal_patch_size,
+            self.patch_size,
+            self.patch_size,
+        )
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype)).reshape(-1, self.embed_dim)
 
         if not self.config.preserve_original_pe:
             return patch_embeds
