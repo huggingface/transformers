@@ -21,7 +21,7 @@ jobs:
   vllm:
     name: Test vLLM integration
     runs-on:
-      group: aws-m8i-2xl-cache
+      group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
@@ -78,6 +78,20 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
+
+      - name: Patch vLLM gpu_memory_utilization for CPU
+        # Needed even on the larger aws-m8i-8xl-cache runner: vLLM checks that
+        # available RAM >= gpu_memory_utilization * total RAM at startup, and the
+        # container memory ceiling makes this fail without lowering the default.
+        run: |
+          # Lower hardcoded value in test_initialization.py. Kept in case other tests hit the same OOM issue.
+          sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
+          # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
+          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
+          # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
+          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
+          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
+          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
 
       - name: Pip freeze
         run: pip freeze
@@ -422,7 +436,7 @@ jobs:
   vllm-multimodal-processing:
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
     runs-on:
-      group: aws-m8i-2xl-cache
+      group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
