@@ -21,7 +21,14 @@ from pathlib import Path
 
 from parameterized import parameterized
 
-from transformers import Ovis2_5Config, Ovis2_5VisionConfig, is_torch_available
+from transformers import (
+    Ovis2_5Config,
+    Ovis2_5ForConditionalGeneration,
+    Ovis2_5Model,
+    Ovis2_5VisionConfig,
+    Ovis2_5VisionModel,
+    is_torch_available,
+)
 from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
@@ -37,12 +44,6 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 if is_torch_available():
     import torch
-
-    from transformers import (
-        Ovis2_5ForConditionalGeneration,
-        Ovis2_5Model,
-        Ovis2_5VisionModel,
-    )
 
 
 class Ovis2_5VisionModelTester:
@@ -94,11 +95,11 @@ class Ovis2_5VisionModelTester:
 
 
 class Ovis2_5VisionText2TextModelTester(VLMModelTester):
-    base_model_class = Ovis2_5Model if is_torch_available() else None
+    base_model_class = Ovis2_5Model
     config_class = Ovis2_5Config
     text_config_class = Qwen3Config
     vision_config_class = Ovis2_5VisionConfig
-    conditional_generation_class = Ovis2_5ForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = Ovis2_5ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
