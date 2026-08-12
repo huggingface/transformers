@@ -335,18 +335,13 @@ jobs:
           uv pip install tblib pqdm pytest-shard sentence-transformers open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: Patch vLLM gpu_memory_utilization for CPU
+        # Previously ran as a step in the vllm job but hit OOM on the 32 GiB runner.
         run: |
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
           sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
           grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
-          # Mamba CPU bug 1: conv1d weight stays 2-D after dummy load → IndexError in .size(2)
-          sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
-          # Mamba CPU bug 2: transpose produces non-contiguous tensor → onednn_mm stride error
-          sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
       - name: Pip freeze
         run: pip freeze
