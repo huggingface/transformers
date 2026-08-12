@@ -113,6 +113,26 @@ def _clean_subconfig(config_dict: dict[str, Any], remove_model_type: bool = Fals
     return config_dict
 
 
+def _convert_vision_config(config_dict: dict[str, Any]) -> dict[str, Any]:
+    config_dict = _clean_subconfig(config_dict, remove_model_type=True)
+    num_patches = config_dict.pop("num_patches", -1)
+    if num_patches != -1:
+        raise ValueError("The converter only supports the convolutional patch embedding used by released checkpoints.")
+
+    full_attention_indexes = config_dict.pop("fullatt_block_indexes", None)
+    if "layer_types" not in config_dict:
+        if isinstance(full_attention_indexes, str):
+            full_attention_indexes = [int(index) for index in full_attention_indexes.split("|") if index]
+        if full_attention_indexes is None:
+            full_attention_indexes = range(config_dict["num_hidden_layers"])
+        full_attention_indexes = set(full_attention_indexes)
+        config_dict["layer_types"] = [
+            "full_attention" if layer_index in full_attention_indexes else "sliding_attention"
+            for layer_index in range(config_dict["num_hidden_layers"])
+        ]
+    return config_dict
+
+
 def convert_config(source: Path) -> tuple[Ovis2_5Config, int]:
     original_config = read_json(source / "config.json")
     if "llm_config" not in original_config or "vit_config" not in original_config:
@@ -120,7 +140,7 @@ def convert_config(source: Path) -> tuple[Ovis2_5Config, int]:
 
     config = Ovis2_5Config(
         text_config=_clean_subconfig(original_config["llm_config"]),
-        vision_config=_clean_subconfig(original_config["vit_config"], remove_model_type=True),
+        vision_config=_convert_vision_config(original_config["vit_config"]),
         visual_vocab_size=original_config.get("visual_vocab_size", 65536),
         dtype=original_config.get("torch_dtype", "bfloat16"),
     )

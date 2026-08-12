@@ -29,18 +29,13 @@ from ..qwen3 import Qwen3Config
 @strict
 class Ovis2_5VisionConfig(PreTrainedConfig):
     r"""
-    num_patches (`int`, *optional*, defaults to -1):
-        Number of patches used by the original fixed-resolution position table. A negative value selects convolutional
-        patch embedding, which is the layout used by the released Ovis2.5 checkpoints.
     hidden_stride (`int`, *optional*, defaults to 2):
         Spatial grouping factor applied before the visual-tokenizer head.
     window_size (`int`, *optional*, defaults to 112):
         Window size, in input pixels, used by windowed vision-attention layers.
-    fullatt_block_indexes (`tuple[int, ...]`, *optional*):
-        Indices of vision layers that use full attention. `None` makes every layer use full attention.
     layer_types (`list[str]`, *optional*):
-        Per-layer attention type. Values are `"full_attention"` or `"sliding_attention"`. When omitted, this is derived
-        from `fullatt_block_indexes`.
+        Per-layer attention type. Values are `"full_attention"` or `"sliding_attention"`. When omitted, every layer
+        uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
     preserve_original_pe (`bool`, *optional*, defaults to `True`):
@@ -61,7 +56,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     num_hidden_layers: int = 27
     num_attention_heads: int = 16
     num_channels: int = 3
-    num_patches: int = -1
     image_size: int = 512
     patch_size: int = 16
     hidden_act: str = "gelu_pytorch_tanh"
@@ -69,7 +63,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     hidden_stride: int = 2
     window_size: int = 112
-    fullatt_block_indexes: tuple[int, ...] | list[int] | str | None = None
     layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
     preserve_original_pe: bool = True
@@ -80,23 +73,8 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
 
     # Ignore copy
     def __post_init__(self, **kwargs):
-        if isinstance(self.fullatt_block_indexes, str):
-            self.fullatt_block_indexes = tuple(
-                int(layer_index) for layer_index in self.fullatt_block_indexes.split("|") if layer_index
-            )
-        elif isinstance(self.fullatt_block_indexes, list):
-            self.fullatt_block_indexes = tuple(self.fullatt_block_indexes)
-
         if self.layer_types is None:
-            full_attention_layers = (
-                set(range(self.num_hidden_layers))
-                if self.fullatt_block_indexes is None
-                else set(self.fullatt_block_indexes)
-            )
-            self.layer_types = [
-                "full_attention" if layer_index in full_attention_layers else "sliding_attention"
-                for layer_index in range(self.num_hidden_layers)
-            ]
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
         else:
             self.layer_types = list(self.layer_types)
         if len(self.layer_types) != self.num_hidden_layers:

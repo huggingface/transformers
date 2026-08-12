@@ -79,7 +79,6 @@ if is_torch_available():
                 vocab_size=12,
                 num_visual_indicator_tokens=4,
                 preserve_original_pe=True,
-                fullatt_block_indexes=None,
             )
 
         def prepare_config_and_inputs_for_common(self):
@@ -179,7 +178,6 @@ if is_torch_available():
                 num_visual_indicator_tokens=4,
                 preserve_original_pe=True,
                 use_rope=True,
-                fullatt_block_indexes=None,
             )
 
         def get_config(self):
@@ -528,8 +526,11 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertNotIn("visual_atom_token_id", serialized_config)
         self.assertEqual(config.image_token_id, config.video_token_id)
 
-    def test_vision_layer_types_follow_full_attention_indexes(self):
-        config = Ovis2_5VisionConfig(num_hidden_layers=4, fullatt_block_indexes=(1, 3))
+    def test_vision_layer_types_validation(self):
+        config = Ovis2_5VisionConfig(
+            num_hidden_layers=4,
+            layer_types=["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        )
         self.assertEqual(
             config.layer_types,
             ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
@@ -545,9 +546,14 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         text_config = self.model_tester.get_text_config().to_dict()
         text_config["hidden_size"] = 2048
+        vision_config = self.model_tester.get_vision_config().to_dict()
+        vision_config.pop("layer_types")
+        vision_config["num_hidden_layers"] = 3
+        vision_config["fullatt_block_indexes"] = [1]
+        vision_config["num_patches"] = -1
         original_config = {
             "llm_config": text_config,
-            "vit_config": self.model_tester.get_vision_config().to_dict(),
+            "vit_config": vision_config,
             "visual_vocab_size": self.model_tester.visual_vocab_size,
             "torch_dtype": "bfloat16",
         }
@@ -559,8 +565,27 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsInstance(config.text_config, Qwen3Config)
         self.assertIsInstance(config.vision_config, Ovis2_5VisionConfig)
         self.assertEqual(config.text_config.hidden_size, 2048)
+        self.assertEqual(
+            config.vision_config.layer_types,
+            ["sliding_attention", "full_attention", "sliding_attention"],
+        )
+        self.assertFalse(hasattr(config.vision_config, "fullatt_block_indexes"))
+        self.assertFalse(hasattr(config.vision_config, "num_patches"))
         self.assertEqual(config.architectures, ["Ovis2_5ForConditionalGeneration"])
         self.assertEqual(max_pixels, 1344 * 1792)
+
+    def test_converter_rejects_unreleased_patch_embedding(self):
+        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
+
+        original_config = {
+            "llm_config": self.model_tester.get_text_config().to_dict(),
+            "vit_config": {**self.model_tester.get_vision_config().to_dict(), "num_patches": 16},
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir)
+            (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "convolutional patch embedding"):
+                convert_config(source)
 
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -696,7 +721,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     def test_vision_encoder_dispatches_layer_attention_types(self):
         config = self.model_tester.get_vision_config()
         config.num_hidden_layers = 2
-        config.fullatt_block_indexes = (1,)
         config.layer_types = ["sliding_attention", "full_attention"]
         config.window_size = 4
         model = Ovis2_5VisionModel(config).to(torch_device).eval()
@@ -738,7 +762,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_patch_embedding_uses_released_convolutional_layout(self):
         config = self.model_tester.get_vision_config()
-        config.num_patches = 16
         model = Ovis2_5VisionModel(config).to(torch_device).eval()
         grid_thw = torch.tensor([[1, 4, 4]], dtype=torch.long, device=torch_device)
         pixel_values = torch.randn(
