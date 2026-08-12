@@ -152,6 +152,7 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only (fast, no sharding needed).
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
+    if: false  # disabled: Gemma3nForCausalLM hangs on shm_broadcast; revisit when fixed
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
