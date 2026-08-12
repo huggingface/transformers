@@ -40,7 +40,6 @@ from ...vision_utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
-from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
@@ -48,6 +47,7 @@ from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoderLayer,
     VideoLlama3VisionMLP,
+    VideoLlama3VisionRotaryEmbedding,
 )
 
 
@@ -266,7 +266,7 @@ class Ovis2_5Config(PreTrainedConfig):
         self.video_token_id = self.visual_atom_token_id
         super().__post_init__(**kwargs)
 
-class Ovis2_5VisionRotaryEmbedding(VisionRotaryEmbedding):
+class Ovis2_5VisionRotaryEmbedding(VideoLlama3VisionRotaryEmbedding):
     pass
 
 

@@ -715,6 +715,16 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertGreater(captured_seqlens[0].numel(), captured_seqlens[1].numel())
         torch.testing.assert_close(captured_seqlens[1], torch.tensor([0, 32], dtype=torch.int32, device=torch_device))
 
+    def test_vision_rotary_embedding_initialization(self):
+        config = self.model_tester.get_vision_config()
+        model = Ovis2_5VisionModel(config)
+        rotary_embedding = model.transformer.rotary_pos_emb
+        expected = 1.0 / (
+            rotary_embedding.theta
+            ** (torch.arange(0, rotary_embedding.dim, 2, dtype=torch.float) / rotary_embedding.dim)
+        )
+        torch.testing.assert_close(rotary_embedding.inv_freq, expected)
+
     def test_patch_embedding_uses_released_convolutional_layout(self):
         config = self.model_tester.get_vision_config()
         config.num_patches = 16
