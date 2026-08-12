@@ -78,17 +78,6 @@ class Ovis2_5Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    @staticmethod
-    def _resolve_special_token_id(tokenizer, token: str) -> int:
-        token_id = tokenizer.convert_tokens_to_ids(token)
-        encoded = tokenizer(token, add_special_tokens=False).input_ids
-        if token_id is None or token_id < 0 or encoded != [token_id]:
-            raise ValueError(
-                f"Ovis2.5 requires `{token}` to be registered as one positive tokenizer token, "
-                f"but got token_id={token_id} and encoded={encoded}."
-            )
-        return token_id
-
     def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         if audio is not None:
