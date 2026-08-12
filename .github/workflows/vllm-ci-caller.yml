@@ -266,9 +266,19 @@ jobs:
             -k FalconMambaForCausalLM \
             --num-shards=1 --shard-id=$SHARD_ID
 
-  # Same test as vllm-test-init but on GPU (A10G), without the mamba_mixer CPU patches,
-  # to confirm the mamba_mixer bugs are CPU-specific and pass on GPU.
+  # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
+  # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
+  # CPU-specific and pass on GPU without any patches.
+  # However, vLLM's compiled C extension `vllm._C_stable_libtorch` fails to load in the
+  # huggingface/transformers-all-latest-gpu container (torch 2.13.0+cu130): the .so IS
+  # present in the wheel but dlopen() fails due to an ABI/shared-library mismatch between
+  # the torch version vllm was compiled against and the one in the container. Python then
+  # surfaces this as ModuleNotFoundError, making vllm unimportable. We did not invest
+  # further in resolving this (would need a dedicated vLLM GPU docker or pinned torch),
+  # so the job is disabled for now. It only targeted FalconMambaForCausalLM for debugging;
+  # it was never intended to run the full test suite like the CPU vllm-test-init job.
   vllm-test-init-gpu:
+    if: false
     name: "Test vLLM initialization on GPU (FalconMambaForCausalLM only)"
     runs-on:
       group: aws-g5-4xlarge-cache
