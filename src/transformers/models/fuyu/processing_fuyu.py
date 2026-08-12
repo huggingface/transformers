@@ -442,7 +442,6 @@ class FuyuProcessor(ProcessorMixin):
             add_BOS=True,
             add_beginning_of_answer_token=True,
         )
-        print("WTF", prompts_length.tolist(), prompt_tokens[0][0].shape, model_image_input["image_input_ids"][0][0].shape)
         image_padded_unpacked_tokens = construct_full_unpacked_stream(
             num_real_text_tokens=prompts_length,
             input_stream=prompt_tokens,
@@ -539,7 +538,6 @@ class FuyuProcessor(ProcessorMixin):
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
-        print("START")
 
         for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
             prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, batch_images
