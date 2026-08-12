@@ -27,7 +27,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -95,8 +95,8 @@ class Ovis2_5ImageProcessor(TorchvisionBackend):
     default_to_square = False
     do_rescale = True
     do_normalize = True
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
     patch_size = 16
     temporal_patch_size = 1

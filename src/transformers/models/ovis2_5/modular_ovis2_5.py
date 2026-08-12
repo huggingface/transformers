@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...image_utils import PILImageResampling
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -97,8 +97,8 @@ def smart_resize(
 class Ovis2_5ImageProcessor(Qwen2VLImageProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
@@ -108,8 +108,8 @@ class Ovis2_5ImageProcessor(Qwen2VLImageProcessor):
 class Ovis2_5ImageProcessorPil(Qwen2VLImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 448 * 448, "longest_edge": 1344 * 1792}
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
