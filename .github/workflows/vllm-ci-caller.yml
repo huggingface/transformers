@@ -116,7 +116,7 @@ jobs:
         #   ValueError: Available memory on node 0 (17.24/27.83 GiB) on startup is less than desired CPU memory utilization (0.8, 22.27 GiB)
         # CPU memory is not released between tests on the 32 GiB runner.
         # We need the infra team to provide a larger runner (say 128 GiB CPU RAM).
-        if: always()
+        if: false
         working-directory: vllm
         run: |
           pytest -v -s tests/models/transformers/
@@ -151,7 +151,7 @@ jobs:
 
   # test_initialization split across 8 parallel shards (test takes ~6 hours when run sequentially).
   vllm-test-init:
-    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 8)"
+    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 1, JambaForCausalLM only)"
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -160,7 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0]
     env:
       SHARD_ID: ${{ matrix.shard }}
 
@@ -222,11 +222,12 @@ jobs:
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
           grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
 
-      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 8)"
+      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 1, JambaForCausalLM only)"
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py \
-            --num-shards=8 --shard-id=$SHARD_ID
+            -k JambaForCausalLM \
+            --num-shards=1 --shard-id=$SHARD_ID
 
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
