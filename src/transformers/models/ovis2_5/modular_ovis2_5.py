@@ -403,9 +403,7 @@ class Ovis2_5VisionEncoder(nn.Module):
 
         recorded_hidden_states = None
         for layer_index, encoder_layer in enumerate(self.layers):
-            use_full_attention = (
-                self.config.fullatt_block_indexes is None or layer_index in self.config.fullatt_block_indexes
-            )
+            use_full_attention = self.config.layer_types[layer_index] == "full_attention"
             layer_cu_seqlens = cu_seqlens if use_full_attention else cu_window_seqlens
             hidden_states = encoder_layer(
                 hidden_states,

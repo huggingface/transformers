@@ -680,6 +680,39 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             outputs.last_hidden_state,
         )
 
+    def test_vision_encoder_dispatches_layer_attention_types(self):
+        config = self.model_tester.get_vision_config()
+        config.num_hidden_layers = 2
+        config.fullatt_block_indexes = (1,)
+        config.layer_types = ["sliding_attention", "full_attention"]
+        config.window_size = 4
+        model = Ovis2_5VisionModel(config).to(torch_device).eval()
+        grid_thw = torch.tensor([[1, 4, 8]], dtype=torch.long, device=torch_device)
+        pixel_values = torch.randn(
+            int(grid_thw.prod()),
+            config.num_channels * config.patch_size**2,
+            device=torch_device,
+        )
+        captured_seqlens = []
+
+        def capture_cu_seqlens(_module, _args, kwargs):
+            captured_seqlens.append(kwargs["cu_seqlens"].clone())
+
+        hooks = [
+            layer.self_attn.register_forward_pre_hook(capture_cu_seqlens, with_kwargs=True)
+            for layer in model.transformer.encoder.layers
+        ]
+        try:
+            with torch.no_grad():
+                model(pixel_values=pixel_values, grid_thw=grid_thw)
+        finally:
+            for hook in hooks:
+                hook.remove()
+
+        self.assertEqual(len(captured_seqlens), 2)
+        self.assertGreater(captured_seqlens[0].numel(), captured_seqlens[1].numel())
+        torch.testing.assert_close(captured_seqlens[1], torch.tensor([0, 32], dtype=torch.int32, device=torch_device))
+
     def test_patch_embedding_uses_released_convolutional_layout(self):
         config = self.model_tester.get_vision_config()
         config.num_patches = 16
