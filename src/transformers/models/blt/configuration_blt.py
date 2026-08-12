@@ -277,6 +277,13 @@ class BltConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    @property
+    def decoder(self):
+        # `get_text_config(decoder=True)` (used e.g. by `Cache` initialization) looks for a sub-config
+        # exposed under one of a few standard attribute names. Blt only exposes it as `decoder_config`,
+        # so alias it here to make Blt compatible with that generic lookup.
+        return self.decoder_config
+
 
 __all__ = [
     "BltConfig",
