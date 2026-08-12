@@ -940,9 +940,6 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def set_output_embeddings(self, new_embeddings: nn.Module):
-        self.lm_head = new_embeddings
-
     @auto_docstring
     def get_video_features(
         self,
