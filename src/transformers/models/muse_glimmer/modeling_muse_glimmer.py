@@ -433,6 +433,9 @@ class MuseGlimmerPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
 
+# Not a pass-through wrapper: this *is* the embedding (nn.Embedding subclass) and forward does the
+# lookup via super().forward() before the norm, so there is no inner module to hoist out.
+# trf-ignore: TRF026
 class MuseGlimmerTextNormedEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float = 1e-6):
         super().__init__(num_embeddings, embedding_dim, padding_idx)

@@ -256,7 +256,7 @@ diff = '''
 [rules.TRF016]
 description = "do_* flags declared on a processor class must be referenced by overridden preprocess/_preprocess."
 default_enabled = true
-allowlist_models = []
+allowlist_models = ["kimi_k25", "minimax_m3_vl"]
 
 [rules.TRF016.explanation]
 what_it_does = "When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (e.g. do_resize, do_rescale, do_normalize, do_convert_rgb) and overrides preprocess() or _preprocess(), checks that each declared flag is still consumed along the override path. That can be a direct reference in the override body, delegating back to the base implementation via super().preprocess(..., **kwargs) or super()._preprocess(..., **kwargs), or, for image processors, forwarding do_convert_rgb into the shared image-preparation path via _preprocess_image_like_inputs(...) or _prepare_image_like_inputs(...). The allowlist of base-handled flags (do_sample_frames) is exempted because the base preprocess() consumes them before _preprocess() runs."
@@ -308,7 +308,7 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module), except modular-file sentinels."
 default_enabled = true
-allowlist_models = []
+allowlist_models = ["cosmos3_omni", "diffusion_gemma", "eomt_dinov3", "exaone4_5", "gemma4", "higgs_audio_v2", "kimi_k25", "olmo3", "pp_formulanet", "pp_lcnet_v3", "radio", "sam3_lite_text", "sam3_tracker", "slanet", "voxtral_realtime", "xcodec2"]
 
 [rules.TRF018.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. In modular files, `PreTrainedModel._init_weights(self, module)` and `raise AttributeError(...)` are accepted because they are modularization sentinels. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method."
@@ -326,7 +326,7 @@ diff = '''
 [rules.TRF019]
 description = "A processor TypedDict class must not define `_defaults`, instead push them upstream to the hub (`processor_config.json`)."
 default_enabled = true
-allowlist_models = []
+allowlist_models = ["blip_2", "grounding_dino", "hunyuan_vl", "kosmos2", "omdet_turbo", "qwen3_asr"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF019.explanation]
@@ -617,7 +617,7 @@ diff = '''
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
 default_enabled = true
-allowlist_models = ["cosmos3_edge", "dinov3_convnext", "hunyuan_vl", "kimi_k25", "openai", "radio", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
+allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF034.explanation]
@@ -724,7 +724,7 @@ diff = '''
 [rules.TRF041]
 description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
 default_enabled = true
-allowlist_models = ["dinov3_vit", "inkling", "kimi_k25", "kosmos2", "mimo_v2_flash", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "mimo_v2_flash", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
