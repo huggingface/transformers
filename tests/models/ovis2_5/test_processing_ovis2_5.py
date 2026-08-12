@@ -96,6 +96,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_image_prompt_expansion_matches_patch_grid(self):
+        """An image placeholder expands to boundary tokens and one visual atom per merged patch."""
         processor = self.get_processor()
         inputs = processor(
             images=self.prepare_image_inputs(),
@@ -129,6 +130,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(empty_videos, [])
 
     def test_multiple_images(self):
+        """Each image placeholder gets its own start and end boundary tokens."""
         processor = self.get_processor()
         image = self.prepare_image_inputs()
         inputs = processor(
@@ -142,6 +144,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual((inputs.input_ids == processor.image_end_token_id).sum().item(), 2)
 
     def test_video_prompt_expansion(self):
+        """A video placeholder expands to boundary tokens and one visual atom per merged patch."""
         processor = self.get_processor()
         inputs = processor(
             videos=self.prepare_video_inputs(),
@@ -161,6 +164,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(input_ids[video_start : video_start + num_visual_tokens + 2], expected_video_ids)
 
     def test_special_mm_token_truncation(self):
+        """Truncation raises instead of silently dropping part of an expanded visual sequence."""
         processor = self.get_processor()
 
         with self.assertRaisesRegex(ValueError, "Visual tokens were likely truncated"):
