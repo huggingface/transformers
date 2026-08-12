@@ -4398,11 +4398,15 @@ class PreTrainedModel(
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_quant_method_with_non_standard_params = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.QUARK,
-            QuantizationMethod.BITS_AND_BYTES,
-        }
+        is_quant_method_with_non_standard_params = (
+            hf_quantizer is not None
+            and hf_quantizer.quantization_config.quant_method
+            in {
+                QuantizationMethod.HQQ,
+                QuantizationMethod.QUARK,
+                QuantizationMethod.BITS_AND_BYTES,
+            }
+        )
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
