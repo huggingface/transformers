@@ -291,12 +291,12 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
-      - name: Find latest vLLM commit with built CPU wheel
+      - name: Find latest vLLM commit with built CUDA 13.0 wheel
         shell: bash
         run: |
           VLLM_COMMIT=$(python3 -c "
           import json, urllib.request
-          data = json.loads(urllib.request.urlopen('https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json').read())
+          data = json.loads(urllib.request.urlopen('https://wheels.vllm.ai/nightly/cu130/vllm/metadata.json').read())
           wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
           print(wheel['path'].split('/')[3])
           ")
@@ -315,8 +315,20 @@ jobs:
           persist-credentials: false
           path: vllm
 
-      - name: Install vLLM and test dependencies
-        run: python3 -m pip install vllm pytest pytest-shard cloudpickle tblib
+      - name: Install vLLM (CUDA 13.0 nightly wheel) and test dependencies
+        shell: bash
+        run: |
+          WHEEL_URL=$(python3 -c "
+          import json, urllib.request
+          from urllib.parse import urljoin
+          base = 'https://wheels.vllm.ai/nightly/cu130/vllm/metadata.json'
+          data = json.loads(urllib.request.urlopen(base).read())
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(urljoin(base, wheel['path']))
+          ")
+          echo "Installing vLLM wheel: $WHEEL_URL"
+          python3 -m pip install "$WHEEL_URL"
+          python3 -m pip install pytest pytest-shard cloudpickle tblib
 
       - name: Pip freeze
         run: pip freeze
