@@ -15,8 +15,16 @@
 
 import unittest
 
-from transformers import NemotronH_Omni_Reasoning_V3_Config, is_torch_available
-from transformers.testing_utils import require_torch
+from transformers import AutoTokenizer, NemotronH_Omni_Reasoning_V3_Config, is_torch_available
+from transformers.testing_utils import (
+    cleanup,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
+from transformers.video_utils import load_video
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -25,7 +33,11 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 if is_torch_available():
     import torch
 
-    from transformers import NemotronH_Omni_Reasoning_V3
+    from transformers import (
+        NemotronH_Omni_Reasoning_V3,
+        NemotronH_Omni_Reasoning_V3ImageProcessor,
+        NemotronH_Omni_Reasoning_V3Processor,
+    )
 
 
 class NemotronHOmniVisionText2TextModelTester:
@@ -100,6 +112,25 @@ class NemotronHOmniVisionText2TextModelTester:
             "num_cls_tokens": 2,
             "num_registers": 1,
         }
+        # Tiny Parakeet encoder + projection. Kept enabled so the `sound_encoder` / `sound_projection`
+        # weight renames in the conversion mapping have matching keys to check.
+        self.sound_config = {
+            "model_type": "parakeet",
+            "hidden_size": 32,
+            "num_attention_heads": 2,
+            "num_hidden_layers": 2,
+            "intermediate_size": 64,
+            "conv_kernel_size": 9,
+            "convolution_bias": False,
+            "subsampling_conv_channels": 16,
+            "subsampling_conv_kernel_size": 3,
+            "subsampling_conv_stride": 2,
+            "subsampling_factor": 8,
+            "num_mel_bins": 32,
+            "projection_hidden_size": 64,
+            "projection_bias": False,
+            "sampling_rate": 16000,
+        }
         self.num_hidden_layers = len(self.llm_config["layers_block_type"])
         self.num_attention_heads = self.llm_config["num_attention_heads"]
         self.num_image_token = int((force_image_size // patch_size) ** 2 * (downsample_ratio**2))
@@ -108,7 +139,7 @@ class NemotronHOmniVisionText2TextModelTester:
         return NemotronH_Omni_Reasoning_V3_Config(
             vision_config=self.vision_config,
             llm_config=self.llm_config,
-            sound_config=None,
+            sound_config=self.sound_config,
             force_image_size=self.force_image_size,
             downsample_ratio=self.downsample_ratio,
             vit_hidden_size=self.vit_hidden_size,
@@ -246,6 +277,102 @@ class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     def test_keep_in_fp32_modules(self):
         pass
 
-    @unittest.skip(reason="sound weight renames require sound_config, disabled in the tiny test model")
-    def test_reverse_loading_mapping(self):
-        pass
+
+@slow
+@require_torch_gpu
+@require_flash_attn
+class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
+    """End-to-end greedy generation against the released checkpoint, one test per modality.
+
+    No expected text is pinned. The checkpoint runs in bfloat16 and its mamba/RADIO kernels are not
+    bit-reproducible across GPU architectures. Each test asserts that the modality's full
+    path (processor -> encoder -> projector -> LM) runs and decodes to non-empty text.
+    """
+
+    model_id = "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16"
+    num_video_frames = 8
+    max_new_tokens = 12
+
+    @classmethod
+    def setUpClass(cls):
+        # The Hub repo still advertises the pre-port `NemotronH_Nano_Omni_Reasoning_V3*` classes via
+        # `auto_map`, so `AutoProcessor.from_pretrained` routes to remote code. Composing the native
+        # processor from the same repo files avoids that and keeps this an end-to-end test of the
+        # port; it yields byte-identical inputs to the remote processor for all three modalities.
+        tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        image_processor = NemotronH_Omni_Reasoning_V3ImageProcessor.from_pretrained(cls.model_id)
+        cls.processor = NemotronH_Omni_Reasoning_V3Processor(
+            image_processor=image_processor, tokenizer=tokenizer, chat_template=tokenizer.chat_template
+        )
+        cls.model = NemotronH_Omni_Reasoning_V3.from_pretrained(
+            cls.model_id, dtype=torch.bfloat16, device_map="auto", attn_implementation="flash_attention_2"
+        ).eval()
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
+
+    def _generate(self, inputs):
+        accepted = {"input_ids", "attention_mask", "pixel_values", "pixel_values_videos", "sound_clips"}
+        inputs = {k: (v.to(self.model.device) if hasattr(v, "to") else v) for k, v in inputs.items() if k in accepted}
+        with torch.inference_mode():
+            output = self.model.generate(**inputs, max_new_tokens=self.max_new_tokens, do_sample=False)
+        generated = output[0, inputs["input_ids"].shape[-1] :]
+        return self.processor.tokenizer.decode(generated, skip_special_tokens=True)
+
+    def _chat(self, content, **kwargs):
+        return self.processor.apply_chat_template(
+            [{"role": "user", "content": content}],
+            add_generation_prompt=True,
+            return_tensors="pt",
+            enable_thinking=False,
+            **kwargs,
+        )
+
+    def test_image_generation(self):
+        from huggingface_hub import hf_hub_download
+        from PIL import Image
+
+        image_path = hf_hub_download(repo_id=self.model_id, filename="media/example1a.jpeg")
+        image = Image.open(image_path).convert("RGB")
+        inputs = self._chat(
+            [{"type": "image", "image": image}, {"type": "text", "text": "Describe this image in detail."}],
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self._generate(inputs).strip())
+
+    def test_audio_generation(self):
+        from huggingface_hub import hf_hub_download
+
+        audio_path = hf_hub_download(repo_id=self.model_id, filename="media/2414-165385-0000.wav")
+        inputs = self._chat(
+            [{"type": "audio", "audio": audio_path}, {"type": "text", "text": "Transcribe this audio."}],
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self._generate(inputs).strip())
+
+    def test_video_generation(self):
+        import numpy as np
+        from huggingface_hub import hf_hub_download
+        from PIL import Image
+
+        video_path = hf_hub_download(repo_id=self.model_id, filename="media/demo.mp4")
+
+        def sample_indices_fn(metadata, **kwargs):
+            return np.linspace(0, metadata.total_num_frames - 1, self.num_video_frames).round().astype(int)
+
+        frames, _ = load_video(video_path, backend="decord", sample_indices_fn=sample_indices_fn)
+        # The chat template only accepts pre-sampled frames, so the processor is called directly.
+        text = self._chat(
+            [{"type": "video", "video": None}, {"type": "text", "text": "Describe this video."}], tokenize=False
+        )
+        inputs = self.processor(text=text, videos=[[Image.fromarray(f) for f in frames]], return_tensors="pt")
+
+        # 8 frames packed 2-per-temporal-patch -> 4 tower passes x 252 tokens after pixel shuffle.
+        self.assertEqual(int((inputs["input_ids"] == self.model.img_context_token_id).sum()), 1008)
+
+        self.model.video_pruning_rate = 0.0
+        self.assertTrue(self._generate(inputs).strip())
