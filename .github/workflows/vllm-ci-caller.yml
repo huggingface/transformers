@@ -266,6 +266,66 @@ jobs:
             -k FalconMambaForCausalLM \
             --num-shards=1 --shard-id=$SHARD_ID
 
+  # Same test as vllm-test-init but on GPU (A10G), without the mamba_mixer CPU patches,
+  # to confirm the mamba_mixer bugs are CPU-specific and pass on GPU.
+  vllm-test-init-gpu:
+    name: "Test vLLM initialization on GPU (FalconMambaForCausalLM only)"
+    runs-on:
+      group: aws-g5-4xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: "--gpus all --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_HOME: /mnt/cache
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+
+    steps:
+      - name: Update transformers clone
+        working-directory: /transformers
+        env:
+          commit_sha: ${{ github.sha }}
+        run: |
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Install vLLM and test dependencies
+        run: |
+          pip install vllm
+          pip install pytest pytest-shard cloudpickle tblib
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: test_initialization (GPU, FalconMambaForCausalLM only)"
+        working-directory: vllm
+        run: |
+          pytest -v -s tests/models/test_initialization.py \
+            -k FalconMambaForCausalLM \
+            --num-shards=1 --shard-id=0
+
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
   vllm-multimodal-processing:
