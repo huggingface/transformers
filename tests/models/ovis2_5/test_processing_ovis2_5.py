@@ -95,33 +95,6 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024},
         )
 
-    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
-        if isinstance(modalities, str):
-            modalities = [modalities]
-        modalities = modalities or []
-        placeholder = "<image>" if "image" in modalities else "<video>" if "video" in modalities else ""
-        text = f"{placeholder} lower newer"
-        if batch_size is None:
-            return text
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-        return [text] * batch_size
-
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
-        image = np.zeros((3, 64, 64), dtype=np.uint8)
-        if batch_size is None:
-            return image
-        images = [image.copy() for _ in range(batch_size)]
-        return [[item] for item in images] if nested else images
-
-    def prepare_video_inputs(self, batch_size: int | None = None):
-        video = np.zeros((4, 3, 64, 64), dtype=np.uint8)
-        if batch_size is None:
-            return video
-        if batch_size < 1:
-            raise ValueError("batch_size must be greater than 0")
-        return [video.copy() for _ in range(batch_size)]
-
     def test_image_prompt_expansion_matches_patch_grid(self):
         processor = self.get_processor()
         inputs = processor(
