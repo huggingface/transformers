@@ -23,7 +23,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter, needs_half_precision_export
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
@@ -610,7 +610,12 @@ class ExportTesterMixin:
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
+        model = model_class(config).eval()
+        # Export in bf16 only when the model uses a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`). Everything else exports in
+        # fp32, which is both realistic and avoids the spurious dtype mismatches a blanket bf16 cast causes.
+        dtype = torch.bfloat16 if needs_half_precision_export(model) else torch.float32
+        model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
@@ -630,7 +635,14 @@ class ExportTesterMixin:
         return eager_outputs
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
-        """Assert outputs are close, allowing up to 5% element-level mismatch."""
+        """Assert outputs are close, allowing up to 5% element-level mismatch.
+
+        For bf16/fp16 outputs the fp32-calibrated tolerance is far too tight — export re-rounds ops (fusion,
+        reordered reductions), which perturbs half-precision values by ~2^-8. Widen to the dtype's rounding
+        scale so genuine bugs (systematic, larger drift) still fail while benign bf16 noise passes.
+        """
+        if any(t.dtype in (torch.bfloat16, torch.float16) for t in expected.values()):
+            atol, rtol = max(atol, 1.6e-2), max(rtol, 1.6e-2)
         try:
             torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=check_device)
         except AssertionError as e:
@@ -786,7 +798,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
+        model = model_class(config).eval()
+        # Export in bf16 only when the model uses a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`). Everything else exports in
+        # fp32, which is both realistic and avoids the spurious dtype mismatches a blanket bf16 cast causes.
+        dtype = torch.bfloat16 if needs_half_precision_export(model) else torch.float32
+        model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))

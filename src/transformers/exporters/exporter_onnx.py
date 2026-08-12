@@ -29,7 +29,7 @@ into an ONNX model via `torch.onnx.export`:
    per-node in-place rewrites on the `GraphModule` to drop or replace nodes ONNX
    can't lower (alias, in-place ops, dead comparisons, `_assert_*`, …). Triggered
    both directly after `torch.export` and indirectly via the stage 2 hook.
-4. **ONNX translations** (`_ONNX_TRANSLATION_TABLE`): custom onnxscript functions
+4. **ONNX translations** (`_get_onnx_translation_table`): custom onnxscript functions
    passed as `custom_translation_table` that override the default torchlib
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
@@ -44,6 +44,7 @@ import operator
 from collections.abc import MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from typing import Sequence as TypingSequence  # noqa: UP035  # onnxscript.script classifies attrs via typing.Sequence
 
 import numpy as np
 
@@ -70,7 +71,9 @@ if is_torch_available():
 
 
 if is_onnxscript_available():
+    import onnx
     import onnx_ir
+    from onnxscript import FLOAT, INT64, script  # runtime: `@script` evaluates these annotations at import
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
@@ -78,7 +81,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
     if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+        from onnxscript.function_libs.torch_lib.ops.core import BOOL, TReal
 
 
 logger = logging.get_logger(__file__)
@@ -124,7 +127,7 @@ class OnnxExporter(DynamoExporter):
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
-                custom_translation_table=_ONNX_TRANSLATION_TABLE,
+                custom_translation_table=_get_onnx_translation_table(),
                 opset_version=config.opset_version,
                 external_data=config.external_data,
                 export_params=config.export_params,
@@ -748,7 +751,7 @@ def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool
 
 
 # ── Stage 4: ONNX translations ────────────────────────────────────────────────
-# Custom onnxscript `_aten_*` functions registered in `_ONNX_TRANSLATION_TABLE`
+# Custom onnxscript `_aten_*` functions registered by `_get_onnx_translation_table`
 # that override `torchlib`'s default lowering for specific aten ops where the
 # default is buggy or missing. Passed to `torch.onnx.export` as `custom_translation_table`.
 
@@ -942,20 +945,74 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
-_ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
-if is_onnxscript_available():
-    _ONNX_TRANSLATION_TABLE.update(
-        {
-            torch.ops.aten.bincount.default: _aten_bincount,
-            torch.ops.aten.index_put.default: _aten_index_put,
-            torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
-            torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
-            torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
-            torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
-            torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
-            operator.floordiv: _operator_floordiv,
-        }
-    )
+@functools.cache
+def _get_onnx_translation_table() -> dict[Any, Any]:
+    """Custom onnxscript translations for `torch.onnx.export`'s `custom_translation_table`.
+
+    Built lazily and cached rather than at module import: the `@script` compile below (and the onnxscript
+    APIs it exercises) then run only inside `OnnxExporter.export`, after `__init__`'s `validate_environment`
+    has confirmed a compatible onnxscript — never on the bare import path.
+    """
+    table: dict[Any, Any] = {
+        torch.ops.aten.bincount.default: _aten_bincount,
+        torch.ops.aten.index_put.default: _aten_index_put,
+        torch.ops.aten._grouped_mm.default: _aten_grouped_mm,
+        torch.ops.transformers.grouped_mm_fallback.default: _aten_grouped_mm,
+        torch.ops.aten.repeat_interleave.self_int: _aten_repeat_interleave_self_int,
+        torch.ops.aten.masked_fill.Scalar: _aten_masked_fill,
+        torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
+        operator.floordiv: _operator_floordiv,
+    }
+    try:
+        from torch.nn.attention import varlen  # noqa: F401  # registers `torch_attn::_varlen_attn`
+
+        @script()
+        def _aten_varlen_attn(
+            query: FLOAT,
+            key: FLOAT,
+            value: FLOAT,
+            cu_seq_q: INT64,
+            cu_seq_k: INT64,
+            max_q: INT64,
+            max_k: INT64,
+            is_causal: bool,
+            scale: float,
+            window_size: TypingSequence[int],
+        ) -> tuple[FLOAT, FLOAT, FLOAT]:
+            """ONNX translation of `torch_attn::_varlen_attn` — the varlen attention emitted by the chunked
+            vision/audio attention export patch. Lowers to an ONNX `Loop` over the `cu_seq_q` segments (each
+            iteration a dense SDPA on that segment's `n_i` tokens, concatenated), i.e. the true variable-length
+            shape — O(sum n_i^2), no N×N block mask materialised. The op has three outputs `(out, softmax_lse,
+            rng_state)`; only `out` is consumed downstream, so the two aux tensors are empty stubs.
+
+            `max_q`/`max_k` are the (unused) flash-kernel bounds — kept as tensor inputs, not `int` attributes,
+            because they arrive as symints under dynamic export. `window_size` must be typed via `typing.Sequence`
+            (not `collections.abc`), which `onnxscript.script`'s annotation parser rejects."""
+            one = op.Constant(value_ints=[1])
+            two = op.Constant(value_ints=[2])
+            axis0 = op.Constant(value_ints=[0])
+            cu = op.Cast(cu_seq_q, to=7)  # INT64
+            num_segments = op.Squeeze(op.Sub(op.Shape(cu), one))
+            output = op.Slice(
+                query, op.Constant(value_ints=[0]), op.Constant(value_ints=[0]), axis0
+            )  # empty (0, H, D)
+            for i in range(num_segments):
+                index = op.Reshape(i, one)
+                start = op.Slice(cu, index, op.Add(index, one), axis0)
+                end = op.Slice(cu, op.Add(index, one), op.Add(index, two), axis0)
+                query_heads = op.Transpose(op.Slice(query, start, end, axis0), perm=[1, 0, 2])
+                key_heads = op.Transpose(op.Slice(key, start, end, axis0), perm=[1, 0, 2])
+                value_heads = op.Transpose(op.Slice(value, start, end, axis0), perm=[1, 0, 2])
+                scores = op.Mul(op.MatMul(query_heads, op.Transpose(key_heads, perm=[0, 2, 1])), scale)
+                segment = op.Transpose(op.MatMul(op.Softmax(scores, axis=-1), value_heads), perm=[1, 0, 2])
+                output = op.Concat(output, segment, axis=0)
+            aux = op.CastLike(op.Constant(value_float=0.0), query)
+            return output, aux, aux
+
+        table[torch.ops.torch_attn._varlen_attn.default] = _aten_varlen_attn
+    except (ImportError, AttributeError):
+        pass
+    return table
 
 
 # ── Stage 5: ONNX IR fixes ────────────────────────────────────────────────────
@@ -977,8 +1034,50 @@ def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
+def _fix_ir_bf16_unsupported_ops(graph_like: onnx_ir.Graph) -> None:
+    """Keep a bf16 graph valid across ops whose ONNX type constraints don't admit bfloat16 (e.g. Conv,
+    Sin, Cos — patch-embedding convs and rotary embeddings). Such a node makes the whole model invalid at
+    graph type-checking (rejected by every EP, not just a missing kernel), so wrap it: cast its bf16
+    inputs up to fp32 and its bf16 outputs back down to bf16, leaving it to run in fp32 inside an otherwise
+    bf16 graph. Ops that do admit bf16 (MatMul, Add, Softmax, …) are untouched. The unsupported set is read
+    from `onnx.defs` per node — discovered, not enumerated, so future ops are handled automatically."""
+    opset = (graph_like.opset_imports or {}).get("", None) or 18
+    bf16, fp32 = onnx_ir.DataType.BFLOAT16, onnx_ir.DataType.FLOAT
+    for node in list(graph_like.all_nodes()):
+        if node.domain not in ("", "ai.onnx"):
+            continue
+        try:
+            schema = onnx.defs.get_schema(node.op_type, opset)
+        except Exception:
+            continue
+        if "tensor(bfloat16)" in {t for tc in schema.type_constraints for t in tc.allowed_type_strs}:
+            continue
+        if not any(v is not None and v.dtype == bf16 for v in (*node.inputs, *node.outputs)):
+            continue
+        for index, value in enumerate(node.inputs):
+            if value is not None and value.dtype == bf16:
+                up = onnx_ir.Node(
+                    "", "Cast", [value], {"to": onnx_ir.Attr("to", onnx_ir.AttributeType.INT, fp32.value)}, num_outputs=1
+                )
+                up.outputs[0].dtype, up.outputs[0].shape = fp32, value.shape
+                graph_like.insert_before(node, up)
+                node.replace_input_with(index, up.outputs[0])
+        for value in node.outputs:
+            if value.dtype == bf16:
+                down = onnx_ir.Node(
+                    "", "Cast", [None], {"to": onnx_ir.Attr("to", onnx_ir.AttributeType.INT, bf16.value)}, num_outputs=1
+                )
+                down.outputs[0].dtype, down.outputs[0].shape = bf16, value.shape
+                # redirect consumers to the bf16 result before the cast itself reads `value` (avoids a cycle)
+                value.replace_all_uses_with(down.outputs[0])
+                down.replace_input_with(0, value)
+                value.dtype = fp32  # the op now emits fp32
+                graph_like.insert_after(node, down)
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
+    _fix_ir_bf16_unsupported_ops,
 ]
 
 
