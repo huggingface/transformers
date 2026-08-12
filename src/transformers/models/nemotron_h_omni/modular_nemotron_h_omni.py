@@ -21,9 +21,9 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, FEATURE_EXTRACTOR_MAPPING, AutoModel, AutoModelForCausalLM
 from ..nemotron_h.modeling_nemotron_h import NemotronHRMSNorm
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
@@ -238,16 +238,42 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def get_image_features(self, pixel_values):
-        if isinstance(pixel_values, (list, tuple)):
-            return torch.cat([self.get_image_features(pv) for pv in pixel_values], dim=0)
-        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
-        vit_embeds = self.vision_model(pixel_values).features
-        height, width = pixel_values.shape[-2:]
-        patch_size = self.vision_model.patch_size
-        return self.vision_projector(vit_embeds, height // patch_size, width // patch_size)
+    def _vision_output_kwargs(self, kwargs):
+        # `vision_config` is not reached by the top-level output flags, so forward them explicitly.
+        for flag in ("output_hidden_states", "output_attentions"):
+            kwargs.setdefault(flag, getattr(self.config, flag, None))
+        return kwargs
 
-    def get_video_features(self, pixel_values_videos):
+    @can_return_tuple
+    def get_image_features(self, pixel_values, image_flags=None, **kwargs):
+        # `pixel_values` is a list when tiles of differing sizes are batched; each runs the tower
+        # separately and their projected tokens are concatenated.
+        kwargs = self._vision_output_kwargs(kwargs)
+        tiles = list(pixel_values) if isinstance(pixel_values, (list, tuple)) else [pixel_values]
+        last_hidden_states, image_embeds = [], []
+        for tile in tiles:
+            tile = tile.to(dtype=self.vision_model.config.torch_dtype)
+            vision_outputs = self.vision_model(tile, **kwargs)
+            height, width = tile.shape[-2:]
+            patch_size = self.vision_model.patch_size
+            last_hidden_states.append(vision_outputs.last_hidden_state)
+            image_embeds.append(
+                self.vision_projector(vision_outputs.features, height // patch_size, width // patch_size)
+            )
+
+        image_embeds = torch.cat(image_embeds, dim=0)
+        if image_flags is not None:
+            image_embeds = image_embeds[image_flags.squeeze(-1) == 1]
+        return BaseModelOutputWithPooling(
+            last_hidden_state=torch.cat(last_hidden_states, dim=0),
+            pooler_output=image_embeds,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
+
+    @can_return_tuple
+    def get_video_features(self, pixel_values_videos, **kwargs):
+        kwargs = self._vision_output_kwargs(kwargs)
         pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
         temporal_patch_dim = self.video_temporal_patch_dim
         num_frames, channels, height, width = pixel_values_videos.shape
@@ -264,9 +290,14 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         packed = pixel_values_videos.reshape(
             num_frames // temporal_patch_dim, temporal_patch_dim * channels, height, width
         )
-        vit_embeds = self.vision_model(packed, use_video_patch_projection=True).features
+        vision_outputs = self.vision_model(packed, use_video_patch_projection=True, **kwargs)
         patch_size = self.vision_model.patch_size
-        return self.vision_projector(vit_embeds, height // patch_size, width // patch_size)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=self.vision_projector(vision_outputs.features, height // patch_size, width // patch_size),
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -298,15 +329,13 @@ class NemotronH_Omni_Reasoning_V3(PreTrainedModel, GenerationMixin):
         # Multimodal merges need `input_ids` to locate the placeholder tokens; skip them on the
         # cached decode steps and the inputs-embeds-only path where `input_ids` is absent.
         if pixel_values is not None and input_ids is not None:
-            image_embeds = self.get_image_features(pixel_values)
-            if image_flags is not None:
-                image_embeds = image_embeds[image_flags.squeeze(-1) == 1]
+            image_embeds = self.get_image_features(pixel_values, image_flags=image_flags).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.to(inputs_embeds.device), image_embeds)
 
         if pixel_values_videos is not None and input_ids is not None:
-            video_embeds = self.get_video_features(pixel_values_videos)
+            video_embeds = self.get_video_features(pixel_values_videos).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             video_mask = (input_ids == self.img_context_token_id).unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask.to(inputs_embeds.device), video_embeds)

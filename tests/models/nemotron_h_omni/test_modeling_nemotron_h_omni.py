@@ -112,6 +112,8 @@ class NemotronHOmniVisionText2TextModelTester:
             "num_cls_tokens": 2,
             "num_registers": 1,
         }
+        # The video path reuses the same RADIO tower, so its expected layer counts are the vision ones.
+        self.video_config = self.vision_config
         # Tiny Parakeet encoder + projection. Kept enabled so the `sound_encoder` / `sound_projection`
         # weight renames in the conversion mapping have matching keys to check.
         self.sound_config = {
@@ -175,6 +177,9 @@ class NemotronHOmniModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
     all_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
     all_generative_model_classes = (NemotronH_Omni_Reasoning_V3,) if is_torch_available() else ()
     _is_composite = True
+    # The video path packs `video_temporal_patch_dim` frames into a single tower pass, so the
+    # vision batch dim is deliberately smaller than `pixel_values_videos.shape[0]`.
+    skip_test_video_features_output_shape = True
     test_pruning = False
     test_head_masking = False
 
