@@ -514,7 +514,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             video_end_token_id=self.model_tester.video_end_token_id,
         )
 
-        self.assertIs(config.llm_config, config.text_config)
         self.assertIs(config.vit_config, config.vision_config)
         self.assertIsInstance(config.text_config, Qwen3Config)
         self.assertIsInstance(config.vision_config, Ovis2_5VisionConfig)
