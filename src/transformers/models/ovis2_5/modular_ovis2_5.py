@@ -246,26 +246,17 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.patch_size = config.patch_size
-        if config.num_patches > 0:
-            self.patch_embedding = nn.Linear(
-                config.num_channels * config.patch_size**2,
-                config.hidden_size,
-            )
-            if config.preserve_original_pe:
-                self.position_embedding_size = int(config.num_patches**0.5)
-                self.position_embedding = nn.Embedding(config.num_patches, config.hidden_size)
-        else:
-            self.patch_embedding = nn.Conv2d(
-                in_channels=config.num_channels,
-                out_channels=config.hidden_size,
-                kernel_size=config.patch_size,
-                stride=config.patch_size,
-                padding="valid",
-                bias=True,
-            )
-            if config.preserve_original_pe:
-                self.position_embedding_size = config.image_size // config.patch_size
-                self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            padding="valid",
+            bias=True,
+        )
+        if config.preserve_original_pe:
+            self.position_embedding_size = config.image_size // config.patch_size
+            self.position_embedding = nn.Embedding(self.position_embedding_size**2, config.hidden_size)
 
     def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         grid_values = grid_thw.tolist()

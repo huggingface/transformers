@@ -668,7 +668,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             outputs.last_hidden_state,
         )
 
-    def test_linear_patch_embedding(self):
+    def test_patch_embedding_uses_released_convolutional_layout(self):
         config = self.model_tester.get_vision_config()
         config.num_patches = 16
         model = Ovis2_5VisionModel(config).to(torch_device).eval()
@@ -682,8 +682,11 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, grid_thw=grid_thw)
 
-        self.assertIsInstance(model.get_input_embeddings(), torch.nn.Linear)
-        self.assertEqual(model.transformer.embeddings.position_embedding.num_embeddings, config.num_patches)
+        self.assertIsInstance(model.get_input_embeddings(), torch.nn.Conv2d)
+        self.assertEqual(
+            model.transformer.embeddings.position_embedding.num_embeddings,
+            (config.image_size // config.patch_size) ** 2,
+        )
         self.assertEqual(outputs.pooler_output.shape[0], 4)
 
         config.preserve_original_pe = False
