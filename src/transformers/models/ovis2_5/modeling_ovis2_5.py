@@ -29,10 +29,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -577,6 +577,10 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         hidden_states = self.embeddings(pixel_values, grid_thw)
         position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
@@ -623,6 +627,10 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5VisualFeaturesOutput:
+        r"""
+        image_grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -688,6 +696,12 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5ModelOutputWithPast:
+        r"""
+        image_grid_thw (<fill_type>):
+            <fill_docstring>
+        video_grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
@@ -792,6 +806,10 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5VisualFeaturesOutput:
+        r"""
+        video_grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
@@ -851,6 +869,10 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the causal language modeling loss. Token indices set to `-100` are ignored.
+        image_grid_thw (<fill_type>):
+            <fill_docstring>
+        video_grid_thw (<fill_type>):
+            <fill_docstring>
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -896,6 +918,10 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, GenerationMixin):
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Ovis2_5VisualFeaturesOutput:
+        r"""
+        video_grid_thw (<fill_type>):
+            <fill_docstring>
+        """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     def _get_image_nums_and_video_nums(

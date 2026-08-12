@@ -24,7 +24,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -262,6 +262,7 @@ class Ovis2_5Config(PreTrainedConfig):
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
         super().__post_init__(**kwargs)
 
+
 class Ovis2_5VisionRotaryEmbedding(VideoLlama3VisionRotaryEmbedding):
     pass
 
@@ -342,6 +343,7 @@ class Ovis2_5VisionAttention(VideoLlama3VisionAttention):
 
 class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer):
     pass
+
 
 class Ovis2_5VisionHiddenStateRecorder(nn.Module):
     """Restore encoder states from window order before output hooks record them."""
@@ -467,6 +469,7 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     _supports_cache_class = True
     _supports_flex_attn = True
     _can_compile_fullgraph = False
+
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
 class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
