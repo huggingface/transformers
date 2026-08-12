@@ -568,6 +568,10 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 grid_thw=inputs["image_grid_thw"],
             )
             visual_tokens = model.model.visual_tokenizer(vision_outputs.pooler_output)
+            image_outputs = model.model.get_image_features(
+                pixel_values=inputs["pixel_values"],
+                image_grid_thw=inputs["image_grid_thw"],
+            )
 
         num_indicators = config.vision_config.num_visual_indicator_tokens
         torch.testing.assert_close(
@@ -577,6 +581,10 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(
             visual_tokens[:, :-num_indicators].sum(dim=-1),
             torch.ones(visual_tokens.shape[0], device=torch_device),
+        )
+        torch.testing.assert_close(
+            torch.cat(image_outputs.pooler_output),
+            visual_tokens @ model.model.visual_embeddings_table.weight,
         )
 
     def test_visual_feature_helpers_split_per_input(self):

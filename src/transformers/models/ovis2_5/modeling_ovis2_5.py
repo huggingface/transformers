@@ -674,10 +674,30 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed image.
         """
-        outputs = self._get_visual_features(pixel_values, image_grid_thw, **kwargs)
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            grid_thw=image_grid_thw,
+            return_dict=True,
+            **kwargs,
+        )
+        visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
+        visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
+        indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
+        indicator_token_ids = torch.arange(
+            indicator_start,
+            self.config.visual_vocab_size,
+            dtype=torch.long,
+            device=visual_features.device,
+        )
+        visual_indicator_features = self.visual_embeddings_table(indicator_token_ids)
         split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.hidden_stride**2).tolist()
-        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-        return outputs
+        return Ovis2_5VisualFeaturesOutput(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=torch.split(visual_features, split_sizes),
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            visual_indicator_features=visual_indicator_features,
+        )
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
