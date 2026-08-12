@@ -15,6 +15,7 @@
 Image/Text processor class for GIT
 """
 
+import json
 import math
 import re
 from typing import Union
@@ -57,19 +58,9 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
-            "padding": True,
-            "padding_side": "left",
-            "stride": 0,
-            "return_attention_mask": True,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-            "return_mm_token_type_ids": False,
+            "padding": False,
         },
-        "common_kwargs": {"return_tensors": "pt"}
+        # "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -193,23 +184,6 @@ def transform_coordinates(text: list[str], scale_factors: list["torch.Tensor"]) 
     return processed_text
 
 
-def prepare_input_text(
-    text: list[str],
-    scale_factors: list["torch.Tensor"] | None = None,
-    **kwargs,
-) -> list[str]:
-    """
-    Given a set of prompts add location/bbox tags and BOS/beginning_of_answer_token tokens when needed.
-    """
-    # If not tool use, transform the coordinates while tokenizing
-    if scale_factors is not None:
-        text = transform_coordinates(text, scale_factors)
-
-    # add bos and eos tokens manually
-    text = ["<s>" + prompt + BEGINNING_OF_ANSWER_STRING for prompt in text]
-    return text
-
-
 def construct_full_unpacked_stream(
     num_real_text_tokens: Union[list[list[int]], "torch.Tensor"],
     input_stream: "torch.Tensor",
@@ -225,6 +199,30 @@ def construct_full_unpacked_stream(
     all_bi_stream = [torch.cat([subsequence_stream[:num_real_tokens]], dim=0)]
 
     return all_bi_stream
+
+
+def patch_dummy_prefix(tok):
+    data = json.loads(tok.backend_tokenizer.to_str())
+
+    def strip(node):
+        if node is None:
+            return
+        t = node.get("type")
+        if t == "Metaspace":
+            if "prepend_scheme" in node:
+                node["prepend_scheme"] = "never"
+            if "add_prefix_space" in node:
+                node["add_prefix_space"] = False
+        elif t == "Prepend":
+            node["prepend"] = ""
+        elif t == "Sequence":
+            for sub in node.get("pretokenizers", node.get("normalizers", [])):
+                strip(sub)
+
+    strip(data.get("pre_tokenizer"))
+    strip(data.get("normalizer"))
+    tokenizer_cls = type(tok.backend_tokenizer)
+    tok._tokenizer = tokenizer_cls.from_str(json.dumps(data))
 
 
 @requires(backends=("vision",))
@@ -250,8 +248,15 @@ class FuyuProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         self.max_tokens_to_generate = 10
-        tokenizer.pad_token_id = 0
         vocab = tokenizer.get_vocab()
+        tokenizer.pad_token_id = 0
+
+        # Drop the underscore prefix manually, it gets added by tokenizer when encoding `image_token`
+        # Ref implem appends placeholder IDs manually therefore it isn't appended in ref
+        # Another option to loop over each sample, tokenize, pad and add placeholders manually is too much
+        # custom code, which we don't want anymore
+        patch_dummy_prefix(tokenizer)
+
         self.image_token = "|SPEAKER|"
         self.image_newline_token = "|NEWLINE|"
         self.image_token_id = vocab["|SPEAKER|"]
@@ -268,13 +273,35 @@ class FuyuProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs,
     ):
-        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+        # Don't call super on purpose, the model is extremely custom depending on inputs
+
+        if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
 
         if text is not None and images is not None:
-            text = prepare_input_text(text, **kwargs)
-            text = [self.image_token + prompt for prompt in text]
+            prepared_text = []
+            text = [text] if isinstance(text, str) else text
+            for sample, image in zip(text, images):
+                if image:
+                    # if there is an image associated with text, process location tags
+                    # and add placeholder token at the beginning
+                    # FIXME: scale_factor are output from image processor, this doesn't work!
+                    if (scale_factor := kwargs.get("scale_factor")) is not None:
+                        sample = transform_coordinates(sample, scale_factor)
+                    sample = self.image_token + sample
 
-        return images, text, None, None
+                # add eos tokens manually here, we'll add BOS in `replace_image_token`
+                # because tokenizer's `_` ends up incorrect attached before BOS
+                prepared_text.append(sample + BEGINNING_OF_ANSWER_STRING)
+        elif text is not None:
+            logger.warning("You are processing a text with no associated image. Make sure it is intended.")
+            prepared_text = text
+        elif text is None and images is not None:
+            logger.warning("You are processing an image with no associated text. Make sure it is intended.")
+            prepared_text = [""]
+
+        return images, prepared_text, None, None
 
     def validate_inputs(
         self,
@@ -289,7 +316,6 @@ class FuyuProcessor(ProcessorMixin):
 
     def _process_images(self, images: ImageInput, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
-        images = make_flat_list_of_images(images)
 
         batch_image_patches = []
         image_replacements = []
@@ -314,22 +340,23 @@ class FuyuProcessor(ProcessorMixin):
             image_patches = self.image_processor.patchify_image(image=image, patch_size=patch_size)
             batch_image_patches.append(image_patches.squeeze(0))
 
-            row_width = image_width // patch_width
+            row_width = new_w // patch_width
             replacement_text = self.replace_image_token(
                 processed_images, image_idx=image_idx, num_patches=num_patches, row_width=row_width, **kwargs
             )
             image_replacements.append(replacement_text)
 
-        processed_images["image_patches"] = batch_image_patches
+        processed_images["image_patches"] = torch.cat(batch_image_patches, dim=0)
         return processed_images, image_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Terminate each line with newline token
         image_tokens_with_newlines = []
-        for i in range(0, kwargs["num_patches"], kwargs["row_width"]):
+        for _ in range(0, kwargs["num_patches"], kwargs["row_width"]):
             image_tokens_with_newlines.append(self.image_token * kwargs["row_width"] + self.image_newline_token)
 
-        return "".join(image_tokens_with_newlines)
+        # add BOS token after the image tokens, order kept for BC
+        return "".join(image_tokens_with_newlines) + "<s> "
 
     @auto_docstring
     def __call__(
@@ -344,7 +371,6 @@ class FuyuProcessor(ProcessorMixin):
 
             - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
             - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
-            - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
               `return_attention_mask=True`.
         """
@@ -357,6 +383,17 @@ class FuyuProcessor(ProcessorMixin):
         )
         if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
+
+        # Was hardcoded in ref by manually padding/tensorizing all inputs
+        # Text-only inputs though don't need any of these defaults
+        if text is not None and images is not None:
+            output_kwargs["text_kwargs"]["add_special_tokens"] = True
+            output_kwargs["text_kwargs"]["padding"] = True
+            output_kwargs["text_kwargs"]["padding_side"] = "left"
+
+        if images is not None:
+            output_kwargs["text_kwargs"]["return_tensors"] = "pt"
+            output_kwargs["images_kwargs"]["return_tensors"] = "pt"
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         return model_inputs
@@ -550,17 +587,7 @@ class FuyuProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-
-        # Make a copy of list when removing otherwise `self.image_processor.model_input_names` is also modified
-        extra_image_inputs = [
-            "image_input_ids",
-            "image_patch_indices_per_subsequence",
-            "images",
-            "image_patch_indices_per_batch",
-        ]
-        image_processor_input_names = [name for name in image_processor_input_names if name not in extra_image_inputs]
-        return list(tokenizer_input_names + image_processor_input_names + ["image_patches_indices"])
+        return list(tokenizer_input_names + ["image_patches"])
 
 
 __all__ = ["FuyuProcessor"]
