@@ -440,8 +440,11 @@ class MuseGlimmerTextNormedEmbedding(nn.Embedding):
         # to embed without the norm
         self.embed_norm = MuseGlimmerRMSNorm(eps=norm_eps, with_scale=False)
 
-    def forward(self, input_ids: torch.Tensor):
-        return self.embed_norm(super().forward(input_ids))
+    def forward(self, input_ids: torch.Tensor, apply_norm: bool = True):
+        inputs_embeds = super().forward(input_ids)
+        if not apply_norm:
+            return inputs_embeds
+        return self.embed_norm(inputs_embeds)
 
 
 @auto_docstring
@@ -1145,6 +1148,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
