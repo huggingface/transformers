@@ -631,36 +631,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         )
         return (inputs_embeds == token_embedding).all(dim=-1)
 
-    def _get_visual_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            grid_thw=grid_thw,
-            return_dict=True,
-            **kwargs,
-        )
-        visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
-        visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
-        indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
-        indicator_token_ids = torch.arange(
-            indicator_start,
-            self.config.visual_vocab_size,
-            dtype=torch.long,
-            device=visual_features.device,
-        )
-        visual_indicator_features = self.visual_embeddings_table(indicator_token_ids)
-        return Ovis2_5VisualFeaturesOutput(
-            last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=visual_features,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-            visual_indicator_features=visual_indicator_features,
-        )
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into Ovis2.5 visual embeddings.")
