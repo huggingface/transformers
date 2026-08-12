@@ -16,30 +16,30 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-
 from huggingface_hub.dataclasses import strict
 
-from ...modeling_rope_utils import RopeParameters
-from ..llama.modeling_llama import (
-    LlamaAttention, 
-    LlamaDecoderLayer,
-    LlamaForCausalLM, 
-    LlamaPreTrainedModel,
-    LlamaMLP,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
-from ..llama.configuration_llama import LlamaConfig 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaMLP,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+
 
 @auto_docstring(checkpoint="FrontiersMind/Lumma-0.6B-Base")
 @strict
@@ -74,10 +74,10 @@ class LummaConfig(LlamaConfig):
     >>> configuration = model.config
     ```
     """
- 
+
     model_type = "lumma"
     keys_to_ignore_at_inference = ["past_key_values"]
- 
+
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -158,7 +158,7 @@ class LummaConfig(LlamaConfig):
                 f"`num_hidden_layers` ({self.num_hidden_layers}) must be divisible by "
                 f"`layer_sharing_repeats` ({self.layer_sharing_repeats}) when `layer_sharing=True`."
             )
-        
+
 class LummaRMSNorm(LlamaRMSNorm):
     pass
 
@@ -277,7 +277,7 @@ class LummaAttention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-    
+
 class LummaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: LummaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -505,5 +505,5 @@ class LummaForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
 __all__ = ["LummaConfig", "LummaPreTrainedModel", "LummaModel", "LummaForCausalLM"]

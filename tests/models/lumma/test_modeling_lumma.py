@@ -1137,3 +1137,4 @@ class LummaModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             output = model(input_ids)
         self.assertEqual(output.logits.shape, (2, 4, config.vocab_size))
+        
