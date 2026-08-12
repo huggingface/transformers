@@ -259,6 +259,7 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
 class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Ovis2_5VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw"]
+    # The vision input embedding is a patch projection, not a resizable token embedding.
     test_resize_embeddings = False
     # Packed grid metadata uses data-dependent Python control flow.
     test_torch_exportable = False
@@ -270,12 +271,14 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # The vision input embedding is a Conv2d patch projection rather than nn.Embedding.
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5VisionModel(config)
         self.assertIsInstance(model.get_input_embeddings(), torch.nn.Module)
         self.assertIsNone(model.get_output_embeddings())
 
+    # Packed patch rows must stay aligned with grid_thw when the comparison batch is expanded.
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self,
@@ -377,6 +380,7 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
         torch.testing.assert_close(hidden_states_eager, hidden_states_flash, atol=atol, rtol=rtol)
 
+    # Each layer returns one attention tensor per packed image instead of one dense batch tensor.
     def test_attention_outputs(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -400,6 +404,7 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
         model = Ovis2_5VisionModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
         check_attention_outputs(model, inputs)
 
+    # Hidden states contain packed patches and one recorded state per encoder layer.
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         expected_shape = [int(inputs["grid_thw"].prod(dim=1).sum()), self.model_tester.hidden_size]
@@ -418,6 +423,7 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
         model = Ovis2_5VisionModel(config).to(torch_device).eval()
         check_hidden_states(model, inputs)
 
+    # Attention outputs are nested by layer and packed image.
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5VisionModel._from_config(config, attn_implementation="eager").to(torch_device)
@@ -435,16 +441,18 @@ class Ovis2_5VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
-    model_tester_class = Ovis2_5VisionText2TextModelTester if is_torch_available() else None
+    model_tester_class = Ovis2_5VisionText2TextModelTester
     # The visual-tokenizer head consumes the encoder state before post_layernorm.
     test_all_params_have_gradient = False
     # Packed patch counts and grid metadata use data-dependent Python control flow.
     test_torch_exportable = False
 
+    # Ovis records encoder-layer states without an initial embedding state.
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         model_tester = self.model_tester if model_tester is None else model_tester
         return model_tester.num_hidden_layers
 
+    # Video features use the same encoder-state contract as image features.
     def _video_features_get_expected_num_hidden_states(self, model_tester=None):
         model_tester = self.model_tester if model_tester is None else model_tester
         return model_tester.num_hidden_layers
@@ -453,6 +461,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         # The official-key mapping targets the conditional model's `model.*` subtree.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    # Generic batch slicing would separate flattened patches from their grid metadata.
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         filtered_inputs = {}
@@ -471,6 +480,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         text_config.forced_eos_token_id = None
         return config, filtered_inputs
 
+    # One Ovis image is a complete packed patch group plus one grid row, not one pixel tensor row.
     def test_mismatching_num_image_tokens(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         patches_per_image = self.model_tester.num_image_patches
