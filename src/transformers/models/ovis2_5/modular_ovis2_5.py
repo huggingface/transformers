@@ -626,7 +626,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         grid_thw: torch.LongTensor,
         is_video: bool,
     ) -> torch.FloatTensor:
-        atom_mask = self._get_token_mask(self.config.visual_atom_token_id, input_ids, inputs_embeds)
+        atom_token_id = self.config.video_token_id if is_video else self.config.image_token_id
+        atom_mask = self._get_token_mask(atom_token_id, input_ids, inputs_embeds)
         torch_compilable_check(
             atom_mask.sum() * inputs_embeds.shape[-1] == visual_features.numel(),
             lambda: (
