@@ -42,6 +42,7 @@ from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
 from ..video_llama_3.modeling_video_llama_3 import (
+    VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoderLayer,
@@ -483,23 +484,8 @@ class Ovis2_5ModelOutputWithPast(VideoLlama3ModelOutputWithPast):
     pass
 
 
-@auto_docstring
-@dataclass
-class Ovis2_5CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor`, *optional*):
-        Causal language modeling loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, vocab_size)`, *optional*):
-        Language modeling logits.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+class Ovis2_5CausalLMOutputWithPast(VideoLlama3CausalLMOutputWithPast):
+    pass
 
 
 @auto_docstring
