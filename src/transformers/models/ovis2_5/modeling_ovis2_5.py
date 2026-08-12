@@ -642,9 +642,8 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 class Ovis2_5Model(Ovis2_5PreTrainedModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
-        vision_config = cast(Ovis2_5VisionConfig, config.vision_config)
-        # Ovis2_5Config.__post_init__ constructs the Qwen3 sub-config.
-        text_config = cast(Any, config.text_config)
+        vision_config = config.vision_config
+        text_config = config.text_config
         self.vision_tower = Ovis2_5VisionModel(vision_config)
         self.visual_embeddings_table = Ovis2_5VisualEmbeddingTable(
             config.visual_vocab_size,
