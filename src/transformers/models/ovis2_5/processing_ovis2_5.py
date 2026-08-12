@@ -70,21 +70,11 @@ class Ovis2_5Processor(ProcessorMixin):
         self.image_end_token = image_end_token
         self.video_start_token = video_start_token
         self.video_end_token = video_end_token
-        self.visual_atom_token_id = self._resolve_special_token_id(tokenizer, visual_atom_token)
-        self.image_start_token_id = self._resolve_special_token_id(tokenizer, image_start_token)
-        self.image_end_token_id = self._resolve_special_token_id(tokenizer, image_end_token)
-        self.video_start_token_id = self._resolve_special_token_id(tokenizer, video_start_token)
-        self.video_end_token_id = self._resolve_special_token_id(tokenizer, video_end_token)
-
-        special_token_ids = {
-            self.visual_atom_token_id,
-            self.image_start_token_id,
-            self.image_end_token_id,
-            self.video_start_token_id,
-            self.video_end_token_id,
-        }
-        if len(special_token_ids) != 5:
-            raise ValueError("Ovis2.5's visual atom and four indicator tokens must have distinct token IDs.")
+        self.visual_atom_token_id = tokenizer.convert_tokens_to_ids(visual_atom_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(image_end_token)
+        self.video_start_token_id = tokenizer.convert_tokens_to_ids(video_start_token)
+        self.video_end_token_id = tokenizer.convert_tokens_to_ids(video_end_token)
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
