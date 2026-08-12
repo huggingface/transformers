@@ -37,6 +37,9 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
         Window size, in input pixels, used by windowed vision-attention layers.
     fullatt_block_indexes (`tuple[int, ...]`, *optional*):
         Indices of vision layers that use full attention. `None` makes every layer use full attention.
+    layer_types (`list[str]`, *optional*):
+        Per-layer attention type. Values are `"full_attention"` or `"sliding_attention"`. When omitted, this is derived
+        from `fullatt_block_indexes`.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
     preserve_original_pe (`bool`, *optional*, defaults to `True`):
@@ -66,6 +69,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     hidden_stride: int = 2
     window_size: int = 112
     fullatt_block_indexes: tuple[int, ...] | list[int] | str | None = None
+    layer_types: list[str] | tuple[str, ...] | None = None
     temporal_patch_size: int = 1
     preserve_original_pe: bool = True
     use_rope: bool = True
@@ -81,6 +85,26 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
             )
         elif isinstance(self.fullatt_block_indexes, list):
             self.fullatt_block_indexes = tuple(self.fullatt_block_indexes)
+
+        if self.layer_types is None:
+            full_attention_layers = (
+                set(range(self.num_hidden_layers))
+                if self.fullatt_block_indexes is None
+                else set(self.fullatt_block_indexes)
+            )
+            self.layer_types = [
+                "full_attention" if layer_index in full_attention_layers else "sliding_attention"
+                for layer_index in range(self.num_hidden_layers)
+            ]
+        else:
+            self.layer_types = list(self.layer_types)
+        if len(self.layer_types) != self.num_hidden_layers:
+            raise ValueError(
+                f"Expected one vision attention type per layer, but got {len(self.layer_types)} entries for "
+                f"{self.num_hidden_layers} layers."
+            )
+        if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
+            raise ValueError(f"Unsupported Ovis2.5 vision attention types: {sorted(invalid_layer_types)}")
 
         super().__post_init__(**kwargs)
 

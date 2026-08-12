@@ -524,6 +524,18 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertNotIn("llm_config", serialized_config)
         self.assertNotIn("vit_config", serialized_config)
 
+    def test_vision_layer_types_follow_full_attention_indexes(self):
+        config = Ovis2_5VisionConfig(num_hidden_layers=4, fullatt_block_indexes=(1, 3))
+        self.assertEqual(
+            config.layer_types,
+            ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "one vision attention type per layer"):
+            Ovis2_5VisionConfig(num_hidden_layers=2, layer_types=["full_attention"])
+        with self.assertRaisesRegex(ValueError, "Unsupported Ovis2.5 vision attention types"):
+            Ovis2_5VisionConfig(num_hidden_layers=1, layer_types=["invalid"])
+
     def test_converter_translates_original_subconfig_names(self):
         from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
 
