@@ -1595,6 +1595,9 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
 
+        # Same tensor the stopping criteria are built from, so a draft cropped here stops generation
+        self.eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
+
         self.is_main_model_prefill = True
 
     def get_candidates(
@@ -1692,6 +1695,17 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
             candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        # Crop the draft after the first EOS, otherwise the target model may accept eos and the rest as valid,
+        # thus not stopping generation after "eos" -- the block is committed before the stopping criteria run,
+        # and they only look at the last committed token. Cropping leaves EOS last, so they fire unchanged.
+        if self.eos_token_id is not None:
+            drafted_tokens = candidate_ids[0, input_ids.shape[1] :]
+            eos_positions = (torch.isin(drafted_tokens, self.eos_token_id.to(drafted_tokens.device))).nonzero()
+            if eos_positions.numel() > 0:
+                num_drafted = eos_positions[0].item() + 1
+                candidate_ids = candidate_ids[:, : input_ids.shape[1] + num_drafted]
+                candidate_logits = candidate_logits[:, :num_drafted]
 
         return candidate_ids, candidate_logits
 
