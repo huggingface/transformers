@@ -307,6 +307,7 @@ class Ovis2_5VisionAttention(nn.Module):
 class Ovis2_5VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
+        self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = Ovis2_5VisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

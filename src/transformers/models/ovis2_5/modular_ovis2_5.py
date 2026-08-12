@@ -26,7 +26,6 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -42,7 +41,11 @@ from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
-from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention, VideoLlama3VisionMLP
+from ..video_llama_3.modeling_video_llama_3 import (
+    VideoLlama3VisionAttention,
+    VideoLlama3VisionEncoderLayer,
+    VideoLlama3VisionMLP,
+)
 
 
 class Ovis2_5ImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
@@ -314,9 +317,9 @@ class Ovis2_5VisionAttention(VideoLlama3VisionAttention):
     pass
 
 
-class Ovis2_5VisionEncoderLayer(GradientCheckpointingLayer):
+class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer):
     def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = Ovis2_5VisionAttention(config)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
