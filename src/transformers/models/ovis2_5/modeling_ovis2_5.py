@@ -767,19 +767,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             video_hidden_states=video_hidden_states,
         )
 
-    def _get_token_mask(
-        self,
-        token_id: int,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-    ) -> torch.BoolTensor:
-        if input_ids is not None:
-            return input_ids == token_id
-        token_embedding = self.get_input_embeddings()(
-            torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
-        )
-        return (inputs_embeds == token_embedding).all(dim=-1)
-
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes videos into Ovis2.5 visual embeddings.")

@@ -544,19 +544,6 @@ class Ovis2_5Model(Ovis2Model):
         self.language_model = AutoModel.from_config(text_config)
         self.post_init()
 
-    def _get_token_mask(
-        self,
-        token_id: int,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-    ) -> torch.BoolTensor:
-        if input_ids is not None:
-            return input_ids == token_id
-        token_embedding = self.get_input_embeddings()(
-            torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
-        )
-        return (inputs_embeds == token_embedding).all(dim=-1)
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into Ovis2.5 visual embeddings.")
