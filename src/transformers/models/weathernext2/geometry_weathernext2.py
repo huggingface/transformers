@@ -42,11 +42,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-# --------------------------------------------------------------------------------------------
-# Coordinate helpers
-# --------------------------------------------------------------------------------------------
-
-
 def lat_lon_deg_to_spherical(lat: np.ndarray, lon: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(lat, lon) in degrees -> (phi=azimuth, theta=polar) in radians."""
     phi = np.deg2rad(lon)
@@ -73,11 +68,6 @@ def lat_lon_to_cartesian(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
 def cartesian_to_lat_lon(xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     phi, theta = cartesian_to_spherical(xyz[..., 0], xyz[..., 1], xyz[..., 2])
     return 90.0 - np.rad2deg(theta), np.mod(np.rad2deg(phi), 360.0)
-
-
-# --------------------------------------------------------------------------------------------
-# Icosahedral mesh
-# --------------------------------------------------------------------------------------------
 
 
 def get_icosahedron(pole_parallel_faces: bool = True) -> tuple[np.ndarray, np.ndarray]:
@@ -212,11 +202,6 @@ def get_mask_bandwidth(mask: sp.spmatrix) -> int:
     return int(np.abs(coo.row.astype(np.int64) - coo.col.astype(np.int64)).max()) + 1
 
 
-# --------------------------------------------------------------------------------------------
-# Grid <-> mesh connectivity
-# --------------------------------------------------------------------------------------------
-
-
 def max_mesh_edge_length(vertices: np.ndarray, faces: np.ndarray) -> float:
     senders, receivers = faces_to_edges(faces)
     return float(np.linalg.norm(vertices[senders] - vertices[receivers], axis=-1).max())
@@ -328,11 +313,6 @@ def in_triangle_edges(
     return grid_indices, mesh_indices
 
 
-# --------------------------------------------------------------------------------------------
-# Node / edge features
-# --------------------------------------------------------------------------------------------
-
-
 def get_spatial_features(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
     """`[sin_lat, sin_lon, cos_lon]`, the only node features the model gets from geometry."""
     return np.stack([np.sin(np.deg2rad(lat)), np.sin(np.deg2rad(lon)), np.cos(np.deg2rad(lon))], axis=-1)
@@ -384,11 +364,6 @@ def get_edge_features(
     relative_position = relative_position / edge_normalization_factor
 
     return np.concatenate([distances, relative_position], axis=-1)
-
-
-# --------------------------------------------------------------------------------------------
-# Bundle
-# --------------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -580,7 +555,3 @@ def _load_geometry(path: str) -> WeatherNext2Geometry:
         mesh_to_grid_receivers=data["mesh_to_grid_receivers"],
         mesh_to_grid_edge_features=data["mesh_to_grid_edge_features"],
     )
-
-
-# Deliberately no `__all__`: this module is an internal helper, not part of the public API, and it
-# imports scipy at module level. Exporting it would make `from transformers import *` require scipy.

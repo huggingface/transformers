@@ -1980,12 +1980,6 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_WEATHER_FORECASTING_MAPPING_NAMES = OrderedDict(
-    [
-        ("weathernext2", "WeatherNext2ForWeatherForecasting"),
-    ]
-)
-
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         ("swin2sr", "Swin2SRForImageSuperResolution"),
@@ -2138,10 +2132,6 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = _LazyAutoMapping(
 
 MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES
-)
-
-MODEL_FOR_WEATHER_FORECASTING_MAPPING = _LazyAutoMapping(
-    CONFIG_MAPPING_NAMES, MODEL_FOR_WEATHER_FORECASTING_MAPPING_NAMES
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
@@ -2336,13 +2326,6 @@ class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
 AutoModelForTimeSeriesPrediction = auto_class_update(
     AutoModelForTimeSeriesPrediction, head_doc="time-series prediction"
 )
-
-
-class AutoModelForWeatherForecasting(_BaseAutoModelClass):
-    _model_mapping = MODEL_FOR_WEATHER_FORECASTING_MAPPING
-
-
-AutoModelForWeatherForecasting = auto_class_update(AutoModelForWeatherForecasting, head_doc="weather forecasting")
 
 
 class AutoModelForUniversalSegmentation(_BaseAutoModelClass):
@@ -2583,7 +2566,6 @@ __all__ = [
     "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
     "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
     "MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING",
-    "MODEL_FOR_WEATHER_FORECASTING_MAPPING",
     "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
     "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
     "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -2633,7 +2615,6 @@ __all__ = [
     "AutoModelForTextToSpectrogram",
     "AutoModelForTextToWaveform",
     "AutoModelForTimeSeriesPrediction",
-    "AutoModelForWeatherForecasting",
     "AutoModelForTokenClassification",
     "AutoModelForUniversalSegmentation",
     "AutoModelForVideoClassification",

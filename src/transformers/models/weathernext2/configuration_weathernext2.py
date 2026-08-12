@@ -157,8 +157,7 @@ class WeatherNext2Config(PreTrainedConfig):
     ```"""
 
     model_type = "weathernext2"
-    # Only the mesh transformer is tensor-parallel; the graph network is sharded over nodes, not
-    # channels. Paths are relative to `WeatherNext2Model`.
+    # Only the mesh transformer is tensor-parallel.
     base_model_tp_plan = {
         "mesh_transformer.layers.*.self_attn.q_proj": "colwise",
         "mesh_transformer.layers.*.self_attn.k_proj": "colwise",
@@ -223,13 +222,6 @@ class WeatherNext2Config(PreTrainedConfig):
         unknown_shifted = set(self.sigmoid_shifted_outputs or {}) - set(self.target_variables)
         if unknown_shifted:
             raise ValueError(f"`sigmoid_shifted_outputs` {sorted(unknown_shifted)} are not in `target_variables`.")
-
-    # ---------------------------------------------------------------------------------------
-    # Channel layout. The encoders and the decoder are plain linear layers over a flat channel
-    # axis, so both the model and the processor need one shared description of what that axis
-    # contains. `*_channel_layout` is that description: an ordered list of
-    # `(variable, time_offset_hours or None, num_levels)`.
-    # ---------------------------------------------------------------------------------------
 
     def num_levels(self, variable: str) -> int:
         return len(self.pressure_levels) if variable in self.atmospheric_variables else 1

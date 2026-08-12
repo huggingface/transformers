@@ -299,9 +299,3 @@ The following auto classes are available for the following multimodal tasks.
 ### AutoModelForTimeSeriesPrediction
 
 [[autodoc]] AutoModelForTimeSeriesPrediction
-
-## Weather
-
-### AutoModelForWeatherForecasting
-
-[[autodoc]] AutoModelForWeatherForecasting

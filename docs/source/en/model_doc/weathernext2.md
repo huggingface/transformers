@@ -48,6 +48,33 @@ The 0.25° repositories hold all four independently trained ensemble members: me
 `model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects one. The examples below
 use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly 50 GB per ensemble member.
 
+## Getting initial conditions
+
+Unlike text or images, the input here is a physical atmospheric state that has to come from somewhere. The checkpoints
+are fine-tuned to be initialized from ECMWF HRES *analysis* - the operational best estimate of the current atmosphere -
+rather than from reanalysis. [earth2studio](https://github.com/NVIDIA/earth2studio) wraps the public sources:
+
+```python
+from earth2studio.data import IFS
+
+ifs = IFS(source="ecmwf")            # HRES analysis, 0.25°, updated four times a day
+data = ifs(times, ["t2m", "msl", "u10m", "v10m", "z500", "t850"])
+```
+
+Three things need care when assembling the state:
+
+- **Latitude order.** earth2studio returns latitudes descending (90 to -90); WeatherNext 2 expects them ascending.
+  Getting this backwards produces a plausible-looking forecast with badly degraded skill rather than an error.
+- **Two frames.** The model conditions on the current analysis and the one 6 hours earlier, in that order.
+- **Missing fields.** `geopotential_at_surface` is static and is not in the IFS lexicon - take it from any reanalysis
+  file, since it never changes. `sea_surface_temperature` is likewise absent; skin temperature masked to the ocean is
+  a workable substitute, and ERA5 through [`earth2studio.data.ARCO`] is better when the initialization time is old
+  enough to be covered.
+
+The clock forcings are derived by [`~WeatherNext2FeatureExtractor.compute_forcings`], so they never need fetching.
+For historical cases, ERA5 via ARCO or [WeatherBench 2](https://sites.research.google/weatherbench/) is simpler than
+analysis, at the cost of a small mismatch with what these checkpoints were tuned for.
+
 ## Usage
 
 The model itself works in a normalized space, and [`WeatherNext2FeatureExtractor`] owns everything physical: the per-variable
@@ -59,7 +86,7 @@ import numpy as np
 import torch
 from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2FeatureExtractor
 
-model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini").eval()
+model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext2-mini", device_map="auto").eval()
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
 
 # `state` maps each input variable to its values. Time-varying variables are
@@ -67,13 +94,16 @@ processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mi
 state = ...
 valid_time = np.array([np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64)])
 
-inputs = processor(state, seconds_since_epoch=valid_time)
+inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
 with torch.no_grad():
     outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
 
 forecast = processor.postprocess(outputs.prediction, state)
 print(forecast["2m_temperature"].shape)  # (1, 181, 360)
 ```
+
+The noise is drawn on the generator's device and moved to the model's, so a plain CPU `torch.Generator` gives the
+same ensemble on any accelerator.
 
 ### Ensembles
 
@@ -82,7 +112,7 @@ noise draw. Because the members are independent, they can also be split across d
 
 ```python
 members = 8
-inputs = processor(state, seconds_since_epoch=valid_time)
+inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
 inputs = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
 
 with torch.no_grad():
@@ -98,10 +128,12 @@ also inputs (precipitation and the cyclone diagnostics).
 ```python
 step_seconds = processor.time_step_hours * 3600
 for step in range(1, 21):  # 5 days
-    inputs = processor(state, seconds_since_epoch=valid_time)
+    inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
     with torch.no_grad():
         outputs = model(**inputs)
     forecast = processor.postprocess(outputs.prediction, state)
+    # `valid_time` moves first: it is the time of the frame `advance_state` is about to append, and
+    # the same time the next iteration conditions on.
     valid_time = valid_time + step_seconds
     state = processor.advance_state(state, forecast, valid_time)
 ```

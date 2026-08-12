@@ -17,11 +17,15 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import WeatherNext2Config, is_torch_available
+from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -29,6 +33,8 @@ if is_torch_available():
     import torch
 
     from transformers import WeatherNext2ForWeatherForecasting, WeatherNext2Model
+    from transformers.models.weathernext2.geometry_weathernext2 import build_geometry
+    from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2Attention
 
 
 class WeatherNext2ModelTester:
@@ -103,6 +109,47 @@ class WeatherNext2ModelTester:
             result.mesh_hidden_state.shape, (self.batch_size, config.num_mesh_nodes, self.hidden_size)
         )
 
+    def get_feature_extractor(self):
+        """A feature extractor describing exactly the variables the config expects, with trivial statistics."""
+        config = self.get_config()
+        variables = set(config.input_variables) | set(config.target_variables)
+        return WeatherNext2FeatureExtractor(
+            input_variables=config.input_variables,
+            target_variables=config.target_variables,
+            forcing_variables=config.forcing_variables,
+            atmospheric_variables=config.atmospheric_variables,
+            static_variables=config.static_variables,
+            global_variables=config.global_variables,
+            pressure_levels=config.pressure_levels,
+            mean_by_level={name: [0.0] * config.num_levels(name) for name in variables},
+            stddev_by_level={name: [1.0] * config.num_levels(name) for name in variables},
+            diffs_stddev_by_level={name: [1.0] * config.num_levels(name) for name in variables},
+            num_input_timesteps=config.num_input_timesteps,
+            time_step_hours=config.time_step_hours,
+            grid_latitudes=config.grid_latitudes,
+            grid_longitudes=config.grid_longitudes,
+        )
+
+    def prepare_state(self, extractor, batch_size, seed=0):
+        """A physical atmospheric state, shaped the way the model documentation describes it."""
+        generator = np.random.default_rng(seed)
+        frames = extractor.num_input_timesteps
+        latitudes, longitudes = extractor.grid_latitudes, extractor.grid_longitudes
+        state = {}
+        for name in extractor.input_variables:
+            if name in extractor.static_variables:
+                shape = (latitudes, longitudes)
+            elif name in extractor.global_variables:
+                shape = (batch_size, frames)
+            elif name in extractor.forcing_variables:
+                shape = (batch_size, frames, longitudes)
+            elif name in extractor.atmospheric_variables:
+                shape = (batch_size, frames, len(extractor.pressure_levels), latitudes, longitudes)
+            else:
+                shape = (batch_size, frames, latitudes, longitudes)
+            state[name] = generator.standard_normal(shape).astype(np.float32)
+        return state
+
     def prepare_config_and_inputs_for_common(self):
         config, grid_features, global_features, noise = self.prepare_config_and_inputs()
         return config, {
@@ -110,10 +157,6 @@ class WeatherNext2ModelTester:
             "global_features": global_features,
             "noise": noise,
         }
-
-
-def floats_tensor(shape):
-    return torch.randn(*shape, device=torch_device, dtype=torch.float32)
 
 
 @require_torch
@@ -168,6 +211,48 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
         torch.testing.assert_close(baseline, repeated)
         self.assertFalse(torch.allclose(baseline, perturbed))
+
+    def test_batched_rollout_matches_running_members_alone(self):
+        """The batch axis carries ensemble members, so a batched rollout must equal member-by-member runs.
+
+        This walks the whole documented loop - feature extractor, model, `postprocess`, `advance_state` - because
+        a batch axis that only works in the model is not much use.
+        """
+        config = self.model_tester.get_config()
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+
+        batch_size = 3
+        state = self.model_tester.prepare_state(extractor, batch_size)
+        valid_time = np.full(batch_size, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
+        noise = torch.randn(batch_size, config.noise_channels, device=torch_device)
+
+        for _ in range(2):
+            inputs = extractor(state, seconds_since_epoch=valid_time).to(torch_device)
+            with torch.no_grad():
+                prediction = model(**inputs, noise=noise).prediction
+            forecast = extractor.postprocess(prediction, state)
+            valid_time = valid_time + extractor.time_step_hours * 3600
+            state = extractor.advance_state(state, forecast, valid_time)
+
+        for member in range(batch_size):
+            solo_state = {
+                name: values if name in extractor.static_variables else values[member : member + 1]
+                for name, values in self.model_tester.prepare_state(extractor, batch_size).items()
+            }
+            solo_time = np.full(1, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
+            for _ in range(2):
+                inputs = extractor(solo_state, seconds_since_epoch=solo_time).to(torch_device)
+                with torch.no_grad():
+                    prediction = model(**inputs, noise=noise[member : member + 1]).prediction
+                forecast = extractor.postprocess(prediction, solo_state)
+                solo_time = solo_time + extractor.time_step_hours * 3600
+                solo_state = extractor.advance_state(solo_state, forecast, solo_time)
+
+            for name, values in solo_state.items():
+                if name in extractor.static_variables:
+                    continue
+                np.testing.assert_allclose(values[0], state[name][member], rtol=1e-4, atol=1e-4)
 
     def test_channel_layout_matches_projection_shapes(self):
         config = self.model_tester.get_config()
@@ -240,8 +325,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_banded_attention_matches_dense_masking(self):
         """The three-block-diagonal attention must equal masking the full node-by-node matrix."""
-        from transformers.models.weathernext2.modeling_weathernext2 import WeatherNext2Attention
-
         config = self.model_tester.get_config()
         model = WeatherNext2Model(config).to(torch_device).eval()
         attention: WeatherNext2Attention = model.mesh_transformer.layers[0].self_attn
@@ -304,8 +387,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 @require_torch
 class WeatherNext2GeometryTest(unittest.TestCase):
     def test_mesh_sizes_and_banded_mask(self):
-        from transformers.models.weathernext2.geometry_weathernext2 import build_geometry
-
         geometry = build_geometry(
             mesh_splits=2,
             grid_lat=np.linspace(-90, 90, 19),
@@ -327,8 +408,6 @@ class WeatherNext2GeometryTest(unittest.TestCase):
         self.assertLessEqual(np.abs(geometry.mesh_to_grid_edge_features[:, 1:]).max(), 1.0 + 1e-6)
 
     def test_geometry_is_deterministic(self):
-        from transformers.models.weathernext2.geometry_weathernext2 import build_geometry
-
         kwargs = {
             "mesh_splits": 1,
             "grid_lat": np.linspace(-90, 90, 13),
@@ -353,8 +432,6 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
     checkpoint = "kashif/weathernext2-mini"
 
     def test_inference_shapes_and_determinism(self):
-        from transformers import WeatherNext2FeatureExtractor
-
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
         processor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
         config = model.config

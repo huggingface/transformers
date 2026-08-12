@@ -126,10 +126,6 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.grid_latitudes = grid_latitudes
         self.grid_longitudes = grid_longitudes
 
-    # ---------------------------------------------------------------------------------------
-    # Layout
-    # ---------------------------------------------------------------------------------------
-
     @property
     def longitudes(self) -> np.ndarray:
         return np.arange(self.grid_longitudes) * (360.0 / self.grid_longitudes)
@@ -163,10 +159,6 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     @property
     def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
         return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
-
-    # ---------------------------------------------------------------------------------------
-    # Normalization
-    # ---------------------------------------------------------------------------------------
 
     def _statistic(self, table: Mapping[str, Any], variable: str) -> np.ndarray | None:
         """Per-level statistic for a variable, or `None` if it has none.
@@ -207,10 +199,6 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             return statistic.reshape([1] * values.ndim)
         return statistic.reshape([1] * (values.ndim - 3) + [-1, 1, 1])
 
-    # ---------------------------------------------------------------------------------------
-    # Forcings
-    # ---------------------------------------------------------------------------------------
-
     def compute_forcings(self, seconds_since_epoch: np.ndarray) -> dict[str, np.ndarray]:
         """Clock-derived variables at the given times.
 
@@ -227,17 +215,30 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             "day_progress_cos": np.cos(day),
         }
 
-    # ---------------------------------------------------------------------------------------
-    # Encoding / decoding
-    # ---------------------------------------------------------------------------------------
+    def _batch_size(self, state: Mapping[str, Any], forcings: Mapping[str, Any]) -> int:
+        """Number of ensemble members in a call, taken from the first variable that carries a batch axis.
 
-    def _field(self, state: Mapping[str, Any], variable: str, time_index: int | None) -> np.ndarray:
+        Static fields have no batch axis, so they cannot be used; every other input does, and they must agree.
+        """
+        sizes = {
+            np.asarray(values).shape[0]
+            for source in (state, forcings)
+            for name, values in source.items()
+            if name not in self.static_variables and np.asarray(values).ndim > 0
+        }
+        if len(sizes) != 1:
+            raise ValueError(f"Inconsistent batch sizes across the inputs: {sorted(sizes)}.")
+        return sizes.pop()
+
+    def _field(
+        self, state: Mapping[str, Any], variable: str, time_index: int | None, batch_size: int = 1
+    ) -> np.ndarray:
         """Extracts `[batch, levels, lat, lon]` for one variable at one conditioning frame."""
         values = np.asarray(state[variable], dtype=np.float32)
         if variable in self.static_variables:
-            while values.ndim < 4:
-                values = values[None]
-            return np.broadcast_to(values, (values.shape[0], 1, self.grid_latitudes, self.grid_longitudes))
+            # Static fields carry no batch axis of their own, so they are shared by every member.
+            values = values.reshape(-1, 1, self.grid_latitudes, self.grid_longitudes)
+            return np.broadcast_to(values, (batch_size, 1, self.grid_latitudes, self.grid_longitudes))
 
         values = values[:, time_index]
         if variable in self.global_variables:
@@ -287,15 +288,16 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             forcings = self.compute_forcings(np.asarray(seconds_since_epoch))
         forcings = {name: np.asarray(values, dtype=np.float32)[:, None] for name, values in forcings.items()}
 
+        batch_size = self._batch_size(state, forcings)
         grid_channels = []
         global_channels = []
         for variable, offset, _ in self.input_channel_layout:
             if offset is not None and offset > 0:
-                field = self._field(forcings, variable, 0)
+                field = self._field(forcings, variable, 0, batch_size)
             elif offset is None:
-                field = self._field(state, variable, None)
+                field = self._field(state, variable, None, batch_size)
             else:
-                field = self._field(state, variable, self.past_time_offsets.index(offset))
+                field = self._field(state, variable, self.past_time_offsets.index(offset), batch_size)
             field = self.normalize(field, variable)
             grid_channels.append(field)
             if variable in self.global_variables:

@@ -56,11 +56,6 @@ SPATIAL_NODE_FEATURES = "sin_lat,sin_lon,cos_lon"
 SPATIAL_EDGE_FEATURES = "distance,rel_x,rel_y,rel_z"
 
 
-# -------------------------------------------------------------------------------------------------
-# Fiddle config
-# -------------------------------------------------------------------------------------------------
-
-
 def load_fiddle_config(path: str) -> dict[str, Any]:
     """Materializes a Fiddle JSON graph into plain Python containers."""
     document = json.load(open(path))
@@ -150,11 +145,6 @@ def nan_filled_variables_from_fiddle(fiddle: dict[str, Any]) -> list[str]:
     return variables
 
 
-# -------------------------------------------------------------------------------------------------
-# Parameter names
-# -------------------------------------------------------------------------------------------------
-
-
 def split_weight_name(config: WeatherNext2Config, variable: str, time_offset: int | None, prefix: str) -> str:
     """Rebuilds the per-variable weight name used by the original `xarray_dense` encoders.
 
@@ -197,11 +187,6 @@ def stacked_output_weight(
     return np.concatenate(weights, axis=1).T, np.concatenate(biases, axis=0)
 
 
-# -------------------------------------------------------------------------------------------------
-# Conversion
-# -------------------------------------------------------------------------------------------------
-
-
 def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config) -> dict[str, torch.Tensor]:
     state_dict: dict[str, torch.Tensor] = {}
     consumed: set[str] = set()
@@ -222,7 +207,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
         put(f"{target}.norm.film.linear.weight", take(f"{film}:w").T)
         put(f"{target}.norm.film.linear.bias", take(f"{film}:b"))
 
-    # --- noise, encoders -------------------------------------------------------------------
+    # --- noise, encoders
     put(
         "model.noise_encoder.weight",
         take(
@@ -242,7 +227,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
         consumed.add(f"{module}/split_input_matmul:w_spatial_feature={SPATIAL_NODE_FEATURES}")
         convert_conditioned_mlp(target, module)
 
-    # --- graph networks --------------------------------------------------------------------
+    # --- graph networks
     for target, module, edge_set, receiver in (
         ("model.grid_to_mesh", "grid_to_mesh_gnn", "points_to_mesh_nodes", "mesh"),
         ("model.mesh_to_grid", "mesh_to_grid_gnn", "mesh_to_points_nodes", "point"),
@@ -281,7 +266,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
             put(f"{target}.{node_target}.norm.film.linear.weight", take(f"{film}:w").T)
             put(f"{target}.{node_target}.norm.film.linear.bias", take(f"{film}:b"))
 
-    # --- mesh transformer ------------------------------------------------------------------
+    # --- mesh transformer
     for layer_idx in range(config.num_hidden_layers):
         block = f"mesh_transformer/transformer/block_{layer_idx:02d}"
         target = f"model.mesh_transformer.layers.{layer_idx}"
@@ -303,7 +288,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     put("model.mesh_transformer.norm.film.linear.weight", take(f"{film}:w").T)
     put("model.mesh_transformer.norm.film.linear.bias", take(f"{film}:b"))
 
-    # --- decoder ---------------------------------------------------------------------------
+    # --- decoder
     put("decoder_proj.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
     put("decoder_proj.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
     output_weight, output_bias = stacked_output_weight(params, config, "grid_decoder")

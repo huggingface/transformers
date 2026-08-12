@@ -52,11 +52,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 
-# -------------------------------------------------------------------------------------------------
-# Noise conditioning
-# -------------------------------------------------------------------------------------------------
-
-
 class WeatherNext2FiLM(nn.Module):
     """Derives a per-channel scale and offset from the global conditioning vector."""
 
@@ -107,11 +102,6 @@ class WeatherNext2ConditionedMlp(nn.Module):
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
         hidden_states = self.out_proj(self.act_fn(self.in_proj(hidden_states)))
         return self.norm(hidden_states, conditioning)
-
-
-# -------------------------------------------------------------------------------------------------
-# Graph network
-# -------------------------------------------------------------------------------------------------
 
 
 class WeatherNext2EdgeUpdate(nn.Module):
@@ -210,11 +200,6 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
         return grid_states, mesh_states
 
 
-# -------------------------------------------------------------------------------------------------
-# Mesh transformer
-# -------------------------------------------------------------------------------------------------
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -251,28 +236,6 @@ def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
     return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
 
 
-def build_flex_block_mask(attention_mask: torch.Tensor, batch_size: int) -> "BlockMask":
-    """Wraps the banded boolean mask in a `BlockMask` for the flex attention backend.
-
-    The block axis is folded into the batch axis before attention, so entry `b` of the batch
-    corresponds to mesh-node block `b % num_blocks`.
-    """
-    num_blocks, _, block_size, kv_length = attention_mask.shape
-    mask = attention_mask[:, 0]
-
-    def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
-        return mask[batch_idx % num_blocks, q_idx, kv_idx]
-
-    return create_block_mask(
-        mask_mod,
-        B=batch_size * num_blocks,
-        H=None,
-        Q_LEN=block_size,
-        KV_LEN=kv_length,
-        device=attention_mask.device,
-    )
-
-
 class WeatherNext2Attention(nn.Module):
     """Local self-attention over mesh nodes.
 
@@ -297,19 +260,16 @@ class WeatherNext2Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        # Built lazily: the flex `BlockMask` depends on the batch size, which is a runtime value.
-        self._flex_block_mask = None
-        self._flex_batch_size = None
 
     def forward(
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, num_blocks, block_size, hidden_size)`)
-        attention_mask (`torch.BoolTensor` of shape `(num_blocks, 1, block_size, 3 * block_size)`):
-            Which of the three candidate blocks each query may attend to, node by node.
+        attention_mask (`torch.BoolTensor` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
+            Which of the three candidate blocks each query may attend to, node by node, as prepared by
+            [`WeatherNext2MeshTransformer.build_attention_mask`].
         """
-        batch_size, num_blocks, block_size, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -323,15 +283,6 @@ class WeatherNext2Attention(nn.Module):
         def flatten(states: torch.Tensor) -> torch.Tensor:
             return states.reshape(-1, *states.shape[-3:]).float()
 
-        if self.config._attn_implementation == "flex_attention":
-            if self._flex_block_mask is None or self._flex_batch_size != batch_size:
-                self._flex_block_mask = build_flex_block_mask(attention_mask, batch_size)
-                self._flex_batch_size = batch_size
-            mask = self._flex_block_mask
-        else:
-            mask = attention_mask.unsqueeze(0).expand(batch_size, -1, -1, -1, -1)
-            mask = mask.reshape(-1, 1, block_size, 3 * block_size)
-
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -340,7 +291,7 @@ class WeatherNext2Attention(nn.Module):
             flatten(query_states),
             flatten(key_states),
             flatten(value_states),
-            mask,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -386,15 +337,54 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def build_flex_block_mask(attention_mask: torch.Tensor, batch_size: int) -> "BlockMask":
+    """Wraps the banded boolean mask in a `BlockMask` for the flex attention backend.
+
+    The block axis is folded into the batch axis before attention, so entry `b` of the batch
+    corresponds to mesh-node block `b % num_blocks`.
+    """
+    num_blocks, _, block_size, kv_length = attention_mask.shape
+    mask = attention_mask[:, 0]
+
+    def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+        return mask[batch_idx % num_blocks, q_idx, kv_idx]
+
+    return create_block_mask(
+        mask_mod,
+        B=batch_size * num_blocks,
+        H=None,
+        Q_LEN=block_size,
+        KV_LEN=kv_length,
+        device=attention_mask.device,
+    )
+
+
 class WeatherNext2MeshTransformer(nn.Module):
     """The processor: a stack of pre-norm blocks over the mesh nodes."""
 
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
+        # The mask depends only on the geometry and the batch size, so it is built once per forward
+        # and shared by every layer. `create_block_mask` is expensive enough to be worth caching.
+        self._flex_block_mask = None
+        self._flex_batch_size = None
+
+    def build_attention_mask(self, attention_mask: torch.Tensor, batch_size: int):
+        """Expands the banded per-block mask to the shape the attention interface expects."""
+        if self.config._attn_implementation == "flex_attention":
+            if self._flex_block_mask is None or self._flex_batch_size != batch_size:
+                self._flex_block_mask = build_flex_block_mask(attention_mask, batch_size)
+                self._flex_batch_size = batch_size
+            return self._flex_block_mask
+
+        num_blocks, _, block_size, kv_length = attention_mask.shape
+        mask = attention_mask.unsqueeze(0).expand(batch_size, -1, -1, -1, -1)
+        return mask.reshape(batch_size * num_blocks, 1, block_size, kv_length)
 
     def forward(
         self,
@@ -408,17 +398,13 @@ class WeatherNext2MeshTransformer(nn.Module):
 
         hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
         hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
+        attention_mask = self.build_attention_mask(attention_mask, batch_size)
 
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
 
         hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
         return self.norm(hidden_states[:, :num_nodes], conditioning)
-
-
-# -------------------------------------------------------------------------------------------------
-# Model
-# -------------------------------------------------------------------------------------------------
 
 
 @auto_docstring
@@ -706,13 +692,16 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         ```
         """
         if noise is None:
+            # Drawn on the generator's own device - a CPU generator cannot seed a CUDA draw - so that
+            # `torch.Generator().manual_seed(...)` gives the same ensemble whatever the model runs on.
+            device = generator.device if generator is not None else grid_features.device
             noise = torch.randn(
                 grid_features.shape[0],
                 self.config.noise_channels,
                 generator=generator,
-                device=grid_features.device,
+                device=device,
                 dtype=grid_features.dtype,
-            )
+            ).to(grid_features.device)
 
         outputs: WeatherNext2ModelOutput = self.model(
             grid_features=grid_features, global_features=global_features, noise=noise, **kwargs
