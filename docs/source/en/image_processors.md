@@ -143,6 +143,33 @@ The benchmarks are obtained from an [AWS EC2 g5.2xlarge](https://aws.amazon.com/
 </div>
 </details>
 
+## Dynamic resolution
+
+Most image processors resize every image to one fixed resolution. Qwen-format processors, such as the ones for [Qwen2-VL](./model_doc/qwen2_vl) and [GLM-4V](./model_doc/glm4v), keep the original aspect ratio and resize each image to fit a pixel budget instead. A detailed photo gets more patches than a small icon, so the model spends its compute where there's something to look at.
+
+The budget is the `shortest_edge` and `longest_edge` keys of `size`, and both are counts of pixels rather than edge lengths. Qwen2-VL defaults to a floor of `56 * 56` pixels and a ceiling of `28 * 28 * 1280` pixels. Three more parameters describe the vision encoder and decide how the resized image is cut up.
+
+| Parameter | Default | What it controls |
+|---|---|---|
+| `patch_size` | 14 | Height and width in pixels of a single patch. |
+| `merge_size` | 2 | How many patches per side are merged into one token before the language model sees them. |
+| `temporal_patch_size` | 2 | How many frames a patch spans. Still images are repeated to fill the temporal dimension. |
+
+Resizing snaps both dimensions to a multiple of `patch_size * merge_size` so the patch grid divides evenly, which means the image you get back is rarely the exact size you asked for. Pass a smaller `longest_edge` to trade detail for a shorter sequence.
+
+```py
+from transformers import AutoImageProcessor
+from transformers.image_utils import load_image
+
+image_processor = AutoImageProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
+
+inputs = image_processor(image, size={"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 256}, return_tensors="pt")
+print(inputs.pixel_values.shape, inputs.image_grid_thw)
+```
+
+The output layout differs from a fixed-resolution processor too. Rather than a `(batch_size, num_channels, height, width)` tensor, `pixel_values` is a 2D tensor of shape `(total_patches, patch_dim)` holding the flattened patches of every image in the batch end to end, and `image_grid_thw` is a `(num_images, 3)` tensor of the temporal, height, and width grid dimensions that says where each image starts and stops. Use `get_number_of_image_patches` to work out the patch count for a given image size without running preprocessing.
+
 ## Preprocess
 
 Transformers' vision models expects the input as PyTorch tensors of pixel values. An image processor handles the conversion of images to pixel values, which is represented by the batch size, number of channels, height, and width. To achieve this, an image is resized (center cropped) and the pixel values are normalized and rescaled to the models expected values.
