@@ -38,6 +38,46 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
 
 
+def _to_mono(inputs):
+    """
+    Reduce a waveform to a single channel, or refuse when the layout is ambiguous.
+
+    The pipeline reads audio as `(channels, samples)`, which is what torchcodec returns
+    and what `datasets` returned before 4.0. Anything else is rejected rather than
+    guessed at: the shape alone cannot distinguish two-channel audio from a two-sample
+    recording, and averaging the wrong axis produces a silently wrong transcription
+    instead of an error.
+    """
+    if inputs.ndim == 1:
+        return inputs
+
+    if inputs.ndim != 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline expects mono audio shaped `(samples,)` or "
+            f"multi-channel audio shaped `(channels, samples)`, got {inputs.ndim} dimensions "
+            f"with shape {tuple(inputs.shape)}."
+        )
+
+    num_channels = inputs.shape[0]
+    if num_channels > 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline reads axis 0 as channels, and it has size "
+            f"{num_channels} in the input of shape {tuple(inputs.shape)}. If this array is "
+            "channels-last `(samples, channels)`, which is what `soundfile.read`, "
+            "`librosa.load(mono=False)` and `scipy.io.wavfile.read` return, transpose it "
+            "first. If it genuinely has more than 2 channels, downmix it to mono yourself "
+            "so the weighting is yours to choose."
+        )
+
+    if num_channels > 1:
+        logger.warning(
+            "We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got "
+            f"{num_channels} channels in an input of shape {tuple(inputs.shape)}. Taking the mean "
+            "over the channels for mono conversion."
+        )
+    return inputs.mean(axis=0)
+
+
 def rescale_stride(stride, ratio):
     """
     Rescales the stride values from audio space to tokens/logits space.
@@ -395,6 +435,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
+            # Downmix before resampling. `F.resample` operates on the last axis, so a
+            # multi-channel array has to be reduced first or the resampler works on the
+            # wrong axis. The stride arithmetic below also reads `shape[0]` as samples.
+            if isinstance(inputs, (np.ndarray, torch.Tensor)):
+                inputs = _to_mono(inputs)
             if in_sampling_rate != self.feature_extractor.sampling_rate:
                 if is_torchaudio_available():
                     from torchaudio import functional as F
@@ -423,18 +468,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
         if not isinstance(inputs, (np.ndarray, torch.Tensor)):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
-        if inputs.ndim != 1:
-            # `soundfile.read`, `librosa.load(mono=False)` and `scipy.io.wavfile.read`
-            # all return channels-last, `(samples, channels)`. Averaging over axis 0
-            # on that layout averages across *time*, collapsing the waveform to one
-            # value per channel. Infer the channel axis instead: real audio has far
-            # more samples than channels, so the shorter axis is the channel axis.
-            channel_axis = int(np.argmin(inputs.shape))
-            logger.warning(
-                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got shape "
-                f"{tuple(inputs.shape)}. Taking the mean over axis {channel_axis} for mono conversion."
-            )
-            inputs = inputs.mean(axis=channel_axis)
+        inputs = _to_mono(inputs)
 
         if chunk_length_s:
             if stride_length_s is None:
