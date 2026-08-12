@@ -821,58 +821,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             **kwargs,
         )
 
-    def _merge_visual_features(
-        self,
-        inputs_embeds: torch.FloatTensor,
-        input_ids: torch.LongTensor | None,
-        visual_features: torch.FloatTensor,
-        visual_indicator_features: torch.FloatTensor,
-        grid_thw: torch.LongTensor,
-        is_video: bool,
-    ) -> torch.FloatTensor:
-        atom_mask = self.get_placeholder_mask(
-            input_ids,
-            inputs_embeds=inputs_embeds,
-            image_features=visual_features,
-        )
-        inputs_embeds = inputs_embeds.masked_scatter(
-            atom_mask,
-            visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
-        )
-
-        if is_video:
-            boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
-            indicator_indexes = (2, 3)
-        else:
-            boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
-            indicator_indexes = (0, 1)
-
-        for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
-            if input_ids is None:
-                boundary_embedding = self.get_input_embeddings()(
-                    torch.tensor(boundary_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                boundary_mask = (inputs_embeds == boundary_embedding).all(dim=-1)
-            else:
-                boundary_mask = input_ids == boundary_token_id
-            torch_compilable_check(
-                boundary_mask.sum() == grid_thw.shape[0],
-                lambda: (
-                    f"Expected {grid_thw.shape[0]} visual boundary tokens with id {boundary_token_id}, but found "
-                    f"{boundary_mask.sum().item()}."
-                ),
-            )
-            boundary_features = visual_indicator_features[indicator_index].to(
-                inputs_embeds.device,
-                inputs_embeds.dtype,
-            )
-            inputs_embeds = torch.where(
-                boundary_mask.unsqueeze(-1),
-                boundary_features.expand_as(inputs_embeds),
-                inputs_embeds,
-            )
-        return inputs_embeds
-
 
 @auto_docstring
 @dataclass
