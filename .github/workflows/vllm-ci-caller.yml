@@ -82,9 +82,7 @@ jobs:
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: Patch vLLM gpu_memory_utilization for CPU
-        # Needed even on the larger aws-m8i-8xl-cache runner: vLLM checks that
-        # available RAM >= gpu_memory_utilization * total RAM at startup, and the
-        # container memory ceiling makes this fail without lowering the default.
+        # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
         run: |
           # Lower hardcoded value in test_initialization.py. Kept in case other tests hit the same OOM issue.
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
@@ -147,7 +145,7 @@ jobs:
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
-  # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only (fast, no sharding needed).
+  # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only.
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -270,8 +268,6 @@ jobs:
             --num-shards=4 --shard-id=$SHARD_ID \
             --deselect 'tests/models/test_initialization.py::test_can_initialize_small_subset[Gemma3nForCausalLM]'
 
-  # Runs tests/models/transformers/ on dedicated fresh runners so RAM is not shared
-  # with other jobs (previously ran as a step in the vllm job but hit OOM on the 32 GiB runner).
   vllm-test-transformers:
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
