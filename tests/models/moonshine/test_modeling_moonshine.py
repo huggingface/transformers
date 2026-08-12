@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+from parameterized import parameterized
+
 from transformers import MoonshineConfig, is_torch_available
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
@@ -30,12 +32,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn import CrossEntropyLoss
 
     from transformers import (
         AutoProcessor,
         MoonshineForConditionalGeneration,
         MoonshineModel,
     )
+    from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
 
 from datasets import load_dataset
 
@@ -153,10 +157,6 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training_loss_no_double_shift(self):
         # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
-        from torch.nn import CrossEntropyLoss
-
-        from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
-
         config = self.model_tester.get_config()
         config.pad_token_id = self.model_tester.pad_token_id
         model = MoonshineForConditionalGeneration(config).to(torch_device).eval()
@@ -178,10 +178,30 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
 
         for lbl in (labels, padded):
+            # Moonshine is the only model here that moves off a plain `CrossEntropyLoss` onto the shared
+            # `self.loss_function`, so it also needs to start honoring `num_items_in_batch`: the loss is a
+            # summed cross-entropy divided by that count, so passing the true count reproduces the aligned
+            # mean cross-entropy, and doubling the count must halve the loss. A plain `CrossEntropyLoss`
+            # (mean over tokens) would ignore the count and leave both losses unchanged.
+            n = int((lbl != -100).sum())
             with torch.no_grad():
-                out = model(encoder_outputs=encoder_outputs, labels=lbl, use_cache=False)
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=n, use_cache=False)
+                loss_2n = model(
+                    encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=2 * n, use_cache=False
+                ).loss
             self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
             self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+            self.assertTrue(torch.allclose(out.loss, 2 * loss_2n))
+
+        # A caller supplied `shift_labels` is popped out of `kwargs` and used verbatim, rather than colliding
+        # with the one `forward` derives from `labels`.
+        caller_shift_labels = labels.roll(shifts=1, dims=1)
+        with torch.no_grad():
+            out = model(
+                encoder_outputs=encoder_outputs, labels=labels, shift_labels=caller_shift_labels, use_cache=False
+            )
+        self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, caller_shift_labels)))
+        self.assertFalse(torch.allclose(out.loss, aligned_ce(out.logits, labels)))
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -452,6 +472,13 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

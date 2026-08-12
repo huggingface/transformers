@@ -55,6 +55,7 @@ URLS_FOR_TESTING_DATA = [
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
     "https://llava-vl.github.io/static/images/view.jpg",
     "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",

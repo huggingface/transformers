@@ -103,10 +103,10 @@ def _preprocess_resize_output_shape(image, output_shape):
         output_shape (`Tuple`):
             The output shape converted to tuple.
 
-    Raises ------ ValueError:
+    Raises: ValueError:
         If output_shape length is smaller than the image number of dimensions.
 
-    Notes ----- The input image is reshaped if its number of dimensions is not equal to output_shape_length.
+    Notes: The input image is reshaped if its number of dimensions is not equal to output_shape_length.
 
     """
     output_shape = tuple(output_shape)

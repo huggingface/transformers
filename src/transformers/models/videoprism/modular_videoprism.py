@@ -413,10 +413,10 @@ class VideoPrismTextEmbeddings(nn.Module):
         self.config = config
         embed_dim = config.hidden_size
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.register_buffer(
-            "position_embedding", create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
+        self.position_embedding = nn.Buffer(
+            create_sinusoidal_positions(config.max_position_embeddings, config.hidden_size)
         )
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.scaling = config.hidden_size**0.5
 

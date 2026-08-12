@@ -42,6 +42,18 @@ if is_torch_available():
     from transformers import BltConfig, BltForCausalLM, BltModel
 
 
+@require_torch
+def test_process_patch_lengths_vectorized():
+    from transformers.models.blt.modeling_blt import process_patch_lengths
+    from transformers.models.blt.modular_blt import process_patch_lengths as modular_process_patch_lengths
+
+    patch_lengths = torch.tensor([[0, 5, 9, 0], [4, 0, 13, 1]], device=torch_device)
+    expected = torch.tensor([[4, 1, 4, 4, 1, 0], [4, 4, 4, 4, 1, 1]], device=torch_device)
+
+    assert torch.equal(process_patch_lengths(patch_lengths, 4), expected)
+    assert torch.equal(modular_process_patch_lengths(patch_lengths, 4), expected)
+
+
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BltModel

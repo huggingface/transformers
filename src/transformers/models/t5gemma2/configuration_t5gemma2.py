@@ -162,7 +162,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
     >>> configuration = T5Gemma2EncoderConfig(vision_config, text_config)
 
     >>> # Initializing a model from the gemma-3-4b style configuration
-    >>> model = T5Gemma2EncoderTextConfig(configuration)
+    >>> model = T5Gemma2EncoderForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

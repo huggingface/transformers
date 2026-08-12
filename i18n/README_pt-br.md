@@ -256,7 +256,7 @@ O modelo em si é um [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.ht
 
 ### Com pip
 
-Este repositório é testado no Python 3.10+ e PyTorch 2.4+.
+Este repositório é testado no Python 3.10+ e PyTorch 2.5+.
 
 Você deve instalar o 🤗 Transformers em um [ambiente virtual](https://docs.python.org/3/library/venv.html). Se você não está familiarizado com ambientes virtuais em Python, confira o [guia do usuário](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

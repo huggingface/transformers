@@ -297,12 +297,11 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         Returns the number of image patches for a given image size (1 global + local patches).
         """
-        if images_kwargs is None:
-            images_kwargs = {}
+        images_kwargs = images_kwargs or {}
         min_patches = images_kwargs.get("min_patches", self.min_patches)
         max_patches = images_kwargs.get("max_patches", self.max_patches)
         tile_size = images_kwargs.get("tile_size", self.tile_size)
@@ -1007,10 +1006,9 @@ class DeepseekOcr2Model(LlavaNextModel):
             else:
                 all_features.append(torch.cat([global_flat, view_sep], dim=0))
 
-        image_features = torch.cat(all_features, dim=0)
         return DeepseekOcr2ModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=all_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1045,7 +1043,7 @@ class DeepseekOcr2Model(LlavaNextModel):
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
@@ -1097,36 +1095,6 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             num_local_patches=num_local_patches,
             **kwargs,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_values_local=None,
-        num_local_patches=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_local"] = pixel_values_local
-            model_inputs["num_local_patches"] = num_local_patches
-
-        return model_inputs
 
     @can_return_tuple
     @auto_docstring
