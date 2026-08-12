@@ -221,10 +221,41 @@ jobs:
           sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
           grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
           grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
-          # Fix mamba_mixer: conv1d weight loses unsqueeze(1) under dummy loader → .size(2) fails on 2D tensor
+          # -------------------------------------------------------------------------
+          # vLLM bug: two CPU-only failures in mamba_mixer.py (affects all Mamba-based
+          # models: JambaForCausalLM, FalconMambaForCausalLM, MambaForCausalLM,
+          # Mamba2ForCausalLM, and hybrids using MambaMixer).
+          # Both failures occur during warming_up_model() → profile_run() → _dummy_run()
+          # and are specific to CPU (VLLM_TARGET_DEVICE=cpu) with load_format="dummy".
+          #
+          # Bug 1 — IndexError: Dimension out of range in conv1d weight view
+          #   Root cause: MambaMixer.__init__ stores conv1d as a ColumnParallelLinear
+          #   (2-D weight [out, in]) and then calls
+          #     self.conv1d.weight.data = self.conv1d.weight.data.unsqueeze(1)
+          #   to reshape it to [out, 1, in]. Under the dummy loader the parameter is
+          #   re-materialised from its original 2-D shape, so the unsqueeze is lost.
+          #   Forward then calls self.conv1d.weight.size(2), which raises IndexError on
+          #   a 2-D tensor.
+          #   Fix: replace .size(2) with -1 so the view becomes weight.view(size(0), -1),
+          #   which collapses all trailing dimensions and works for both 2-D and 3-D.
+          #
+          # Bug 2 — RuntimeError: Expected a.stride(-1) == 1 in out_proj (onednn_mm)
+          #   Root cause: In the profile-run early-return path (attn_metadata is None)
+          #   the code does:
+          #     hidden_states_BC = hidden_states_BC.contiguous()
+          #     return self.out_proj(hidden_states_BC.transpose(-2, -1))[0]
+          #   The .contiguous() makes the tensor contiguous, but the immediately
+          #   following .transpose(-2, -1) creates a non-contiguous view (strides are
+          #   swapped). On GPU this is fine, but the CPU backend uses Intel OneDNN
+          #   (onednn_mm), which requires the last dimension to be contiguous
+          #   (stride(-1) == 1) and raises RuntimeError otherwise.
+          #   Fix: add .contiguous() after the transpose so the tensor is re-packed
+          #   into contiguous memory before being passed to out_proj.
+          #
+          # TODO: open upstream vLLM issues / PRs for both bugs.
+          # -------------------------------------------------------------------------
           sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
           grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
-          # Fix mamba_mixer profile run: transpose() makes tensor non-contiguous → onednn_mm (CPU) requires stride(-1)==1
           sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
           grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
