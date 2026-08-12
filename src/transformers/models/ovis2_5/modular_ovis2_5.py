@@ -245,12 +245,6 @@ class Ovis2_5Config(PreTrainedConfig):
         self.video_token_id = self.visual_atom_token_id
         super().__post_init__(**kwargs)
 
-    @property
-    def vit_config(self) -> Ovis2_5VisionConfig:
-        """Alias used by the original Ovis2.5 remote-code configuration."""
-        return self.vision_config
-
-
 class Ovis2_5VisionRotaryEmbedding(VisionRotaryEmbedding):
     pass
 
