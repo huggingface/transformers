@@ -645,7 +645,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         vision_config = config.vision_config
         text_config = config.text_config
         self.vision_tower = Ovis2_5VisionModel(vision_config)
-        self.visual_embeddings_table = Ovis2_5VisualEmbeddingTable(
+        self.visual_embeddings_table = nn.Embedding(
             config.visual_vocab_size,
             text_config.hidden_size,
         )
