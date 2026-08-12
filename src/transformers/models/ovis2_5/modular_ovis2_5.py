@@ -318,12 +318,7 @@ class Ovis2_5VisionAttention(VideoLlama3VisionAttention):
 
 
 class Ovis2_5VisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__(config)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.self_attn = Ovis2_5VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Ovis2_5VisionMLP(config)
+    pass
 
 class Ovis2_5VisionHiddenStateRecorder(nn.Module):
     """Restore encoder states from window order before output hooks record them."""
