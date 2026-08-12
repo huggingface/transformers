@@ -563,19 +563,20 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
 
         with torch.no_grad():
-            outputs = model.model.vision_tower(
+            vision_outputs = model.model.vision_tower(
                 pixel_values=inputs["pixel_values"],
                 grid_thw=inputs["image_grid_thw"],
             )
+            visual_tokens = model.model.visual_tokenizer(vision_outputs.pooler_output)
 
         num_indicators = config.vision_config.num_visual_indicator_tokens
         torch.testing.assert_close(
-            outputs.pooler_output[:, -num_indicators:],
-            torch.zeros_like(outputs.pooler_output[:, -num_indicators:]),
+            visual_tokens[:, -num_indicators:],
+            torch.zeros_like(visual_tokens[:, -num_indicators:]),
         )
         torch.testing.assert_close(
-            outputs.pooler_output[:, :-num_indicators].sum(dim=-1),
-            torch.ones(outputs.pooler_output.shape[0], device=torch_device),
+            visual_tokens[:, :-num_indicators].sum(dim=-1),
+            torch.ones(visual_tokens.shape[0], device=torch_device),
         )
 
     def test_visual_feature_helpers_split_per_input(self):
@@ -626,9 +627,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 captured_position_ids.append(args[0])
 
             with self.subTest(position_ids_key=position_ids_key):
-                hook = model.model.vision_tower.transformer.rotary_pos_emb.register_forward_pre_hook(
-                    capture_position_ids
-                )
+                hook = model.model.vision_tower.rotary_pos_emb.register_forward_pre_hook(capture_position_ids)
                 try:
                     with torch.no_grad():
                         model(**inputs, **{position_ids_key: position_ids})
@@ -678,7 +677,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers)
         torch.testing.assert_close(outputs.last_hidden_state, baseline.last_hidden_state)
         torch.testing.assert_close(
-            model.transformer.post_layernorm(outputs.hidden_states[-1]),
+            model.post_layernorm(outputs.hidden_states[-1]),
             outputs.last_hidden_state,
         )
 
@@ -702,7 +701,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         hooks = [
             layer.self_attn.register_forward_pre_hook(capture_cu_seqlens, with_kwargs=True)
-            for layer in model.transformer.encoder.layers
+            for layer in model.encoder.layers
         ]
         try:
             with torch.no_grad():
@@ -718,7 +717,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
     def test_vision_rotary_embedding_initialization(self):
         config = self.model_tester.get_vision_config()
         model = Ovis2_5VisionModel(config)
-        rotary_embedding = model.transformer.rotary_pos_emb
+        rotary_embedding = model.rotary_pos_emb
         expected = 1.0 / (
             rotary_embedding.theta
             ** (torch.arange(0, rotary_embedding.dim, 2, dtype=torch.float) / rotary_embedding.dim)
@@ -741,14 +740,23 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertIsInstance(model.get_input_embeddings(), torch.nn.Conv2d)
         self.assertEqual(
-            model.transformer.embeddings.position_embedding.num_embeddings,
+            model.embeddings.position_embedding.num_embeddings,
             (config.image_size // config.patch_size) ** 2,
         )
-        self.assertEqual(outputs.pooler_output.shape[0], 4)
+        self.assertEqual(outputs.pooler_output.shape[0], int(grid_thw.prod()))
 
         config.preserve_original_pe = False
         model = Ovis2_5VisionModel(config)
-        self.assertNotIn("position_embedding.weight", model.transformer.embeddings.state_dict())
+        self.assertNotIn("position_embedding.weight", model.embeddings.state_dict())
+
+    def test_visual_modules_use_native_state_dict_layout(self):
+        model = Ovis2_5ForConditionalGeneration(self.model_tester.get_config())
+        state_dict = model.state_dict()
+
+        self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
+        self.assertIn("model.visual_tokenizer.head.0.weight", state_dict)
+        self.assertFalse(any("vision_tower.transformer" in key for key in state_dict))
+        self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
 
 
 if __name__ == "__main__":

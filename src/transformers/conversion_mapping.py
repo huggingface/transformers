@@ -159,9 +159,8 @@ def _build_checkpoint_conversion_mapping():
         "ovis2_5": [
             WeightRenaming(r"^llm\.model\.", "model.language_model."),
             WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
-            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.", "model.vision_tower.transformer."),
-            WeightRenaming(r"^visual_tokenizer\.head\.0\.", "model.vision_tower.head_linear."),
-            WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.vision_tower.head_norm."),
+            WeightRenaming(r"^visual_tokenizer\.vit\.vision_model\.", "model.vision_tower."),
+            WeightRenaming(r"^visual_tokenizer\.head\.", "model.visual_tokenizer.head."),
             WeightRenaming(r"^vte\.", "model.visual_embeddings_table."),
         ],
         "inkling_mm_model": [

@@ -421,43 +421,27 @@ class Ovis2_5VisionEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class Ovis2_5VisionTransformer(nn.Module):
+class Ovis2_5VisualTokenProjector(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
-        self.config = config
-        self.embeddings = Ovis2_5VisionEmbeddings(config)
-        self.encoder = Ovis2_5VisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        head_dim = config.hidden_size // config.num_attention_heads
-        self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        grid_thw: torch.LongTensor,
-        output_hidden_states: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        hidden_states = self.embeddings(pixel_values, grid_thw)
-        position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (rotary_pos_emb.cos(), rotary_pos_emb.sin())
-
-        encoder_outputs = self.encoder(
-            hidden_states,
-            grid_thw=grid_thw,
-            position_embeddings=position_embeddings,
-            output_hidden_states=output_hidden_states,
-            **kwargs,
+        self.spatial_merge_unit = config.hidden_stride**2
+        self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
+        visual_token_vocab_size = config.vocab_size - config.num_visual_indicator_tokens
+        self.head = nn.Sequential(
+            nn.Linear(config.hidden_size * self.spatial_merge_unit, visual_token_vocab_size, bias=False),
+            nn.LayerNorm(visual_token_vocab_size),
         )
-        pre_layernorm_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.post_layernorm(pre_layernorm_hidden_state)
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pre_layernorm_hidden_state,
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.reshape(hidden_states.shape[0] // self.spatial_merge_unit, -1)
+        logits = self.head(hidden_states)
+        visual_tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
+        indicator_padding = torch.zeros(
+            (visual_tokens.shape[0], self.num_visual_indicator_tokens),
+            dtype=visual_tokens.dtype,
+            device=visual_tokens.device,
         )
+        return torch.cat((visual_tokens, indicator_padding), dim=-1)
 
 
 @auto_docstring
@@ -558,9 +542,7 @@ class Ovis2_5PreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-@auto_docstring(
-    custom_intro="The Ovis2.5 vision tower and visual tokenizer, without the visual embedding table or language model."
-)
+@auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
 class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
     config: Ovis2_5VisionConfig
     main_input_name = "pixel_values"
@@ -575,18 +557,15 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
 
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__(config)
-        self.transformer = Ovis2_5VisionTransformer(config)
-        visual_token_vocab_size = config.vocab_size - config.num_visual_indicator_tokens
-        self.head_linear = nn.Linear(
-            config.hidden_size * config.hidden_stride**2,
-            visual_token_vocab_size,
-            bias=False,
-        )
-        self.head_norm = nn.LayerNorm(visual_token_vocab_size)
+        self.embeddings = Ovis2_5VisionEmbeddings(config)
+        self.encoder = Ovis2_5VisionEncoder(config)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        head_dim = config.hidden_size // config.num_attention_heads
+        self.rotary_pos_emb = Ovis2_5VisionRotaryEmbedding(head_dim // 2)
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.transformer.embeddings.patch_embedding
+        return self.embeddings.patch_embedding
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -602,30 +581,25 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
-        transformer_outputs = self.transformer(
-            pixel_values,
+        hidden_states = self.embeddings(pixel_values, grid_thw)
+        position_ids = get_vision_position_ids(grid_thw, self.config.hidden_stride, kwargs=kwargs)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        rotary_pos_emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (rotary_pos_emb.cos(), rotary_pos_emb.sin())
+        encoder_outputs = self.encoder(
+            hidden_states,
             grid_thw=grid_thw,
+            position_embeddings=position_embeddings,
             output_hidden_states=(
                 self.config.output_hidden_states if output_hidden_states is None else output_hidden_states
             ),
             **kwargs,
         )
-        # The released visual-tokenizer head consumes the final encoder block before `post_layernorm`.
-        hidden_states = transformer_outputs.pooler_output
-        spatial_merge_unit = self.config.hidden_stride**2
-        hidden_states = hidden_states.reshape(hidden_states.shape[0] // spatial_merge_unit, -1)
-        logits = self.head_norm(self.head_linear(hidden_states))
-        visual_tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
-        indicator_padding = torch.zeros(
-            (visual_tokens.shape[0], self.config.num_visual_indicator_tokens),
-            dtype=visual_tokens.dtype,
-            device=visual_tokens.device,
-        )
-        visual_tokens = torch.cat((visual_tokens, indicator_padding), dim=-1)
-
+        pre_layernorm_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(pre_layernorm_hidden_state)
         return BaseModelOutputWithPooling(
-            last_hidden_state=transformer_outputs.last_hidden_state,
-            pooler_output=visual_tokens,
+            last_hidden_state=last_hidden_state,
+            pooler_output=pre_layernorm_hidden_state,
         )
 
 
@@ -636,6 +610,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         vision_config = config.vision_config
         text_config = config.text_config
         self.vision_tower = Ovis2_5VisionModel(vision_config)
+        self.visual_tokenizer = Ovis2_5VisualTokenProjector(vision_config)
         self.visual_embeddings_table = nn.Embedding(
             config.visual_vocab_size,
             text_config.hidden_size,
@@ -668,7 +643,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        visual_features = torch.matmul(vision_outputs.pooler_output, self.visual_embeddings_table.weight)
+        visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
+        visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
         indicator_start = self.config.visual_vocab_size - self.vision_tower.config.num_visual_indicator_tokens
         indicator_token_ids = torch.arange(
             indicator_start,
