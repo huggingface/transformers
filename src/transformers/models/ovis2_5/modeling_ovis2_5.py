@@ -706,11 +706,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
             raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
-        if pixel_values is not None and image_grid_thw is None:
-            raise ValueError("`image_grid_thw` is required when `pixel_values` is provided.")
-        if pixel_values_videos is not None and video_grid_thw is None:
-            raise ValueError("`video_grid_thw` is required when `pixel_values_videos` is provided.")
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
