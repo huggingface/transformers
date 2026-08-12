@@ -344,7 +344,7 @@ diff = '''
 [rules.TRF020]
 description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
 default_enabled = true
-allowlist_models = []
+allowlist_models = ["axk2"]
 
 [rules.TRF020.explanation]
 what_it_does = "In model directories whose configuration declares `kv_lora_rank` (Multi-head Latent Attention), checks the attention class that owns the KV LoRA expansion projection (conventionally `kv_b_proj`, or any `nn.Linear(config.kv_lora_rank, ...)`). The expansion must not be applied inside `forward()`; it must live in a dedicated method (e.g. `expand_kv`) that `forward()` calls."
