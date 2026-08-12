@@ -148,7 +148,9 @@ jobs:
   # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only.
   # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
-    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    # The 2xl runner might have sufficient RAM for this small subset (excluding Gemma3n),
+    # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
+    # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
     runs-on:
       group: aws-m8i-8xl-cache
