@@ -149,9 +149,10 @@ jobs:
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
-  # test_initialization split across 8 parallel shards (test takes ~6 hours when run sequentially).
+  # Mirrors vLLM's Buildkite CI: test_can_initialize_small_subset only (fast, no sharding needed).
+  # See .buildkite/test_areas/models_basic.yaml in vllm-project/vllm.
   vllm-test-init:
-    name: "Test vLLM initialization (shard ${{ matrix.shard }} / 1, FalconMambaForCausalLM only)"
+    name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 8)"
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -160,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       SHARD_ID: ${{ matrix.shard }}
 
@@ -253,18 +254,19 @@ jobs:
           #   into contiguous memory before being passed to out_proj.
           #
           # TODO: open upstream vLLM issues / PRs for both bugs.
+          # Patches commented out — not needed for the small subset (no Mamba models).
+          # Re-enable if/when restoring the large subset run.
           # -------------------------------------------------------------------------
-          sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
-          sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
+          # sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
+          # grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
+          # sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
+          # grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
-      - name: "Test: test_initialization (shard ${{ matrix.shard }} / 1, FalconMambaForCausalLM only)"
+      - name: "Test: test_initialization (small subset, shard ${{ matrix.shard }} / 8)"
         working-directory: vllm
         run: |
-          pytest -v -s tests/models/test_initialization.py \
-            -k FalconMambaForCausalLM \
-            --num-shards=1 --shard-id=$SHARD_ID
+          pytest -v -s tests/models/test_initialization.py::test_can_initialize_small_subset \
+            --num-shards=8 --shard-id=$SHARD_ID
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
