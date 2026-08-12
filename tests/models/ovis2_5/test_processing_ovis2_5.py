@@ -148,9 +148,12 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         images, *_ = processor.prepare_inputs_layout(images=[[image]])
         _, _, videos, _ = processor.prepare_inputs_layout(videos=video)
+        empty_images, _, empty_videos, _ = processor.prepare_inputs_layout(images=[], videos=[])
 
         self.assertEqual(len(images), 1)
         self.assertEqual(len(videos), 1)
+        self.assertListEqual(empty_images, [])
+        self.assertListEqual(empty_videos, [])
 
     def test_multiple_images(self):
         processor = self.get_processor()
