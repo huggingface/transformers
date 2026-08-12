@@ -553,12 +553,12 @@ class Ovis2_5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2_5VisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_cache_class = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
     _can_compile_fullgraph = False
+    _supports_attention_backend = True
+    _supports_cache_class = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

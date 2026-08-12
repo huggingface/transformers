@@ -44,6 +44,7 @@ from ..qwen2_vl.modeling_qwen2_vl import VisionRotaryEmbedding
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3CausalLMOutputWithPast,
     VideoLlama3ModelOutputWithPast,
+    VideoLlama3PreTrainedModel,
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoderLayer,
     VideoLlama3VisionMLP,
@@ -489,18 +490,11 @@ class Ovis2_5CausalLMOutputWithPast(VideoLlama3CausalLMOutputWithPast):
 
 
 @auto_docstring
-class Ovis2_5PreTrainedModel(PreTrainedModel):
+class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     config: Ovis2_5Config
-    base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2_5VisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_cache_class = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_attention_backend = True
     _can_compile_fullgraph = False
 
     def _init_weights(self, module):
