@@ -275,15 +275,12 @@ class FuyuProcessor(ProcessorMixin):
     ):
         # Don't call super on purpose, the model is extremely custom depending on inputs
 
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-
         if text is not None and images is not None:
             prepared_text = []
             text = [text] if isinstance(text, str) else text
+            images = [images] if not isinstance(images, (list, tuple)) else images
             for sample, image in zip(text, images):
-                if image:
+                if not (isinstance(image, list) and image == []):
                     # if there is an image associated with text, process location tags
                     # and add placeholder token at the beginning
                     # FIXME: scale_factor are output from image processor, this doesn't work!
@@ -300,6 +297,10 @@ class FuyuProcessor(ProcessorMixin):
         elif text is None and images is not None:
             logger.warning("You are processing an image with no associated text. Make sure it is intended.")
             prepared_text = [""]
+
+        if images is not None:
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
 
         return images, prepared_text, None, None
 

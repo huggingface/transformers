@@ -103,6 +103,10 @@ class Qwen2AudioProcessor(ProcessorMixin):
         return self.audio_token * num_audio_tokens
 
     @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_audio_tokens"]
+
+    @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names

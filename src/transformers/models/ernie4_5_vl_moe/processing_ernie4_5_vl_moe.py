@@ -17,8 +17,11 @@ from shutil import SameFileError, copyfile
 
 import numpy as np
 
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...image_utils import ImageInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
+from ...video_utils import VideoInput
 
 
 class Ernie4_5_VLMoeProcessorKwargs(ProcessingKwargs, total=False):
@@ -65,8 +68,14 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     @auto_docstring
-    def __call(self, images, text, **kwargs):
-        model_inputs = super().__call__(images=images, text=text, **kwargs)
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[Ernie4_5_VLMoeProcessorKwargs],
+    ):
+        model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
         model_inputs["moe_mm_token_type_ids"] = self.create_moe_mm_token_type_ids(model_inputs["input_ids"])
         return model_inputs
 
@@ -106,15 +115,21 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         ]:
             moe_mm_token_type_ids[array_ids == token_id] = 2
 
-        return moe_mm_token_type_ids.astype(int).tolist()
+        moe_mm_token_type_ids = moe_mm_token_type_ids.astype(int)
+
+        # Cast MoE token types to the same input type as input IDs
+        if isinstance(input_ids, np.ndarray):
+            return moe_mm_token_type_ids
+        elif hasattr(input_ids, "device") and hasattr(input_ids, "dtype"):
+            # torch.Tensor (or tensor-like) without importing torch
+            return type(input_ids)(moe_mm_token_type_ids).to(device=input_ids.device, dtype=input_ids.dtype)
+        else:
+            return moe_mm_token_type_ids.tolist()
 
     @property
     def model_input_names(self):
         """Additional `mm_token_type_ids` used for modality isolated MoE"""
-        model_input_names = super().model_input_names
-        model_input_names.append("mm_token_type_ids")
-        model_input_names.append("moe_mm_token_type_ids")
-        return model_input_names
+        return super().model_input_names + ["mm_token_type_ids", "moe_mm_token_type_ids"]
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
