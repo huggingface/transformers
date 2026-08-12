@@ -278,6 +278,7 @@ jobs:
     env:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_TARGET_DEVICE: ""  # override workflow-level cpu setting
 
     steps:
       - name: Update transformers clone
@@ -334,6 +335,7 @@ jobs:
         run: pip freeze
 
       - name: "Test: test_initialization (GPU, FalconMambaForCausalLM only)"
+        shell: bash
         working-directory: vllm
         run: |
           pytest -v -s tests/models/test_initialization.py \
