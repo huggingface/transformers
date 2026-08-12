@@ -58,7 +58,7 @@ MAX_PIXELS_BY_TEXT_HIDDEN_SIZE = {
     4096: 1792 * 1792,  # Ovis2.5-9B
 }
 VISUAL_SPECIAL_TOKENS = (
-    ("<ovis_visual_atom>", "visual_atom_token_id"),
+    ("<ovis_visual_atom>", "image_token_id"),
     ("<ovis_image_start>", "image_start_token_id"),
     ("<ovis_image_end>", "image_end_token_id"),
     ("<ovis_video_start>", "video_start_token_id"),

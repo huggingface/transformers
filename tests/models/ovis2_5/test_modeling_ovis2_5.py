@@ -126,7 +126,7 @@ if is_torch_available():
             kwargs.setdefault("patch_size", 2)
             kwargs.setdefault("num_image_tokens", 1)
             kwargs.setdefault("image_token_id", 4)
-            kwargs.setdefault("visual_atom_token_id", 4)
+            kwargs.setdefault("video_token_id", 4)
             kwargs.setdefault("image_start_token_id", 5)
             kwargs.setdefault("image_end_token_id", 6)
             kwargs.setdefault("video_start_token_id", 7)
@@ -138,7 +138,7 @@ if is_torch_available():
         @property
         def _special_token_ids(self):
             return super()._special_token_ids | {
-                self.visual_atom_token_id,
+                self.video_token_id,
                 self.image_start_token_id,
                 self.image_end_token_id,
                 self.video_start_token_id,
@@ -187,7 +187,8 @@ if is_torch_available():
                 text_config=self.get_text_config(),
                 vision_config=self.get_vision_config(),
                 visual_vocab_size=self.visual_vocab_size,
-                visual_atom_token_id=self.visual_atom_token_id,
+                image_token_id=self.image_token_id,
+                video_token_id=self.video_token_id,
                 image_start_token_id=self.image_start_token_id,
                 image_end_token_id=self.image_end_token_id,
                 video_start_token_id=self.video_start_token_id,
@@ -209,7 +210,7 @@ if is_torch_available():
             for token_id in self._special_token_ids:
                 input_ids[input_ids == token_id] = self._safe_token_id()
             input_ids[:, 0] = config.image_start_token_id
-            input_ids[:, 1] = config.visual_atom_token_id
+            input_ids[:, 1] = config.image_token_id
             input_ids[:, 2] = config.image_end_token_id
             return input_ids
 
@@ -230,8 +231,8 @@ if is_torch_available():
                     [
                         self.bos_token_id,
                         self.video_start_token_id,
-                        self.visual_atom_token_id,
-                        self.visual_atom_token_id,
+                        self.video_token_id,
+                        self.video_token_id,
                         self.video_end_token_id,
                         self._safe_token_id(),
                         self.eos_token_id,
@@ -509,7 +510,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             text_config=text_config,
             vision_config=vision_config,
             visual_vocab_size=self.model_tester.visual_vocab_size,
-            visual_atom_token_id=self.model_tester.visual_atom_token_id,
+            image_token_id=self.model_tester.image_token_id,
+            video_token_id=self.model_tester.video_token_id,
             image_start_token_id=self.model_tester.image_start_token_id,
             image_end_token_id=self.model_tester.image_end_token_id,
             video_start_token_id=self.model_tester.video_start_token_id,
@@ -523,6 +525,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIn("vision_config", serialized_config)
         self.assertNotIn("llm_config", serialized_config)
         self.assertNotIn("vit_config", serialized_config)
+        self.assertNotIn("visual_atom_token_id", serialized_config)
+        self.assertEqual(config.image_token_id, config.video_token_id)
 
     def test_vision_layer_types_follow_full_attention_indexes(self):
         config = Ovis2_5VisionConfig(num_hidden_layers=4, fullatt_block_indexes=(1, 3))

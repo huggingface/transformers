@@ -115,8 +115,10 @@ class Ovis2_5Config(PreTrainedConfig):
     r"""
     visual_vocab_size (`int`, *optional*, defaults to 65536):
         Size of the visual-token vocabulary shared by the visual tokenizer and visual embedding table.
-    visual_atom_token_id (`int`, *optional*, defaults to 151669):
-        Text-vocabulary token used as the placeholder for one visual atom.
+    image_token_id (`int`, *optional*, defaults to 151669):
+        Text-vocabulary token used as the placeholder for one image atom.
+    video_token_id (`int`, *optional*, defaults to 151669):
+        Text-vocabulary token used as the placeholder for one video atom.
     image_start_token_id (`int`, *optional*, defaults to 151670):
         Text-vocabulary token replaced by the learned image-begin visual embedding.
     image_end_token_id (`int`, *optional*, defaults to 151671):
@@ -134,13 +136,12 @@ class Ovis2_5Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     visual_vocab_size: int = 65536
-    visual_atom_token_id: int = 151669
+    image_token_id: int = 151669
+    video_token_id: int = 151669
     image_start_token_id: int = 151670
     image_end_token_id: int = 151671
     video_start_token_id: int = 151672
     video_end_token_id: int = 151673
-    image_token_id: int = 151669
-    video_token_id: int = 151669
     tie_word_embeddings: bool = False
 
     # Ignore copy
@@ -162,10 +163,6 @@ class Ovis2_5Config(PreTrainedConfig):
         self.vision_config.vocab_size = self.visual_vocab_size
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        # These aliases let generic multimodal utilities identify the repeated
-        # placeholder token while preserving Ovis2.5's distinct boundary IDs.
-        self.image_token_id = self.visual_atom_token_id
-        self.video_token_id = self.visual_atom_token_id
         super().__post_init__(**kwargs)
 
 
