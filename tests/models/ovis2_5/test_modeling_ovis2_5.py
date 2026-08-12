@@ -21,7 +21,8 @@ from pathlib import Path
 
 from parameterized import parameterized
 
-from transformers import is_torch_available
+from transformers import Ovis2_5Config, Ovis2_5VisionConfig, is_torch_available
+from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
@@ -38,224 +39,220 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Ovis2_5Config,
         Ovis2_5ForConditionalGeneration,
         Ovis2_5Model,
-        Ovis2_5VisionConfig,
         Ovis2_5VisionModel,
     )
-    from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 
 
-if is_torch_available():
+class Ovis2_5VisionModelTester:
+    def __init__(self, parent):
+        self.parent = parent
+        self.batch_size = 2
+        self.image_size = 4
+        self.patch_size = 2
+        self.num_channels = 3
+        self.hidden_size = 16
+        self.intermediate_size = 32
+        self.num_hidden_layers = 1
+        self.expected_num_hidden_layers = self.num_hidden_layers
+        self.num_attention_heads = 4
+        self.seq_length = (self.image_size // self.patch_size) ** 2
+        self.is_training = True
 
-    class Ovis2_5VisionModelTester:
-        def __init__(self, parent):
-            self.parent = parent
-            self.batch_size = 2
-            self.image_size = 4
-            self.patch_size = 2
-            self.num_channels = 3
-            self.hidden_size = 16
-            self.intermediate_size = 32
-            self.num_hidden_layers = 1
-            self.expected_num_hidden_layers = self.num_hidden_layers
-            self.num_attention_heads = 4
-            self.seq_length = (self.image_size // self.patch_size) ** 2
-            self.is_training = True
+    def get_config(self):
+        return Ovis2_5VisionConfig(
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_channels=self.num_channels,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            hidden_stride=2,
+            window_size=self.image_size,
+            attention_dropout=0.0,
+            vocab_size=12,
+            num_visual_indicator_tokens=4,
+            preserve_original_pe=True,
+        )
 
-        def get_config(self):
-            return Ovis2_5VisionConfig(
-                hidden_size=self.hidden_size,
-                intermediate_size=self.intermediate_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                num_channels=self.num_channels,
-                image_size=self.image_size,
-                patch_size=self.patch_size,
-                hidden_stride=2,
-                window_size=self.image_size,
-                attention_dropout=0.0,
-                vocab_size=12,
-                num_visual_indicator_tokens=4,
-                preserve_original_pe=True,
-            )
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        pixel_values = torch.randn(
+            self.batch_size * self.seq_length,
+            self.num_channels * self.patch_size**2,
+            device=torch_device,
+        )
+        grid_size = self.image_size // self.patch_size
+        grid_thw = torch.tensor(
+            [[1, grid_size, grid_size]] * self.batch_size,
+            dtype=torch.long,
+            device=torch_device,
+        )
+        return config, {"pixel_values": pixel_values, "grid_thw": grid_thw}
 
-        def prepare_config_and_inputs_for_common(self):
-            config = self.get_config()
-            pixel_values = torch.randn(
-                self.batch_size * self.seq_length,
-                self.num_channels * self.patch_size**2,
-                device=torch_device,
-            )
-            grid_size = self.image_size // self.patch_size
-            grid_thw = torch.tensor(
+
+class Ovis2_5VisionText2TextModelTester(VLMModelTester):
+    base_model_class = Ovis2_5Model if is_torch_available() else None
+    config_class = Ovis2_5Config
+    text_config_class = Qwen3Config
+    vision_config_class = Ovis2_5VisionConfig
+    conditional_generation_class = Ovis2_5ForConditionalGeneration if is_torch_available() else None
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("seq_length", 8)
+        kwargs.setdefault("vocab_size", 32)
+        kwargs.setdefault("hidden_size", 16)
+        kwargs.setdefault("intermediate_size", 32)
+        kwargs.setdefault("num_hidden_layers", 1)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 4)
+        kwargs.setdefault("max_position_embeddings", 32)
+        kwargs.setdefault("attention_dropout", 0.0)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("bos_token_id", 1)
+        kwargs.setdefault("eos_token_id", 2)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("tie_word_embeddings", False)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("image_size", 4)
+        kwargs.setdefault("patch_size", 2)
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("image_start_token_id", 5)
+        kwargs.setdefault("image_end_token_id", 6)
+        kwargs.setdefault("video_start_token_id", 7)
+        kwargs.setdefault("video_end_token_id", 8)
+        kwargs.setdefault("visual_vocab_size", 12)
+        super().__init__(parent, **kwargs)
+        self.num_image_patches = (self.image_size // self.patch_size) ** 2
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {
+            self.video_token_id,
+            self.image_start_token_id,
+            self.image_end_token_id,
+            self.video_start_token_id,
+            self.video_end_token_id,
+        }
+
+    def get_text_config(self):
+        return Qwen3Config(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
+            max_position_embeddings=self.max_position_embeddings,
+            attention_dropout=self.attention_dropout,
+            hidden_act=self.hidden_act,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            tie_word_embeddings=self.tie_word_embeddings,
+        )
+
+    def get_vision_config(self):
+        return Ovis2_5VisionConfig(
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_channels=self.num_channels,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            hidden_stride=2,
+            window_size=self.image_size,
+            attention_dropout=self.attention_dropout,
+            vocab_size=self.visual_vocab_size,
+            num_visual_indicator_tokens=4,
+            preserve_original_pe=True,
+            use_rope=True,
+        )
+
+    def get_config(self):
+        return Ovis2_5Config(
+            text_config=self.get_text_config(),
+            vision_config=self.get_vision_config(),
+            visual_vocab_size=self.visual_vocab_size,
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            image_start_token_id=self.image_start_token_id,
+            image_end_token_id=self.image_end_token_id,
+            video_start_token_id=self.video_start_token_id,
+            video_end_token_id=self.video_end_token_id,
+        )
+
+    def create_attention_mask(self, input_ids):
+        return torch.ones_like(input_ids, device=torch_device)
+
+    def create_pixel_values(self):
+        return torch.randn(
+            self.batch_size * self.num_image_patches,
+            self.num_channels * self.patch_size**2,
+            device=torch_device,
+        )
+
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        for token_id in self._special_token_ids:
+            input_ids[input_ids == token_id] = self._safe_token_id()
+        input_ids[:, 0] = config.image_start_token_id
+        input_ids[:, 1] = config.image_token_id
+        input_ids[:, 2] = config.image_end_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
+        grid_size = self.image_size // self.patch_size
+        return {
+            "image_grid_thw": torch.tensor(
                 [[1, grid_size, grid_size]] * self.batch_size,
                 dtype=torch.long,
                 device=torch_device,
             )
-            return config, {"pixel_values": pixel_values, "grid_thw": grid_thw}
+        }
 
-    class Ovis2_5VisionText2TextModelTester(VLMModelTester):
-        base_model_class = Ovis2_5Model
-        config_class = Ovis2_5Config
-        text_config_class = Qwen3Config
-        vision_config_class = Ovis2_5VisionConfig
-        conditional_generation_class = Ovis2_5ForConditionalGeneration
-
-        def __init__(self, parent, **kwargs):
-            kwargs.setdefault("batch_size", 2)
-            kwargs.setdefault("seq_length", 8)
-            kwargs.setdefault("vocab_size", 32)
-            kwargs.setdefault("hidden_size", 16)
-            kwargs.setdefault("intermediate_size", 32)
-            kwargs.setdefault("num_hidden_layers", 1)
-            kwargs.setdefault("num_attention_heads", 4)
-            kwargs.setdefault("num_key_value_heads", 2)
-            kwargs.setdefault("head_dim", 4)
-            kwargs.setdefault("max_position_embeddings", 32)
-            kwargs.setdefault("attention_dropout", 0.0)
-            kwargs.setdefault("hidden_act", "silu")
-            kwargs.setdefault("bos_token_id", 1)
-            kwargs.setdefault("eos_token_id", 2)
-            kwargs.setdefault("pad_token_id", 0)
-            kwargs.setdefault("tie_word_embeddings", False)
-            kwargs.setdefault("num_channels", 3)
-            kwargs.setdefault("image_size", 4)
-            kwargs.setdefault("patch_size", 2)
-            kwargs.setdefault("num_image_tokens", 1)
-            kwargs.setdefault("image_token_id", 4)
-            kwargs.setdefault("video_token_id", 4)
-            kwargs.setdefault("image_start_token_id", 5)
-            kwargs.setdefault("image_end_token_id", 6)
-            kwargs.setdefault("video_start_token_id", 7)
-            kwargs.setdefault("video_end_token_id", 8)
-            kwargs.setdefault("visual_vocab_size", 12)
-            super().__init__(parent, **kwargs)
-            self.num_image_patches = (self.image_size // self.patch_size) ** 2
-
-        @property
-        def _special_token_ids(self):
-            return super()._special_token_ids | {
-                self.video_token_id,
-                self.image_start_token_id,
-                self.image_end_token_id,
-                self.video_start_token_id,
-                self.video_end_token_id,
-            }
-
-        def get_text_config(self):
-            return Qwen3Config(
-                vocab_size=self.vocab_size,
-                hidden_size=self.hidden_size,
-                intermediate_size=self.intermediate_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                num_key_value_heads=self.num_key_value_heads,
-                head_dim=self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                attention_dropout=self.attention_dropout,
-                hidden_act=self.hidden_act,
-                bos_token_id=self.bos_token_id,
-                eos_token_id=self.eos_token_id,
-                pad_token_id=self.pad_token_id,
-                tie_word_embeddings=self.tie_word_embeddings,
-            )
-
-        def get_vision_config(self):
-            return Ovis2_5VisionConfig(
-                hidden_size=self.hidden_size,
-                intermediate_size=self.intermediate_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                num_channels=self.num_channels,
-                image_size=self.image_size,
-                patch_size=self.patch_size,
-                hidden_stride=2,
-                window_size=self.image_size,
-                attention_dropout=self.attention_dropout,
-                vocab_size=self.visual_vocab_size,
-                num_visual_indicator_tokens=4,
-                preserve_original_pe=True,
-                use_rope=True,
-            )
-
-        def get_config(self):
-            return Ovis2_5Config(
-                text_config=self.get_text_config(),
-                vision_config=self.get_vision_config(),
-                visual_vocab_size=self.visual_vocab_size,
-                image_token_id=self.image_token_id,
-                video_token_id=self.video_token_id,
-                image_start_token_id=self.image_start_token_id,
-                image_end_token_id=self.image_end_token_id,
-                video_start_token_id=self.video_start_token_id,
-                video_end_token_id=self.video_end_token_id,
-            )
-
-        def create_attention_mask(self, input_ids):
-            return torch.ones_like(input_ids, device=torch_device)
-
-        def create_pixel_values(self):
-            return torch.randn(
-                self.batch_size * self.num_image_patches,
+    def prepare_video_inputs(self):
+        num_frames = 2
+        input_ids = torch.tensor(
+            [
+                [
+                    self.bos_token_id,
+                    self.video_start_token_id,
+                    self.video_token_id,
+                    self.video_token_id,
+                    self.video_end_token_id,
+                    self._safe_token_id(),
+                    self.eos_token_id,
+                ]
+            ]
+            * self.batch_size,
+            dtype=torch.long,
+            device=torch_device,
+        )
+        grid_size = self.image_size // self.patch_size
+        patches_per_video = num_frames * grid_size**2
+        return {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "pixel_values_videos": torch.randn(
+                self.batch_size * patches_per_video,
                 self.num_channels * self.patch_size**2,
                 device=torch_device,
-            )
-
-        def place_image_tokens(self, input_ids, config):
-            input_ids = input_ids.clone()
-            for token_id in self._special_token_ids:
-                input_ids[input_ids == token_id] = self._safe_token_id()
-            input_ids[:, 0] = config.image_start_token_id
-            input_ids[:, 1] = config.image_token_id
-            input_ids[:, 2] = config.image_end_token_id
-            return input_ids
-
-        def get_additional_inputs(self, config, input_ids, modality_inputs):
-            grid_size = self.image_size // self.patch_size
-            return {
-                "image_grid_thw": torch.tensor(
-                    [[1, grid_size, grid_size]] * self.batch_size,
-                    dtype=torch.long,
-                    device=torch_device,
-                )
-            }
-
-        def prepare_video_inputs(self):
-            num_frames = 2
-            input_ids = torch.tensor(
-                [
-                    [
-                        self.bos_token_id,
-                        self.video_start_token_id,
-                        self.video_token_id,
-                        self.video_token_id,
-                        self.video_end_token_id,
-                        self._safe_token_id(),
-                        self.eos_token_id,
-                    ]
-                ]
-                * self.batch_size,
+            ),
+            "video_grid_thw": torch.tensor(
+                [[num_frames, grid_size, grid_size]] * self.batch_size,
                 dtype=torch.long,
                 device=torch_device,
-            )
-            grid_size = self.image_size // self.patch_size
-            patches_per_video = num_frames * grid_size**2
-            return {
-                "input_ids": input_ids,
-                "attention_mask": torch.ones_like(input_ids),
-                "pixel_values_videos": torch.randn(
-                    self.batch_size * patches_per_video,
-                    self.num_channels * self.patch_size**2,
-                    device=torch_device,
-                ),
-                "video_grid_thw": torch.tensor(
-                    [[num_frames, grid_size, grid_size]] * self.batch_size,
-                    dtype=torch.long,
-                    device=torch_device,
-                ),
-            }
+            ),
+        }
 
 
 @require_torch
