@@ -549,7 +549,7 @@ In modeling_*.py and modular_*.py, flags calls to einsum and reports the equatio
 
 ### TRF038
 
-For each modeling_*.py, processing_*.py, image_processing_*.py and video_processing_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review. A source file with no test file has no regression coverage: a broken forward pass, a bad conversion mapping, or a processor bug can land and stay broken indefinitely. Every model can be exercised with a dummy config and randomly initialized weights, so 'nothing to test' is not a valid reason to skip this.
+For each modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py and feature_extraction_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. modular_*.py files are handled separately: since a single modular file can define modeling, processing, image/video-processor and config classes together, the classes it defines are classified by name suffix (XxxModel/XxxPreTrainedModel/XxxForCausalLM -> modeling, XxxImageProcessor(Fast) -> image processing, XxxProcessor -> processing, XxxVideoProcessor -> video processing, XxxFeatureExtractor -> feature extraction, XxxConfig -> skipped), and one violation is reported per missing test file, not just one per source file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review. A source file with no test file has no regression coverage: a broken forward pass, a bad conversion mapping, or a processor bug can land and stay broken indefinitely. Every model can be exercised with a dummy config and randomly initialized weights, so 'nothing to test' is not a valid reason to skip this.
 
 ```diff
 src/transformers/models/acme/modeling_acme.py
@@ -563,6 +563,228 @@ Finds `if is_*_available(): import ...` blocks (including combinations like `is_
 ```diff
 if is_vision_available():
 -    from PIL import Image
+```
+
+### TRF040
+
+In modeling_*.py and modular_*.py, checks methods decorated with both @capture_outputs and @can_return_tuple. Complements TRF003, which covers manual return_dict branching in forward(). @capture_outputs and @can_return_tuple both pop return_dict, thus only the outermost decorator sees the true value. @capture_outputs already handles to_tuple conversion which makes @can_return_tuple redundant.
+
+```diff
+-@can_return_tuple
+ @merge_with_config_defaults
+ @capture_outputs
+ @auto_docstring
+ def forward(self, x):
+     return AcmeModelOutput(last_hidden_state=x)
+```
+
+### TRF041
+
+In modeling_*.py and modular_*.py, flags every `if`/`elif` statement and every conditional expression whose condition reads a `config.*` or `self.config.*` attribute and that does not carry a `# CODEPATH:` comment. The comment is accepted on the branch line itself or anywhere in the contiguous comment block directly above it, so it can head a multi-line explanation. Deliberately broad: any config attribute in the condition counts, not only boolean feature flags, because a branch on a numeric or optional config field forks the graph exactly as much as a branch on a flag does. One shape is exempt outright, by structure rather than by name: `X if X is not None else fallback`, where the field under test is itself one of the two results. That yields the field when set and a default when not, which is `getattr(config, x, default)` spelled long, so it cannot fork the graph and there is no path to name. Merely mentioning None does not qualify — `config.vision_config is not None` selects a whole extra tower and still owes a note. A field that gates no checkpoint divergence at all, such as `problem_type` selecting a loss or `hidden_act` looking up an activation, can be exempted for a whole file with a module-level `# trf-ignore: TRF041 config.problem_type, config.hidden_act` directive at column 0, naming the fields comma- or space-separated; `self.config.x`, `config.x` and `x` all name the same field. The directive has to name at least one field, so a bare `# trf-ignore: TRF041` keeps its per-line meaning instead of muting the file. Exemption is per field, not per branch: a condition reading several config fields is skipped only when every one of them is exempt, so `if config.problem_type and config.use_cache` still has to explain itself when only `problem_type` is named. Every config-gated branch is a second architecture living in the same file, and the reader cannot tell from the code whether both halves are reachable. That is why reviewers ask "is this ever used?", "are they all needed?" and "why are there so many cases?" on almost every new model, and why dead experimental branches survive for releases. This rule does not forbid the branch; it borrows Rust's `// SAFETY:` discipline and makes the author write down the justification next to it. A branch nobody can name a checkpoint for is a branch to delete, and the note makes that obvious at review time instead of three rounds later.
+
+```diff
++        # CODEPATH: ESMC-6B ships pre-normalised embeddings, the 300M/600M checkpoints do not.
+         if config.use_embedding_norm:
+             hidden_states = self.embedding_norm(hidden_states)
+
+-        if config.msa_encoder_enabled:
+-            hidden_states = self.msa_encoder(hidden_states)
++        # no released checkpoint sets msa_encoder_enabled -> branch removed
+```
+
+### TRF042
+
+In tests/models/*/test_tokenization_*.py, checks that the file defines a test class inheriting TokenizerTesterMixin. Only classes the test runner collects are considered — a `TestCase` base, or the `*Test` naming convention when the base is another model's test class — so files whose only classes are helpers are skipped, and a helper mixing in the suite does not satisfy the rule on a real test class's behalf. The violation is reported on the first test class that does not run the suite. Inheritance is followed through base classes defined in the same file and into another model's tokenizer test imported by name, so a class deriving from one that already carries the mixin is satisfied; a base the tests tree cannot resolve never counts as carrying it. `auto` is allowlisted because test_tokenization_auto.py tests AutoTokenizer resolution rather than one model's tokenizer. Ships with the file discovery widened to tests/models/**/test_tokenization_*.py, which affects which files the linter walks for every rule -- existing rules all gate on the file-name prefix, so none of them see these files. TokenizerTesterMixin is where encode/decode round-tripping, padding and truncation, special-token handling, added-token persistence, and save/load equivalence are actually checked. A tokenizer test that only asserts a couple of hand-written token id lists passes while the tokenizer is broken in every one of those dimensions, and the gap is invisible in review because the file looks like it has tests. Reviewers ask for the mixin by name on new tokenizers; five of the six tokenizer tests missing it predate 2026.
+
+```diff
+-class AcmeTokenizationTest(unittest.TestCase):
++class AcmeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
++    tokenizer_class = AcmeTokenizer
++    test_slow_tokenizer = True
+```
+
+### TRF043
+
+Checks forward signatures of classes whose name ends in Attention for a declared position_ids parameter. position_ids is consumed downstream by flash-attention padding-free training and must flow through **kwargs. An attention class that names it in the signature swallows it before the attention interface can read it; the llama standard passes position_embeddings plus **kwargs.
+
+```diff
+class AcmeAttention(nn.Module):
+     def forward(
+         self,
+         hidden_states,
+         position_embeddings,
+         attention_mask=None,
+-        position_ids=None,
+         **kwargs: Unpack[TransformersKwargs],
+     ):
+```
+
+### TRF044
+
+Checks every function in modeling_*.py and modular_*.py for a parameter named cache_position. cache_position was removed from all models in v5. Code that reintroduces it (usually copied from pre-v5 sources) threads a dead argument through every layer; the cache update call is past_key_values.update(key_states, value_states, self.layer_idx) with no position threading.
+
+```diff
+def forward(
+     self,
+     hidden_states,
+     past_key_values=None,
+-    cache_position=None,
+     **kwargs,
+ ):
+-    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_position)
++    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+```
+
+### TRF045
+
+Checks forward signatures in modeling_*.py and modular_*.py for the legacy output_attentions, output_hidden_states, and return_dict parameters. Models contributed before the cutoff date are exempt. The decorator stack owns output control: @capture_outputs resolves output_* flags against the config and records the tensors via _can_record_outputs, and @can_return_tuple handles return_dict. Declaring them in the signature reintroduces manual flag threading that drifts from the decorator behavior.
+
+```diff
++@capture_outputs
+ def forward(
+     self,
+     input_ids,
+-    output_attentions=None,
+-    output_hidden_states=None,
+-    return_dict=None,
+     **kwargs: Unpack[TransformersKwargs],
+ ):
+```
+
+### TRF046
+
+Checks forward methods in modeling_*.py and modular_*.py for assignments to self attributes. Hidden state written during forward breaks batching, torch.compile, and reasoning about the module. Carried state is passed explicitly (cache objects, the generate loop); values that depend only on config or static shapes belong in __init__.
+
+```diff
+def forward(self, hidden_states):
+-    self.sequence_length = hidden_states.shape[1]
+-    embeddings = self.compute_embeddings(self.sequence_length)
++    embeddings = self.compute_embeddings(hidden_states.shape[1])
+```
+
+### TRF047
+
+Checks preprocess, _preprocess, __call__, and post_process* methods in image_processing_*.py and video_processing_*.py for assignments to self attributes. A processor that carries state between calls breaks preprocess-many-then-postprocess batching: the second preprocess overwrites the state the first postprocess needs. Return the value or pass it through the method chain.
+
+```diff
+def _preprocess(self, images, **kwargs):
+-    self.original_sizes = [image.shape[-2:] for image in images]
++    original_sizes = [image.shape[-2:] for image in images]
+     ...
++    return BatchFeature(data={"pixel_values": pixel_values, "original_sizes": original_sizes})
+```
+
+### TRF048
+
+Checks class-level _tied_weights_keys declarations for list/tuple/set literals. v5 changed _tied_weights_keys to a dict mapping the tied target parameter to its source. The list form no longer tells the loading code which parameter is the source, so tying, device_map computation, and saving misbehave silently.
+
+```diff
+class AcmeForCausalLM(AcmePreTrainedModel):
+-    _tied_weights_keys = ["lm_head.weight"]
++    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+```
+
+### TRF049
+
+Checks __init__ methods in modeling_*.py and modular_*.py for init calls: nn.init.* / init.* primitives and in-place initializers on own parameters (self.weight.data.normal_()). Models instantiate on the meta device, so tensor values written in __init__ are discarded before loading; a parameter initialized only there has random content when fine-tuning from scratch or after a meta-device reload. Allocate with torch.empty in __init__ and initialize in _init_weights.
+
+```diff
+class AcmeEmbeddings(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+         self.position_embedding = nn.Parameter(torch.empty(config.num_positions, config.hidden_size))
+-        nn.init.trunc_normal_(self.position_embedding, std=config.initializer_range)
+
+ class AcmePreTrainedModel(PreTrainedModel):
+     def _init_weights(self, module):
+         super()._init_weights(module)
++        if isinstance(module, AcmeEmbeddings):
++            init.trunc_normal_(module.position_embedding, std=self.config.initializer_range)
+```
+
+### TRF050
+
+Checks __init__ methods of classes whose name ends in Attention for calls to a *RotaryEmbedding class. The Model owns a single rotary_emb, builds inv_freq once, and passes cos/sin down as position_embeddings. A rotary module per attention layer duplicates buffers, recomputes frequencies per layer, and diverges from the interface contract that attention receives position_embeddings.
+
+```diff
+class AcmeAttention(nn.Module):
+     def __init__(self, config, layer_idx):
+         super().__init__()
+-        self.rotary_emb = AcmeRotaryEmbedding(config)
+
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
++        self.rotary_emb = AcmeRotaryEmbedding(config)
+```
+
+### TRF051
+
+Checks modeling_*.py and modular_*.py for comparisons against a _attn_implementation attribute. Backend dispatch belongs to ALL_ATTENTION_FUNCTIONS.get_interface, and backend-conditional tensor munging (padding, reshaping) belongs in the shared wrappers under integrations/. Inline branching keeps the model body kernel-aware and breaks when new backends register.
+
+```diff
+-if self.config._attn_implementation == "flash_attention_2":
+-    attn_output = flash_path(query_states, key_states, value_states)
+-else:
+-    attn_output = eager_path(query_states, key_states, value_states)
++attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
++attn_output, attn_weights = attention_interface(self, query_states, key_states, value_states, ...)
+```
+
+### TRF052
+
+Checks modeling_*.py and modular_*.py for module-level assignments to names ending in _ATTENTION_CLASSES. Per-backend attention classes selected from a dict are the pre-interface idiom: three near-identical classes drift apart, and hub attention kernels registered into ALL_ATTENTION_FUNCTIONS never reach them. One attention class dispatching through the interface replaces the dict; do not propagate it from a legacy parent.
+
+```diff
+-ACME_ATTENTION_CLASSES = {
+-    "eager": AcmeAttention,
+-    "flash_attention_2": AcmeFlashAttention2,
+-    "sdpa": AcmeSdpaAttention,
+-}
++class AcmeAttention(nn.Module):
++    def forward(self, ...):
++        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+```
+
+### TRF053
+
+Checks modeling_*.py and modular_*.py for assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop("shift_labels", labels)) is the correct idiom and is not flagged. self.loss_function shifts labels itself, so modeling code that pre-shifts trains on doubly-shifted targets or forces a bespoke loss path. Decoder-only models pass the raw labels and let the loss shift them. Encoder-decoder models are the mirror case: their labels are already shifted because the decoder input gets the decoder start token prepended, so they must pass shift_labels=labels to stop the loss from shifting again. Double-shift is the recurring training-loss bug (Git/Florence2/Moonshine family).
+
+```diff
+if labels is not None:
+-    shift_logits = logits[..., :-1, :].contiguous()
+-    shift_labels = labels[..., 1:].contiguous()
+-    loss = nn.functional.cross_entropy(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
++    # decoder-only: labels are unshifted, the loss shifts them
++    loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
++    # encoder-decoder: labels are already shifted, hand them over as shift_labels
++    loss = self.loss_function(logits=logits, labels=labels, shift_labels=labels, vocab_size=self.config.vocab_size)
+```
+
+### TRF054
+
+Checks processor __init__ methods in processing_*.py for assignments to self.image_token_id, self.video_token_id, or self.audio_token_id. Models contributed before the cutoff date are exempt. Instance attributes on a processor serialize into processor_config.json, which v5 forbids for token ids; the saved value also goes stale when the tokenizer changes. Expose the id as a property reading the tokenizer.
+
+```diff
+class AcmeProcessor(ProcessorMixin):
+     def __init__(self, image_processor, tokenizer):
+         super().__init__(image_processor, tokenizer)
+-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
++
++    @property
++    def image_token_id(self):
++        return self.tokenizer.convert_tokens_to_ids(self.image_token)
+```
+
+### TRF055
+
+Checks that PreTrainedModel subclasses in modeling_*.py and modular_*.py do not assign `config = SomeConfig` as a class attribute. `PreTrainedModel.__init_subclass__` derives `config_class` by looking for a `config` **annotation** via `inspect.get_annotations(cls)`. An assignment (`config = SomeConfig`) is invisible to this mechanism: it creates a stray class attribute but `inspect.get_annotations` returns `None` for it, so the subclass falls back to inheriting the parent's `config_class` instead of picking up the intended config. A pure annotation (`config: SomeConfig`) has no runtime value and does not create an attribute, so it is correctly detected by `inspect.get_annotations` and sets `config_class` to the right class.
+
+```diff
+class Gemma4VisionModel(Gemma4PreTrainedModel):
+     """The Gemma 4 Vision Encoder."""
+-    config = Gemma4VisionConfig
++    config: Gemma4VisionConfig
 ```
 
 <!-- END RULES REFERENCE -->

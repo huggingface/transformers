@@ -256,7 +256,7 @@ diff = '''
 [rules.TRF016]
 description = "do_* flags declared on a processor class must be referenced by overridden preprocess/_preprocess."
 default_enabled = true
-allowlist_models = ["kimi_k25", "minimax_m3_vl"]
+allowlist_models = []
 
 [rules.TRF016.explanation]
 what_it_does = "When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (e.g. do_resize, do_rescale, do_normalize, do_convert_rgb) and overrides preprocess() or _preprocess(), checks that each declared flag is still consumed along the override path. That can be a direct reference in the override body, delegating back to the base implementation via super().preprocess(..., **kwargs) or super()._preprocess(..., **kwargs), or, for image processors, forwarding do_convert_rgb into the shared image-preparation path via _preprocess_image_like_inputs(...) or _prepare_image_like_inputs(...). The allowlist of base-handled flags (do_sample_frames) is exempted because the base preprocess() consumes them before _preprocess() runs."
@@ -308,7 +308,7 @@ diff = '''
 [rules.TRF018]
 description = "_init_weights overrides should call super()._init_weights(module), except modular-file sentinels."
 default_enabled = true
-allowlist_models = ["cosmos3_omni", "diffusion_gemma", "eomt_dinov3", "exaone4_5", "gemma4", "higgs_audio_v2", "kimi_k25", "olmo3", "pp_formulanet", "pp_lcnet_v3", "radio", "sam3_lite_text", "sam3_tracker", "slanet", "voxtral_realtime", "xcodec2"]
+allowlist_models = []
 
 [rules.TRF018.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass that overrides `_init_weights(self, module, ...)` chains the call up via `super()._init_weights(...)`. In modular files, `PreTrainedModel._init_weights(self, module)` and `raise AttributeError(...)` are accepted because they are modularization sentinels. If a model intentionally fully overrides initialization, suppress with `# trf-ignore: TRF018` on the line above the method."
@@ -326,7 +326,7 @@ diff = '''
 [rules.TRF019]
 description = "A processor TypedDict class must not define `_defaults`, instead push them upstream to the hub (`processor_config.json`)."
 default_enabled = true
-allowlist_models = ["blip_2", "grounding_dino", "hunyuan_vl", "kosmos2", "omdet_turbo", "qwen3_asr"]
+allowlist_models = []
 cutoff_date = "2026-06-20"
 
 [rules.TRF019.explanation]
@@ -343,7 +343,7 @@ diff = '''
 
 [rules.TRF020]
 description = "MLA models must isolate the KV LoRA expansion (kv_b_proj) in a dedicated method that forward() calls."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 
 [rules.TRF020.explanation]
@@ -369,7 +369,7 @@ diff = '''
 
 [rules.TRF021]
 description = "Scalar tensors must be filled on-device with torch.full((), ...) instead of torch.tensor(..., device=...)."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 
 [rules.TRF021.explanation]
@@ -388,7 +388,7 @@ diff = '''
 
 [rules.TRF022]
 description = "_no_split_modules entries must name module classes that exist in the model."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 
 [rules.TRF022.explanation]
@@ -401,7 +401,7 @@ diff = '''
 
 [rules.TRF023]
 description = "Config fields must use canonical dimension names (hidden_size, intermediate_size, num_attention_heads, ...)."
-default_enabled = false
+default_enabled = true
 # openai -> openai-gpt.md and kosmos2 -> kosmos-2.md cannot be derived from the directory name, so the
 # cutoff cannot grandfather them. qwen3_asr mirrors Whisper's encoder config, where d_model is public API.
 allowlist_models = ["kosmos2", "openai", "qwen3_asr"]
@@ -425,7 +425,7 @@ diff = '''
 
 [rules.TRF024]
 description = "Layer dimensions must come from the config, not from an integer literal in the modeling file."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -444,7 +444,7 @@ diff = '''
 
 [rules.TRF025]
 description = "Attention masks must be built once in the model, not rebuilt inside a layer or attention module."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -471,7 +471,7 @@ diff = '''
 
 [rules.TRF026]
 description = "A module whose forward only delegates to its single submodule adds nothing; inline it."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -496,7 +496,7 @@ diff = '''
 
 [rules.TRF027]
 description = "Model files must raise explicit errors instead of using bare `assert`."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -512,7 +512,7 @@ diff = '''
 
 [rules.TRF028]
 description = "Model files must carry a complete license header."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -529,7 +529,7 @@ diff = '''
 
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
-default_enabled = false
+default_enabled = true
 allowlist_models = ["kosmos2"]
 cutoff_date = "2026-06-20"
 
@@ -549,7 +549,7 @@ diff = '''
 
 [rules.TRF030]
 description = "Reaching more than two levels into the config means the module was handed the wrong config."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -566,7 +566,7 @@ diff = '''
 
 [rules.TRF031]
 description = "Dataclasses in modeling files must inherit ModelOutput."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -584,7 +584,7 @@ diff = '''
 
 [rules.TRF032]
 description = "Masked positions must be filled with torch.finfo(dtype).min, not a magic negative number."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -598,7 +598,7 @@ diff = '''
 
 [rules.TRF033]
 description = "Hyperparameters must be set on the config, not mutated through a set_* method."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 cutoff_date = "2026-06-20"
 
@@ -616,7 +616,7 @@ diff = '''
 
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
-default_enabled = false
+default_enabled = true
 allowlist_models = ["cosmos3_edge", "dinov3_convnext", "hunyuan_vl", "kimi_k25", "openai", "radio", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
 cutoff_date = "2026-06-20"
 
@@ -632,7 +632,7 @@ diff = '''
 
 [rules.TRF035]
 description = "Model files must not silence the linter with `# noqa`."
-default_enabled = false
+default_enabled = true
 allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "zaya"]
 cutoff_date = "2026-06-20"
 
@@ -646,7 +646,7 @@ diff = '''
 
 [rules.TRF036]
 description = "nn.Sequential hides the forward flow; declare the submodules explicitly."
-default_enabled = false
+default_enabled = true
 allowlist_models = ["x_clip"]
 cutoff_date = "2026-06-20"
 
@@ -681,10 +681,10 @@ diff = '''
 [rules.TRF038]
 description = "Every modeling-family source file needs a matching test file under tests/models/."
 default_enabled = true
-allowlist_models = ["bros", "cohere_asr", "emu3", "gemma4", "higgs_audio_v2", "kyutai_speech_to_text", "minimax_m3_vl", "nemotron_asr_streaming", "nougat", "pe_audio", "pe_video", "pe_audio_video","sam2_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "x_clip"]
+allowlist_models = ["bros", "cohere_asr", "emu3", "exaone4_5", "gemma4", "glm46v", "glm_image", "glmga", "granite_speech", "higgs_audio_v2", "inkling", "kyutai_speech_to_text", "lasr", "minimax_m3_vl", "moonshine_streaming", "nemotron_asr_streaming", "nemotron3_5_asr", "nougat", "paddleocr_vl", "pe_audio", "pe_video", "pe_audio_video", "pi0", "pp_formulanet", "rf_detr", "sam2", "sam2_video", "sam3_tracker", "sam3_tracker_video", "sam3_video", "siglip", "siglip2", "tvp", "video_llava", "vilt", "vjepa2", "voxtral", "voxtral_realtime", "x_clip"]
 
 [rules.TRF038.explanation]
-what_it_does = "For each modeling_*.py, processing_*.py, image_processing_*.py and video_processing_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review."
+what_it_does = "For each modeling_*.py, processing_*.py, image_processing_*.py, video_processing_*.py and feature_extraction_*.py file, checks that a corresponding tests/models/<model>/test_*.py file exists (e.g. modeling_acme.py -> tests/models/acme/test_modeling_acme.py). configuration_*.py is exempt since config classes are conventionally covered by ConfigTester inside the companion test_modeling_*.py file. modular_*.py files are handled separately: since a single modular file can define modeling, processing, image/video-processor and config classes together, the classes it defines are classified by name suffix (XxxModel/XxxPreTrainedModel/XxxForCausalLM -> modeling, XxxImageProcessor(Fast) -> image processing, XxxProcessor -> processing, XxxVideoProcessor -> video processing, XxxFeatureExtractor -> feature extraction, XxxConfig -> skipped), and one violation is reported per missing test file, not just one per source file. There is no `# trf-ignore: TRF038` support for this rule: use `allowlist_models` if a model genuinely cannot ship a test yet, so the exemption is visible in review."
 why_bad = "A source file with no test file has no regression coverage: a broken forward pass, a bad conversion mapping, or a processor bug can land and stay broken indefinitely. Every model can be exercised with a dummy config and randomly initialized weights, so 'nothing to test' is not a valid reason to skip this."
 diff = '''
  src/transformers/models/acme/modeling_acme.py
@@ -702,4 +702,296 @@ why_bad = "ruff's unused-import check does not clean these up, because the impor
 diff = '''
  if is_vision_available():
 -    from PIL import Image
+'''
+
+[rules.TRF040]
+description = "@can_return_tuple must not be combined with @capture_outputs."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF040.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, checks methods decorated with both @capture_outputs and @can_return_tuple. Complements TRF003, which covers manual return_dict branching in forward()."
+why_bad = "@capture_outputs and @can_return_tuple both pop return_dict, thus only the outermost decorator sees the true value. @capture_outputs already handles to_tuple conversion which makes @can_return_tuple redundant."
+diff = '''
+-@can_return_tuple
+ @merge_with_config_defaults
+ @capture_outputs
+ @auto_docstring
+ def forward(self, x):
+     return AcmeModelOutput(last_hidden_state=x)
+'''
+
+[rules.TRF041]
+description = "A config-gated branch must carry a `# CODEPATH:` note saying which checkpoints diverge."
+default_enabled = true
+allowlist_models = ["dinov3_vit", "inkling", "kimi_k25", "kosmos2", "mimo_v2_flash", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF041.explanation]
+what_it_does = "In modeling_*.py and modular_*.py, flags every `if`/`elif` statement and every conditional expression whose condition reads a `config.*` or `self.config.*` attribute and that does not carry a `# CODEPATH:` comment. The comment is accepted on the branch line itself or anywhere in the contiguous comment block directly above it, so it can head a multi-line explanation. Deliberately broad: any config attribute in the condition counts, not only boolean feature flags, because a branch on a numeric or optional config field forks the graph exactly as much as a branch on a flag does. One shape is exempt outright, by structure rather than by name: `X if X is not None else fallback`, where the field under test is itself one of the two results. That yields the field when set and a default when not, which is `getattr(config, x, default)` spelled long, so it cannot fork the graph and there is no path to name. Merely mentioning None does not qualify — `config.vision_config is not None` selects a whole extra tower and still owes a note. A field that gates no checkpoint divergence at all, such as `problem_type` selecting a loss or `hidden_act` looking up an activation, can be exempted for a whole file with a module-level `# trf-ignore: TRF041 config.problem_type, config.hidden_act` directive at column 0, naming the fields comma- or space-separated; `self.config.x`, `config.x` and `x` all name the same field. The directive has to name at least one field, so a bare `# trf-ignore: TRF041` keeps its per-line meaning instead of muting the file. Exemption is per field, not per branch: a condition reading several config fields is skipped only when every one of them is exempt, so `if config.problem_type and config.use_cache` still has to explain itself when only `problem_type` is named."
+why_bad = "Every config-gated branch is a second architecture living in the same file, and the reader cannot tell from the code whether both halves are reachable. That is why reviewers ask \"is this ever used?\", \"are they all needed?\" and \"why are there so many cases?\" on almost every new model, and why dead experimental branches survive for releases. This rule does not forbid the branch; it borrows Rust's `// SAFETY:` discipline and makes the author write down the justification next to it. A branch nobody can name a checkpoint for is a branch to delete, and the note makes that obvious at review time instead of three rounds later."
+diff = '''
++        # CODEPATH: ESMC-6B ships pre-normalised embeddings, the 300M/600M checkpoints do not.
+         if config.use_embedding_norm:
+             hidden_states = self.embedding_norm(hidden_states)
+
+-        if config.msa_encoder_enabled:
+-            hidden_states = self.msa_encoder(hidden_states)
++        # no released checkpoint sets msa_encoder_enabled -> branch removed
+'''
+
+[rules.TRF042]
+description = "A tokenizer test must exercise the shared TokenizerTesterMixin suite."
+default_enabled = true
+allowlist_models = ["auto"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF042.explanation]
+what_it_does = "In tests/models/*/test_tokenization_*.py, checks that the file defines a test class inheriting TokenizerTesterMixin. Only classes the test runner collects are considered — a `TestCase` base, or the `*Test` naming convention when the base is another model's test class — so files whose only classes are helpers are skipped, and a helper mixing in the suite does not satisfy the rule on a real test class's behalf. The violation is reported on the first test class that does not run the suite. Inheritance is followed through base classes defined in the same file and into another model's tokenizer test imported by name, so a class deriving from one that already carries the mixin is satisfied; a base the tests tree cannot resolve never counts as carrying it. `auto` is allowlisted because test_tokenization_auto.py tests AutoTokenizer resolution rather than one model's tokenizer. Ships with the file discovery widened to tests/models/**/test_tokenization_*.py, which affects which files the linter walks for every rule -- existing rules all gate on the file-name prefix, so none of them see these files."
+why_bad = "TokenizerTesterMixin is where encode/decode round-tripping, padding and truncation, special-token handling, added-token persistence, and save/load equivalence are actually checked. A tokenizer test that only asserts a couple of hand-written token id lists passes while the tokenizer is broken in every one of those dimensions, and the gap is invisible in review because the file looks like it has tests. Reviewers ask for the mixin by name on new tokenizers; five of the six tokenizer tests missing it predate 2026."
+diff = '''
+-class AcmeTokenizationTest(unittest.TestCase):
++class AcmeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
++    tokenizer_class = AcmeTokenizer
++    test_slow_tokenizer = True
+'''
+
+[rules.TRF043]
+description = "Attention classes must not declare position_ids in their forward signature; it flows via **kwargs."
+default_enabled = true
+allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm"]
+
+[rules.TRF043.explanation]
+what_it_does = "Checks forward signatures of classes whose name ends in Attention for a declared position_ids parameter."
+why_bad = "position_ids is consumed downstream by flash-attention padding-free training and must flow through **kwargs. An attention class that names it in the signature swallows it before the attention interface can read it; the llama standard passes position_embeddings plus **kwargs."
+diff = '''
+ class AcmeAttention(nn.Module):
+     def forward(
+         self,
+         hidden_states,
+         position_embeddings,
+         attention_mask=None,
+-        position_ids=None,
+         **kwargs: Unpack[TransformersKwargs],
+     ):
+'''
+
+[rules.TRF044]
+description = "cache_position must not appear as a parameter in modeling code; it is removed framework surface."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF044.explanation]
+what_it_does = "Checks every function in modeling_*.py and modular_*.py for a parameter named cache_position."
+why_bad = "cache_position was removed from all models in v5. Code that reintroduces it (usually copied from pre-v5 sources) threads a dead argument through every layer; the cache update call is past_key_values.update(key_states, value_states, self.layer_idx) with no position threading."
+diff = '''
+ def forward(
+     self,
+     hidden_states,
+     past_key_values=None,
+-    cache_position=None,
+     **kwargs,
+ ):
+-    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_position)
++    key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+'''
+
+[rules.TRF045]
+description = "forward must not declare output_attentions/output_hidden_states/return_dict; decorators own them."
+default_enabled = true
+# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
+# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
+allowlist_models = ["kosmos2", "openai", "timm_backbone", "timm_wrapper"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF045.explanation]
+what_it_does = "Checks forward signatures in modeling_*.py and modular_*.py for the legacy output_attentions, output_hidden_states, and return_dict parameters. Models contributed before the cutoff date are exempt."
+why_bad = "The decorator stack owns output control: @capture_outputs resolves output_* flags against the config and records the tensors via _can_record_outputs, and @can_return_tuple handles return_dict. Declaring them in the signature reintroduces manual flag threading that drifts from the decorator behavior."
+diff = '''
++@capture_outputs
+ def forward(
+     self,
+     input_ids,
+-    output_attentions=None,
+-    output_hidden_states=None,
+-    return_dict=None,
+     **kwargs: Unpack[TransformersKwargs],
+ ):
+'''
+
+[rules.TRF046]
+description = "forward must not write module attributes; modules are stateless in forward."
+default_enabled = true
+allowlist_models = ["clvp", "codegen", "ctrl", "fastspeech2_conformer", "nllb_moe", "qwen2_5_omni", "qwen3_omni_moe", "recurrent_gemma", "seamless_m4t", "switch_transformers", "trocr", "udop", "wav2vec2_conformer"]
+
+[rules.TRF046.explanation]
+what_it_does = "Checks forward methods in modeling_*.py and modular_*.py for assignments to self attributes."
+why_bad = "Hidden state written during forward breaks batching, torch.compile, and reasoning about the module. Carried state is passed explicitly (cache objects, the generate loop); values that depend only on config or static shapes belong in __init__."
+diff = '''
+ def forward(self, hidden_states):
+-    self.sequence_length = hidden_states.shape[1]
+-    embeddings = self.compute_embeddings(self.sequence_length)
++    embeddings = self.compute_embeddings(hidden_states.shape[1])
+'''
+
+[rules.TRF047]
+description = "Image/video processors are stateless: preprocess/_preprocess/post_process_* must not write self attributes."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF047.explanation]
+what_it_does = "Checks preprocess, _preprocess, __call__, and post_process* methods in image_processing_*.py and video_processing_*.py for assignments to self attributes."
+why_bad = "A processor that carries state between calls breaks preprocess-many-then-postprocess batching: the second preprocess overwrites the state the first postprocess needs. Return the value or pass it through the method chain."
+diff = '''
+ def _preprocess(self, images, **kwargs):
+-    self.original_sizes = [image.shape[-2:] for image in images]
++    original_sizes = [image.shape[-2:] for image in images]
+     ...
++    return BatchFeature(data={"pixel_values": pixel_values, "original_sizes": original_sizes})
+'''
+
+[rules.TRF048]
+description = "_tied_weights_keys must be a dict mapping target to source, not the pre-v5 list form."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF048.explanation]
+what_it_does = "Checks class-level _tied_weights_keys declarations for list/tuple/set literals."
+why_bad = "v5 changed _tied_weights_keys to a dict mapping the tied target parameter to its source. The list form no longer tells the loading code which parameter is the source, so tying, device_map computation, and saving misbehave silently."
+diff = '''
+ class AcmeForCausalLM(AcmePreTrainedModel):
+-    _tied_weights_keys = ["lm_head.weight"]
++    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+'''
+
+[rules.TRF049]
+description = "Weight initialization belongs in _init_weights, never in __init__ (meta-device init discards it)."
+default_enabled = true
+allowlist_models = ["convbert", "emu3", "esm", "granite_speech", "unispeech_sat"]
+
+[rules.TRF049.explanation]
+what_it_does = "Checks __init__ methods in modeling_*.py and modular_*.py for init calls: nn.init.* / init.* primitives and in-place initializers on own parameters (self.weight.data.normal_())."
+why_bad = "Models instantiate on the meta device, so tensor values written in __init__ are discarded before loading; a parameter initialized only there has random content when fine-tuning from scratch or after a meta-device reload. Allocate with torch.empty in __init__ and initialize in _init_weights."
+diff = '''
+ class AcmeEmbeddings(nn.Module):
+     def __init__(self, config):
+         super().__init__()
+         self.position_embedding = nn.Parameter(torch.empty(config.num_positions, config.hidden_size))
+-        nn.init.trunc_normal_(self.position_embedding, std=config.initializer_range)
+
+ class AcmePreTrainedModel(PreTrainedModel):
+     def _init_weights(self, module):
+         super()._init_weights(module)
++        if isinstance(module, AcmeEmbeddings):
++            init.trunc_normal_(module.position_embedding, std=self.config.initializer_range)
+'''
+
+[rules.TRF050]
+description = "One rotary module per model: attention classes must not instantiate their own rotary embedding."
+default_enabled = true
+allowlist_models = ["edgetam_video", "moshi", "recurrent_gemma", "sam2_video"]
+
+[rules.TRF050.explanation]
+what_it_does = "Checks __init__ methods of classes whose name ends in Attention for calls to a *RotaryEmbedding class."
+why_bad = "The Model owns a single rotary_emb, builds inv_freq once, and passes cos/sin down as position_embeddings. A rotary module per attention layer duplicates buffers, recomputes frequencies per layer, and diverges from the interface contract that attention receives position_embeddings."
+diff = '''
+ class AcmeAttention(nn.Module):
+     def __init__(self, config, layer_idx):
+         super().__init__()
+-        self.rotary_emb = AcmeRotaryEmbedding(config)
+
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
++        self.rotary_emb = AcmeRotaryEmbedding(config)
+'''
+
+[rules.TRF051]
+description = "Modeling code must not branch on _attn_implementation; the attention interface owns dispatch."
+default_enabled = true
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni"]
+
+[rules.TRF051.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for comparisons against a _attn_implementation attribute."
+why_bad = "Backend dispatch belongs to ALL_ATTENTION_FUNCTIONS.get_interface, and backend-conditional tensor munging (padding, reshaping) belongs in the shared wrappers under integrations/. Inline branching keeps the model body kernel-aware and breaks when new backends register."
+diff = '''
+-if self.config._attn_implementation == "flash_attention_2":
+-    attn_output = flash_path(query_states, key_states, value_states)
+-else:
+-    attn_output = eager_path(query_states, key_states, value_states)
++attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
++attn_output, attn_weights = attention_interface(self, query_states, key_states, value_states, ...)
+'''
+
+[rules.TRF052]
+description = "No *_ATTENTION_CLASSES dispatch dicts; attention backends route through the attention interface."
+default_enabled = true
+allowlist_models = ["bark", "data2vec", "falcon", "git", "gpt_neo", "gptj", "sam", "superglue"]
+
+[rules.TRF052.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for module-level assignments to names ending in _ATTENTION_CLASSES."
+why_bad = "Per-backend attention classes selected from a dict are the pre-interface idiom: three near-identical classes drift apart, and hub attention kernels registered into ALL_ATTENTION_FUNCTIONS never reach them. One attention class dispatching through the interface replaces the dict; do not propagate it from a legacy parent."
+diff = '''
+-ACME_ATTENTION_CLASSES = {
+-    "eager": AcmeAttention,
+-    "flash_attention_2": AcmeFlashAttention2,
+-    "sdpa": AcmeSdpaAttention,
+-}
++class AcmeAttention(nn.Module):
++    def forward(self, ...):
++        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, eager_attention_forward)
+'''
+
+[rules.TRF053]
+description = "No manual label shifting in modeling code; self.loss_function owns it."
+default_enabled = true
+allowlist_models = ["blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
+
+[rules.TRF053.explanation]
+what_it_does = "Checks modeling_*.py and modular_*.py for assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop(\"shift_labels\", labels)) is the correct idiom and is not flagged."
+why_bad = "self.loss_function shifts labels itself, so modeling code that pre-shifts trains on doubly-shifted targets or forces a bespoke loss path. Decoder-only models pass the raw labels and let the loss shift them. Encoder-decoder models are the mirror case: their labels are already shifted because the decoder input gets the decoder start token prepended, so they must pass shift_labels=labels to stop the loss from shifting again. Double-shift is the recurring training-loss bug (Git/Florence2/Moonshine family)."
+diff = '''
+ if labels is not None:
+-    shift_logits = logits[..., :-1, :].contiguous()
+-    shift_labels = labels[..., 1:].contiguous()
+-    loss = nn.functional.cross_entropy(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
++    # decoder-only: labels are unshifted, the loss shifts them
++    loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
++    # encoder-decoder: labels are already shifted, hand them over as shift_labels
++    loss = self.loss_function(logits=logits, labels=labels, shift_labels=labels, vocab_size=self.config.vocab_size)
+'''
+
+[rules.TRF054]
+description = "Processor media token ids are properties, never instance attributes set in __init__."
+default_enabled = true
+allowlist_models = ["hunyuan_vl", "inkling", "qwen3_asr"]
+cutoff_date = "2026-06-20"
+
+[rules.TRF054.explanation]
+what_it_does = "Checks processor __init__ methods in processing_*.py for assignments to self.image_token_id, self.video_token_id, or self.audio_token_id. Models contributed before the cutoff date are exempt."
+why_bad = "Instance attributes on a processor serialize into processor_config.json, which v5 forbids for token ids; the saved value also goes stale when the tokenizer changes. Expose the id as a property reading the tokenizer."
+diff = '''
+ class AcmeProcessor(ProcessorMixin):
+     def __init__(self, image_processor, tokenizer):
+         super().__init__(image_processor, tokenizer)
+-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
++
++    @property
++    def image_token_id(self):
++        return self.tokenizer.convert_tokens_to_ids(self.image_token)
+'''
+
+[rules.TRF055]
+description = "`config` on a PreTrainedModel subclass must be an annotation (`config: SomeConfig`), not an assignment (`config = SomeConfig`)."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF055.explanation]
+what_it_does = "Checks that PreTrainedModel subclasses in modeling_*.py and modular_*.py do not assign `config = SomeConfig` as a class attribute."
+why_bad = "`PreTrainedModel.__init_subclass__` derives `config_class` by looking for a `config` **annotation** via `inspect.get_annotations(cls)`. An assignment (`config = SomeConfig`) is invisible to this mechanism: it creates a stray class attribute but `inspect.get_annotations` returns `None` for it, so the subclass falls back to inheriting the parent's `config_class` instead of picking up the intended config. A pure annotation (`config: SomeConfig`) has no runtime value and does not create an attribute, so it is correctly detected by `inspect.get_annotations` and sets `config_class` to the right class."
+diff = '''
+ class Gemma4VisionModel(Gemma4PreTrainedModel):
+     """The Gemma 4 Vision Encoder."""
+-    config = Gemma4VisionConfig
++    config: Gemma4VisionConfig
 '''
