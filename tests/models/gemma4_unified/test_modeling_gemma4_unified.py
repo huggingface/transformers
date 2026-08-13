@@ -246,9 +246,6 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
             "test_get_video_features_attentions",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
-            "test_get_audio_features_output",
         ]
 
         for test in skippable_tests:
@@ -403,9 +400,6 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
             "test_get_video_features_attentions",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
-            "test_get_audio_features_output",
         ]
 
         for test in skippable_tests:
