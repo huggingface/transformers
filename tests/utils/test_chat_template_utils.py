@@ -18,9 +18,8 @@ from typing import Literal
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from transformers.utils.chat_template_utils import (
     Chat,
-    resolve_sanitization_placeholders,
     sanitize_chat_input,
-    split_at_trusted_special_tokens,
+    split_sanitized_chat,
 )
 
 
@@ -775,58 +774,61 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertNotIn("<|im_end|>", sanitized.messages[0]["content"])
         self.assertEqual(len(substitutions), 1)
 
-    def test_resolve_placeholders_spans(self):
-        substitutions = {"12345": "<|im_end|>"}
-        rendered = "a12345b12345"
-        final, untrusted_spans, seen = resolve_sanitization_placeholders(rendered, substitutions)
-        self.assertEqual(final, "a<|im_end|>b<|im_end|>")
+
+class SplitSanitizedChatTest(unittest.TestCase):
+    def split(self, rendered, substitutions, tokens, token_flags=None):
+        return split_sanitized_chat(rendered, substitutions, tokens, token_flags or {})
+
+    def test_restores_placeholders_and_splits_at_trusted_tokens(self):
+        # "hi </s> there</s>": the first </s> arrives through a placeholder (untrusted input), the second
+        # was emitted by the template itself
+        parts, seen = self.split("hi 12345 there</s>", {"12345": "</s>"}, ["</s>"])
+        self.assertEqual(parts, [("text", "hi </s> there", [(3, 7)]), ("special", "</s>", [])])
         self.assertEqual(seen, {"12345"})
-        # the untrusted spans cover exactly the restored special-token text in the final string
-        self.assertEqual([final[start:end] for start, end in untrusted_spans], ["<|im_end|>", "<|im_end|>"])
 
-
-class SplitAtTrustedSpecialTokensTest(unittest.TestCase):
-    def split(self, final, untrusted_spans, tokens, token_flags=None):
-        return split_at_trusted_special_tokens(final, untrusted_spans, tokens, token_flags or {})
-
-    def test_trusted_tokens_split_untrusted_stay_inline(self):
-        # "hi </s> there</s>": the first </s> is untrusted input, the second was emitted by the template
-        final = "hi </s> there</s>"
-        parts = self.split(final, [(3, 7)], ["</s>"])
-        self.assertEqual(parts, [("text", "hi </s> there", 0, 13), ("special", "</s>", 13, 17)])
-        # every part span tiles the final string
-        self.assertEqual("".join(final[start:end] for _, _, start, end in parts), final)
+    def test_multiple_placeholders_in_one_text_part(self):
+        parts, seen = self.split("a12345b12345", {"12345": "<|im_end|>"}, ["<|im_end|>"])
+        self.assertEqual(seen, {"12345"})
+        [(kind, text, untrusted_spans)] = parts
+        self.assertEqual(kind, "text")
+        self.assertEqual(text, "a<|im_end|>b<|im_end|>")
+        # the untrusted spans cover exactly the restored special-token text
+        self.assertEqual([text[start:end] for start, end in untrusted_spans], ["<|im_end|>", "<|im_end|>"])
 
     def test_no_trusted_tokens_is_single_text_part(self):
-        final = "just some text"
-        self.assertEqual(self.split(final, [], ["</s>"]), [("text", final, 0, len(final))])
+        parts, seen = self.split("just some text", {}, ["</s>"])
+        self.assertEqual(parts, [("text", "just some text", [])])
+        self.assertEqual(seen, set())
 
     def test_splice_attack_is_untrusted(self):
-        # Untrusted text supplies the tail of a token whose head is trusted template text; the spliced match
-        # overlaps an untrusted span and must not be treated as a trusted control token
-        final = "<|im_end|>"
-        parts = self.split(final, [(5, 10)], ["<|im_end|>"])
-        self.assertEqual(parts, [("text", final, 0, len(final))])
+        # Untrusted text supplies the tail of a token whose head is trusted template text; the token is
+        # never matched because matching only happens inside the segments between placeholders
+        parts, _ = self.split("<|im_12345", {"12345": "end|>"}, ["<|im_end|>"])
+        self.assertEqual(parts, [("text", "<|im_end|>", [(5, 10)])])
+
+    def test_untrusted_spans_are_part_local(self):
+        # Restored text on both sides of a template token lands in different text parts, each span relative
+        # to its own part
+        parts, seen = self.split("111</s>222", {"111": "<a>", "222": "<b>"}, ["</s>", "<a>", "<b>"])
+        self.assertEqual(parts, [("text", "<a>", [(0, 3)]), ("special", "</s>", []), ("text", "<b>", [(0, 3)])])
+        self.assertEqual(seen, {"111", "222"})
 
     def test_lstrip_rstrip_absorb_whitespace(self):
         # Mirrors the tokenizer's added-token matching: a token with lstrip/rstrip consumes the adjacent
-        # whitespace into its own span, so it must not be encoded as part of the neighboring text
-        final = "A <mask> B"
-        parts = self.split(final, [], ["<mask>"], {"<mask>": (True, True)})
-        self.assertEqual(parts, [("text", "A", 0, 1), ("special", "<mask>", 1, 9), ("text", "B", 9, 10)])
+        # whitespace, so it must not be encoded as part of the neighboring text
+        parts, _ = self.split("A <mask> B", {}, ["<mask>"], {"<mask>": (True, True)})
+        self.assertEqual(parts, [("text", "A", []), ("special", "<mask>", []), ("text", "B", [])])
 
     def test_longest_token_wins(self):
-        final = "keep <|end|>_extra keep"
-        parts = self.split(final, [], ["<|end|>", "<|end|>_extra"])
+        parts, _ = self.split("keep <|end|>_extra keep", {}, ["<|end|>", "<|end|>_extra"])
         self.assertEqual(
             parts,
-            [("text", "keep ", 0, 5), ("special", "<|end|>_extra", 5, 18), ("text", " keep", 18, 23)],
+            [("text", "keep ", []), ("special", "<|end|>_extra", []), ("text", " keep", [])],
         )
 
     def test_adjacent_trusted_tokens(self):
-        final = "</s></s>x"
-        parts = self.split(final, [], ["</s>"])
+        parts, _ = self.split("</s></s>x", {}, ["</s>"])
         self.assertEqual(
             parts,
-            [("special", "</s>", 0, 4), ("special", "</s>", 4, 8), ("text", "x", 8, 9)],
+            [("special", "</s>", []), ("special", "</s>", []), ("text", "x", [])],
         )
