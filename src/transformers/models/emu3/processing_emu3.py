@@ -107,7 +107,7 @@ class Emu3Processor(ProcessorMixin):
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
-        if text is not None:
+        if text is not None and kwargs.get("add_special_tokens", True):
             # Add BOS once per sample; GPT tokenizer doesn't add it automatically
             text = [f"{self.bos_token}{sample}" for sample in text]
         return images, text, None, None

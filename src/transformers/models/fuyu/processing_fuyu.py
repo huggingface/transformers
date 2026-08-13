@@ -15,7 +15,6 @@
 Image/Text processor class for GIT
 """
 
-import json
 import math
 import re
 from typing import Union
@@ -201,30 +200,6 @@ def construct_full_unpacked_stream(
     return all_bi_stream
 
 
-def patch_dummy_prefix(tok):
-    data = json.loads(tok.backend_tokenizer.to_str())
-
-    def strip(node):
-        if node is None:
-            return
-        t = node.get("type")
-        if t == "Metaspace":
-            if "prepend_scheme" in node:
-                node["prepend_scheme"] = "never"
-            if "add_prefix_space" in node:
-                node["add_prefix_space"] = False
-        elif t == "Prepend":
-            node["prepend"] = ""
-        elif t == "Sequence":
-            for sub in node.get("pretokenizers", node.get("normalizers", [])):
-                strip(sub)
-
-    strip(data.get("pre_tokenizer"))
-    strip(data.get("normalizer"))
-    tokenizer_cls = type(tok.backend_tokenizer)
-    tok._tokenizer = tokenizer_cls.from_str(json.dumps(data))
-
-
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
@@ -250,12 +225,6 @@ class FuyuProcessor(ProcessorMixin):
         self.max_tokens_to_generate = 10
         vocab = tokenizer.get_vocab()
         tokenizer.pad_token_id = 0
-
-        # Drop the underscore prefix manually, it gets added by tokenizer when encoding `image_token`
-        # Ref implem appends placeholder IDs manually therefore it isn't appended in ref
-        # Another option to loop over each sample, tokenize, pad and add placeholders manually is too much
-        # custom code, which we don't want anymore
-        patch_dummy_prefix(tokenizer)
 
         self.image_token = "|SPEAKER|"
         self.image_newline_token = "|NEWLINE|"
@@ -328,11 +297,11 @@ class FuyuProcessor(ProcessorMixin):
 
             new_h = min(
                 image_height,
-                math.ceil(processed_images["image_unpadded_heights"][image_idx] / patch_height) * patch_height,
+                math.ceil(processed_images["image_unpadded_heights"][image_idx][0] / patch_height) * patch_height,
             )
             new_w = min(
                 image_width,
-                math.ceil(processed_images["image_unpadded_widths"][image_idx] / patch_width) * patch_width,
+                math.ceil(processed_images["image_unpadded_widths"][image_idx][0] / patch_width) * patch_width,
             )
             num_patches = self.image_processor.get_num_patches(
                 image_height=new_h, image_width=new_w, patch_size=patch_size
@@ -357,7 +326,7 @@ class FuyuProcessor(ProcessorMixin):
             image_tokens_with_newlines.append(self.image_token * kwargs["row_width"] + self.image_newline_token)
 
         # add BOS token after the image tokens, order kept for BC
-        return "".join(image_tokens_with_newlines) + "<s> "
+        return "".join(image_tokens_with_newlines) + "<s>"
 
     @auto_docstring
     def __call__(
@@ -377,27 +346,93 @@ class FuyuProcessor(ProcessorMixin):
         """
         requires_backends(self, ["torch"])
 
-        output_kwargs = self._merge_kwargs(
+        merged_kwargs = self._merge_kwargs(
             FuyuProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
+        if not merged_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
 
-        # Was hardcoded in ref by manually padding/tensorizing all inputs
-        # Text-only inputs though don't need any of these defaults
+        # Was and still is hardcoded by manually padding/tensorizing all inputs due to BC
         if text is not None and images is not None:
-            output_kwargs["text_kwargs"]["add_special_tokens"] = True
-            output_kwargs["text_kwargs"]["padding"] = True
-            output_kwargs["text_kwargs"]["padding_side"] = "left"
+            merged_kwargs["text_kwargs"]["add_special_tokens"] = False
+            merged_kwargs["text_kwargs"]["padding"] = False
 
         if images is not None:
-            output_kwargs["text_kwargs"]["return_tensors"] = "pt"
-            output_kwargs["images_kwargs"]["return_tensors"] = "pt"
+            merged_kwargs["text_kwargs"]["return_tensors"] = "pt"
+            merged_kwargs["images_kwargs"]["return_tensors"] = "pt"
 
-        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
-        return model_inputs
+        # Processor has a ton of custom code to tokenize inputs and we need to keep it for BC
+        # passing the whole seq to tokenizer adds SP underscore (`_`) randomly in the beginning
+        images, text, *_ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
+        self.validate_inputs(images=images, text=text, **kwargs)
+
+        processed_images = {}
+        images_replacements = []
+        if images is not None and hasattr(self, "image_processor"):
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+
+        text_inputs = {}
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        if text is not None:
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
+            )
+
+            text, text_replacement_offsets = self.get_text_with_replacements(
+                text,
+                images_replacements,
+            )
+            # IMPORTANT: here comes the custom part with tokenization, do not change it!
+            if not images_replacements:
+                text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            else:
+                # encode the text and the placeholders separately, then always pad on the left
+                batch_input_ids, batch_attention_mask = [], []
+                for sample in text:
+                    split_sample = re.split(r"(?<=<s>)", sample, maxsplit=1)
+                    prompt_inputs = self.tokenizer(split_sample[-1], **merged_kwargs["text_kwargs"])
+
+                    if len(split_sample) == 2:
+                        # strip off the underscore which is always prepended before special image tokens
+                        # we are guaranteed that the output are torch tensors
+                        placeholder_inputs = self.tokenizer(split_sample[0], **merged_kwargs["text_kwargs"])
+                        batch_input_ids.append(
+                            torch.cat(
+                                [placeholder_inputs["input_ids"][..., 1:], prompt_inputs["input_ids"]], dim=-1
+                            ).squeeze(0)
+                        )
+                        batch_attention_mask.append(
+                            torch.cat(
+                                [placeholder_inputs["attention_mask"][..., 1:], prompt_inputs["attention_mask"]],
+                                dim=-1,
+                            ).squeeze(0)
+                        )
+                    else:
+                        batch_input_ids.append(prompt_inputs["input_ids"].squeeze(0))
+                        batch_attention_mask.append(prompt_inputs["attention_mask"].squeeze(0))
+
+                # Now pad on the left to max length in the prompt, can't be customized by users for BC
+                text_inputs = self.tokenizer.pad(
+                    {"input_ids": batch_input_ids, "attention_mask": batch_attention_mask},
+                    padding_side="left",
+                    max_length=None,
+                )
+
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
+        data = {**text_inputs, **processed_images}
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
 
     @property
     def unused_input_names(self) -> list[str]:

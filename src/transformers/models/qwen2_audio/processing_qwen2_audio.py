@@ -82,7 +82,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         audio = self.feature_extractor.fetch_audio(audio)
+
+        # Some kwargs should not be changed so we can expand text with audio tokens below
+        kwargs["return_attention_mask"] = True
+        kwargs["padding"] = "max_length"
         audio_inputs = self.feature_extractor(audio, **kwargs)
+
         # rename attention_mask to prevent conflicts later on
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 

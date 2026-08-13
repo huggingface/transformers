@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import Emu3Processor
 
@@ -102,4 +103,9 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @unittest.skip("Processor adds BOS manually to the input text")
     def test_tokenizer_defaults(self):
+        pass
+
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Processor adds BOS manually to the input text")
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
