@@ -666,29 +666,25 @@ def sanitize_chat_inputs(
             "`sanitize_special_tokens` does not support tokenizers with `single_word` special tokens."
         )
     substitutions = {}
-    protected_tokens = sanitization_special_tokens(tokenizer)
-    conversations = sanitize_chat_input(conversations, protected_tokens, substitutions)
-    tools = sanitize_chat_input(tools, protected_tokens, substitutions)
-    documents = sanitize_chat_input(documents, protected_tokens, substitutions)
-    kwargs = sanitize_chat_input(kwargs, protected_tokens, substitutions)
+    pattern = _compile_special_token_pattern(tuple(sanitization_special_tokens(tokenizer)))
+    conversations = _sanitize_chat_input(conversations, pattern, substitutions)
+    tools = _sanitize_chat_input(tools, pattern, substitutions)
+    documents = _sanitize_chat_input(documents, pattern, substitutions)
+    kwargs = _sanitize_chat_input(kwargs, pattern, substitutions)
     return conversations, tools, documents, kwargs, substitutions
 
 
-def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str], substitutions: dict[str, str]) -> Any:
-    """Sanitize special tokens out of chat inputs by replacing each occurrence with a unique placeholder,
-    recorded in `substitutions` as `{placeholder: original_text}`. After the chat template has been rendered,
-    the placeholders are resolved back to the original text by `split_sanitized_chat` and encoded as
-    ordinary (non-special) tokens."""
-    return _sanitize_chat_input(chat_input, _compile_special_token_pattern(tuple(all_special_tokens)), substitutions)
-
-
 def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None, substitutions: dict[str, str]) -> Any:
+    """Recursively sanitize special tokens out of a chat input by replacing each occurrence with a unique
+    placeholder, recorded in `substitutions` as `{placeholder: original_text}`. After the chat template has
+    been rendered, the placeholders are resolved back to the original text by `split_sanitized_chat` and
+    encoded as ordinary (non-special) tokens."""
     if pattern is None:
         return chat_input
-    if hasattr(chat_input, "messages"):
-        # catches Chat objects
-        chat_input.messages = _sanitize_chat_input(chat_input.messages, pattern, substitutions)
-        return chat_input
+    if isinstance(chat_input, Chat):
+        # Rebuilt rather than mutated, like every other container: the caller's Chat must not end up
+        # holding this call's placeholders
+        return Chat(_sanitize_chat_input(chat_input.messages, pattern, substitutions))
     if isinstance(chat_input, dict):
         return {key: _sanitize_chat_input(value, pattern, substitutions) for key, value in chat_input.items()}
     elif isinstance(chat_input, list):
@@ -728,7 +724,7 @@ def split_sanitized_chat(
     protected_tokens: list[str],
     token_flags: dict[str, tuple[bool, bool]],
 ) -> tuple[list[tuple[str, str, list[tuple[int, int]]]], set[str]]:
-    """Walk a rendered chat string, resolving the placeholders inserted by `sanitize_chat_input` back to
+    """Walk a rendered chat string, resolving the placeholders inserted by `sanitize_chat_inputs` back to
     their original special-token text and splitting at the special tokens the chat template itself emitted.
     Returns `(parts, seen)`:
 
@@ -804,7 +800,7 @@ def encode_sanitized_chats(
     **tokenizer_kwargs,
 ):
     """Encode rendered chats whose inputs were sanitized by `sanitize_chat_inputs`, given the
-    `{placeholder: original_text}` substitutions it made, using only the public tokenizer API. The
+    `{placeholder: original_text}` substitutions it made, using only backend-independent tokenizer APIs. The
     placeholders in each rendered chat are resolved back to their original special-token text, and the
     result is split at the special tokens the template itself emitted: those are converted directly to their
     token ids, while everything else - including the restored input text - is encoded without special-token
@@ -875,8 +871,7 @@ def encode_sanitized_chats(
     text_ids = iter(encoded_texts["input_ids"]) if encoded_texts is not None else iter(())
     text_offsets = iter(encoded_texts["offset_mapping"]) if encoded_texts is not None and with_offsets else None
 
-    protected_ids = {token_id for token_id, token in tokenizer.added_tokens_decoder.items() if token.special}
-    protected_ids.update(tokenizer.all_special_ids)
+    protected_ids = set(tokenizer.convert_tokens_to_ids(protected_tokens))
     # Out-of-vocabulary text legitimately encodes to the unknown token, exactly as it would without
     # sanitization, so it must not be treated as a protected control token
     protected_ids.discard(tokenizer.unk_token_id)
