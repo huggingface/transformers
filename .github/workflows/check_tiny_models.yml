@@ -67,7 +67,7 @@ jobs:
 
       - name: Create + Upload tiny models for new model architecture(s)
         run: |
-          python utils/update_tiny_models.py --organization hf-tiny-v2 --num_workers 4 --summary-repo-id hf-tiny-v2/tiny-model-summary --model-types vit,llama,mistral3,qwen3,qwen3_vl
+          python utils/update_tiny_models.py --organization hf-tiny-v2 --num_workers 4 --summary-repo-id hf-tiny-v2/tiny-model-summary
 
       - name: Failure report
         run: cat tiny_models/reports/simple_failed_report.txt
