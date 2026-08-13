@@ -213,12 +213,10 @@ class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Qwen3_5MoeGatedDeltaNet):
             init.ones_(module.dt_bias)
-            # Sample in float32 to avoid rounding to 0 (log(0) = -inf)
+            # Lower bound kept away from 0 so log(A) never becomes -inf
             init.copy_(
                 module.A_log,
-                torch.empty(module.num_v_heads, dtype=torch.float32, device=module.A_log.device)
-                .uniform_(0, 16)
-                .log_(),
+                torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
             )
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3_5MoeRMSNorm):

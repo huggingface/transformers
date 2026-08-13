@@ -413,8 +413,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # instantiate once and copy inv_dt in init_weights of PretrainedModel
         self.dt_bias = nn.Parameter(torch.ones(self.num_v_heads))
 
-        # Sample in float32 to avoid rounding to 0 (log(0) = -inf)
-        A = torch.empty(self.num_v_heads, dtype=torch.float32).uniform_(0, 16)
+        # Lower bound kept away from 0 so log(A) never becomes -inf
+        A = torch.empty(self.num_v_heads).uniform_(0.01, 16)
         self.A_log = nn.Parameter(torch.log(A))
 
         self.norm = Qwen3_5MoeRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
@@ -900,12 +900,10 @@ class Qwen3_5MoePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Qwen3_5MoeGatedDeltaNet):
             init.ones_(module.dt_bias)
-            # Sample in float32 to avoid rounding to 0 (log(0) = -inf)
+            # Lower bound kept away from 0 so log(A) never becomes -inf
             init.copy_(
                 module.A_log,
-                torch.empty(module.num_v_heads, dtype=torch.float32, device=module.A_log.device)
-                .uniform_(0, 16)
-                .log_(),
+                torch.empty(module.num_v_heads, device=module.A_log.device).uniform_(0.01, 16).log_(),
             )
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3_5MoeRMSNorm):
