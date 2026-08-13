@@ -1511,6 +1511,10 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @property
+    def vocabulary_mapping(self):
+        return self.model.vocabulary_mapping
+
     def decode_image_tokens(self, **kwargs):
         return self.model.decode_image_tokens(**kwargs)
 
