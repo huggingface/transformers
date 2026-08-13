@@ -677,8 +677,8 @@ def sanitize_chat_inputs(
 def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str], substitutions: dict[str, str]) -> Any:
     """Sanitize special tokens out of chat inputs by replacing each occurrence with a unique placeholder,
     recorded in `substitutions` as `{placeholder: original_text}`. After the chat template has been rendered,
-    the placeholders can be resolved back to the original text with `resolve_sanitization_placeholders` and
-    encoded as ordinary (non-special) tokens."""
+    the placeholders are resolved back to the original text by `split_sanitized_chat` and encoded as
+    ordinary (non-special) tokens."""
     return _sanitize_chat_input(chat_input, _compile_special_token_pattern(tuple(all_special_tokens)), substitutions)
 
 
@@ -722,75 +722,75 @@ def sanitization_special_tokens(tokenizer) -> list[str]:
     return sorted(protected)
 
 
-def resolve_sanitization_placeholders(
-    rendered: str, substitutions: dict[str, str]
-) -> tuple[str, list[tuple[int, int]], set[str]]:
-    """Restore the original special-token text at the placeholders inserted by `sanitize_chat_input` in a
-    rendered chat string. Returns `(final, untrusted_spans, seen)`:
-
-    - `final`: the final chat string, with every placeholder replaced by its original text.
-    - `untrusted_spans`: `(start, end)` character spans in `final` covering the restored text, i.e. the
-      regions that came from untrusted chat input and must not encode as control tokens.
-    - `seen`: the placeholder keys that were found, so callers can detect placeholders that a template mangled.
-    """
-    pattern = re.compile("|".join(map(re.escape, substitutions)))
-    pieces, untrusted_spans, seen = [], [], set()
-    last = final_length = 0
-    for match in pattern.finditer(rendered):
-        original = substitutions[match.group(0)]
-        seen.add(match.group(0))
-        pieces.append(rendered[last : match.start()])
-        final_length += match.start() - last
-        untrusted_spans.append((final_length, final_length + len(original)))
-        pieces.append(original)
-        final_length += len(original)
-        last = match.end()
-    pieces.append(rendered[last:])
-    return "".join(pieces), untrusted_spans, seen
-
-
-def split_at_trusted_special_tokens(
-    final: str,
-    untrusted_spans: list[tuple[int, int]],
+def split_sanitized_chat(
+    rendered: str,
+    substitutions: dict[str, str],
     protected_tokens: list[str],
     token_flags: dict[str, tuple[bool, bool]],
-) -> list[tuple[str, str, int, int]]:
-    """Split a sanitized chat string at the special tokens the chat template itself emitted. Returns a list
-    of `(kind, text, char_start, char_end)` parts whose spans tile `final`:
+) -> tuple[list[tuple[str, str, list[tuple[int, int]]]], set[str]]:
+    """Walk a rendered chat string, resolving the placeholders inserted by `sanitize_chat_input` back to
+    their original special-token text and splitting at the special tokens the chat template itself emitted.
+    Returns `(parts, seen)`:
 
-    - `("special", token, start, end)`: a trusted special-token occurrence, to be converted directly to its
-      token id. The span may be wider than the token itself when its `lstrip`/`rstrip` flags (looked up in
-      `token_flags`) absorb adjacent whitespace, mirroring the tokenizer's own added-token matching.
-    - `("text", text, start, end)`: everything else, to be encoded *without* special-token matching (as with
-      `split_special_tokens=True`). Untrusted special-token text stays inline in these parts, so it is
-      tokenized in context as ordinary text rather than as control tokens.
+    - `parts`: `(kind, text, untrusted_spans)` tuples whose texts concatenate to the final chat string.
+      `("special", token, [])` parts are trusted special-token occurrences, to be converted directly to
+      their token ids; whitespace absorbed by a token's `lstrip`/`rstrip` flags (looked up in `token_flags`,
+      mirroring the tokenizer's own added-token matching) is dropped along with it. `("text", text,
+      untrusted_spans)` parts are everything else, to be encoded *without* special-token matching (as with
+      `split_special_tokens=True`); `untrusted_spans` marks the `(start, end)` spans within `text` of
+      restored placeholder text, i.e. special-token text from untrusted chat input, which stays inline so
+      that it is tokenized in context as ordinary text rather than as control tokens.
+    - `seen`: the placeholder keys that were found, so callers can detect placeholders a template mangled.
 
-    A special-token match only counts as trusted when it lies entirely outside `untrusted_spans`: a match that
-    overlaps untrusted text, including one spliced together from trusted and untrusted characters, stays
-    inline as ordinary text.
-    """
-    pattern = _compile_special_token_pattern(tuple(protected_tokens))
-    parts = []
+    Special tokens are only matched inside the segments between placeholders, which contain no text of
+    sanitized (untrusted) origin, so untrusted text can never produce a trusted special token - not even by
+    splicing fragments around trusted characters."""
+    placeholder_pattern = re.compile("|".join(map(re.escape, substitutions))) if substitutions else None
+    token_pattern = _compile_special_token_pattern(tuple(protected_tokens))
+    parts, seen = [], set()
+    fragments, length, untrusted_spans = [], 0, []  # the text part currently being accumulated
+
+    def add_fragment(piece: str, untrusted: bool = False):
+        nonlocal length
+        if piece:
+            if untrusted:
+                untrusted_spans.append((length, length + len(piece)))
+            fragments.append(piece)
+            length += len(piece)
+
+    def flush_text_part():
+        nonlocal fragments, length, untrusted_spans
+        if fragments:
+            parts.append(("text", "".join(fragments), untrusted_spans))
+            fragments, length, untrusted_spans = [], 0, []
+
+    def add_trusted_segment(segment: str):
+        last = 0
+        for match in token_pattern.finditer(segment) if token_pattern is not None else ():
+            if match.start() < last:
+                # Inside whitespace already absorbed by the previous token's rstrip
+                continue
+            start, end = match.start(), match.end()
+            lstrip, rstrip = token_flags.get(match.group(0), (False, False))
+            while lstrip and start > last and segment[start - 1].isspace():
+                start -= 1
+            while rstrip and end < len(segment) and segment[end].isspace():
+                end += 1
+            add_fragment(segment[last:start])
+            flush_text_part()
+            parts.append(("special", match.group(0), []))
+            last = end
+        add_fragment(segment[last:])
+
     last = 0
-    for match in pattern.finditer(final) if pattern is not None else ():
-        if match.start() < last:
-            # Inside whitespace already absorbed by the previous token's rstrip
-            continue
-        if any(match.start() < span_end and span_start < match.end() for span_start, span_end in untrusted_spans):
-            continue
-        start, end = match.start(), match.end()
-        lstrip, rstrip = token_flags.get(match.group(0), (False, False))
-        while lstrip and start > last and final[start - 1].isspace():
-            start -= 1
-        while rstrip and end < len(final) and final[end].isspace():
-            end += 1
-        if last < start:
-            parts.append(("text", final[last:start], last, start))
-        parts.append(("special", match.group(0), start, end))
-        last = end
-    if last < len(final):
-        parts.append(("text", final[last:], last, len(final)))
-    return parts
+    for match in placeholder_pattern.finditer(rendered) if placeholder_pattern is not None else ():
+        seen.add(match.group(0))
+        add_trusted_segment(rendered[last : match.start()])
+        add_fragment(substitutions[match.group(0)], untrusted=True)
+        last = match.end()
+    add_trusted_segment(rendered[last:])
+    flush_text_part()
+    return parts, seen
 
 
 def encode_sanitized_chats(
@@ -839,27 +839,23 @@ def encode_sanitized_chats(
         verbose=verbose,
     )
 
-    # Restore the original special-token text at the placeholders, keeping track of which character spans of
-    # the final strings came from untrusted chat input, then split each chat at the special tokens the
-    # template itself emitted (the only ones allowed to encode as control tokens).
-    resolved = [resolve_sanitization_placeholders(rendered, substitutions) for rendered in rendered_batch]
-    placeholders_seen = set().union(*(seen for _, _, seen in resolved))
-    if placeholders_seen != set(substitutions):
+    # Restore the original special-token text at the placeholders and split each chat at the special tokens
+    # the template itself emitted (the only ones allowed to encode as control tokens)
+    protected_tokens = sanitization_special_tokens(tokenizer)
+    token_flags = {token.content: (token.lstrip, token.rstrip) for token in tokenizer.added_tokens_decoder.values()}
+    resolved = [
+        split_sanitized_chat(rendered, substitutions, protected_tokens, token_flags) for rendered in rendered_batch
+    ]
+    batch_parts = [parts for parts, _ in resolved]
+    if set().union(*(seen for _, seen in resolved)) != set(substitutions):
         logger.warning_once(
             "Some special tokens in the chat inputs were transformed or dropped by the chat template, "
             "so their original text could not be restored after sanitization."
         )
-    protected_tokens = sanitization_special_tokens(tokenizer)
-    token_flags = {token.content: (token.lstrip, token.rstrip) for token in tokenizer.added_tokens_decoder.values()}
-    batch_parts = [
-        split_at_trusted_special_tokens(final, untrusted_spans, protected_tokens, token_flags)
-        for final, untrusted_spans, _ in resolved
-    ]
-    batch_untrusted_spans = [untrusted_spans for _, untrusted_spans, _ in resolved]
 
     # Encode every text part across the batch in a single call, without special-token matching. Offsets are
     # requested when the backend can produce them, for the precise protected-id check below.
-    texts = [text for parts in batch_parts for kind, text, _, _ in parts if kind == "text"]
+    texts = [text for parts in batch_parts for kind, text, _ in parts if kind == "text"]
     with_offsets = getattr(tokenizer, "backend", None) == "tokenizers"
     encoded_texts = None
     if texts:
@@ -886,9 +882,9 @@ def encode_sanitized_chats(
     protected_ids.discard(tokenizer.unk_token_id)
 
     batch_ids = []
-    for parts, untrusted_spans in zip(batch_parts, batch_untrusted_spans):
+    for parts in batch_parts:
         ids = []
-        for kind, text, char_start, char_end in parts:
+        for kind, text, untrusted_spans in parts:
             if kind == "special":
                 ids.append(tokenizer.convert_tokens_to_ids(text))
                 continue
@@ -898,20 +894,15 @@ def encode_sanitized_chats(
             # assemble a special token out of ordinary pieces. Protected ids arising from trusted text are
             # native tokenizer behavior (e.g. wav2vec2's word delimiter) and pass through. With offsets each
             # id is attributed to its characters exactly; without them (Python backends), any protected id in
-            # a part that overlaps untrusted text is conservatively treated as unsafe.
+            # a part that contains untrusted text is conservatively treated as unsafe.
             if part_offsets is not None:
                 unsafe = any(
                     token_id in protected_ids
-                    and any(
-                        char_start + start < span_end and span_start < char_start + end
-                        for span_start, span_end in untrusted_spans
-                    )
+                    and any(start < span_end and span_start < end for span_start, span_end in untrusted_spans)
                     for token_id, (start, end) in zip(part_ids, part_offsets)
                 )
             else:
-                unsafe = any(
-                    char_start < span_end and span_start < char_end for span_start, span_end in untrusted_spans
-                ) and bool(protected_ids.intersection(part_ids))
+                unsafe = bool(untrusted_spans) and bool(protected_ids.intersection(part_ids))
             if unsafe:
                 raise ValueError(
                     "`sanitize_special_tokens=True` cannot safely encode these chat inputs: special-token "
