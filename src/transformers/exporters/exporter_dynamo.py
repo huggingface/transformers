@@ -286,6 +286,7 @@ def _varlen_vision_attention_forward(
         seq_length != 0,
         "Chunked vision attention received an empty input.",
     )
+
     if hasattr(self, "qkv"):
         # Grouped-query attention (q_dim != kv_dim, e.g. Exaone4.5) splits asymmetrically;
         # uniform reshape into (seq, 3, num_heads, -1) only works when Q, K, V share the head count.
