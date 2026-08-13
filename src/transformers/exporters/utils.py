@@ -75,8 +75,8 @@ if is_torch_available():
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
 _PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
-_FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
+_FX_NODE_FIXES: dict[str, list[callable]] = {}
 
 
 @contextlib.contextmanager
