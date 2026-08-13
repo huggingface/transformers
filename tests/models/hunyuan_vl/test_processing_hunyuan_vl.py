@@ -87,7 +87,10 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image = Image.new("RGB", (32, 32), color="white")
 
         inputs = processor(
-            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+            text=[f"{processor.image_start_token}{self.image_token}{processor.image_end_token} hello"],
+            images=[image],
+            padding=True,
+            return_tensors="pt",
         )
 
         self.assertSetEqual(
@@ -110,7 +113,10 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image = Image.new("RGB", (32, 32), color="white")
 
         inputs = processor(
-            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+            text=[f"{processor.image_start_token}{self.image_token}{processor.image_end_token} hello"],
+            images=[image],
+            padding=True,
+            return_tensors="pt",
         )
 
         input_ids = inputs["input_ids"][0].tolist()
@@ -124,7 +130,7 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
 
-        with self.assertRaisesRegex(ValueError, "image placeholders must be formatted"):
+        with self.assertRaisesRegex(ValueError, r"tokens in text \(0\) does not match the number of images"):
             processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
 
     def test_apply_chat_template_keeps_wrapped_image_tokens_single_wrapped(self):

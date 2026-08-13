@@ -1649,7 +1649,20 @@ class ProcessorTesterMixin:
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-        self.assertEqual(len(out_dict[input_name]), batch_size)
+
+        mm_len = 0
+        if "video_grid_thw" in out_dict:
+            # Qwen-style pixels don't scale with bs same way as other models
+            # calculate expected video token count based on video_grid_thw
+            for thw in out_dict["video_grid_thw"]:
+                mm_len += thw[0] * thw[1] * thw[2]
+        elif "image_grid_thw" in out_dict:
+            for thw in out_dict["image_grid_thw"]:
+                mm_len += thw[0] * thw[1] * thw[2]
+        else:
+            mm_len = batch_size
+
+        self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:

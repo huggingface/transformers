@@ -94,7 +94,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_subprocessor_defaults_1_images(self):
-        # Skip if processor doesn't have image_processor
+        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_data = MODALITY_PARAMETERIZED_DATA["images"]
         subprocessor = self.get_component(parameterized_data["processing_class"])
 

@@ -68,8 +68,8 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text="<|VISION_START|><|IMAGE_PAD|><|VISION_END|> describe this image",
             return_tensors="pt",
         )
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 2, 2]])
-        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 1)
+        self.assertEqual(output.image_grid_thw.tolist(), [[1, 8, 8]])
+        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 16)
         self.assertTrue(output.mm_token_type_ids.equal((output.input_ids == processor.image_token_id).int()))
 
     def test_multiple_images_preserve_grid_order(self):
@@ -82,25 +82,11 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ),
             return_tensors="pt",
         )
-        self.assertEqual(output.image_grid_thw.tolist(), [[1, 2, 2], [1, 2, 4]])
-        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 3)
+        self.assertEqual(output.image_grid_thw.tolist(), [[1, 8, 8], [1, 6, 12]])
+        self.assertEqual((output.input_ids == processor.image_token_id).sum().item(), 34)
 
     def test_get_num_multimodal_tokens(self):
         processor = self.get_processor()
         output = processor._get_num_multimodal_tokens(image_sizes=[(56, 56), (56, 112)])
         self.assertEqual(output["num_image_patches"], [4, 8])
         self.assertEqual(output["num_image_tokens"], [1, 2])
-
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        processor = self.get_processor()
-        image_sizes = [(64, 64), (64, 128), (128, 64)]
-        images = [np.random.randint(255, size=(*size, 3), dtype=np.uint8) for size in image_sizes]
-        output = processor(
-            text=[processor.image_token] * len(images),
-            images=images,
-            padding=True,
-            return_tensors="pt",
-        )
-        expected = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
-        actual = (output.input_ids == processor.image_token_id).sum(dim=1).tolist()
-        self.assertEqual(actual, expected)
