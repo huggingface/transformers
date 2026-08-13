@@ -18,7 +18,6 @@ import numpy as np
 
 from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
 from transformers.utils import (
-    is_tokenizers_available,
     is_torch_available,
     is_torchvision_available,
     is_vision_available,
@@ -29,9 +28,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_torch_available():
     import torch
-
-if is_tokenizers_available():
-    pass
 
 if is_vision_available():
     from PIL import Image

@@ -34,8 +34,7 @@ if is_vision_available():
 class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
     # Tiny processor created with make_tiny_processor.py from "llava-hf/LLaVA-NeXT-Video-7B-hf"
-    # tiny_model_id = "hf-internal-testing/tiny-processor-llava_next_video"
-
+    tiny_model_id = "hf-internal-testing/tiny-processor-llava_next_video"
     model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
 
     @classmethod

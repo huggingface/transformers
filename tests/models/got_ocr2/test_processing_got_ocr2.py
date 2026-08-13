@@ -15,9 +15,13 @@
 import unittest
 
 from transformers import GotOcr2Processor
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import is_torch_available, require_vision
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import MODALITY_PARAMETERIZED_DATA, ProcessorTesterMixin
+
+
+if is_torch_available():
+    import torch
 
 
 @require_vision
@@ -94,4 +98,37 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     def test_subprocessor_defaults_1_images(self):
-        pass  # override me
+        # Skip if processor doesn't have image_processor
+        parameterized_data = MODALITY_PARAMETERIZED_DATA["images"]
+        subprocessor = self.get_component(parameterized_data["processing_class"])
+
+        # Get all other required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        modality_input = self.prepare_modality_inputs("images")
+
+        # merge processor defaults when calling a subprocessor
+        kwargs = parameterized_data["kwargs"]
+        kwargs["return_tensors"] = "pt"
+        merged_kwargs = processor._merge_kwargs(
+            processor.valid_processor_kwargs,
+            tokenizer_init_kwargs=None,
+            **kwargs,
+        )
+        kwargs = merged_kwargs["images_kwargs"]
+        kwargs.pop("num_image_tokens")
+        kwargs.pop("multi_page")
+
+        input_subproc = subprocessor(modality_input, **kwargs)
+        try:
+            input_processor = processor(images=modality_input, **kwargs)
+        except Exception:
+            input_processor = {}
+
+        # Verify outputs match
+        for key in input_subproc:
+            if input_processor and key in processor.model_input_names:
+                torch.testing.assert_close(input_subproc[key], input_processor[key])

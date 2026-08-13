@@ -2094,7 +2094,9 @@ class ProcessorTesterMixin:
     def test_replacement_offsets(self):
         "Tests that the returned replacement offsets show correct text and spans for multimodal tokens"
 
-        processor = self.get_processor()
+        # Tiny model IDs have small vocab and squash all tokens to `UNK` Test becomes pointless
+        # if we are comparing unk to unk token, the differences are lost
+        processor = self.get_processor(use_tiny_ckpt=False)
 
         if not self.does_processor_return_offsets(processor.__class__, "replace_image_token"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
@@ -2136,7 +2138,9 @@ class ProcessorTesterMixin:
             return_text_replacement_offsets=True,
             return_tensors="pt",
         )
-        detokenized_text = processor.tokenizer.batch_decode(model_inputs["input_ids"], skip_special_tokens=False)
+        detokenized_text = processor.tokenizer.batch_decode(
+            model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
+        )
         self.assertIn("text_replacement_offsets", model_inputs)
 
         for i, sample_offsets in enumerate(model_inputs["text_replacement_offsets"]):

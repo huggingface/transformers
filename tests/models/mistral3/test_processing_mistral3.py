@@ -32,7 +32,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """This tests Pixtral processor with the new `spatial_merge_size` argument in Mistral3."""
 
     processor_class = PixtralProcessor
-    # tiny_model_id = "hf-internal-testing/tiny-processor-mistral3"
+    tiny_model_id = "hf-internal-testing/tiny-processor-mistral3"
     model_id = "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor"
 
     @classmethod

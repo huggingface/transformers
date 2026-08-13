@@ -19,7 +19,6 @@ from transformers import (
     CohereCompassImageProcessor,
     CohereCompassProcessor,
     CohereCompassVideoProcessor,
-    PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import require_torch, require_vision
 
@@ -33,45 +32,7 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_unstructured_max_length = 870
     video_text_kwargs_max_length = 870
     video_text_kwargs_override_max_length = 870
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        from tokenizers.pre_tokenizers import Whitespace
-
-        tokenizer = Tokenizer(
-            WordLevel(
-                {
-                    "<unk>": 0,
-                    "<bos>": 1,
-                    "<eos>": 2,
-                    "<pad>": 3,
-                    "<|IMAGE_PAD|>": 4,
-                    "<|VISION_START|>": 5,
-                    "<|VISION_END|>": 6,
-                    "<|VIDEO_PAD|>": 7,
-                    "describe": 8,
-                    "this": 9,
-                    "image": 10,
-                },
-                unk_token="<unk>",
-            )
-        )
-        tokenizer.pre_tokenizer = Whitespace()
-        return PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            bos_token="<bos>",
-            eos_token="<eos>",
-            pad_token="<pad>",
-            unk_token="<unk>",
-            additional_special_tokens=[
-                "<|IMAGE_PAD|>",
-                "<|VIDEO_PAD|>",
-                "<|VISION_START|>",
-                "<|VISION_END|>",
-            ],
-        )
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
 
     @classmethod
     def _setup_image_processor(cls):

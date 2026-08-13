@@ -31,26 +31,7 @@ if is_vision_available():
 @require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        vocab_tokens = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
-            ("[PAD]", 0.0),
-            ("<image>", 0.0),
-            ("<video>", 0.0),
-            ("Hello", 0.0),
-            ("world", 0.0),
-        ]
-        vocab = {token: index for index, (token, _) in enumerate(vocab_tokens)}
-        tokenizer = tokenizer_class(vocab=vocab, add_bos_token=True, add_eos_token=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = "[PAD]"
-        return tokenizer
+    model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
     @classmethod
     def _setup_image_processor(cls):
