@@ -758,6 +758,7 @@ class Emu3VQVAE(PreTrainedModel):
         else:
             batch_size, temporal, channels, height, width = pixel_values.shape
 
+        pixel_values = pixel_values.to(self.dtype)
         hidden_states = self.encoder(pixel_values)
 
         # b t c h w -> b c t h w
