@@ -384,8 +384,7 @@ class CLIPEncoderLayer(GradientCheckpointingLayer):
 
 
 def _init_child_weight(child: nn.Module, std: float) -> None:
-    """Initialize `child.weight` if the child module still carries one. Guards against quantization methods that set `weight` to `None`.
-    """
+    """Initialize `child.weight` if the child module still carries one. Guards against quantization methods that set `weight` to `None`."""
     if getattr(child, "weight", None) is not None:
         init.normal_(child.weight, std=std)
 
