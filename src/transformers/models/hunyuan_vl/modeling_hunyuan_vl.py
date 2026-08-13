@@ -1148,8 +1148,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         r"""
         pixel_values (`torch.FloatTensor`):
             Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 

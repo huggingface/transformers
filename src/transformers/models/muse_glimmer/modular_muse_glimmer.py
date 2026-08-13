@@ -974,6 +974,7 @@ def get_vision_pixel_shuffle_index(
     return torch.cat(indices, dim=0)
 
 
+@auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
@@ -1007,12 +1008,17 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(

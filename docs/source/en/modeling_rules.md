@@ -787,6 +787,35 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
 +    config: Gemma4VisionConfig
 ```
 
+### TRF056
+
+In modeling_*.py and modular_*.py, flags `.item()` and `.tolist()` calls inside any `forward`. A `.tolist()` whose result is the split-size argument of `split(...)`, is exempt as torch.split needs Python ints. Both calls read a tensor back to the host, so dynamo cannot trace them resulting in a graph break.
+
+```diff
+-        for grid, item in zip(grid_thw.tolist(), split_items):
+-            _, height, width = grid
+-            merged.append(self.patch_merger(item, size=(height, width)))
++        for grid, item in zip(grid_thw, split_items):
++            merged.append(self.patch_merger(item, size=(grid[1], grid[2])))
+```
+
+### TRF057
+
+Checks `@auto_docstring` on the classes that need it: public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors and `ProcessorMixin` subclasses, and on their public methods: `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A class or method in a `modular_*.py` file is checked against the files generated from it. Without the decorator, a class ships with no intro and no parameter documentation, and a method with no argument documentation, no `Returns` section and no usage example, so the standard descriptions in `auto_docstring.py` have to be hand-written per model instead.
+
+```diff
++@auto_docstring
+ @dataclass
+ class AcmeModelOutputWithPast(ModelOutput):
+     logits: torch.FloatTensor | None = None
+
++@auto_docstring
+ class AcmeForConditionalGeneration(AcmePreTrainedModel):
++    @auto_docstring
+     def forward(self, input_ids, pixel_values=None, **kwargs):
+         ...
+```
+
 <!-- END RULES REFERENCE -->
 
 ## Suppressing violations

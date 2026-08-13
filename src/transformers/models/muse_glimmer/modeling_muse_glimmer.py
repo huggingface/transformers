@@ -834,6 +834,7 @@ def get_vision_pixel_shuffle_index(
     return torch.cat(indices, dim=0)
 
 
+@auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
     main_input_name = "pixel_values"
@@ -867,12 +868,17 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -923,6 +929,7 @@ class MuseGlimmerVisionAdapter(nn.Module):
         return self.act(self.fc2(self.act(self.fc1(x))))
 
 
+@auto_docstring
 class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
@@ -959,6 +966,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -968,8 +976,6 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1069,6 +1075,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         )
 
 
+@auto_docstring
 class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

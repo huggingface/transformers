@@ -818,6 +818,7 @@ class CohereCompassVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class CohereCompassVisionModel(CohereCompassPreTrainedModel):
     config: CohereCompassVisionConfig
     input_modalities = ("image",)

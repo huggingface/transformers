@@ -278,7 +278,10 @@ class InklingVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-@auto_docstring(checkpoint="thinkingmachines/Inkling", custom_intro="Top-level multimodal config (`InklingMMConfig` in the SGLang source).")
+@auto_docstring(
+    checkpoint="thinkingmachines/Inkling",
+    custom_intro="Top-level multimodal config (`InklingMMConfig` in the SGLang source).",
+)
 @strict
 class InklingConfig(PreTrainedConfig):
     r"""

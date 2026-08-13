@@ -392,6 +392,7 @@ class CohereCompassForCausalLM(Cohere2ForCausalLM, CohereCompassPreTrainedModel)
 
 
 # Overwritten to show type as cohere_compass_vision for internal compatibility
+@auto_docstring
 class CohereCompassVisionModel(Qwen3VLVisionModel):
     config: CohereCompassVisionConfig
     input_modalities = ("image",)
