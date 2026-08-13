@@ -260,10 +260,6 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(inputs[self.images_input_name].shape[0], 800)
 
-    @unittest.skip("Kimi pops some keys before returning in a processor")
-    def test_video_processor_defaults(self):
-        pass
-
     @parameterized.expand([(1, "pt")])
     @unittest.skip("Kimi sampels with FPS by default which is not compatible with this test")
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):

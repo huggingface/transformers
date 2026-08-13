@@ -54,10 +54,6 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    @unittest.skip("ColpaliProcessor adds a prefix and suffix to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

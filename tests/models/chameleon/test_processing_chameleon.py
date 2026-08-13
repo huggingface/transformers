@@ -42,7 +42,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return tokenizer
 
     @unittest.skip("Chameleon processor add a sep_token at the end of each sample")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     def test_special_mm_token_truncation(self):

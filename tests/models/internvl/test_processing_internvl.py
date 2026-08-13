@@ -64,10 +64,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_convert_rgb=True,
         )
 
-    @unittest.skip("InternVL requires text")
-    def test_video_processor_defaults(self):
-        pass
-
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_length": 2}

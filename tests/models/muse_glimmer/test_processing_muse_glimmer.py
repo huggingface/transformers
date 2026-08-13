@@ -58,10 +58,6 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # `replace_video_token` needs the metadata to write one timestamp per temporal group
         return video_processor_class(max_video_frame_tokens=40, do_sample_frames=False, return_metadata=True)
 
-    @unittest.skip("The processor consumes `video_metadata`, so its output cannot be equal to the raw one")
-    def test_video_processor_defaults(self):
-        pass
-
     def test_image_boundary_tokens(self):
         processor = self.get_processor()
         images = self.prepare_image_inputs(batch_size=2)

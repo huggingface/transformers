@@ -199,10 +199,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
-    @unittest.skip("Inkling quantizes input features into discrete audio input IDs")
-    def test_feature_extractor_defaults(self):
-        pass
-
     @unittest.skip("The test fixture passes image_seq_length, which is not an InklingProcessor attribute")
     def test_processor_to_json_string(self):
         pass

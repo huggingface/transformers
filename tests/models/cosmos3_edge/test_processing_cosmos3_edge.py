@@ -256,34 +256,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 processor_kwargs={"fps": fps, "num_frames": num_frames, "do_sample_frames": True},
             )
 
-    def test_video_processor_defaults(self):
-        """Compare processor outputs while preserving Edge's timestamp metadata."""
-        video_processor = self.get_component("video_processor")
-        processor = self.processor_class(**self.prepare_components())
-        video_input = self.prepare_video_inputs()
-        video_metadata = [VideoMetadata(total_num_frames=4, fps=2, duration=2.0, frames_indices=[0, 1, 2, 3])]
-
-        video_processor_output = video_processor(
-            video_input,
-            video_metadata=video_metadata,
-            do_sample_frames=False,
-            return_metadata=True,
-            return_tensors="pt",
-        )
-        processor_output = processor(
-            videos=video_input,
-            video_metadata=video_metadata,
-            do_sample_frames=False,
-            return_metadata=True,
-            return_tensors="pt",
-        )
-
-        for key in video_processor_output:
-            if key == "video_metadata":
-                self.assertEqual(video_processor_output[key], processor_output[key])
-            else:
-                torch.testing.assert_close(video_processor_output[key], processor_output[key])
-
     def test_image_processor_uses_projector_block_major_patch_order(self):
         """Protect the checkpoint's block-major patches and HWC values within each patch."""
         image = np.arange(4 * 4 * 3, dtype=np.uint8).reshape(4, 4, 3)

@@ -48,7 +48,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-kosmos2_5"
 
     @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
-    def test_image_processor_defaults(self):
+    def test_subprocessor_defaults_1_images(self):
         pass
 
     def test_image_procesor_load_save_reload(self):

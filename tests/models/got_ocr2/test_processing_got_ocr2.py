@@ -42,10 +42,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class()
 
-    @unittest.skip("GotOcr2Processor pop the image processor output 'num_patches'")
-    def test_image_processor_defaults(self):
-        pass
-
     def test_ocr_queries(self):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()

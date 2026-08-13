@@ -660,7 +660,7 @@ class ProcessorTesterMixin:
         kwargs["return_tensors"] = "pt"
         merged_kwargs = processor._merge_kwargs(
             processor.valid_processor_kwargs,
-            tokenizer_init_kwargs=None,
+            tokenizer_init_kwargs=processor.tokenizer.init_kwargs if hasattr(processor, "tokenizer") else {},
             **kwargs,
         )
         kwargs = merged_kwargs[f"{modality}_kwargs"]

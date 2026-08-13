@@ -92,10 +92,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         return {"chat_template": chat_template}
 
-    @unittest.skip("Lfm2VlProcessor adds special tokens to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""

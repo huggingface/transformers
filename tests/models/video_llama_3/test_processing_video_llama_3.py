@@ -316,25 +316,3 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=20,
             )
-
-    def test_video_processor_defaults(self):
-        # Video processor has default `return_metadata=True` which doesn't match with processor
-        video_processor = self.get_component("video_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-        video_input = self.prepare_video_inputs()
-
-        # Process with both video_processor and processor
-        input_video_proc = video_processor(video_input, return_tensors="pt", return_metadata=True)
-        input_processor = processor(videos=video_input, return_tensors="pt", return_metadata=True)
-
-        # Verify outputs match
-        for key in input_video_proc:
-            # processor changes metadata fps in-place when can't be inferred, i.e. if already decoded video
-            if key != "video_metadata":
-                torch.testing.assert_close(input_video_proc[key], input_processor[key])

@@ -70,10 +70,6 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return LayoutLMv2Tokenizer.from_pretrained(cls.tmpdirname)
 
     @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
-    def test_image_processor_defaults(self):
-        pass
-
-    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
     def test_processor_with_multiple_inputs(self):
         pass
 

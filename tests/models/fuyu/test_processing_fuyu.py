@@ -51,10 +51,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         cls.bus_image_pil = load_image(bus_image_url)
 
     @unittest.skip("FuyuProcessor doesn't return typical pixel values for images")
-    def test_image_processor_defaults(self):
-        pass
-
-    @unittest.skip("FuyuProcessor doesn't return typical pixel values for images")
     def test_processor_with_multiple_inputs(self):
         pass
 

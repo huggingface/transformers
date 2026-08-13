@@ -65,13 +65,6 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_additional_features(self):
         pass
 
-    @unittest.skip(
-        "VoxtralRealtimeProcessor encodes audio via a mistral-common transcription request (with padding), "
-        "so its features differ from those of the bare feature extractor"
-    )
-    def test_feature_extractor_defaults(self):
-        pass
-
     def _dummy_audio(self, processor, seed: int = 0, duration_s: float = 1.0):
         sampling_rate = processor.feature_extractor.sampling_rate
         rng = np.random.default_rng(seed)

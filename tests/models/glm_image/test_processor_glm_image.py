@@ -164,13 +164,6 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    @unittest.skip(
-        "GlmImageProcessor injects additional special/control tokens around plain text inputs, so "
-        "`processor(text=X)` is not equivalent to `tokenizer(X)` for this model."
-    )
-    def test_tokenizer_defaults(self):
-        pass
-
     # tiny model has too little tokens and collapses everything to UNK which is not defined
     def test_replacement_offsets(self):
         pass
