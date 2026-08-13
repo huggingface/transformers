@@ -44,9 +44,11 @@ Released checkpoints, all sharing this architecture:
 | [kashif/weathernext2](https://huggingface.co/kashif/weathernext2) | 0.25° | 183.8M | also predicts 100m winds |
 | [kashif/weathernext-cyclones](https://huggingface.co/kashif/weathernext-cyclones) | 0.25° | 183.8M | operational cyclone model; `main`, `<2024`, `<2023` revisions |
 
-The 0.25° repositories hold all four independently trained ensemble members: member 1 at the root and the rest in
-`model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects one. The examples below
-use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly 50 GB per ensemble member.
+The 0.25° releases are four separate training runs rather than one checkpoint. Each repository holds all four: run 1 at
+the root and the rest in `model2`/`model3`/`model4` subfolders, so `from_pretrained(..., subfolder="model3")` selects
+one. Combining them into a multi-model ensemble - loading each in turn and pooling its members - is left to the caller,
+as it is upstream. The examples below use the Mini checkpoint because it runs anywhere; the 0.25° models need roughly
+50 GB per ensemble member.
 
 ## Getting initial conditions
 
@@ -107,17 +109,39 @@ same ensemble on any accelerator.
 
 ### Ensembles
 
-A forecast ensemble is produced by repeating the same inputs along the batch axis and letting each member get its own
-noise draw. Because the members are independent, they can also be split across devices.
+Each member is one draw of the 32-dimensional noise vector through the same weights. Members are fully independent, so
+the usual way to run them is one at a time, seeding each from its own index:
 
 ```python
 members = 8
 inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
-inputs = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
+
+predictions = []
+for member in range(members):
+    noise = torch.randn(1, model.config.noise_channels, generator=torch.Generator().manual_seed(member))
+    with torch.no_grad():
+        predictions.append(model(**inputs, noise=noise.to(model.device)).prediction)
+```
+
+Seeding per member rather than drawing from one stream means the first `n` members are the same however large the
+ensemble is - the property the original implementation gets from `jax.random.fold_in`. The reference implementation
+also runs one member per device, looping or sharding over them rather than batching.
+
+At 0.25° a member needs roughly 50 GB, so looping is usually the only option. Where the model is small enough, the
+members can instead ride on the batch axis, which is what [`WeatherNext2ForWeatherForecasting`] draws noise for when
+`noise` is not passed:
+
+```python
+inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
+batched = {key: value.repeat(members, *([1] * (value.ndim - 1))) for key, value in inputs.items()}
 
 with torch.no_grad():
-    outputs = model(**inputs, generator=torch.Generator().manual_seed(0))
+    outputs = model(**batched, generator=torch.Generator().manual_seed(0))
 ```
+
+Note that the batch axis serves double duty: it carries ensemble members here, and independent initialization times
+when several forecasts are run together. The reference implementation keeps these as separate `sample` and `batch`
+dimensions.
 
 ### Autoregressive rollout
 
