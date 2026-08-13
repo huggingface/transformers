@@ -59,7 +59,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "add_special_tokens": True,
             "padding": False,
         },
-        # "common_kwargs": {"return_tensors": "pt"},
     }
 
 
