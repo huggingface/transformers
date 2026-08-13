@@ -4398,7 +4398,7 @@ class PreTrainedModel(
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_quant_method_with_non_standard_params = (
+        is_hqq_or_quark = (
             hf_quantizer is not None
             and hf_quantizer.quantization_config.quant_method
             in {
@@ -4427,7 +4427,7 @@ class PreTrainedModel(
             )
 
         # Warmup cuda to load the weights much faster on devices
-        if load_config.device_map is not None and not is_quant_method_with_non_standard_params:
+        if load_config.device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
