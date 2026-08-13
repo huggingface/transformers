@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import tempfile
 import unittest
 from contextlib import contextmanager
 
@@ -110,6 +111,16 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
+
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma4TextConfig(sliding_window=512, use_bidirectional_attention="all")
+        self.assertEqual(config.sliding_window, 257)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma4TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
 
     @unittest.skip(
         "Gemma4 cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided"
