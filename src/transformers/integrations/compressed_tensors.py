@@ -24,13 +24,24 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
-def get_experts_scheme(quantization_config):
+def get_experts_scheme(quantization_config, module_name=None):
     """Resolve which config group quantizes the MoE experts. Mixed configs quantize
     different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so
-    the experts' scheme cannot be assumed global: the experts' group is the one whose
-    `re:` targets mention the expert modules.
+    the experts' scheme cannot be assumed global. When ``module_name`` is provided, match
+    the concrete checkpoint expert projection against each group's targets. This is needed
+    for configs such as Laguna INT4, where different decoder layers use different bit widths.
     """
+    from compressed_tensors.utils.match import match_name
+
     groups = list(quantization_config.config_groups.values())
+    if module_name is not None:
+        for group in groups:
+            for target in group.targets:
+                if target != "Linear" and match_name(module_name, target):
+                    return group
+        for group in groups:
+            if "Linear" in group.targets:
+                return group
     for group in groups:
         if any(target.startswith("re:") and "experts" in target for target in group.targets):
             return group
@@ -46,8 +57,8 @@ class DecompressExperts(ConversionOps):
     """
     Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
 
-    Takes packed weights and scales from the loaded state dict, creates a dummy Module
-    to take advantage of higher-lvl API `decompress_module` and dequantizes all weights.
+    Collects each expert's compressed weight and format-specific metadata, then uses the
+    matching compressed-tensors compressor to restore dense weights.
 
     Requires MoE conversion to be defined on conversion mapping, so that decompressed weights
     are stacked/merged for all experts.
@@ -71,92 +82,84 @@ class DecompressExperts(ConversionOps):
         from compressed_tensors.compressors.format import infer_module_format
 
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
-
-        quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
-
-        weights_args = quantization_scheme.weights
-        if weights_args.type == "float" and weights_args.num_bits == 8:
-            # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Fold the
-            # scale into each per-expert weight so the downstream merge sees dense tensors.
-            processed_out = {}
-            for key, value in input_dict.items():
-                if "weight_scale" in key:
-                    continue
-                scale_key = key.replace(".weight", ".weight_scale")
-                if scale_key not in input_dict:
-                    # Weights that ship no scale (e.g. norms) pass through untouched.
-                    processed_out[key] = value
-                    continue
-                quantized = value if isinstance(value, list) else [value]
-                scales = input_dict[scale_key]
-                scales = scales if isinstance(scales, list) else [scales]
-                output = None
-                for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                    dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(torch.bfloat16)
-                    if output is None:
-                        # Pre-allocate the stacked buffer (see the packed path below).
-                        output = torch.empty((len(quantized), *dense.shape), dtype=dense.dtype, device=dense.device)
-                    output[i].copy_(dense)
-                    del dense
-                if output is not None:
-                    processed_out[key] = output
-            return processed_out
-
-        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
-        compressor = BaseCompressor.get_value_from_registry(format)
-
-        class DummyModule(nn.Module):
-            def __init__(self, weight, scale, shape):
-                super().__init__()
-                self.weight_packed = nn.Parameter(weight, requires_grad=False)
-                self.weight_scale = nn.Parameter(scale, requires_grad=False)
-                self.weight_shape = nn.Parameter(shape, requires_grad=False)
-
-        # `pack_factor` low-bit weights are packed per int32 along the packed dim.
-        # Used only as a fallback for `weight_shape` (see below): rebuilding the
-        # unpacked in-dim as `packed_cols * pack_factor` is exact only when
-        # `num_bits` divides 32; for 3/5/6/7-bit dense packing it under-counts.
-        pack_factor = 32 // quantization_scheme.weights.num_bits
-
-        # Per-expert compressed projections of size (input-dim; output-dim)
+        model = kwargs.get("model")
+        target_dtype = model.get_parameter(full_layer_name).dtype if model is not None else None
         processed_out = {}
         for key, value in input_dict.items():
-            if "weight_packed" not in key:
+            if not key.endswith((".weight$", ".weight_packed$")):
                 continue
-            quantized = value
-            scales = input_dict[key.replace("weight_packed", "weight_scale")]
-            shapes = input_dict.get(key.replace("weight_packed", "weight_shape"))
+
+            packed = key.endswith(".weight_packed$")
+            weight_suffix = ".weight_packed$" if packed else ".weight$"
+            base_key = key.removesuffix(weight_suffix)
+            projection = base_key.rsplit(".", 1)[-1]
+            expert_parent = full_layer_name.rsplit(".", 1)[0]
+            checkpoint_module_name = f"{expert_parent}.0.{projection}"
+            quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config, checkpoint_module_name)
+            if quantization_scheme is None:
+                processed_out[key] = value
+                continue
+
+            format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
+            compressor = BaseCompressor.get_value_from_registry(format)
+            quantized = value if isinstance(value, list) else [value]
+            companion_names = (
+                "weight_scale",
+                "weight_shape",
+                "weight_zero_point",
+                "weight_g_idx",
+                "weight_global_scale",
+                "input_global_scale",
+            )
+            companions = {
+                name: input_dict[f"{base_key}.{name}$"]
+                for name in companion_names
+                if f"{base_key}.{name}$" in input_dict
+            }
+            if not packed and "weight_scale" not in companions:
+                # An ignored expert projection stays dense and carries no quantization
+                # metadata. It still matches the plain ``weight`` conversion source.
+                processed_out[key] = value
+                continue
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
             # Without pre-allocation the loop accumulates N tensors per expert and next
             # `MergeModulelist` stacks the full list for MoE kernels compatibility, i.e. x2 memory
             output = None
-            for i, (quant, scale) in enumerate(zip(quantized, scales)):
+            for i, quant in enumerate(quantized):
+                state_dict = {"weight_packed" if packed else "weight": quant}
+                for name, tensors in companions.items():
+                    state_dict[name] = tensors[i] if isinstance(tensors, list) else tensors
+
                 # Prefer the checkpoint's stored per-expert `weight_shape`
                 # (out-dim, in-dim); it is exact for any bit width. Fall back to
                 # rebuilding from the packed tensor only when it is missing/empty,
                 # e.g. left empty on most ranks under TP/EP sharding.
-                stored_shape = None if shapes is None else shapes[i]
-                if stored_shape is not None and stored_shape.numel():
-                    shape = stored_shape
-                else:
-                    shape = torch.tensor([quant.shape[0], quant.shape[1] * pack_factor])
-                module = DummyModule(quant, scale, shape)
-                module.quantization_scheme = quantization_scheme
-                compressor.decompress_module(module)
+                if (
+                    packed
+                    and ("weight_shape" not in state_dict or not state_dict["weight_shape"].numel())
+                    and quantization_scheme.weights.type == "int"
+                ):
+                    pack_factor = 32 // quantization_scheme.weights.num_bits
+                    state_dict["weight_shape"] = torch.tensor(
+                        [quant.shape[0], quant.shape[1] * pack_factor], device=quant.device
+                    )
+                dense = compressor.decompress(state_dict, quantization_scheme)["weight"]
+                if target_dtype is not None:
+                    dense = dense.to(target_dtype)
 
                 if output is None:
                     # Use the first expert's decompressed shape/dtype to allocate full buffer.
                     output = torch.empty(
-                        (len(quantized), *module.weight.shape),
-                        dtype=module.weight.dtype,
-                        device=module.weight.device,
+                        (len(quantized), *dense.shape),
+                        dtype=dense.dtype,
+                        device=dense.device,
                     )
-                output[i].copy_(module.weight)
+                output[i].copy_(dense)
                 # explicitly free intermediate tensors so it does not accumulate across iterations
-                del module
+                del dense
 
-            del quantized, scales
+            del quantized
             if output is not None:
                 # Return a single pre-stacked tensor instead of a list. `MergeModulelist`
                 # passes it through without an extra `torch.stack` copy -> no x2 memory overhead
