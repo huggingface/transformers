@@ -303,6 +303,9 @@ class FuyuImageProcessor(TorchvisionBackend):
                 Size of the patches.
         """
         requires_backends(self, ["torch"])
+        logger.warning(
+            "`image_processor.preprocess_with_tokenizer_info` is depreacted and will be removed in future versions."
+        )
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
