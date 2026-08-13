@@ -39,7 +39,7 @@ vision, audio, and language-model-head weights. Both formats load through the st
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "dots-studio/dots-3-note-prev"
+model_id = "dots-studio/dots3-note-prev"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 

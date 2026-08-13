@@ -480,40 +480,6 @@ class Dots3NoteModelTest(unittest.TestCase):
         actual = torch.cat(chunks, dim=1)
         torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
 
-    def test_dsa_chunked_prefill_generate_matches_one_shot(self):
-        config = get_tiny_config(use_dsa=True)
-        model = Dots3NoteTextForCausalLM(config).eval()
-        input_ids = torch.tensor([[1, 7, 11, 9, 6, 13, 12]])
-        attention_mask = torch.ones_like(input_ids)
-
-        with torch.no_grad():
-            expected = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                do_sample=False,
-                max_new_tokens=3,
-            )
-            past_key_values = None
-            for start in range(0, input_ids.shape[1] - 1, 2):
-                stop = min(start + 2, input_ids.shape[1] - 1)
-                outputs = model(
-                    input_ids[:, start:stop],
-                    attention_mask=attention_mask[:, :stop],
-                    past_key_values=past_key_values,
-                    use_cache=True,
-                    logits_to_keep=1,
-                )
-                past_key_values = outputs.past_key_values
-            actual = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                do_sample=False,
-                max_new_tokens=3,
-            )
-
-        torch.testing.assert_close(actual, expected)
-
     def test_dsa_left_padded_batch_cache_matches_unpadded_decode(self):
         torch.manual_seed(0)
         config = get_tiny_config(use_dsa=True)

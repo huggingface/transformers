@@ -17,7 +17,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
+@auto_docstring(checkpoint="dots-studio/dots3-note-prev")
 @strict
 class Dots3NoteVisionConfig(PreTrainedConfig):
     r"""
@@ -109,7 +109,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
+@auto_docstring(checkpoint="dots-studio/dots3-note-prev")
 @strict
 class Dots3NoteAudioConfig(PreTrainedConfig):
     r"""
@@ -252,7 +252,7 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
         return self.chunk_seconds * 100
 
 
-@auto_docstring(checkpoint="dots-studio/dots-3-note-prev")
+@auto_docstring(checkpoint="dots-studio/dots3-note-prev")
 @strict
 class Dots3NoteConfig(PreTrainedConfig):
     r"""
