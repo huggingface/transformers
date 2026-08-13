@@ -71,7 +71,6 @@ if is_torch_available():
 
 
 if is_onnxscript_available():
-    import onnx
     import onnx_ir
     from onnxscript import FLOAT, INT64, script  # runtime: `@script` evaluates these annotations at import
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
@@ -750,6 +749,87 @@ def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool
     return True
 
 
+_TENSOR_FACTORY_OPS = set()
+if is_torch_available():
+    _TENSOR_FACTORY_OPS.update(
+        {
+            torch.ops.aten.zeros.default,
+            torch.ops.aten.ones.default,
+            torch.ops.aten.empty.memory_format,
+            torch.ops.aten.full.default,
+            torch.ops.aten.new_zeros.default,
+            torch.ops.aten.new_ones.default,
+            torch.ops.aten.new_full.default,
+        }
+    )
+
+
+def _sym_expr(value) -> str | None:
+    """Return the sympy expression string of a SymInt-valued FX node/val, else None."""
+    if isinstance(value, torch.fx.Node):
+        value = value.meta.get("val")
+    if isinstance(value, torch.SymInt):
+        return str(value.node.expr)
+    return None
+
+
+@register_fx_node_fix("onnx")
+def _fix_symbolic_factory_shape(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Size ``zeros``/``full``/… off a live tensor's runtime shape instead of a derived floor-div SymInt.
+
+    A conv/pool output length reaches a tensor factory (e.g. ``torch.zeros((batch, feat_len))`` for an
+    audio feature mask) as a *derived* SymInt — a floor-div chain of the input length. onnxscript lowers
+    that signed floor-div as ``Sub(Div, Cast(And(...Mod...Sign)))``, which ORT's CUDA EP mis-evaluates to a
+    negative dim → ``Expand``/``Reshape`` failures. When another tensor already in the graph carries that
+    exact symbolic dim in its shape, rewrite the factory's size element to read it as ``aten.sym_size``
+    (a plain ``Shape`` gather at export) so no floor-div is recomputed. Only touches factory *size* args —
+    never arithmetic ``Div`` nodes — so numeric floor-divs (relative-position lengths) are left intact.
+    """
+    if node.target not in _TENSOR_FACTORY_OPS:
+        return False
+    # The size list is the first list/tuple arg holding at least one SymInt-valued node.
+    size_pos = next(
+        (i for i, a in enumerate(node.args) if isinstance(a, (list, tuple)) and any(_sym_expr(e) for e in a)),
+        None,
+    )
+    if size_pos is None:
+        return False
+    size = list(node.args[size_pos])
+
+    # Map each floor-div symbolic dim to a live tensor dim defined earlier in the graph.
+    sources: dict[str, tuple[torch.fx.Node, int]] = {}
+    for prior in gm.graph.nodes:
+        if prior is node:
+            break
+        if prior.target in _TENSOR_FACTORY_OPS:
+            continue
+        val = prior.meta.get("val") if hasattr(prior, "meta") else None
+        shape = getattr(val, "shape", None)
+        if shape is None or isinstance(val, torch.SymInt):
+            continue
+        for dim, s in enumerate(shape):
+            expr = _sym_expr(s)
+            if expr and expr not in sources:
+                sources[expr] = (prior, dim)
+
+    changed = False
+    for i, element in enumerate(size):
+        expr = _sym_expr(element)
+        if expr is None or "//" not in expr or expr not in sources:
+            continue
+        src_node, src_dim = sources[expr]
+        with gm.graph.inserting_before(node):
+            sym_size = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(src_node, src_dim))
+        # Carry the original SymInt value so downstream shape reasoning / ONNX translation still sees it.
+        sym_size.meta["val"] = element.meta["val"]
+        size[i] = sym_size
+        changed = True
+    if not changed:
+        return False
+    node.update_arg(size_pos, size)
+    return True
+
+
 # ── Stage 4: ONNX translations ────────────────────────────────────────────────
 # Custom onnxscript `_aten_*` functions registered by `_get_onnx_translation_table`
 # that override `torchlib`'s default lowering for specific aten ops where the
@@ -990,9 +1070,24 @@ def _get_onnx_translation_table() -> dict[Any, Any]:
             (not `collections.abc`), which `onnxscript.script`'s annotation parser rejects."""
             one = op.Constant(value_ints=[1])
             two = op.Constant(value_ints=[2])
+            three = op.Constant(value_ints=[3])
             axis0 = op.Constant(value_ints=[0])
             cu = op.Cast(cu_seq_q, to=7)  # INT64
             num_segments = op.Squeeze(op.Sub(op.Shape(cu), one))
+            # Grouped-query attention: key/value carry fewer heads than query (e.g. Exaone4.5 vision). The
+            # flash op broadcasts them internally; here we materialise the `repeat_kv` expansion once up
+            # front — (L, Hkv, D) → (L, Hq, D) by repeating each kv head `Hq // Hkv` times — so the per-
+            # segment MatMul sees matching head counts. `n_rep == 1` (multi-head attention) makes it a no-op.
+            q_heads = op.Slice(op.Shape(query), one, two, axis0)
+            k_shape = op.Shape(key)
+            k_len = op.Slice(k_shape, axis0, one, axis0)
+            k_heads = op.Slice(k_shape, one, two, axis0)
+            k_dim = op.Slice(k_shape, two, three, axis0)
+            n_rep = op.Div(q_heads, k_heads)
+            expand_shape = op.Concat(k_len, k_heads, n_rep, k_dim, axis=0)
+            grouped_shape = op.Concat(k_len, q_heads, k_dim, axis=0)
+            key = op.Reshape(op.Expand(op.Unsqueeze(key, two), expand_shape), grouped_shape)
+            value = op.Reshape(op.Expand(op.Unsqueeze(value, two), expand_shape), grouped_shape)
             output = op.Slice(
                 query, op.Constant(value_ints=[0]), op.Constant(value_ints=[0]), axis0
             )  # empty (0, H, D)
@@ -1034,50 +1129,8 @@ def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
-def _fix_ir_bf16_unsupported_ops(graph_like: onnx_ir.Graph) -> None:
-    """Keep a bf16 graph valid across ops whose ONNX type constraints don't admit bfloat16 (e.g. Conv,
-    Sin, Cos — patch-embedding convs and rotary embeddings). Such a node makes the whole model invalid at
-    graph type-checking (rejected by every EP, not just a missing kernel), so wrap it: cast its bf16
-    inputs up to fp32 and its bf16 outputs back down to bf16, leaving it to run in fp32 inside an otherwise
-    bf16 graph. Ops that do admit bf16 (MatMul, Add, Softmax, …) are untouched. The unsupported set is read
-    from `onnx.defs` per node — discovered, not enumerated, so future ops are handled automatically."""
-    opset = (graph_like.opset_imports or {}).get("", None) or 18
-    bf16, fp32 = onnx_ir.DataType.BFLOAT16, onnx_ir.DataType.FLOAT
-    for node in list(graph_like.all_nodes()):
-        if node.domain not in ("", "ai.onnx"):
-            continue
-        try:
-            schema = onnx.defs.get_schema(node.op_type, opset)
-        except Exception:
-            continue
-        if "tensor(bfloat16)" in {t for tc in schema.type_constraints for t in tc.allowed_type_strs}:
-            continue
-        if not any(v is not None and v.dtype == bf16 for v in (*node.inputs, *node.outputs)):
-            continue
-        for index, value in enumerate(node.inputs):
-            if value is not None and value.dtype == bf16:
-                up = onnx_ir.Node(
-                    "", "Cast", [value], {"to": onnx_ir.Attr("to", onnx_ir.AttributeType.INT, fp32.value)}, num_outputs=1
-                )
-                up.outputs[0].dtype, up.outputs[0].shape = fp32, value.shape
-                graph_like.insert_before(node, up)
-                node.replace_input_with(index, up.outputs[0])
-        for value in node.outputs:
-            if value.dtype == bf16:
-                down = onnx_ir.Node(
-                    "", "Cast", [None], {"to": onnx_ir.Attr("to", onnx_ir.AttributeType.INT, bf16.value)}, num_outputs=1
-                )
-                down.outputs[0].dtype, down.outputs[0].shape = bf16, value.shape
-                # redirect consumers to the bf16 result before the cast itself reads `value` (avoids a cycle)
-                value.replace_all_uses_with(down.outputs[0])
-                down.replace_input_with(0, value)
-                value.dtype = fp32  # the op now emits fp32
-                graph_like.insert_after(node, down)
-
-
 _IR_FIXES = [
     _fix_ir_topk_sorted,
-    _fix_ir_bf16_unsupported_ops,
 ]
 
 

@@ -167,6 +167,7 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     """
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
+            torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
             torch.ops.aten._is_all_true.default,
             torch.ops.aten.bincount.default,

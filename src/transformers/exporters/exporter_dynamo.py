@@ -466,21 +466,6 @@ if is_torch_available():
         torch.library.register_kernel("torch_attn::_varlen_attn", "CompositeImplicitAutograd", _varlen_attn_op_kernel)
 
 
-def needs_half_precision_export(model: torch.nn.Module) -> bool:
-    """Whether `model` exercises a kernel that only exists in half precision, so it must be exported in
-    bf16 rather than fp32. Two such kernels: grouped-mm MoE experts (`config._experts_implementation` resolves
-    to `"grouped_mm"`; the eager/batched paths are fp32-fine) and the vision/audio varlen flash attention
-    (the forwards patched in `_VARLEN_ATTENTION_PATHS`, matched by full module-qualified class path so a
-    generic name like `VisionAttention` can't collide). Everything else exports fine — and more faithfully —
-    in fp32."""
-    if getattr(getattr(model, "config", None), "_experts_implementation", None) == "grouped_mm":
-        return True
-    return any(
-        f"{type(module).__module__}.{type(module).__qualname__}.forward" in _VARLEN_ATTENTION_PATHS
-        for module in model.modules()
-    )
-
-
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
 # torch.export needs pytree flatten/unflatten for Cache objects and other
 # custom types. The generic flattener serialises any object to a JSON-native

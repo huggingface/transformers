@@ -23,7 +23,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter, needs_half_precision_export
+from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
@@ -533,6 +533,21 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
 
 
+def needs_half_precision_export(model) -> bool:
+    """Whether `model` exercises a kernel that only runs in half precision, so the export test builds it in
+    half precision rather than fp32. Two such kernels: grouped-mm MoE experts (`config._experts_implementation`
+    resolves to `"grouped_mm"`; the eager/batched paths are fp32-fine) and the vision/audio varlen flash
+    attention (the forwards patched in `_VARLEN_ATTENTION_PATHS`, matched by full module-qualified class path so
+    a generic name like `VisionAttention` can't collide). Everything else exports fine — and more faithfully —
+    in fp32."""
+    if getattr(getattr(model, "config", None), "_experts_implementation", None) == "grouped_mm":
+        return True
+    return any(
+        f"{type(module).__module__}.{type(module).__qualname__}.forward" in _VARLEN_ATTENTION_PATHS
+        for module in model.modules()
+    )
+
+
 # ──────────────────────────── mixins ────────────────────────────
 
 
@@ -592,7 +607,7 @@ class ExportTesterMixin:
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
+    def _prepare_export_model_and_inputs(self, model_class, backend, device=torch_device):
         """Create model and forward inputs ready for export.
 
         ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
@@ -611,10 +626,12 @@ class ExportTesterMixin:
 
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval()
-        # Export in bf16 only when the model uses a half-precision-only kernel — the vision varlen flash
-        # attention or grouped-mm MoE experts (see `needs_half_precision_export`). Everything else exports in
-        # fp32, which is both realistic and avoids the spurious dtype mismatches a blanket bf16 cast causes.
-        dtype = torch.bfloat16 if needs_half_precision_export(model) else torch.float32
+        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
+        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
+        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
+        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
+        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
         model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
@@ -672,7 +689,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class, "dynamo")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -708,7 +725,7 @@ class ExportTesterMixin:
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class, "onnx")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -743,7 +760,7 @@ class ExportTesterMixin:
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
-            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            components = self._prepare_export_model_and_inputs(model_class, "executorch", device="cpu")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -772,7 +789,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     """
 
     def _prepare_export_generate_model_and_inputs(
-        self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
+        self, model_class, backend, device=torch_device, generation_config=None, multi_token_decode=False
     ):
         """Decompose a generative model into exportable components.
 
@@ -799,10 +816,12 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval()
-        # Export in bf16 only when the model uses a half-precision-only kernel — the vision varlen flash
-        # attention or grouped-mm MoE experts (see `needs_half_precision_export`). Everything else exports in
-        # fp32, which is both realistic and avoids the spurious dtype mismatches a blanket bf16 cast causes.
-        dtype = torch.bfloat16 if needs_half_precision_export(model) else torch.float32
+        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
+        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
+        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
+        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
+        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
         model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
@@ -833,7 +852,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config, multi_token_decode=dynamic
+                model_class, "dynamo", generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
 
@@ -873,7 +892,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config, multi_token_decode=dynamic
+                model_class, "onnx", generation_config=generation_config, multi_token_decode=dynamic
             )
             eager_outputs = self._collect_eager_outputs(components)
 
@@ -909,6 +928,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
+                "executorch",
                 device="cpu",
                 generation_config=generation_config,
                 multi_token_decode=dynamic,
