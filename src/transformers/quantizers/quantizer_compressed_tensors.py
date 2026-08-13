@@ -23,10 +23,23 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import DecompressExperts, get_experts_scheme
+    from ..integrations.compressed_tensors import DecompressExperts
 
 
 logger = logging.get_logger(__name__)
+
+
+def _normalize_ignore_names_for_model(ignore, model_type):
+    """Translate checkpoint module names used in compression configs to model names."""
+    if model_type == "laguna":
+        # Public Laguna checkpoints use ``shared_expert`` while the Transformers
+        # implementation uses ``shared_experts`` (and renames weights at load time).
+        # Apply the same rename to ignore entries before compressed-tensors decides
+        # which model modules should receive packed placeholders.
+        return [
+            name if "shared_experts" in name else name.replace("shared_expert", "shared_experts") for name in ignore
+        ]
+    return ignore
 
 
 def _is_fp8_scheme(scheme) -> bool:
@@ -87,6 +100,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         ct_config = self.compressor.quantization_config
+        ct_config.ignore = _normalize_ignore_names_for_model(ct_config.ignore, model.config.model_type)
         remaining_groups = dict(ct_config.config_groups)
 
         if self.use_fp8_kernel:
@@ -197,20 +211,23 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 continue
             weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
             if weight_sources:
-                scheme = get_experts_scheme(self.quantization_config.quantization_config)
-                scale_sources = [p + "_scale$" for p in weight_sources]
                 other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                if _is_fp8_scheme(scheme):
-                    # Merged experts cannot stay FP8 (they are not nn.Linear): they are
-                    # dequantized to the model dtype before the merge. The weight patterns
-                    # must be anchored with `$`: patterns are regex-searched, so unanchored
-                    # `.weight` would also match the `.weight_scale` keys.
-                    new_sources = [p + "$" for p in weight_sources] + scale_sources + other
-                else:
-                    packed_weight = [p + "_packed$" for p in weight_sources]
-                    shape_sources = [p + "_shape$" for p in weight_sources]
-                    new_sources = packed_weight + scale_sources + shape_sources + other
-                new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
+                companion_suffixes = (
+                    "_scale$",
+                    "_shape$",
+                    "_zero_point$",
+                    "_g_idx$",
+                    "_global_scale$",
+                )
+                # Accept both plain FP8 weights and packed INT/FP4 weights. Scheme selection is
+                # deferred until conversion time because mixed checkpoints can use a different
+                # bit width or format in different decoder layers.
+                new_sources = [p + "$" for p in weight_sources]
+                new_sources += [p + "_packed$" for p in weight_sources]
+                new_sources += [p + suffix for p in weight_sources for suffix in companion_suffixes]
+                new_sources += [p.removesuffix(".weight") + ".input_global_scale$" for p in weight_sources]
+                new_sources += other
+                new_ops = [DecompressExperts(self)] + list(conv.operations)
                 conv = WeightConverter(
                     source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,
