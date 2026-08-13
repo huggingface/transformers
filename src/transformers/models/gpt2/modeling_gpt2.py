@@ -444,11 +444,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        if isinstance(module, PreTrainedModel):
-            for name, p in module.named_parameters():
-                if name == "c_proj.weight":
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
+        if isinstance(module, (GPT2Attention, GPT2MLP)):
+            # Special Scaled Initialization --> 2 residual paths (attention and MLP) per Transformer Block
+            std = self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
+            init.normal_(module.c_proj.weight, mean=0.0, std=std)
 
 
 @auto_docstring(

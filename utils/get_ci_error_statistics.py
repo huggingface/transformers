@@ -5,113 +5,25 @@ import math
 import os
 import time
 import traceback
+import urllib.error
+import urllib.request
 import zipfile
 from collections import Counter
 
-import requests
+# All GitHub REST API access goes through the shared, standard-library-only helper so rate limiting,
+# retries, and rejected-token handling behave identically across every CI utility. `get_github_json`
+# is re-exported here because other modules import it as `from get_ci_error_statistics import ...`.
+from github_utils import build_github_headers, get_github_json  # noqa: F401
 
 
 logger = logging.getLogger(__name__)
 
 
-def _rate_limit_wait(response, attempt):
-    """Return how many seconds to wait before retrying a rate-limited GitHub response, or ``None``.
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Redirect handler that refuses to follow redirects, so the caller can read ``Location`` itself."""
 
-    Distinguishes the two GitHub rate limits, which look different on the wire:
-
-      * primary limit: ``X-RateLimit-Remaining: 0`` plus an ``X-RateLimit-Reset`` epoch;
-      * secondary limit: a 403/429 that does *not* touch the primary quota (``X-RateLimit-Remaining``
-        may still be non-zero) and often ships no ``Retry-After`` header, only a body message like
-        "You have exceeded a secondary rate limit". This is the one that breaks daily CI reporting
-        when it walks the ~24 pages of a large run's jobs, so it must be detected by body too.
-
-    see https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
-    """
-    if response.status_code not in (403, 429):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
-
-    retry_after = response.headers.get("Retry-After")
-    remaining = response.headers.get("X-RateLimit-Remaining")
-    reset = response.headers.get("X-RateLimit-Reset")
-    body = (response.text or "").lower()
-    # A 429 is always "too many requests"; a 403 only counts as a rate limit if something says so
-    # (a 403 without any rate-limit signal is a genuine permission error and must not be retried).
-    is_rate_limited = response.status_code == 429 or (
-        retry_after is not None
-        or remaining == "0"
-        or "rate limit" in body
-        or "secondary rate" in body
-        or "abuse" in body
-    )
-    if not is_rate_limited:
-        return None
-
-    if retry_after is not None:
-        wait = int(retry_after)
-    elif remaining == "0" and reset is not None:
-        wait = max(0, int(reset) - int(time.time()))
-    else:
-        # Secondary limit without hints: GitHub asks to wait ~1 min; grow it per attempt.
-        wait = 60 * (attempt + 1)
-    # Clamp so a far-off primary reset can't stall CI, but always wait long enough for a secondary
-    # limit (which is measured in tens of seconds) to actually clear.
-    return min(max(wait, 30), 300)
-
-
-def get_github_json(url, token=None, max_retries=8):
-    """GET a GitHub REST API URL and return the parsed JSON.
-
-    Hardened against the failure modes that silently broke daily CI reporting (the reports indexed
-    into the response with e.g. ``result["jobs"]`` / ``workflow_run["created_at"]`` and raised a
-    bare ``KeyError`` when GitHub returned an error payload instead of data):
-
-      * primary *and* secondary rate limiting: retried with a backoff (``Retry-After`` /
-        ``X-RateLimit-Reset`` when present, otherwise ~1 min for secondary limits), never parsed
-        as data. Retrying without the token would only lower the limit, so the token is kept.
-      * transient 5xx errors: retried with exponential backoff.
-
-    Only a genuine 401/404 with a token falls back to an unauthenticated retry; a 403 is treated as
-    a rate limit (above) or a non-retryable error, never as a reason to drop the token. Raises
-    ``RuntimeError`` if no usable response is obtained, so callers fail loudly instead of indexing
-    into an error payload.
-    """
-    headers = None
-    if token:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    response = None
-    for attempt in range(max_retries):
-        response = requests.get(url, headers=headers)
-        status = response.status_code
-
-        wait = _rate_limit_wait(response, attempt)
-        if wait is not None:
-            print(
-                f"GitHub API rate limited on {url} (status {status}); waiting {wait}s before "
-                f"retry {attempt + 1}/{max_retries}"
-            )
-            time.sleep(wait)
-            continue
-
-        # Genuine auth/not-found with a token: retry once unauthenticated (previous behaviour).
-        if headers is not None and status in (401, 404):
-            response = requests.get(url)
-            status = response.status_code
-
-        if status >= 500:
-            wait = min(2**attempt, 60)
-            print(f"GitHub API server error {status} on {url}; retrying in {wait}s ({attempt + 1}/{max_retries})")
-            time.sleep(wait)
-            continue
-
-        if status == 200:
-            return response.json()
-
-        # Any other (non-retryable) status: stop and fail loudly below.
-        break
-
-    last_status = response.status_code if response is not None else "no response"
-    raise RuntimeError(f"Could not fetch {url}: last status {last_status} after {max_retries} attempt(s)")
 
 
 def _get_paginated_items(url, key, token=None):
@@ -181,16 +93,24 @@ def download_artifact(artifact_name, artifact_url, output_dir, token):
     but it can't be used to download directly. We need to get a redirect URL first.
     See https://docs.github.com/en/rest/actions/artifacts#download-an-artifact
     """
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
+    # First request keeps the auth header but must NOT follow the redirect, so we can read the signed
+    # download URL from `Location`. A redirect surfaces as an HTTPError once auto-redirection is off.
+    request = urllib.request.Request(artifact_url, headers=build_github_headers(token), method="GET")
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=30) as result:
+            download_url = result.headers["Location"]
+    except urllib.error.HTTPError as error:
+        if error.code not in (301, 302, 303, 307, 308) or "Location" not in error.headers:
+            raise
+        download_url = error.headers["Location"]
 
-    result = requests.get(artifact_url, headers=headers, allow_redirects=False)
-    download_url = result.headers["Location"]
-    response = requests.get(download_url, allow_redirects=True)
+    # Second request fetches the signed URL WITHOUT the GitHub auth header (it points at storage).
+    with urllib.request.urlopen(download_url, timeout=60) as response:
+        content = response.read()
     file_path = os.path.join(output_dir, f"{artifact_name}.zip")
     with open(file_path, "wb") as fp:
-        fp.write(response.content)
+        fp.write(content)
 
 
 def get_errors_from_single_artifact(artifact_zip_path, job_links=None):

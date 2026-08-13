@@ -1097,7 +1097,7 @@ class Sapiens2Config(DINOv3ViTConfig):
         Number of key/value heads for each transformer layer. Setting a layer's value equal to
         `num_attention_heads` gives full multi-head attention; a smaller value gives grouped-query
         attention. Defaults to `num_attention_heads` for the first `num_first_full_attention_layers`
-        and last `num_last_full_attention_layers` layers and `num_key_valueattention_heads` for all other
+        and last `num_last_full_attention_layers` layers and `num_key_value_attention_heads` for all other
         layers.
     num_key_value_attention_heads (`int`):
         Number of key/value heads for layers that use grouped-query attention when `num_key_value_heads_per_layer`

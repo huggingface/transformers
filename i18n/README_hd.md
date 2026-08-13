@@ -206,7 +206,7 @@ checkpoint: जाँच बिंदु
 
 ### पिप का उपयोग करना
 
-इस रिपॉजिटरी का परीक्षण Python 3.10+ और PyTorch 2.4+ के तहत किया गया है।
+इस रिपॉजिटरी का परीक्षण Python 3.10+ और PyTorch 2.5+ के तहत किया गया है।
 
 आप [वर्चुअल एनवायरनमेंट](https://docs.python.org/3/library/venv.html) में 🤗 ट्रांसफॉर्मर इंस्टॉल कर सकते हैं। यदि आप अभी तक पायथन के वर्चुअल एनवायरनमेंट से परिचित नहीं हैं, तो कृपया इसे [उपयोगकर्ता निर्देश](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) पढ़ें।
 

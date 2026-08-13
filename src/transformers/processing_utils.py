@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union
@@ -200,6 +201,8 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_text_replacement_offsets (`bool`, *optional*):
+            Whether to return character offsets for each mm placeholder and its replacement.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -225,6 +228,7 @@ class TextKwargs(TypedDict, total=False):
     verbose: bool | None
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
+    return_text_replacement_offsets: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -670,7 +674,7 @@ class ProcessorMixin(PushToHubMixin):
             processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None and hasattr(self, "video_processor"):
             processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
-        if audio is not None and hasattr(self, "feature_extractor"):
+        if audio is not None and self._audio_processor is not None:
             processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
 
         text_inputs = {}
@@ -723,11 +727,11 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(text, str):
                 text = [text]
             # avoid in-place updates on text
-            text = text.copy()
+            text = list(text).copy()
 
-        if audio is not None and hasattr(self, "feature_extractor"):
-            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
-            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+        if audio is not None and self._audio_processor is not None:
+            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
+            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -766,7 +770,7 @@ class ProcessorMixin(PushToHubMixin):
             # Some processors use nested struct, we need to flatten back if needed
             images = make_flat_list_of_images(images)
             for idx in range(len(images)):
-                replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+                replacement_text = self.replace_image_token(processed_images, image_idx=idx, **kwargs)
                 image_replacements.append(replacement_text)
         return processed_images, image_replacements
 
@@ -777,30 +781,35 @@ class ProcessorMixin(PushToHubMixin):
         if getattr(self, "video_token", None) is not None:
             videos = make_batched_videos(videos)
             for idx in range(len(videos)):
-                replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+                replacement_text = self.replace_video_token(processed_videos, video_idx=idx, **kwargs)
                 video_replacements.append(replacement_text)
 
         return processed_videos, video_replacements
 
+    @property
+    def _audio_processor(self):
+        # TODO: To be replaced with `audio_processor`
+        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+
     def _process_audio(self, audio: AudioInput, **kwargs):
-        processed_audio = self.feature_extractor(audio, **kwargs)
+        processed_audio = self._audio_processor(audio, **kwargs)
 
         audio_replacements = []
         if getattr(self, "audio_token", None) is not None:
             for idx in range(len(audio)):
-                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
+                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx, **kwargs)
                 audio_replacements.append(replacement_text)
 
         return processed_audio, audio_replacements
 
     # To be overridden by each model's processor if they need to add placeholder tokens
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
     def get_text_with_replacements(
@@ -2071,8 +2080,8 @@ class ProcessorMixin(PushToHubMixin):
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
         sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
         if sampling_rate is None:
-            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                sampling_rate = self.feature_extractor.sampling_rate
+            if hasattr(self._audio_processor, "sampling_rate"):
+                sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
@@ -2247,6 +2256,7 @@ class ProcessorMixin(PushToHubMixin):
         schema: dict | None = None,
         *,
         prefix: "str | list[int] | list[str] | list[list[int]] | np.ndarray | torch.Tensor | None" = None,
+        tools: list[dict | Callable] | None = None,
     ):
         """
         Converts an output string created by generating text from a model into a parsed message dictionary.
@@ -2266,10 +2276,13 @@ class ProcessorMixin(PushToHubMixin):
                 The prompt that came before generation. Many chat templates pre-write part of the message, so
                 this is needed to parse correctly. For a batched `response`, pass either a single prefix
                 (broadcast to every item) or one prefix per item. Only supported with new-style templates.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                Tools available to the model, in the same format as `apply_chat_template` accepts.
+                Tool-call arguments are cast using the calling tool's JSON schema.
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")
-        return self.tokenizer.parse_response(response, schema, prefix=prefix)
+        return self.tokenizer.parse_response(response, schema, prefix=prefix, tools=tools)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
@@ -2323,11 +2336,14 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
+        input_ids = text_inputs["input_ids"]
+        if hasattr(input_ids, "tolist"):
+            input_ids = input_ids.tolist()
         for modality in modalities:
             token_str = getattr(self, f"{modality}_token", None)
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
-                ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+                ids_count = [list(ids).count(token_id) for ids in input_ids]
                 text_count = [sample.count(token_str) for sample in text]
 
                 if ids_count != text_count:
