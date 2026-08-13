@@ -17,6 +17,9 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -629,3 +632,30 @@ class TextGenerationPipelineTests(unittest.TestCase):
             kw_call_args = mock.call_args[1]
             self.assertIn("enable_thinking", kw_call_args)
             self.assertEqual(kw_call_args["enable_thinking"], True)
+
+    @require_torch
+    def test_pipeline_respects_model_generation_config(self):
+        """Test for #47752: Verify model.generation_config modifications take precedence over pipeline defaults."""
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # 1. Modify model.generation_config directly
+        model.generation_config.max_new_tokens = 500
+        model.generation_config.temperature = 0.7
+
+        # 2. Instantiate pipeline without extra generation kwargs
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        # 3. Assert user settings on model.generation_config were respected
+        self.assertEqual(pipe.generation_config.max_new_tokens, 500)
+        self.assertEqual(pipe.generation_config.temperature, 0.7)
+
+        # 4. Verify explicit kwargs override model settings
+        pipe_kwargs = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=100)
+        self.assertEqual(pipe_kwargs.generation_config.max_new_tokens, 100)
+
+        # 5. Verify explicit generation_config object overrides model settings
+        custom_gc = GenerationConfig(max_new_tokens=250)
+        pipe_gc = pipeline("text-generation", model=model, tokenizer=tokenizer, generation_config=custom_gc)
+        self.assertEqual(pipe_gc.generation_config.max_new_tokens, 250)
