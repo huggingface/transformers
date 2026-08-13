@@ -242,7 +242,9 @@ deleting or rewriting any of the input.
 Because sanitization works at the token level, it requires `tokenize=True` - there is no way to mark special-token
 text as inert in string output, so requesting it with `tokenize=False` raises an error. It is also currently only
 supported by tokenizers: processors (for multimodal models) will raise an error if you request it, as will the few
-tokenizers that cannot encode plain text (for example, layout-aware tokenizers that require word boxes).
+tokenizers that cannot encode plain text (for example, layout-aware tokenizers that require word boxes). Combining
+sanitization with `return_assistant_tokens_mask` is unsupported for now as well: assistant masks are generally used
+with pre-prepared data at training time, while sanitization protects inference-time chat inputs.
 
 ## Model training
 

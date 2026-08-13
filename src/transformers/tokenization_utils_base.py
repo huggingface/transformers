@@ -3049,8 +3049,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 structure. Sanitization preserves the text, but encodes it with ordinary (non-special) tokens,
                 like `split_special_tokens=True`. Special tokens added by the chat template itself are
                 unaffected. Requires `tokenize=True`, since token-level sanitization cannot be expressed in
-                string output. Sanitization never deletes or rewrites input text: if the text cannot be
-                represented with ordinary tokens, a `ValueError` is raised instead.
+                string output, and cannot currently be combined with `return_assistant_tokens_mask`.
+                Sanitization never deletes or rewrites input text: if the text cannot be represented with
+                ordinary tokens, a `ValueError` is raised instead.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3120,7 +3121,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         sanitization = None
         if sanitize_special_tokens:
             conversations, tools, documents, kwargs, sanitization = sanitize_chat_inputs(
-                self, conversations, tools, documents, kwargs, tokenize=tokenize
+                self,
+                conversations,
+                tools,
+                documents,
+                kwargs,
+                tokenize=tokenize,
+                return_assistant_tokens_mask=return_assistant_tokens_mask,
             )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
@@ -3142,11 +3149,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if sanitization:
                 # Sanitization replaced special tokens in the chat inputs with placeholders. Restoring and
                 # encoding them so that they can never act as control tokens needs a dedicated path.
-                out, assistant_token_spans = encode_sanitized_chats(
+                out = encode_sanitized_chats(
                     self,
                     rendered_chat if is_batched else [rendered_chat],
                     sanitization,
-                    generation_indices=generation_indices if return_assistant_tokens_mask else None,
                     padding=padding,
                     truncation=truncation,
                     max_length=max_length,
@@ -3174,20 +3180,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        if sanitization:
-                            # Token-level spans were already computed by the sanitized encoding
-                            token_spans = assistant_token_spans[i]
-                        else:
-                            token_spans = []
-                            for assistant_start_char, assistant_end_char in generation_indices[i]:
-                                start_token = out.char_to_token(i, assistant_start_char)
-                                end_token = out.char_to_token(i, assistant_end_char - 1)
-                                if start_token is None:
-                                    # start_token is out of bounds maybe due to truncation.
-                                    break
-                                token_spans.append((start_token, end_token if end_token else len(input_ids[i]) - 1))
-                        for start_token, end_token in token_spans:
-                            for token_id in range(start_token, end_token + 1):
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            start_token = out.char_to_token(i, assistant_start_char)
+                            end_token = out.char_to_token(i, assistant_end_char - 1)
+                            if start_token is None:
+                                # start_token is out of bounds maybe due to truncation.
+                                break
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 

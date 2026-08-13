@@ -655,7 +655,7 @@ class ChatSanitization:
 
 
 def sanitize_chat_inputs(
-    tokenizer, conversations, tools, documents, kwargs: dict, tokenize: bool
+    tokenizer, conversations, tools, documents, kwargs: dict, tokenize: bool, return_assistant_tokens_mask: bool
 ) -> tuple[Any, Any, Any, dict, ChatSanitization]:
     """Entry point for the `sanitize_special_tokens` argument of `apply_chat_template`: before the template
     is rendered, replace special-token text anywhere in the chat inputs with unique placeholders, so that
@@ -666,6 +666,12 @@ def sanitize_chat_inputs(
         raise ValueError(
             "`sanitize_special_tokens=True` requires `tokenize=True`: sanitization encodes special-token "
             "text from the chat inputs with ordinary tokens, which cannot be expressed in string output."
+        )
+    if return_assistant_tokens_mask:
+        raise NotImplementedError(
+            "`sanitize_special_tokens` does not support `return_assistant_tokens_mask` yet. Assistant masks "
+            "are generally used with pre-prepared data at training time, while sanitization protects "
+            "inference-time chat inputs."
         )
     if any(token.single_word for token in tokenizer.added_tokens_decoder.values() if token.special):
         # Matching trusted tokens in the rendered chat cannot replicate word-boundary semantics
@@ -731,19 +737,17 @@ def sanitization_special_tokens(tokenizer) -> list[str]:
 
 def resolve_sanitization_placeholders(
     rendered: str, substitutions: dict[str, str]
-) -> tuple[str, list[tuple[int, int]], list[tuple[int, int]], set[str]]:
+) -> tuple[str, list[tuple[int, int]], set[str]]:
     """Restore the original special-token text at the placeholders inserted by `sanitize_chat_input` in a
-    rendered chat string. Returns `(final, untrusted_spans, shifts, seen)`:
+    rendered chat string. Returns `(final, untrusted_spans, seen)`:
 
     - `final`: the final chat string, with every placeholder replaced by its original text.
     - `untrusted_spans`: `(start, end)` character spans in `final` covering the restored text, i.e. the
       regions that came from untrusted chat input and must not encode as control tokens.
-    - `shifts`: `(position, delta)` pairs recording how character indices in `rendered` map to indices in
-      `final` (see `shift_sanitized_index`), since placeholders and their originals differ in length.
     - `seen`: the placeholder keys that were found, so callers can detect placeholders that a template mangled.
     """
     pattern = re.compile("|".join(map(re.escape, substitutions)))
-    pieces, untrusted_spans, shifts, seen = [], [], [], set()
+    pieces, untrusted_spans, seen = [], [], set()
     last = final_length = 0
     for match in pattern.finditer(rendered):
         original = substitutions[match.group(0)]
@@ -753,17 +757,9 @@ def resolve_sanitization_placeholders(
         untrusted_spans.append((final_length, final_length + len(original)))
         pieces.append(original)
         final_length += len(original)
-        shifts.append((match.end(), len(original) - (match.end() - match.start())))
         last = match.end()
     pieces.append(rendered[last:])
-    return "".join(pieces), untrusted_spans, shifts, seen
-
-
-def shift_sanitized_index(index: int, shifts: list[tuple[int, int]]) -> int:
-    """Translate a character index in a placeholder-bearing rendered chat string (as produced by rendering
-    inputs processed by `sanitize_chat_input`) to the corresponding index in the final string in which the
-    placeholders have been resolved back to their original text."""
-    return index + sum(delta for position, delta in shifts if position <= index)
+    return "".join(pieces), untrusted_spans, seen
 
 
 def split_at_trusted_special_tokens(
@@ -810,37 +806,10 @@ def split_at_trusted_special_tokens(
     return parts
 
 
-class SanitizedTokenMap:
-    """Maps character indices in a sanitized chat string to token indices in its sanitized encoding, standing
-    in for `BatchEncoding.char_to_token` (which has no offsets for an encoding assembled from parts).
-    `token_spans` holds one `(char_start, char_end)` span per token; `token_shift` accounts for tokens
-    prepended to the sequence after the spans were recorded (i.e. left-padding)."""
-
-    def __init__(self, token_spans: list[tuple[int, int]], token_shift: int = 0):
-        self.token_spans = token_spans
-        self.token_shift = token_shift
-
-    def start_token(self, char: int) -> int | None:
-        """The first token that covers `char`, or begins after it (for characters the tokenization skipped)."""
-        for index, (start, end) in enumerate(self.token_spans):
-            if end > char and end > start:
-                return index + self.token_shift
-        return None
-
-    def end_token(self, char: int) -> int | None:
-        """The last token that covers `char`, or ends before it (for characters the tokenization skipped)."""
-        for index in range(len(self.token_spans) - 1, -1, -1):
-            start, end = self.token_spans[index]
-            if start <= char and end > start:
-                return index + self.token_shift
-        return None
-
-
 def encode_sanitized_chats(
     tokenizer,
     rendered_batch: list[str],
     sanitization: ChatSanitization,
-    generation_indices: list[list[tuple[int, int]]] | None = None,
     padding=False,
     truncation: bool = False,
     max_length: int | None = None,
@@ -863,11 +832,7 @@ def encode_sanitized_chats(
     even when encoded as ordinary text (some vocabularies can assemble special tokens from ordinary pieces),
     a `ValueError` is raised rather than deleting or rewriting the offending text.
 
-    Returns `(batch_encoding, assistant_token_spans)`. When `generation_indices` is given (one list of
-    `(start_char, end_char)` spans per chat in the coordinates of the placeholder-bearing rendered strings,
-    as produced by `render_jinja_template`), `assistant_token_spans` translates it to inclusive
-    `(start_token, end_token)` spans in the encoding, ready to drive assistant masks; otherwise it is
-    `None`."""
+    Returns the padded `BatchEncoding` for the batch."""
     verbose = tokenizer_kwargs.pop("verbose", True)
     padding_side = tokenizer_kwargs.pop("padding_side", None)
     pad_to_multiple_of = tokenizer_kwargs.pop("pad_to_multiple_of", None)
@@ -890,7 +855,7 @@ def encode_sanitized_chats(
     # the final strings came from untrusted chat input, then split each chat at the special tokens the
     # template itself emitted (the only ones allowed to encode as control tokens).
     resolved = [resolve_sanitization_placeholders(rendered, sanitization.substitutions) for rendered in rendered_batch]
-    placeholders_seen = set().union(*(seen for _, _, _, seen in resolved))
+    placeholders_seen = set().union(*(seen for _, _, seen in resolved))
     if placeholders_seen != set(sanitization.substitutions):
         logger.warning_once(
             "Some special tokens in the chat inputs were transformed or dropped by the chat template, "
@@ -899,16 +864,14 @@ def encode_sanitized_chats(
     token_flags = {token.content: (token.lstrip, token.rstrip) for token in tokenizer.added_tokens_decoder.values()}
     batch_parts = [
         split_at_trusted_special_tokens(final, untrusted_spans, sanitization.protected_tokens, token_flags)
-        for final, untrusted_spans, _, _ in resolved
+        for final, untrusted_spans, _ in resolved
     ]
-    batch_untrusted_spans = [untrusted_spans for _, untrusted_spans, _, _ in resolved]
+    batch_untrusted_spans = [untrusted_spans for _, untrusted_spans, _ in resolved]
 
     # Encode every text part across the batch in a single call, without special-token matching. Offsets are
-    # requested whenever the backend can produce them: they drive both the assistant-mask token maps and the
-    # precise protected-id check below.
+    # requested when the backend can produce them, for the precise protected-id check below.
     texts = [text for parts in batch_parts for kind, text, _, _ in parts if kind == "text"]
-    with_token_maps = generation_indices is not None
-    with_offsets = getattr(tokenizer, "backend", None) == "tokenizers" or with_token_maps
+    with_offsets = getattr(tokenizer, "backend", None) == "tokenizers"
     encoded_texts = None
     if texts:
         try:
@@ -933,13 +896,12 @@ def encode_sanitized_chats(
     # sanitization, so it must not be treated as a protected control token
     protected_ids.discard(tokenizer.unk_token_id)
 
-    batch_ids, batch_spans = [], []
+    batch_ids = []
     for parts, untrusted_spans in zip(batch_parts, batch_untrusted_spans):
-        ids, spans = [], []
+        ids = []
         for kind, text, char_start, char_end in parts:
             if kind == "special":
                 ids.append(tokenizer.convert_tokens_to_ids(text))
-                spans.append((char_start, char_end))
                 continue
             part_ids = next(text_ids)
             part_offsets = next(text_offsets) if text_offsets is not None else None
@@ -969,24 +931,20 @@ def encode_sanitized_chats(
                     "to encode the chat."
                 )
             ids.extend(part_ids)
-            if with_token_maps and part_offsets is not None:
-                spans.extend((char_start + start, char_start + end) for start, end in part_offsets)
         batch_ids.append(ids)
-        batch_spans.append(spans)
 
     if truncation_strategy.value != "do_not_truncate" and max_length is not None:
         for i, ids in enumerate(batch_ids):
             if len(ids) > max_length:
                 keep = slice(-max_length, None) if tokenizer.truncation_side == "left" else slice(None, max_length)
                 batch_ids[i] = ids[keep]
-                batch_spans[i] = batch_spans[i][keep]
     for ids in batch_ids:
         tokenizer._eventual_warn_about_too_long_sequence(ids, max_length, verbose)
 
     encoded_inputs = {"input_ids": batch_ids}
     if "token_type_ids" in tokenizer.model_input_names:
         encoded_inputs["token_type_ids"] = [[0] * len(ids) for ids in batch_ids]
-    batch_encoding = tokenizer.pad(
+    return tokenizer.pad(
         encoded_inputs,
         padding=padding_strategy.value,
         max_length=max_length,
@@ -996,23 +954,3 @@ def encode_sanitized_chats(
         return_tensors=return_tensors,
         verbose=verbose,
     )
-
-    assistant_token_spans = None
-    if with_token_maps:
-        assistant_token_spans = []
-        for i, (_, _, shifts, _) in enumerate(resolved):
-            padded_length = len(batch_encoding["input_ids"][i])
-            left_pad = padded_length - len(batch_spans[i]) if (padding_side or tokenizer.padding_side) == "left" else 0
-            token_map = SanitizedTokenMap(batch_spans[i], left_pad)
-            token_spans = []
-            for start_char, end_char in generation_indices[i]:
-                # The generation indices refer to the placeholder-bearing rendered string; translate them to
-                # the final string with the placeholders resolved, then look the tokens up in the map
-                # recorded by the sanitized encoding
-                start_token = token_map.start_token(shift_sanitized_index(start_char, shifts))
-                end_token = token_map.end_token(shift_sanitized_index(end_char, shifts) - 1)
-                if start_token is None or end_token is None:
-                    continue
-                token_spans.append((start_token, min(end_token, padded_length - 1)))
-            assistant_token_spans.append(token_spans)
-    return batch_encoding, assistant_token_spans

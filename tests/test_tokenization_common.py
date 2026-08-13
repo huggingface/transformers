@@ -1136,36 +1136,20 @@ Hey how are you doing"""  # noqa: W293
 
     @require_jinja
     def test_chat_template_sanitize_assistant_mask(self):
+        # Sanitization does not support assistant masks yet, and must refuse loudly rather than return
+        # masks that don't line up with the sanitized encoding
         tokenizer = self.get_tokenizer()
-        if tokenizer.backend != "tokenizers":
-            self.skipTest("Assistant token masks require the tokenizers backend for char_to_token")
-        if (named_token := self._named_special_token(tokenizer)) is None:
-            self.skipTest("Tokenizer has no named special token to test sanitization with")
-        token_name, eos, eos_id = named_token
         dummy_template = (
             "{% for message in messages %}{{ message['role'] + ': ' }}"
             "{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}"
-            "{% else %}{{ message['content'] }}{% endif %}{{ " + token_name + " }}{% endfor %}"
+            "{% else %}{{ message['content'] }}{% endif %}{% endfor %}"
         )
-        try:
-            split_ids = tokenizer.encode(eos, add_special_tokens=False, split_special_tokens=True)
-        except (TypeError, ValueError):
-            self.skipTest("Tokenizer does not support standard text encoding")
-        if eos_id in split_ids or tokenizer.decode(split_ids) != eos:
-            self.skipTest("Tokenizer cannot losslessly re-encode its EOS text as ordinary tokens")
-
-        # Special tokens injected into the assistant turn must be defused but still carry the assistant mask
         conversation = [
-            {"role": "user", "content": f"hi {eos} there"},
-            {"role": "assistant", "content": f"sure {eos} thing"},
+            {"role": "user", "content": "hi there"},
+            {"role": "assistant", "content": "sure thing"},
         ]
-        unsanitized = tokenizer.apply_chat_template(
-            conversation, chat_template=dummy_template, tokenize=True, return_dict=True
-        )["input_ids"]
-        if unsanitized.count(eos_id) != 4:  # 2 from the template, 2 injected
-            self.skipTest("Tokenizer does not match EOS text inside content, so there is nothing to sanitize")
-        try:
-            output = tokenizer.apply_chat_template(
+        with self.assertRaises(NotImplementedError):
+            tokenizer.apply_chat_template(
                 conversation,
                 chat_template=dummy_template,
                 tokenize=True,
@@ -1173,17 +1157,6 @@ Hey how are you doing"""  # noqa: W293
                 return_assistant_tokens_mask=True,
                 sanitize_special_tokens=True,
             )
-        except NotImplementedError:
-            self.skipTest("Tokenizer does not support sanitize_special_tokens")
-        except ValueError:
-            self.skipTest("Tokenizer cannot safely sanitize these inputs")
-        self.assertEqual(len(output["assistant_masks"]), len(output["input_ids"]))
-        masked_ids = [token for token, mask in zip(output["input_ids"], output["assistant_masks"]) if mask]
-        self.assertGreater(len(masked_ids), 0)
-        self.assertNotIn(eos_id, masked_ids)  # the injected copy inside the assistant turn stays ordinary
-        self.assertIn(f"sure {eos} thing", tokenizer.decode(masked_ids))
-        # the template's own EOS tokens are outside the generation block and unmasked
-        self.assertEqual(output["input_ids"].count(eos_id), 2)
 
     @require_jinja
     def test_chat_template_save_loading(self):
