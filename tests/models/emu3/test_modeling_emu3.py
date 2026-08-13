@@ -394,10 +394,9 @@ class Emu3IntegrationTest(unittest.TestCase):
                     "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
                     "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a",
                 ],
-                # We switch to A10 on 2025/06/29, and A10 gives strange values
                 ("cuda", 8): [
-                    'USER: 64*64Describe what do you see here? ASSISTANT: 1.Filed with 1.Computing theComputing.Computing.',
-                    'USER: 64*64What can you say about the image? ASSISTANT: 1.Filed with theComputing theComputing.Computing.',
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is mostly obscured by shadows, but its distinctive black fur and the outline of its muscular build are visible.",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground shows a grassy area with some patches of bare soil. The middle ground features a large, gently sloping hill or small mountain, which appears to",
                 ],
             }
         )  # fmt: skip
