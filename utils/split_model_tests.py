@@ -82,6 +82,14 @@ if __name__ == "__main__":
     d1 = [x for x in d1 if x not in skipped]
     d = d2 + d1
 
+    # TEMP (MI355 manual important-models run): restrict the discovered folders to the
+    # important models only. This branch (run_mi355_important_models_ci) is used to trigger
+    # a one-off MI355 CI over IMPORTANT_MODELS; revert before merging anywhere.
+    from important_files import IMPORTANT_MODELS
+
+    _important = {f"models/{m}" for m in IMPORTANT_MODELS}
+    d = sorted(x for x in d if x in _important)
+
     if args.subdirs != "":
         model_tests = ast.literal_eval(args.subdirs)
         # We handle both cases with and without prefix because `push-important-models.yml` returns the list without
