@@ -114,6 +114,16 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_load_with_mismatched_shapes(self):
         pass
 
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma3TextConfig(sliding_window=512, use_bidirectional_attention=True)
+        self.assertEqual(config.sliding_window, 257)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma3TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
+
     def test_generation_beyond_sliding_window_tiny_model(self):
         """Test generation with a tiny randomly initialised model whose input length is larger than the `sliding_window`.
         The model is configured with both `full_attention` and `sliding_attention` layers to make sure the hybrid cache
