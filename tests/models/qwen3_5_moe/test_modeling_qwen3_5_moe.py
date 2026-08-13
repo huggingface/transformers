@@ -192,6 +192,21 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
+    def test_gated_delta_net_a_log_finite_under_bfloat16_init(self):
+        """
+        Regression test for #47831: `A_log` must be sampled in float32 regardless of the model's
+        dtype, so that a bfloat16 init can't round a head's decay to 0 (log(0) = -inf), which would
+        permanently freeze that head (zero gradient) for the lifetime of training.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3_5MoeTextModel._from_config(config, dtype=torch.bfloat16)
+
+        a_log_params = {name: param for name, param in model.named_parameters() if name.endswith("A_log")}
+        self.assertTrue(len(a_log_params) > 0)
+        for name, param in a_log_params.items():
+            self.assertEqual(param.dtype, torch.float32, f"{name} should be sampled/stored in float32")
+            self.assertTrue(torch.isfinite(param).all(), f"{name} contains non-finite values")
+
 
 class Qwen3_5MoeVisionText2TextModelTester:
     def __init__(
