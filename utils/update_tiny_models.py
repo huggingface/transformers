@@ -155,14 +155,15 @@ if __name__ == "__main__":
     parser.add_argument("--organization", required=True, type=str, help="The Hugging Face organization to upload tiny models to.")
     parser.add_argument("--ignore-existing", action="store_true", help="Create and upload all models, ignoring the existing tiny model summary.")
     parser.add_argument("--summary-repo-id", default=None, type=str, help="Hub repo ID to fetch the base tiny_model_summary.json from and upload the merged result back to.")
+    parser.add_argument("--model-types", default=None, type=str, help="Comma-separated list of model types to create. If not set, all model types are created.")
     args = parser.parse_args()
 
     # This has to be `spawn` to avoid hanging forever!
     multiprocessing.set_start_method("spawn")
 
     output_path = "tiny_models"
-    all = True
-    model_types = None
+    model_types = [m.strip() for m in args.model_types.split(",")] if args.model_types else None
+    all = model_types is None
     models_to_skip = set() if (args.ignore_existing or args.summary_repo_id is None) else get_tiny_model_names_from_repo(args.summary_repo_id)
     no_check = True
     upload = True
