@@ -232,40 +232,22 @@ def fast_all(tensor: torch.BoolTensor) -> torch.BoolTensor:
     return tensor.sum() == tensor.numel()
 
 
-def _is_padding_free(padding_mask: torch.Tensor, past_key_values: Cache | None) -> bool:
-    """Whether `padding_mask` masks nothing -- resolved once and carried, not re-read every step.
+def _is_padded(padding_mask: torch.Tensor, past_key_values: Cache | None) -> bool:
+    """Whether `padding_mask` actually masks anything"""
+    if is_tracing(padding_mask):
+        return True
 
-    `fast_all` reduces the mask on the accelerator and its result is then read on the host to branch on. A
-    host read inside the decode loop stops the CPU from running ahead of the accelerator, so the step costs
-    `cpu + gpu` instead of `max(cpu, gpu)`: removing this cache measures 66.8 -> 50.2 tok/s of decode on
-    Qwen3.5-4B at an 800-token prompt (MPS), i.e. the read was a quarter of the step.
-
-    This is the right layer for the decision, rather than dropping the mask in `generate`: by the time
-    `_preprocess_mask_arguments` runs, the mask's *length* has already been used to derive `kv_length`,
-    `q_length` and the offsets, so only its contents are discarded here. In `generate` the length is still
-    load-bearing -- restarting from a cache with new tokens only, and assisted generation's crop/extend, both
-    read it to know how long the sequence is -- so a mask of ones is not removable there even though it masks
-    nothing.
-
-    Padding only arrives with the prompt, so the answer is cached on the cache object and reused while the
-    mask grows one column per step. Anything else -- a different batch, a mask that jumped in length, no
-    cache at all -- asks the device again, so a cache reused for a differently padded batch cannot inherit a
-    stale answer.
-    """
-    if is_tracing(padding_mask):  # contents not inspectable; `_ignore_causal_mask_sdpa` also declines here
-        return False
-
-    key = tuple(padding_mask.shape[:-1])
+    batch_shape = tuple(padding_mask.shape[:-1])
     kv_length = padding_mask.shape[-1]
-    seen = getattr(past_key_values, "_padding_free", None)
-    if seen is not None and seen[1] + 1 == kv_length and seen[2] == key:
-        past_key_values._padding_free = (seen[0], kv_length, key)
+    seen = getattr(past_key_values, "_is_padded", None)
+    if seen is not None and seen[1] + 1 == kv_length and seen[2] == batch_shape:
+        past_key_values._is_padded = (seen[0], kv_length, batch_shape)
         return seen[0]
 
-    padding_free = bool(fast_all(padding_mask))
+    is_padded = not bool(fast_all(padding_mask))
     if past_key_values is not None:
-        past_key_values._padding_free = (padding_free, kv_length, key)
-    return padding_free
+        past_key_values._is_padded = (is_padded, kv_length, batch_shape)
+    return is_padded
 
 
 def _ignore_causal_mask_sdpa(
@@ -894,9 +876,16 @@ def _preprocess_mask_arguments(
             position_ids = position_ids.expand(batch_size, -1)
         packed_sequence_mask = find_packed_sequence_indices(position_ids)
 
-    # After the sizes above are derived from it: a mask that masks nothing is equivalent to no mask at all
-    # downstream, so dropping it here takes the cheaper `padding_mask is None` branches. See `_is_padding_free`.
-    if attention_mask is not None and _is_padding_free(attention_mask, past_key_values):
+    # This is in addition to `_ignore_causal_mask_sdpa`, and restricted to the same mask path. That function
+    # already concludes that a mask with no padding can be skipped, but it re-derives that on every forward:
+    # it reduces the mask on the accelerator and reads the result back on the host, which stops the CPU from
+    # running ahead of it. Here the same conclusion is reached once and carried (see `_is_padded`), so it no
+    # longer costs a synchronization per decode step.
+    if (
+        attention_mask is not None
+        and ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation] is sdpa_mask
+        and not _is_padded(attention_mask, past_key_values)
+    ):
         attention_mask = None
 
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
