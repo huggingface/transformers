@@ -5116,15 +5116,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     hasattr(outputs, "pooler_output"),
                     "get_text_features() must return a BaseModelOutput with pooler_output",
                 )
-                self.assertTrue(
-                    hasattr(outputs, "hidden_states"),
-                    "get_text_features() must return a BaseModelOutput with hidden_states",
-                )
-                if self.has_attentions:
-                    self.assertTrue(
-                        hasattr(outputs, "attentions"),
-                        "get_text_features() must return a BaseModelOutput with attentions",
-                    )
 
                 # Test against (batch_size, seq_len, hidden_size)
                 last_hidden_state = outputs.last_hidden_state
@@ -5147,6 +5138,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_text_features() must return a BaseModelOutput with hidden_states",
+            )
+
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
             hidden_states = outputs.hidden_states
             expected_num_hidden_states = self._text_features_get_expected_num_hidden_states()
@@ -5180,6 +5176,11 @@ class ModelTesterMixin(ExportTesterMixin):
 
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(
+                hasattr(outputs, "attentions"),
+                "get_text_features() must return a BaseModelOutput with attentions",
+            )
+
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
             expected_num_attentions = self._text_features_get_expected_num_attentions()
