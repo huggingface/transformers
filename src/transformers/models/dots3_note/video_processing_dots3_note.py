@@ -29,7 +29,8 @@ from urllib.request import urlopen
 import numpy as np
 from PIL import Image
 
-from ...utils import requires_backends
+from ...tokenization_utils_base import LARGE_INTEGER
+from ...utils import logging, requires_backends
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 
@@ -45,6 +46,9 @@ _INTERLEAVE_MIN_SECONDS = 1.0
 _AUDIO_SAMPLE_RATE = 16_000
 _AUDIO_SAMPLES_PER_TOKEN = 1_280
 _AUDIO_CHUNK_SECONDS = 30
+_DEFAULT_SEQUENCE_LENGTH = 524_288
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,31 @@ def _token_length(tokenizer, text: str) -> int:
     if not text:
         return 0
     return len(tokenizer.encode(text, add_special_tokens=False))
+
+
+def _resolve_video_budget(
+    tokenizer, sequence_length: int | None, output_reserve: int | None, max_new_tokens: int
+) -> tuple[int, int]:
+    tokenizer_max_length = getattr(tokenizer, "model_max_length", None)
+    if tokenizer_max_length is None or tokenizer_max_length > LARGE_INTEGER:
+        tokenizer_max_length = _DEFAULT_SEQUENCE_LENGTH
+    if sequence_length is None:
+        sequence_length = tokenizer_max_length
+    elif sequence_length > tokenizer_max_length:
+        raise ValueError(
+            f"sequence_length must not exceed tokenizer.model_max_length ({tokenizer_max_length}), "
+            f"got {sequence_length}"
+        )
+    if sequence_length <= 0:
+        raise ValueError(f"sequence_length must be positive, got {sequence_length}")
+    if output_reserve is not None and output_reserve < 0:
+        raise ValueError(f"output_reserve must be non-negative, got {output_reserve}")
+    if max_new_tokens < 0:
+        raise ValueError(f"max_new_tokens must be non-negative, got {max_new_tokens}")
+    effective_reserve = max(sequence_length // 4 if output_reserve is None else output_reserve, max_new_tokens)
+    if effective_reserve >= sequence_length:
+        raise ValueError("output_reserve/max_new_tokens must leave room for video input")
+    return sequence_length, effective_reserve
 
 
 def _compute_target_size(orig_height: int, orig_width: int, min_pixels: int, max_pixels: int) -> tuple[int, int]:
@@ -165,10 +194,12 @@ def _decode_audio(video_bytes: bytes, sample_rate: int) -> tuple[np.ndarray | No
 
     try:
         samples = AudioDecoder(video_bytes, sample_rate=sample_rate, num_channels=1).get_all_samples()
-    except Exception:
+    except Exception as error:
+        logger.warning("The video audio track could not be decoded and will be omitted: %s", error)
         return None, 0.0
     waveform = samples.data
     if waveform is None or waveform.numel() == 0:
+        logger.warning("The video has no decodable audio samples and will be processed without audio")
         return None, 0.0
     if waveform.ndim == 2:
         waveform = waveform.mean(dim=0) if waveform.shape[0] > 1 else waveform[0]
@@ -361,7 +392,7 @@ def preprocess_dots3_note_video(
     *,
     tokenizer,
     question: str = "",
-    sequence_length: int = 131_072,
+    sequence_length: int | None = None,
     output_reserve: int | None = None,
     audio_cap: float = 1.0,
     audio_sample_rate: int = _AUDIO_SAMPLE_RATE,
@@ -370,14 +401,9 @@ def preprocess_dots3_note_video(
     jpeg_quality: int = 85,
 ) -> list[Dots3NoteVideoPart]:
     """Expand one video into SGLang-compatible timestamped image/audio parts."""
-    if sequence_length <= 0:
-        raise ValueError(f"sequence_length must be positive, got {sequence_length}")
-    if max_new_tokens < 0:
-        raise ValueError(f"max_new_tokens must be non-negative, got {max_new_tokens}")
-    configured_reserve = sequence_length // 4 if output_reserve is None else output_reserve
-    effective_reserve = max(configured_reserve, max_new_tokens)
-    if effective_reserve >= sequence_length:
-        raise ValueError("output_reserve/max_new_tokens must leave room for video input")
+    sequence_length, effective_reserve = _resolve_video_budget(
+        tokenizer, sequence_length, output_reserve, max_new_tokens
+    )
     if audio_cap < 0:
         raise ValueError(f"audio_cap must be non-negative, got {audio_cap}")
     if audio_sample_rate <= 0:
@@ -386,6 +412,11 @@ def preprocess_dots3_note_video(
         raise ValueError(f"Unsupported video k_mode: {k_mode}")
 
     input_length = sequence_length - effective_reserve
+    minimum_input_length = _BUDGET_OVERHEAD + _MIN_FRAMES * (_PF_FLOOR + _FRAME_OVERHEAD)
+    if input_length < minimum_input_length:
+        raise ValueError(
+            f"output_reserve/max_new_tokens must leave at least {minimum_input_length} tokens for video input"
+        )
     video_bytes = _read_video_bytes(video)
     video_duration_hint = (
         float(_open_video(video_bytes).metadata.duration_seconds or 0) if video_bytes is not None else 0.0
@@ -400,10 +431,12 @@ def preprocess_dots3_note_video(
     precheck_groups = min(precheck_frame_bound, max(1, int(audio_duration // _INTERLEAVE_MIN_SECONDS)))
     precheck_audio_tokens = audio_token_count + 3 * precheck_groups if pcm is not None else 0
     minimum_visual_tokens = _MIN_FRAMES * (_PF_FLOOR + _FRAME_OVERHEAD)
-    if (
-        audio_token_count > audio_cap * input_length
-        or precheck_audio_tokens + minimum_visual_tokens + _BUDGET_OVERHEAD > input_length
-    ):
+    if audio_token_count > audio_cap * input_length:
+        logger.warning("The video audio track exceeds audio_cap and will be omitted")
+        pcm = None
+        audio_duration = 0.0
+    elif precheck_audio_tokens + minimum_visual_tokens + _BUDGET_OVERHEAD > input_length:
+        logger.warning("The video audio track does not fit alongside the minimum visual input and will be omitted")
         pcm = None
         audio_duration = 0.0
 

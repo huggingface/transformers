@@ -15,9 +15,13 @@
 
 from pathlib import Path
 
-from ...image_utils import SizeDict
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...audio_utils import AudioInput
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, SizeDict
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...video_utils import VideoInput
 
 
 _RELEASE_VISION_SIZE = SizeDict(shortest_edge=56 * 56, longest_edge=(36 * 28) ** 2)
@@ -27,8 +31,9 @@ _QWEN2_VL_VIDEO_DEFAULT_SIZE = {"shortest_edge": 128 * 28 * 28, "longest_edge": 
 
 class Dots3NoteVideosKwargs(VideosKwargs, total=False):
     """
-    seq (`int`, *optional*, defaults to 131072):
-        Maximum sequence length used to budget video, audio, and output tokens.
+    seq (`int`, *optional*):
+        Maximum sequence length used to budget video, audio, and output tokens. Defaults to the tokenizer's
+        `model_max_length`, or 524288 when the tokenizer does not define a finite maximum length.
     output_reserve (`int`, *optional*):
         Number of sequence tokens reserved for generation. Defaults to one quarter of `seq`.
     audio_cap (`float`, *optional*, defaults to 1.0):
@@ -45,7 +50,7 @@ class Dots3NoteVideosKwargs(VideosKwargs, total=False):
         JPEG quality used for the training-consistent frame round trip.
     """
 
-    seq: int
+    seq: int | None
     output_reserve: int | None
     audio_cap: float
     audio_sr: int
@@ -107,6 +112,42 @@ class Dots3NoteProcessor(ProcessorMixin):
             chat_template=chat_template,
         )
 
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[Dots3NoteProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        videos (`VideoInput`, *optional*):
+            One native video input to preprocess, including its audio track when available.
+        """
+        inputs = super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if videos is None:
+            return inputs
+
+        from .video_processing_dots3_note import _resolve_video_budget
+
+        video_kwargs = kwargs.get("videos_kwargs", {})
+        sequence_length, output_reserve = _resolve_video_budget(
+            self.tokenizer,
+            video_kwargs.get("seq", kwargs.get("seq")),
+            video_kwargs.get("output_reserve", kwargs.get("output_reserve")),
+            video_kwargs.get("max_new_tokens", kwargs.get("max_new_tokens", 0)),
+        )
+        input_length = (
+            inputs["input_ids"].shape[-1] if hasattr(inputs["input_ids"], "shape") else len(inputs["input_ids"][0])
+        )
+        if input_length + output_reserve > sequence_length:
+            raise ValueError(
+                f"Native video input uses {input_length} tokens and reserves {output_reserve} output tokens, "
+                f"exceeding the sequence length of {sequence_length}. Reduce the prompt or video size."
+            )
+        return inputs
+
     @staticmethod
     def _single_token_id(tokenizer, token: str) -> int:
         token_ids = tokenizer.encode(token, add_special_tokens=False)
@@ -159,7 +200,7 @@ class Dots3NoteProcessor(ProcessorMixin):
             )
         video_kwargs = {
             "question": kwargs.pop("video_question", ""),
-            "sequence_length": kwargs.pop("seq", 131_072),
+            "sequence_length": kwargs.pop("seq", None),
             "output_reserve": kwargs.pop("output_reserve", None),
             "audio_cap": kwargs.pop("audio_cap", 1.0),
             "audio_sample_rate": audio_sample_rate,

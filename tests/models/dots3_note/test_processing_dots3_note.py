@@ -13,14 +13,21 @@
 # limitations under the License.
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
 
 from transformers import (
+    AutoFeatureExtractor,
+    AutoImageProcessor,
+    AutoProcessor,
+    AutoVideoProcessor,
     Dots3NoteFeatureExtractor,
     Dots3NoteImageProcessor,
     Dots3NoteProcessor,
@@ -29,7 +36,8 @@ from transformers import (
     Qwen2VLVideoProcessor,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, require_torchvision
+from transformers.models.dots3_note import video_processing_dots3_note
+from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, slow
 
 
 if is_torch_available():
@@ -195,6 +203,98 @@ class Dots3NoteProcessorTest(unittest.TestCase):
         self.assertNotIn("pixel_values_videos", output)
         self.assertTrue(all(grid[0] == 1 for grid in output.image_grid_thw))
 
+    def test_native_video_sequence_length_defaults_and_override(self):
+        processor = get_tiny_processor()
+        for model_max_length, expected in ((524_288, 524_288), (262_144, 262_144), (int(1e30), 524_288)):
+            with self.subTest(model_max_length=model_max_length):
+                processor.tokenizer.model_max_length = model_max_length
+                self.assertEqual(
+                    video_processing_dots3_note._resolve_video_budget(processor.tokenizer, None, None, 0)[0], expected
+                )
+        self.assertEqual(
+            video_processing_dots3_note._resolve_video_budget(processor.tokenizer, 131_072, None, 0)[0], 131_072
+        )
+
+    def test_native_video_sequence_budget(self):
+        processor = get_tiny_processor()
+        processor.tokenizer.model_max_length = 524_288
+        video = [torch.zeros(3, 4, 4), torch.ones(3, 4, 4)]
+        sequence_length = 4096
+        max_new_tokens = 1024
+        video_inputs = {
+            "text": f"{VIDEO} describe",
+            "videos": [video],
+            "seq": sequence_length,
+            "audio_sr": 32,
+            "add_special_tokens": False,
+        }
+        output = processor(**video_inputs, max_new_tokens=max_new_tokens, return_tensors="pt")
+
+        self.assertLessEqual(output.input_ids.shape[-1] + max_new_tokens, sequence_length)
+        processor.tokenizer.model_max_length = sequence_length
+        with self.assertRaisesRegex(ValueError, "must not exceed tokenizer.model_max_length"):
+            processor(**(video_inputs | {"seq": sequence_length + 1}))
+        with self.assertRaisesRegex(ValueError, "exceeding the sequence length"):
+            processor(**(video_inputs | {"text": f"{VIDEO} " + "plain " * sequence_length}))
+        with self.assertRaisesRegex(ValueError, "must leave room for video input"):
+            processor(**(video_inputs | {"seq": None}), max_new_tokens=524_288)
+        with self.assertRaisesRegex(ValueError, "output_reserve must be non-negative"):
+            processor(**video_inputs, output_reserve=-1)
+
+    def test_native_video_warns_when_audio_exceeds_budget(self):
+        processor = get_tiny_processor()
+        frames = [(0.0, Image.new("RGB", (4, 4)))] * 4
+        with (
+            patch.object(
+                video_processing_dots3_note,
+                "_open_video",
+                return_value=SimpleNamespace(metadata=SimpleNamespace(duration_seconds=10)),
+            ),
+            patch.object(
+                video_processing_dots3_note,
+                "_decode_audio",
+                return_value=(np.zeros(320, dtype=np.int16), 10.0),
+            ),
+            patch.object(video_processing_dots3_note, "_decode_frames", return_value=(frames, 10.0)),
+            self.assertLogs(video_processing_dots3_note.logger, level="WARNING") as logs,
+        ):
+            processor(
+                text=f"{VIDEO} describe",
+                videos=[b"video"],
+                seq=4096,
+                audio_cap=0.0001,
+                audio_sr=32,
+                add_special_tokens=False,
+            )
+        self.assertIn("audio_cap", " ".join(logs.output))
+
+    @slow
+    @require_torchcodec
+    def test_native_video_with_audio_torchcodec(self):
+        processor = get_tiny_processor()
+        sequence_length = 32_768
+        max_new_tokens = 128
+        video = hf_hub_download(
+            repo_id="merve/vlm_test_images",
+            filename="concert.mp4",
+            repo_type="dataset",
+        )
+        output = processor(
+            text=f"{VIDEO} describe",
+            videos=[video],
+            seq=sequence_length,
+            max_new_tokens=max_new_tokens,
+            audio_sr=32,
+            add_special_tokens=False,
+            return_tensors="pt",
+        )
+
+        self.assertIn("pixel_values", output)
+        self.assertIn("input_features", output)
+        self.assertGreater(output.input_ids.eq(processor.image_token_id).sum().item(), 0)
+        self.assertGreater(output.input_ids.eq(processor.audio_token_id).sum().item(), 0)
+        self.assertLessEqual(output.input_ids.shape[-1] + max_new_tokens, sequence_length)
+
     def test_rejects_video_transform_overrides(self):
         processor = get_tiny_processor()
         with self.assertRaisesRegex(ValueError, "fixed SGLang-aligned transform"):
@@ -224,11 +324,19 @@ class Dots3NoteProcessorTest(unittest.TestCase):
         processor = get_tiny_processor()
         with tempfile.TemporaryDirectory() as directory:
             processor.save_pretrained(directory)
-            reloaded = Dots3NoteProcessor.from_pretrained(directory)
+            reloaded = AutoProcessor.from_pretrained(directory)
+            image_processor = AutoImageProcessor.from_pretrained(directory)
+            video_processor = AutoVideoProcessor.from_pretrained(directory)
+            feature_extractor = AutoFeatureExtractor.from_pretrained(directory)
 
         self.assertIsInstance(reloaded.image_processor, Dots3NoteImageProcessor)
         self.assertIsInstance(reloaded.video_processor, Dots3NoteVideoProcessor)
-        self.assertEqual(reloaded.image_processor.temporal_patch_size, 1)
+        self.assertIsInstance(image_processor, Dots3NoteImageProcessor)
+        self.assertIsInstance(video_processor, Dots3NoteVideoProcessor)
+        self.assertIsInstance(feature_extractor, Dots3NoteFeatureExtractor)
+        for vision_processor in (image_processor, video_processor):
+            self.assertEqual(dict(vision_processor.size), {"shortest_edge": 16, "longest_edge": 64})
+            self.assertEqual(vision_processor.temporal_patch_size, 1)
 
 
 if __name__ == "__main__":

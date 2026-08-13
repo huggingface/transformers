@@ -359,7 +359,7 @@ class Dots3NoteConfig(PreTrainedConfig):
     num_attention_heads: int = 128
     num_key_value_heads: int | None = 128
     hidden_act: str = "silu"
-    max_position_embeddings: int = 393216
+    max_position_embeddings: int = 524288
     seq_length: int = 393216
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5

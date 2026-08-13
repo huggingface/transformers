@@ -49,6 +49,9 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
 class Dots3NoteImageProcessor(Qwen2VLImageProcessorPil):
     """PIL preprocessing numerically identical to the published Dots 3 Note Preview path."""
 
+    size = {"shortest_edge": 56 * 56, "longest_edge": (36 * 28) ** 2}
+    temporal_patch_size = 1
+
     def convert_to_rgb(self, image):
         if not isinstance(image, Image.Image):
             return image
