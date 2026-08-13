@@ -23,6 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_large_accelerator,
@@ -343,6 +344,12 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
@@ -430,7 +437,6 @@ class Emu3IntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
                     (None, None): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
-
                     ("cuda", 8): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black cow. One image captures a close-up of the cow's face, while the other image shows the cow in its natural environment, standing on a"],
                 }
             )  # fmt: skip
