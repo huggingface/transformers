@@ -9,7 +9,9 @@ on:
     - cron: "0 2 * * *"
 
 env:
+  # Write token used explicitly by the scripts to upload tiny models and the merged summary to the Hub.
   TOKEN: ${{ secrets.TRANSFORMERS_HUB_BOT_HF_TOKEN }}
+  # Read token picked up automatically by huggingface_hub to avoid unauthenticated rate limits when downloading model checkpoints.
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 permissions:
@@ -61,3 +63,17 @@ jobs:
         with:
           name: tiny_local_model_creation_reports
           path: tiny_local_models/reports
+
+      - name: Create + Upload tiny models for new model architecture(s)
+        run: |
+          python utils/update_tiny_models.py --organization hf-tiny-v2 --num_workers 4 --summary-repo-id hf-tiny-v2/tiny-model-summary
+
+      - name: Failure report
+        run: cat tiny_models/reports/simple_failed_report.txt
+
+      - name: New tiny model creation reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiny_model_creation_reports
+          path: tiny_models/reports

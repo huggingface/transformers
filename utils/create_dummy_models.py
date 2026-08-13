@@ -30,7 +30,8 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_test_module, get_tester_classes_for_model
-from huggingface_hub import create_repo, hf_api, upload_folder
+from huggingface_hub import HfApi, create_repo, hf_api, hf_hub_download, upload_folder
+from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError
 
 from transformers import (
     CONFIG_MAPPING,
@@ -1830,31 +1831,54 @@ def build_simple_report(results):
     return text, failed_text
 
 
-def update_tiny_model_summary_file(report_path):
+def update_tiny_model_summary_file(report_path, summary_repo_id=None, upload=False, organization=None, token=None):
     with open(os.path.join(report_path, "tiny_model_summary.json")) as fp:
         new_data = json.load(fp)
-    with open("tests/utils/tiny_model_summary.json") as fp:
-        data = json.load(fp)
+
+    if summary_repo_id is None:
+        return
+
+    # Fetch the base summary from the Hub repo; treat missing file as empty.
+    data = {}
+    try:
+        path = hf_hub_download(repo_id=summary_repo_id, filename="tiny_model_summary.json", token=token)
+        with open(path) as fp:
+            data = json.load(fp)
+    except (EntryNotFoundError, RepositoryNotFoundError):
+        pass
+
     for key, value in new_data.items():
         if key not in data:
             data[key] = value
         else:
             for attr in ["tokenizer_classes", "processor_classes", "model_classes"]:
-                # we might get duplication here. We will remove them below when creating `updated_data`.
+                # we might get duplication here. We will remove them below when creating `merged_data`.
                 data[key][attr].extend(value[attr])
             new_sha = value.get("sha", None)
             if new_sha is not None:
                 data[key]["sha"] = new_sha
 
-    updated_data = {}
+    merged_data = {}
     for key in sorted(data.keys()):
-        updated_data[key] = {}
+        merged_data[key] = {}
         for attr, value in data[key].items():
             # deduplication and sort
-            updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
+            merged_data[key][attr] = sorted(set(value)) if attr != "sha" else value
 
-    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
-        json.dump(updated_data, fp, indent=4, ensure_ascii=False)
+    merged_path = os.path.join(report_path, "merged_tiny_model_summary.json")
+    with open(merged_path, "w") as fp:
+        json.dump(merged_data, fp, indent=4, ensure_ascii=False)
+
+    models_uploaded_to_hub = upload and organization is not None
+    if models_uploaded_to_hub:
+        api = HfApi()
+        api.create_repo(repo_id=summary_repo_id, token=token, exist_ok=True)
+        api.upload_file(
+            path_or_fileobj=merged_path,
+            path_in_repo="tiny_model_summary.json",
+            repo_id=summary_repo_id,
+            token=token,
+        )
 
 
 def create_tiny_models(
@@ -1867,6 +1891,7 @@ def create_tiny_models(
     organization,
     token,
     num_workers=1,
+    summary_repo_id=None,
 ):
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
@@ -1972,7 +1997,13 @@ def create_tiny_models(
     with open(os.path.join(report_path, "simple_failed_report.txt"), "w") as fp:
         fp.write(failed_report)
 
-    update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))
+    update_tiny_model_summary_file(
+        report_path=os.path.join(output_path, "reports"),
+        summary_repo_id=summary_repo_id,
+        upload=upload,
+        organization=organization,
+        token=token,
+    )
 
 
 if __name__ == "__main__":
@@ -2015,6 +2046,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
     parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
+    parser.add_argument(
+        "--summary-repo-id",
+        default=None,
+        type=str,
+        help="Hub repo ID to fetch the base tiny_model_summary.json from and upload the merged result back to.",
+    )
 
     args = parser.parse_args()
 
@@ -2031,4 +2068,5 @@ if __name__ == "__main__":
         args.organization,
         args.token,
         args.num_workers,
+        summary_repo_id=args.summary_repo_id,
     )

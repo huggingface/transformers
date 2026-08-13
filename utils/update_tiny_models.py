@@ -14,9 +14,9 @@
 """A script running `create_dummy_models.py` with a pre-defined set of arguments.
 
 This file is intended to be used in a CI workflow file without the need of specifying arguments. It creates and uploads
-tiny models for all model classes (if their tiny versions are not on the Hub yet), as well as produces an updated
-version of `tests/utils/tiny_model_summary.json`. That updated file should be merged into the `main` branch of
-`transformers` so the pipeline testing will use the latest created/updated tiny models.
+tiny models for all new model classes (i.e. those not yet present in the summary), and updates the tiny model summary
+on the Hub (specified via --summary-repo-id). The summary repo acts as the source of truth: it is fetched at the start
+to determine which models to skip, and the merged result is pushed back at the end.
 """
 
 import argparse
@@ -26,7 +26,8 @@ import os
 import time
 
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError
 
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer, logging
@@ -56,8 +57,12 @@ def get_all_model_names():
     return sorted(model_names)
 
 
-def get_tiny_model_names_from_repo():
-    with open("tests/utils/tiny_model_summary.json") as fp:
+def get_tiny_model_names_from_repo(summary_repo_id):
+    try:
+        path = hf_hub_download(repo_id=summary_repo_id, filename="tiny_model_summary.json")
+    except (EntryNotFoundError, RepositoryNotFoundError):
+        return []
+    with open(path) as fp:
         tiny_model_info = json.load(fp)
     tiny_models_names = set()
     for model_base_name in tiny_model_info:
@@ -147,6 +152,9 @@ def get_tiny_model_summary_from_hub(output_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_workers", default=1, type=int, help="The number of workers to run.")
+    parser.add_argument("--organization", required=True, type=str, help="The Hugging Face organization to upload tiny models to.")
+    parser.add_argument("--ignore-existing", action="store_true", help="Create and upload all models, ignoring the existing tiny model summary.")
+    parser.add_argument("--summary-repo-id", default=None, type=str, help="Hub repo ID to fetch the base tiny_model_summary.json from and upload the merged result back to.")
     args = parser.parse_args()
 
     # This has to be `spawn` to avoid hanging forever!
@@ -155,10 +163,12 @@ if __name__ == "__main__":
     output_path = "tiny_models"
     all = True
     model_types = None
-    models_to_skip = get_tiny_model_names_from_repo()
+    models_to_skip = set() if (args.ignore_existing or args.summary_repo_id is None) else get_tiny_model_names_from_repo(args.summary_repo_id)
     no_check = True
     upload = True
-    organization = "hf-internal-testing"
+    organization = args.organization
+    # When --ignore-existing, don't merge: we're doing a fresh run so the Hub base is irrelevant.
+    summary_repo_id = None if args.ignore_existing else args.summary_repo_id
 
     create_tiny_models(
         output_path,
@@ -170,4 +180,5 @@ if __name__ == "__main__":
         organization,
         token=os.environ.get("TOKEN", None),
         num_workers=args.num_workers,
+        summary_repo_id=summary_repo_id,
     )
