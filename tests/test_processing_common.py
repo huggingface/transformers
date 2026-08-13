@@ -1776,18 +1776,19 @@ class ProcessorTesterMixin:
             self.assertTrue(self.videos_input_name in out_dict_with_video)
             self.assertEqual(out_dict_with_video[self.videos_input_name].shape[expected_dim], exp_output_length)
 
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
+        }
+
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
         if self.video_len_sampled_from_images is not None:
-            messages[0][0]["content"][0] = {
-                "type": "video",
-                "url": [
-                    url_to_local_path(
-                        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                    )
-                ]
-                * 2,
-            }
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
