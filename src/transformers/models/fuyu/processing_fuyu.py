@@ -380,10 +380,12 @@ class FuyuProcessor(ProcessorMixin):
                 "return_text_replacement_offsets", False
             )
 
-            text, text_replacement_offsets = self.get_text_with_replacements(
-                text,
-                images_replacements,
-            )
+            if images_replacements:
+                text, text_replacement_offsets = self.get_text_with_replacements(
+                    text,
+                    images_replacements,
+                )
+
             # IMPORTANT: here comes the custom part with tokenization, do not change it!
             if not images_replacements:
                 text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
@@ -420,7 +422,8 @@ class FuyuProcessor(ProcessorMixin):
                     max_length=None,
                 )
 
-            self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+            if images_replacements:
+                self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
             if return_text_replacement_offsets:
                 text_inputs["text_replacement_offsets"] = text_replacement_offsets

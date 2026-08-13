@@ -862,9 +862,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"replacement"` (`str`): the string it was replaced with
         """
         # Early exit if no special tokens found, nothing to replace or if text is not a list
-        # Text as string is used in old models with extremely custom processing, all other model
-        # cast `list(text)` when preparing inputs
-        if not self.all_special_multimodal_tokens or isinstance(text, str):
+        if not self.all_special_multimodal_tokens:
             return text, []
 
         # Use named regex so we can extract groups later and replace
@@ -2338,12 +2336,6 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
-        # Early exit if no special tokens found, nothing to replace or if text is not a list
-        # Text as string is used in old models with extremely custom processing, all other model
-        # cast `list(text)` when preparing inputs
-        if not self.all_special_multimodal_tokens or isinstance(text, str):
-            return
-
         input_ids = text_inputs["input_ids"]
         if hasattr(input_ids, "tolist"):
             input_ids = input_ids.tolist()
