@@ -3118,9 +3118,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        sanitization = None
+        substitutions = None
         if sanitize_special_tokens:
-            conversations, tools, documents, kwargs, sanitization = sanitize_chat_inputs(
+            conversations, tools, documents, kwargs, substitutions = sanitize_chat_inputs(
                 self,
                 conversations,
                 tools,
@@ -3146,13 +3146,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            if sanitization:
+            if substitutions:
                 # Sanitization replaced special tokens in the chat inputs with placeholders. Restoring and
                 # encoding them so that they can never act as control tokens needs a dedicated path.
                 out = encode_sanitized_chats(
                     self,
                     rendered_chat if is_batched else [rendered_chat],
-                    sanitization,
+                    substitutions,
                     padding=padding,
                     truncation=truncation,
                     max_length=max_length,
