@@ -1445,7 +1445,7 @@ def _log_disk_usage(label: str) -> None:
         print(f"[mem]  {label}: could not read memory usage: {e}", flush=True)
 
 
-def build(config_class, models_to_create, output_dir, keep_model=False):
+def build(config_class, models_to_create, output_dir, keep_model=False, upload=False, organization=None, token=None):
     """Create all models for a certain model type.
 
     Args:
@@ -1457,6 +1457,13 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
         output_dir (`str`):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it.
+        upload (`bool`):
+            Whether to upload the created models to the Hub immediately after creation, while the output directory
+            is still available (before temp dir cleanup).
+        organization (`str`):
+            The Hub organization to upload to. Required when `upload=True`.
+        token (`str`):
+            Authentication token for Hub uploads.
     """
     import time as _time
 
@@ -1474,7 +1481,29 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     result = None
     try:
-        result = _build_inner(config_class, models_to_create, output_dir, keep_model)
+        # When uploading, models must persist within output_dir until upload completes,
+        # so pass keep_model=True to _build_inner to disable the inner temp dir in build_model.
+        # The outer _tmpdir above still handles cleanup after the upload.
+        _inner_keep_model = keep_model or (upload and organization is not None)
+        result = _build_inner(config_class, models_to_create, output_dir, _inner_keep_model)
+
+        # Upload immediately while output_dir is still alive (before finally cleanup).
+        if upload and organization is not None:
+            upload_errors = {}
+            for arch_name in os.listdir(output_dir):
+                if arch_name == "processors":
+                    continue
+                model_dir = os.path.join(output_dir, arch_name)
+                if not os.path.isdir(model_dir):
+                    continue
+                try:
+                    upload_model(model_dir, organization, token)
+                except Exception as e:
+                    error = f"Failed to upload {model_dir}. {e.__class__.__name__}: {e}"
+                    logger.error(error)
+                    upload_errors[arch_name] = error
+            result["upload_errors"] = upload_errors
+
         return result
     finally:
         _elapsed = _time.monotonic() - _start
@@ -1924,17 +1953,20 @@ def create_tiny_models(
         if len(models) > 0:
             to_create[c] = {"processor": processors, "pytorch": models}
 
+    if upload and organization is None:
+        raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
+
     results = {}
     if num_workers <= 1:
         for c, models_to_create in list(to_create.items()):
             print(f"Create models for {c.__name__} ...")
-            result = build(c, models_to_create, output_dir=os.path.join(output_path, c.model_type))
+            result = build(c, models_to_create, os.path.join(output_path, c.model_type), upload=upload, organization=organization, token=token)
             results[c.__name__] = result
             print("=" * 40)
     else:
         all_build_args = []
         for c, models_to_create in list(to_create.items()):
-            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
+            all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type), False, upload, organization, token))
         with multiprocessing.Pool(processes=num_workers) as pool:
             results = pool.starmap(build, all_build_args)
             results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
@@ -1942,32 +1974,13 @@ def create_tiny_models(
     print(results)
 
     if upload:
-        if organization is None:
-            raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
-
-        to_upload = []
-        for model_type in os.listdir(output_path):
-            # This is the directory containing the reports
-            if model_type == "reports":
-                continue
-            for arch in os.listdir(os.path.join(output_path, model_type)):
-                if arch == "processors":
-                    continue
-                to_upload.append(os.path.join(output_path, model_type, arch))
-        to_upload = sorted(to_upload)
-
-        upload_results = {}
-        if len(to_upload) > 0:
-            for model_dir in to_upload:
-                try:
-                    upload_model(model_dir, organization, token)
-                except Exception as e:
-                    error = f"Failed to upload {model_dir}. {e.__class__.__name__}: {e}"
-                    logger.error(error)
-                    upload_results[model_dir] = error
-
+        # Aggregate upload errors from each per-model-type build result.
+        upload_errors = {}
+        for result in results.values():
+            if isinstance(result, dict) and "upload_errors" in result:
+                upload_errors.update(result["upload_errors"])
         with open(os.path.join(report_path, "failed_uploads.json"), "w") as fp:
-            json.dump(upload_results, fp, indent=4)
+            json.dump(upload_errors, fp, indent=4)
 
     # Build the tiny model summary file. The `tokenizer_classes` and `processor_classes` could be both empty lists.
     # When using the items in this file to update the file `tests/utils/tiny_model_summary.json`, the model
