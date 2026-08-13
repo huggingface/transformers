@@ -701,6 +701,13 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertNotIn("AB", sanitized)
         self.assertEqual(list(substitutions.values()), ["XY"])
 
+    def test_digit_only_token_single_pass(self):
+        # Placeholders are made of digits, so a digit-only special token can match inside them. The single
+        # substitution pass never rescans its own placeholders, so they stay intact and resolvable.
+        sanitized, substitutions = self.sanitize("a0b", ["0"])
+        self.assertEqual(list(substitutions.values()), ["0"])
+        self.assertEqual(self.resolve(sanitized, substitutions), "a0b")
+
     def test_prefix_shadowing(self):
         # "<|end|>" is a prefix of "<|end|>_extra". Sorting alternatives longest-first ensures the longer token
         # is matched and replaced whole, rather than its prefix being replaced and "_extra" left behind.

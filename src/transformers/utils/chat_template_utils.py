@@ -641,27 +641,14 @@ def _compile_special_token_pattern(all_special_tokens: tuple[str, ...]) -> re.Pa
     return re.compile("|".join(escaped))
 
 
-class ChatSanitization:
-    """State carried from `sanitize_chat_inputs` to `encode_sanitized_chats`: the protected special-token
-    strings and the `{placeholder: original_text}` substitutions made in the chat inputs. Falsy when nothing
-    was substituted, in which case the rendered chat can be encoded by the ordinary path."""
-
-    def __init__(self, protected_tokens: list[str], substitutions: dict[str, str]):
-        self.protected_tokens = protected_tokens
-        self.substitutions = substitutions
-
-    def __bool__(self) -> bool:
-        return bool(self.substitutions)
-
-
 def sanitize_chat_inputs(
     tokenizer, conversations, tools, documents, kwargs: dict, tokenize: bool, return_assistant_tokens_mask: bool
-) -> tuple[Any, Any, Any, dict, ChatSanitization]:
+) -> tuple[Any, Any, Any, dict, dict[str, str]]:
     """Entry point for the `sanitize_special_tokens` argument of `apply_chat_template`: before the template
     is rendered, replace special-token text anywhere in the chat inputs with unique placeholders, so that
     `encode_sanitized_chats` can restore it afterwards and encode it as ordinary (non-special) tokens.
-    Returns the sanitized inputs along with the `ChatSanitization` state that `encode_sanitized_chats`
-    requires."""
+    Returns the sanitized inputs along with the `{placeholder: original_text}` substitutions that
+    `encode_sanitized_chats` requires, empty if there was nothing to sanitize."""
     if not tokenize:
         raise ValueError(
             "`sanitize_special_tokens=True` requires `tokenize=True`: sanitization encodes special-token "
@@ -684,7 +671,7 @@ def sanitize_chat_inputs(
     tools = sanitize_chat_input(tools, protected_tokens, substitutions)
     documents = sanitize_chat_input(documents, protected_tokens, substitutions)
     kwargs = sanitize_chat_input(kwargs, protected_tokens, substitutions)
-    return conversations, tools, documents, kwargs, ChatSanitization(protected_tokens, substitutions)
+    return conversations, tools, documents, kwargs, substitutions
 
 
 def sanitize_chat_input(chat_input: Any, all_special_tokens: list[str], substitutions: dict[str, str]) -> Any:
@@ -716,11 +703,11 @@ def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None, substituti
             substitutions[placeholder] = match.group(0)
             return placeholder
 
-        # Substitution cannot splice fragments of nested tokens into new ones (the placeholder physically
-        # interrupts them), but we re-check to fixpoint anyway as cheap insurance
-        while pattern.search(chat_input):
-            chat_input = pattern.sub(replacement, chat_input)
-        return chat_input
+        # A single pass suffices: a new match cannot straddle a placeholder (the digits physically interrupt
+        # any token fragments), and text away from the replacements was already matched in the same pass.
+        # Deliberately no rescan-to-fixpoint: rescanning would re-match inside the inserted placeholders
+        # whenever a special token consists solely of digits, corrupting them without bound.
+        return pattern.sub(replacement, chat_input)
     else:
         return chat_input
 
@@ -809,19 +796,20 @@ def split_at_trusted_special_tokens(
 def encode_sanitized_chats(
     tokenizer,
     rendered_batch: list[str],
-    sanitization: ChatSanitization,
+    substitutions: dict[str, str],
     padding=False,
     truncation: bool = False,
     max_length: int | None = None,
     return_tensors=None,
     **tokenizer_kwargs,
 ):
-    """Encode rendered chats whose inputs were sanitized by `sanitize_chat_inputs`, using only the public
-    tokenizer API. The placeholders in each rendered chat are resolved back to their original special-token
-    text, and the result is split at the special tokens the template itself emitted: those are converted
-    directly to their token ids, while everything else - including the restored input text - is encoded
-    without special-token matching (as with `split_special_tokens=True`), so that special-token text from
-    untrusted chat input can never act as control tokens.
+    """Encode rendered chats whose inputs were sanitized by `sanitize_chat_inputs`, given the
+    `{placeholder: original_text}` substitutions it made, using only the public tokenizer API. The
+    placeholders in each rendered chat are resolved back to their original special-token text, and the
+    result is split at the special tokens the template itself emitted: those are converted directly to their
+    token ids, while everything else - including the restored input text - is encoded without special-token
+    matching (as with `split_special_tokens=True`), so that special-token text from untrusted chat input can
+    never act as control tokens.
 
     Since trusted special tokens are split points in the tokenizer's own pipeline as well, the concatenated
     ids match encoding the full chat string directly, except that some SentencePiece tokenizers
@@ -854,16 +842,17 @@ def encode_sanitized_chats(
     # Restore the original special-token text at the placeholders, keeping track of which character spans of
     # the final strings came from untrusted chat input, then split each chat at the special tokens the
     # template itself emitted (the only ones allowed to encode as control tokens).
-    resolved = [resolve_sanitization_placeholders(rendered, sanitization.substitutions) for rendered in rendered_batch]
+    resolved = [resolve_sanitization_placeholders(rendered, substitutions) for rendered in rendered_batch]
     placeholders_seen = set().union(*(seen for _, _, seen in resolved))
-    if placeholders_seen != set(sanitization.substitutions):
+    if placeholders_seen != set(substitutions):
         logger.warning_once(
             "Some special tokens in the chat inputs were transformed or dropped by the chat template, "
             "so their original text could not be restored after sanitization."
         )
+    protected_tokens = sanitization_special_tokens(tokenizer)
     token_flags = {token.content: (token.lstrip, token.rstrip) for token in tokenizer.added_tokens_decoder.values()}
     batch_parts = [
-        split_at_trusted_special_tokens(final, untrusted_spans, sanitization.protected_tokens, token_flags)
+        split_at_trusted_special_tokens(final, untrusted_spans, protected_tokens, token_flags)
         for final, untrusted_spans, _ in resolved
     ]
     batch_untrusted_spans = [untrusted_spans for _, untrusted_spans, _ in resolved]
