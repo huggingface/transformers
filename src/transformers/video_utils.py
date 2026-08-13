@@ -899,8 +899,12 @@ def group_videos_by_shape(
         grouped_videos[shape].append(video)
         grouped_videos_index[i] = (shape, len(grouped_videos[shape]) - 1)
 
-    # stack videos with the same size and number of frames
-    grouped_videos = {shape: torch.stack(videos, dim=0) for shape, videos in grouped_videos.items()}
+    # stack videos with the same size and number of frames. Groups holding a single video are unsqueezed instead, as
+    # stacking would copy the video for no reason.
+    grouped_videos = {
+        shape: videos[0].unsqueeze(0) if len(videos) == 1 else torch.stack(videos, dim=0)
+        for shape, videos in grouped_videos.items()
+    }
     return grouped_videos, grouped_videos_index
 
 
