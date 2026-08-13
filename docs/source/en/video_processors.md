@@ -56,7 +56,9 @@ A video processor decodes a video and picks the frames the model actually sees. 
 - `num_frames` asks for a fixed count spread uniformly across the video.
 - `fps` asks for a rate in frames per second.
 
-Pass a path or URL and the processor decodes the video for you with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html), which is the default decoder and must be installed. Add `return_metadata=True` to get back the sampled frame indices, original dimensions, duration, and fps.
+Pass a path or URL and the processor decodes the video for you with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html), the default decoder. If torchcodec isn't available and you're on an older torchvision version, decoding falls back to torchvision.
+
+Add `return_metadata=True` to get back the sampled frame indices, original dimensions, duration, and fps.
 
 ```python
 from transformers import AutoVideoProcessor

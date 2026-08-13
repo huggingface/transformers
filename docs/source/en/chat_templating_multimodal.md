@@ -114,8 +114,11 @@ The decoded output contains the full conversation so far, including the user mes
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
-- For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can be decoded with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html), [PyAV](https://pyav.basswood-io.com/docs/stable/), or [Decord](https://github.com/dmlc/decord), but not with OpenCV.
-- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you've already preprocessed or decoded video frames elsewhere in memory (using torchcodec, OpenCV, or decord). You don't need to save to files or store it in an URL.
+- For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos are decoded with [torchcodec](https://meta-pytorch.org/torchcodec/stable/index.html). If torchcodec isn't available and you're on an older torchvision version, decoding falls back to torchvision.
+- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you've already preprocessed or decoded video frames elsewhere in memory. You don't need to save to files or store it in an URL.
+
+> [!TIP]
+> [PyAV](https://pyav.basswood-io.com/docs/stable/) and [Decord](https://github.com/dmlc/decord) are available, but only if you decode the video yourself and request the backend explicitly with `load_video(backend=...)`.
 
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
