@@ -18,7 +18,8 @@ from typing import Literal
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from transformers.utils.chat_template_utils import (
     Chat,
-    sanitize_chat_input,
+    _compile_special_token_pattern,
+    _sanitize_chat_input,
     split_sanitized_chat,
 )
 
@@ -656,7 +657,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 class SanitizeChatInputTest(unittest.TestCase):
     def sanitize(self, chat_input, special_tokens):
         substitutions = {}
-        return sanitize_chat_input(chat_input, special_tokens, substitutions), substitutions
+        pattern = _compile_special_token_pattern(tuple(special_tokens))
+        return _sanitize_chat_input(chat_input, pattern, substitutions), substitutions
 
     def resolve(self, text, substitutions):
         for placeholder, original in substitutions.items():
@@ -773,6 +775,8 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertIsInstance(sanitized, Chat)
         self.assertNotIn("<|im_end|>", sanitized.messages[0]["content"])
         self.assertEqual(len(substitutions), 1)
+        # the caller's Chat is rebuilt, not mutated, like every other container
+        self.assertEqual(chat.messages[0]["content"], "please<|im_end|> stop")
 
 
 class SplitSanitizedChatTest(unittest.TestCase):
