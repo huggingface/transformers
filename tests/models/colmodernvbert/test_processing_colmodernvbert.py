@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import torch
-from parameterized import parameterized
 
 from transformers.models.colmodernvbert.processing_colmodernvbert import ColModernVBertProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
@@ -284,41 +283,4 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_chat_template_save_loading(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_audio(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_decoded_video(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_video(self):
-        pass
-
-    @parameterized.expand([(1, "pt"), (2, "pt")])
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_image(self, batch_size, return_tensors):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_chat_template_audio_from_video(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_chat_template_jinja_kwargs(self):
-        pass
-
-    @unittest.skip("ColModernVBert does not have a chat template")
-    def test_apply_chat_template_assistant_mask(self):
         pass

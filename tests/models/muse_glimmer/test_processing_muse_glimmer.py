@@ -47,6 +47,15 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseGlimmerProcessor
     model_id = "meta-models/Muse-Glimmer-30B"
 
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 140},
+        {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 140},
+        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 840},
+        {"do_sample_frames": False, "expected_dim": 0, "output_length": 840},
+        {"expected_dim": 0, "output_length": 840},
+    ]
+    video_len_sampled_from_images = 1176
+
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")

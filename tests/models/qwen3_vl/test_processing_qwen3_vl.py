@@ -14,17 +14,14 @@
 
 import unittest
 
-from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Qwen3VLProcessor
-
-if is_torch_available():
-    pass
 
 
 @require_vision
@@ -38,6 +35,16 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_unstructured_max_length = 870
     video_text_kwargs_max_length = 870
     video_text_kwargs_override_max_length = 870
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 96},
+        {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 72},
+        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 48},
+        {"do_sample_frames": False, "expected_dim": 0, "output_length": 48},
+        {"expected_dim": 0, "output_length": 96},
+    ]
+    video_len_sampled_from_images = 96
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -67,100 +74,6 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    @require_av
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
-
-        # for fast test, set the longest edge to 8192
-        processor.video_processor.size.longest_edge = 8192
-
-        # Add video URL for return dict and load with `num_frames` arg
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            fps=None,  # if pass num_frames, fps should be None
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 280)
-
-        # Load with `fps` arg
-        fps = 1
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
-
-        # Load with `fps` and `num_frames` args, should raise an error
-        with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
-            )
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 192)
-
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": [
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-            ],
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            do_sample_frames=False,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 216)
-
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
         self.skip_processor_without_typed_kwargs(processor)
@@ -171,11 +84,3 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
-
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_1(self):
-        pass
-
-    @unittest.skip("qwen3_vl can't sample frames from image frames directly, user can use `qwen-vl-utils`")
-    def test_apply_chat_template_video_2(self):
-        pass

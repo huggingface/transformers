@@ -37,6 +37,16 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_max_length = 570
     video_text_kwargs_override_max_length = 570
 
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+        {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 2},
+        {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        {"expected_dim": 1, "output_length": 2},
+    ]
+    video_len_sampled_from_images = 2
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
@@ -230,7 +240,3 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_lengths = list(expected_num_tokens)
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
-
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass

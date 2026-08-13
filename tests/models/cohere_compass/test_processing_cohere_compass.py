@@ -34,6 +34,15 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_override_max_length = 870
     model_id = "CohereLabs/North-Micro-Vision-Instruct"
 
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 640},
+        {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 640},
+        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 1512},
+        {"do_sample_frames": False, "expected_dim": 0, "output_length": 1512},
+        {"expected_dim": 0, "output_length": 640},
+    ]
+    video_len_sampled_from_images = 1536
+
     @classmethod
     def _setup_image_processor(cls):
         return CohereCompassImageProcessor(

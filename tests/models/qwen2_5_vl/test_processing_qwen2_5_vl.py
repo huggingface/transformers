@@ -12,20 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import unittest
 
-from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Qwen2_5_VLProcessor
-
-if is_torch_available():
-    pass
 
 
 @require_vision
@@ -35,6 +31,16 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5_VLProcessor
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2-VL-7B-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_vl"
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 384},
+        {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 576},
+        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 1152},
+        {"do_sample_frames": False, "expected_dim": 0, "output_length": 1152},
+        {"expected_dim": 0, "output_length": 1152},
+    ]
+    video_len_sampled_from_images = 96
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
@@ -55,119 +61,6 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
-
-    @require_av
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest("Processor doesn't accept videos at input")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)
-
-        # Add video URL for return dict and load with `num_frames` arg
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 384)
-
-        # Load with `fps` arg
-        fps = 1
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 384)
-
-        # Load with `fps` and `num_frames` args, should raise an error
-        with self.assertRaises(ValueError):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
-            )
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1152)
-
-        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
-        # because we assume they come from one video
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": [
-                url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                ),
-                url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                ),
-            ],
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 160)
-
-        # When the inputs are frame URLs/paths we expect that those are already
-        # sampled and will raise an error is asked to sample again.
-        with self.assertRaisesRegex(
-            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
-        ):
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                do_sample_frames=True,
-            )
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()

@@ -191,7 +191,7 @@ class GlmgaVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return torch.tensor(uniq, dtype=torch.int32)
 
     def resize(
         self,

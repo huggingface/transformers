@@ -18,7 +18,7 @@ import numpy as np
 
 from transformers import SmolVLMProcessor
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -30,6 +30,16 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_input_name = "pixel_values"
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 1},
+        {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 7},
+        {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        {"expected_dim": 1, "output_length": 1},
+    ]
+    video_len_sampled_from_images = 2
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -370,63 +380,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
-
-    @require_av
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        # overridden because SmolVLM has special preprocessing for videos
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
-
-        # Load with `fps` arg
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
-
-        # NOTE: the last assert checks are removed
-        # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
 
     @require_torch
     @require_vision

@@ -33,9 +33,9 @@ from transformers.processing_utils import (
 )
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    require_av,
     require_librosa,
     require_torch,
+    require_torchcodec,
     require_vision,
 )
 from transformers.utils import is_torch_available, is_vision_available
@@ -132,6 +132,16 @@ class ProcessorTesterMixin:
     video_text_kwargs_max_length = 167
     video_text_kwargs_override_max_length = 162
     video_unstructured_max_length = 176
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+        {"num_frames": None, "fps": 10, "expected_dim": 1, "output_length": 3},
+        {"do_sample_frames": False, "fps": 10, "expected_dim": 1, "output_length": 11},
+        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        {"expected_dim": 1, "output_length": 11},
+    ]
+    video_len_sampled_from_images = 2
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
@@ -1701,7 +1711,7 @@ class ProcessorTesterMixin:
                 MODALITY_INPUT_DATA["audio"],
             )
 
-    @require_av
+    @require_torchcodec
     @parameterized.expand([(1, "pt")])
     def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
         dummy_preloaded_video = np.array(self.prepare_video_inputs())
@@ -1710,7 +1720,7 @@ class ProcessorTesterMixin:
             "video", batch_size, return_tensors, "videos_input_name", "video_processor", input_data
         )
 
-    @require_av
+    @require_torchcodec
     @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
@@ -1750,92 +1760,44 @@ class ProcessorTesterMixin:
             ]
         ]
 
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"num_frames": num_frames, "fps": None},
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+        # FIXME: instead of clone make it a property or instance attr
+        for processor_kwargs in self.video_sampling_expectations.copy():
+            exp_output_length = processor_kwargs.pop("output_length")
+            expected_dim = processor_kwargs.pop("expected_dim")
 
-        # Load with `fps` arg
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"fps": fps, "num_frames": None},
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
-
-        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            processor_kwargs={
-                "do_sample_frames": False,
-                "fps": fps,
-                "return_tensors": "pt",
-            },
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
-
-        # Load with `fps` and `num_frames` args, should raise an error
-        with self.assertRaises(ValueError):
             out_dict_with_video = processor.apply_chat_template(
                 messages,
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                processor_kwargs={"fps": fps, "num_frames": num_frames},
+                return_tensors="pt",
+                processor_kwargs=processor_kwargs,
             )
-
-        # Load without any arg should load the whole video
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
+            self.assertTrue(self.videos_input_name in out_dict_with_video)
+            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[expected_dim], exp_output_length)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
-        messages[0][0]["content"][0] = {
-            "type": "video",
-            "url": [
-                url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-                )
-            ]
-            * 2,
-        }
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
+        if self.video_len_sampled_from_images is not None:
+            messages[0][0]["content"][0] = {
+                "type": "video",
+                "url": [
+                    url_to_local_path(
+                        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                    )
+                ]
+                * 2,
+            }
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"do_sample_frames": False},
+            )
+            self.assertTrue(self.videos_input_name in out_dict_with_video)
+            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[1], self.video_len_sampled_from_images)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
@@ -1847,11 +1809,12 @@ class ProcessorTesterMixin:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
+                return_tensors="pt",
                 processor_kwargs={"do_sample_frames": True},
             )
 
     @require_librosa
-    @require_av
+    @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:

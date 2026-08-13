@@ -26,21 +26,16 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torchcodec,
     require_torchvision,
     require_vision,
 )
 from transformers.utils import (
-    is_torch_available,
     is_vision_available,
 )
 from transformers.video_utils import VideoMetadata
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_torch_available():
-    pass
 
 if is_vision_available():
     from PIL import Image
@@ -52,6 +47,16 @@ if is_vision_available():
 class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cosmos3EdgeProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-cosmos3-edge"
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 240},
+        {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
+        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 176},
+        {"do_sample_frames": False, "expected_dim": 0, "output_length": 176},
+        {"expected_dim": 0, "output_length": 176},
+    ]
+    video_len_sampled_from_images = 768
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).
@@ -76,84 +81,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if batch_size is None:
             return video
         return [video] * batch_size
-
-    @require_torchcodec
-    def test_apply_chat_template_video_frame_sampling(self):
-        """Adapt the shared frame-sampling assertions to Edge's packed video patches."""
-        processor = self.get_processor()
-
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        def assert_packed_video(output, expected_num_frames):
-            self.assertIn(self.videos_input_name, output)
-            self.assertEqual(tuple(output["video_grid_thw"].shape), (1, 3))
-            self.assertEqual(output["video_grid_thw"][0, 0].item(), expected_num_frames)
-            expected_num_patches = int(output["video_grid_thw"].prod(dim=-1).sum())
-            self.assertEqual(len(output[self.videos_input_name]), expected_num_patches)
-            self.assertEqual(
-                output[self.videos_input_name].shape[-1],
-                len(processor.video_processor.image_mean) * processor.video_processor.patch_size**2,
-            )
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"num_frames": num_frames, "fps": None, "do_sample_frames": True},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=num_frames)
-
-        # The fixture would yield three frames at 10 FPS, which Edge clamps to its four-frame minimum.
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"fps": fps, "num_frames": None, "do_sample_frames": True},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=processor.video_processor.min_frames)
-
-        # Disabling sampling retains all eleven frames in the fixture even when an FPS is supplied.
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            processor_kwargs={"do_sample_frames": False, "fps": fps, "return_tensors": "pt"},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=11)
-
-        with self.assertRaises(ValueError):
-            processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                processor_kwargs={"fps": fps, "num_frames": num_frames, "do_sample_frames": True},
-            )
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
         """Protect the checkpoint's block-major patches and HWC values within each patch."""

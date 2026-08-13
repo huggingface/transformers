@@ -20,7 +20,7 @@ import torch
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
@@ -32,6 +32,15 @@ if is_vision_available():
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
     model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    video_sampling_expectations = [
+        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+        {"num_frames": None, "fps": 16, "expected_dim": 1, "output_length": 5},
+        {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+    ]
+    video_len_sampled_from_images = 2
 
     @classmethod
     def _setup_image_processor(cls):
@@ -105,49 +114,3 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
-
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
-
-        # Choose an fps high enough to avoid rounding down to zero sampled frames on short dummy videos
-        fps = 4
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

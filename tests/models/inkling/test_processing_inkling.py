@@ -181,10 +181,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
 
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass
-
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
@@ -193,11 +189,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
-
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
-    @unittest.skip("Inkling packs image patches across the batch instead of keeping one tensor per image")
-    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        pass
 
     @unittest.skip("The test fixture passes image_seq_length, which is not an InklingProcessor attribute")
     def test_processor_to_json_string(self):
