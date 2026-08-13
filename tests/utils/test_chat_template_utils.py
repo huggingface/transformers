@@ -18,10 +18,8 @@ from typing import Literal
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 from transformers.utils.chat_template_utils import (
     Chat,
-    SanitizedTokenMap,
     resolve_sanitization_placeholders,
     sanitize_chat_input,
-    shift_sanitized_index,
     split_at_trusted_special_tokens,
 )
 
@@ -770,18 +768,14 @@ class SanitizeChatInputTest(unittest.TestCase):
         self.assertNotIn("<|im_end|>", sanitized.messages[0]["content"])
         self.assertEqual(len(substitutions), 1)
 
-    def test_resolve_placeholders_spans_and_shifts(self):
+    def test_resolve_placeholders_spans(self):
         substitutions = {"12345": "<|im_end|>"}
         rendered = "a12345b12345"
-        final, untrusted_spans, shifts, seen = resolve_sanitization_placeholders(rendered, substitutions)
+        final, untrusted_spans, seen = resolve_sanitization_placeholders(rendered, substitutions)
         self.assertEqual(final, "a<|im_end|>b<|im_end|>")
         self.assertEqual(seen, {"12345"})
         # the untrusted spans cover exactly the restored special-token text in the final string
         self.assertEqual([final[start:end] for start, end in untrusted_spans], ["<|im_end|>", "<|im_end|>"])
-        # shifts translate char indices in the rendered (placeholder-bearing) string to the final string
-        self.assertEqual(shift_sanitized_index(0, shifts), 0)
-        self.assertEqual(final[shift_sanitized_index(6, shifts)], rendered[6])  # the "b"
-        self.assertEqual(shift_sanitized_index(len(rendered), shifts), len(final))
 
 
 class SplitAtTrustedSpecialTokensTest(unittest.TestCase):
@@ -829,22 +823,3 @@ class SplitAtTrustedSpecialTokensTest(unittest.TestCase):
             parts,
             [("special", "</s>", 0, 4), ("special", "</s>", 4, 8), ("text", "x", 8, 9)],
         )
-
-
-class SanitizedTokenMapTest(unittest.TestCase):
-    def test_lookup_with_gaps_and_shift(self):
-        # Tokens covering "ab", "cd" with an uncovered gap at char 4, then a special token at (5, 9)
-        spans = [(0, 2), (2, 4), (5, 9)]
-        token_map = SanitizedTokenMap(spans)
-        self.assertEqual(token_map.start_token(0), 0)
-        self.assertEqual(token_map.end_token(3), 1)
-        # chars the tokenization skipped resolve to the nearest token on the requested side
-        self.assertEqual(token_map.start_token(4), 2)
-        self.assertEqual(token_map.end_token(4), 1)
-        # out-of-range lookups return None instead of spilling onto neighboring tokens
-        self.assertIsNone(token_map.start_token(9))
-        self.assertIsNone(token_map.end_token(-1))
-        # left-padding shifts every token index
-        shifted = SanitizedTokenMap(spans, token_shift=3)
-        self.assertEqual(shifted.start_token(0), 3)
-        self.assertEqual(shifted.end_token(8), 5)
