@@ -45,17 +45,30 @@ class BitNetRMSNorm(LlamaRMSNorm):
 class BitNetMLP(GemmaMLP):
     def __init__(self, config: BitNetConfig):
         super().__init__(config)
-        self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
+        # `use_sub_norms=False` describes checkpoints trained through a
+        # weight-quant-only BitLinear, where the sub-layer normalisations are
+        # absent rather than set to a neutral value. They cannot be neutralised
+        # by initialising the weight to one, because RMSNorm still normalises;
+        # the module has to not exist. See BitNetAttention for the same case.
+        self.ffn_sub_norm = (
+            BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
+        )
 
     def forward(self, x):
-        down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
-        return down_proj
+        hidden = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
+        if self.ffn_sub_norm is not None:
+            hidden = self.ffn_sub_norm(hidden)
+        return self.down_proj(hidden)
 
 
 class BitNetAttention(LlamaAttention):
     def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # See BitNetMLP: absent, not neutral, when the checkpoint was trained
+        # without the sub-layer normalisation.
+        self.attn_sub_norm = (
+            BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
+        )
 
     def forward(
         self,
@@ -94,7 +107,8 @@ class BitNetAttention(LlamaAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
+        if self.attn_sub_norm is not None:
+            attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

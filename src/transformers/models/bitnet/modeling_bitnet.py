@@ -71,11 +71,20 @@ class BitNetMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
+        # `use_sub_norms=False` describes checkpoints trained through a
+        # weight-quant-only BitLinear, where the sub-layer normalisations are
+        # absent rather than set to a neutral value. They cannot be neutralised
+        # by initialising the weight to one, because RMSNorm still normalises;
+        # the module has to not exist. See BitNetAttention for the same case.
+        self.ffn_sub_norm = (
+            BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
+        )
 
     def forward(self, x):
-        down_proj = self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
-        return down_proj
+        hidden = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
+        if self.ffn_sub_norm is not None:
+            hidden = self.ffn_sub_norm(hidden)
+        return self.down_proj(hidden)
 
 
 def rotate_half(x):
@@ -174,7 +183,11 @@ class BitNetAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # See BitNetMLP: absent, not neutral, when the checkpoint was trained
+        # without the sub-layer normalisation.
+        self.attn_sub_norm = (
+            BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
+        )
 
     def forward(
         self,
@@ -213,7 +226,8 @@ class BitNetAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
+        if self.attn_sub_norm is not None:
+            attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

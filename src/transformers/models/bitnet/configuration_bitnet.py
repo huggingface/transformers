@@ -59,6 +59,7 @@ class BitNetConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     rope_parameters: RopeParameters | dict | None = None
+    use_sub_norms: bool = True
 
     def __post_init__(self, **kwargs):
         # for backward compatibility
