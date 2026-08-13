@@ -74,7 +74,7 @@ nvidia-smi
 Install PyTorch from the NVIDIA PyPI index, then install Transformers.
 
 ```bash
-uv pip install torch --index-url https://pypi.nvidia.com
+uv pip install torch --index-url https://pypi.nvidia.com/nvtorch_oot_nightly
 uv pip install transformers
 ```
 
