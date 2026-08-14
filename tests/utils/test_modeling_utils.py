@@ -437,6 +437,34 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
+    @require_torch
+    def test_initialize_missing_keys_skips_packed_embeddings(self):
+        config = BertConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            intermediate_size=37,
+            max_position_embeddings=64,
+        )
+        model = BertModel(config)
+        for module in model.modules():
+            if isinstance(module, nn.Embedding):
+                num_embeddings, embedding_dim = module.weight.shape
+                del module._parameters["weight"]
+                module.register_parameter(
+                    "weight_packed",
+                    nn.Parameter(
+                        torch.zeros(num_embeddings, embedding_dim // 8, dtype=torch.int32), requires_grad=False
+                    ),
+                )
+        for param in model.parameters():
+            param._is_hf_initialized = True
+        for module in model.modules():
+            if hasattr(module, "_is_hf_initialized"):
+                del module._is_hf_initialized
+        model._initialize_missing_keys(is_quantized=True)
+
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
