@@ -893,6 +893,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/shensi
+        title: Shensi
       - local: model_doc/smollm3
         title: SmolLM3
       - local: model_doc/solar_open
@@ -1497,6 +1499,8 @@
         title: SAM3 Video
       - local: model_doc/sam3_lite_text
         title: SAM3-LiteText
+      - local: model_doc/shensi_vl
+        title: ShensiVl
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip

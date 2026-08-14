@@ -60,6 +60,23 @@ SPECIAL_CASES_TO_ALLOW = {
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
+    # Inherited from the Shensi text config; the VL language tower lives in its own module dir.
+    "ShensiVlTextConfig": [
+        "attention_bias",
+        "attn_res_block_size",
+        "erc_loss_alpha",
+        "erc_loss_coef",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "output_coupling_matrix",
+        "output_router_logits",
+        "output_sharing_layers",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+    ],
+    "ShensiVlVisionConfig": ["attn_res_block_size"],  # Consumed by `attn_res_block_layer_types`
+    "ShensiVlConfig": ["projection_hidden_size"],  # Replaced by `mm_projector.hidden_size`
     "Step3p7TextConfig": [
         "n_routed_experts",
         "num_sliding_attention_heads",
@@ -187,6 +204,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "norm_topk_prob",
         "num_key_value_heads",
         "num_nextn_predict_layers",
+        "router_jitter_noise",
+    ],
+    "ShensiConfig": [
+        "attention_bias",
+        "attn_res_block_size",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "output_coupling_matrix",
+        "output_sharing_layers",
         "router_jitter_noise",
     ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],

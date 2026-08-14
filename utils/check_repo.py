@@ -185,6 +185,7 @@ IGNORE_NON_TESTED = (
         "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
         "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
         "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
+        "ShensiVlVisionModel",  # Building part of bigger (tested) model.
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
         "Sam2HieraDetModel",  # Building part of bigger (tested) model.
@@ -350,6 +351,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
     + [
         # models to ignore for model xxx mapping
         "Aimv2TextModel",
+        "ShensiVlVisionModel",  # Building part of bigger (tested) model.
         "AlignTextModel",
         "AlignVisionModel",
         "ClapTextModel",
