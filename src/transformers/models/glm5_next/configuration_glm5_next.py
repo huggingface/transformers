@@ -140,7 +140,7 @@ class Glm5NextTextConfig(PreTrainedConfig):
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
     base_config_key = "text_config"
-    swiglu_limit: float | None = 10.0
+    swiglu_limit: float = 10.0
     linear_head_dim: int = 128
     linear_num_heads: int = 64
     linear_conv_kernel_dim: int = 4

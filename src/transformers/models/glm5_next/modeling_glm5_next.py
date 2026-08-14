@@ -34,6 +34,7 @@ from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub,
+    use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
@@ -91,10 +92,9 @@ class Glm5NextTextMLP(nn.Module):
     def forward(self, x):
         gate = self.gate_proj(x)
         up = self.up_proj(x)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -130,10 +130,8 @@ class Glm5NextTextExperts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         # Simple swiglu instead of alpha
         return F.silu(gate) * up
 
@@ -149,7 +147,7 @@ class Glm5NextTextTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -359,14 +357,14 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
     # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if attention_mask is not None:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
 
 
-@use_kernel_func_from_hub("causal_conv1d_update")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
 def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
@@ -386,7 +384,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub("causal_conv1d_fn")
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
@@ -1071,8 +1069,8 @@ class Glm5NextTextAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
         self.q_lora_rank = config.q_lora_rank
@@ -1080,16 +1078,18 @@ class Glm5NextTextAttention(nn.Module):
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+
         self.q_proj = (
-            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is None
             else None
         )
         self.q_a_proj = (
-            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
@@ -1103,20 +1103,20 @@ class Glm5NextTextAttention(nn.Module):
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
+            self.hidden_size,
+            config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
         )
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
+            config.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
 
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
-            config.hidden_size,
+            self.hidden_size,
             bias=config.attention_bias,
         )
         self.scaling = self.qk_head_dim ** (-0.5)
@@ -1127,15 +1127,23 @@ class Glm5NextTextAttention(nn.Module):
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
 
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
+    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Expands the compressed latents into key and value states. Args:
+            - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+        Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
+        """
+        batch_size, _, seq_length, _ = kv_nope.shape
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
+        # Concatenate k_nope and k_rot in a new tensor
+        key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
+        key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
     def forward(
@@ -1155,7 +1163,7 @@ class Glm5NextTextAttention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
@@ -1501,12 +1509,6 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         # Same as in `Glm46V`
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -1531,12 +1533,6 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1603,12 +1599,6 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1762,8 +1752,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1777,8 +1765,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
@@ -1807,10 +1793,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
@@ -1888,42 +1870,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             router_logits=outputs.router_logits,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _get_image_nums_and_video_nums(
         self,
         input_ids: torch.LongTensor | None,
@@ -1946,19 +1892,19 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:
@@ -2067,6 +2013,42 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
 
     @staticmethod
     def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, **_):

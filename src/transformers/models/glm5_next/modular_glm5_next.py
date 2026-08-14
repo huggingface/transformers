@@ -38,7 +38,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
-    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -46,7 +45,6 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoMetadata
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
@@ -128,7 +126,7 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
     moe_intermediate_size: int = 2048
     num_experts_per_tok: int = 8
     n_routed_experts: int = 288
-    swiglu_limit: float | None = 10.0
+    swiglu_limit: float = 10.0
     linear_head_dim: int = 128
     linear_num_heads: int = 64
     linear_conv_kernel_dim: int = 4
@@ -292,10 +290,9 @@ class Glm5NextTextMLP(Qwen2MoeMLP):
     def forward(self, x):
         gate = self.gate_proj(x)
         up = self.up_proj(x)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -308,10 +305,8 @@ class Glm5NextTextExperts(MiniMaxM3VLExperts):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        # Optional clamping
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         # Simple swiglu instead of alpha
         return F.silu(gate) * up
 
@@ -1021,7 +1016,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
@@ -1338,7 +1333,6 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
 
 class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     config: Glm5NextConfig
-    _no_split_modules = AttributeError()
 
     def __init__(self, config):
         super().__init__(config)
@@ -1426,12 +1420,6 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1510,10 +1498,6 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
@@ -1656,32 +1640,31 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spacial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The patch_expand_factor of the vision encoder to llm encoder.
+    max_frames (`int`, *optional*, defaults to 640):
+        The maximum number of frames that can be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 55790`):
+        The maximum pixels a video can be resized to.
+    dynamic_fps_thresholds (`list[list[int]]`, *optional*):
+        The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry,
+        then the associated second entry is used as target fps.
+
+        NOTE that
+            1. An entry is a `list[int]` but should act as tuple (2 entries); this is for JSON compatibility.
+            2. One entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
+    """
+
     dynamic_fps_thresholds: list[list[int]]
 
 
-@add_start_docstrings(
-    "Constructs a fast GLM-5Next video processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-        patch_expand_factor (`int`, *optional*, defaults to 1):
-            The patch_expand_factor of the vision encoder to llm encoder.
-        max_frames (`int`, *optional*, defaults to 640):
-            The maximum number of frames that can be sampled.
-        dynamic_fps_thresholds (`list[list[int]]`, *optional*):
-            The target fps fallbacks based on the (max) duration of the video. If the duration is lower than the first entry,
-            then the associated second entry is used as target fps.
-
-            NOTE that
-                1. An entry is a `list[int]` but should act as tuple (2 entries); this is for JSON compatibility.
-                2. One entry must be the same as `max_duration` (otherwise there might be valid fallbacks missing).
-    """,
-)
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     fps = AttributeError("defaults now via `dynamic_fps_thresholds` instead")
 
