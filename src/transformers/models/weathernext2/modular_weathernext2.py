@@ -448,8 +448,7 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["WeatherNext2Layer"]
     _supports_sdpa = True
     _supports_flex_attn = True
-    # Flash attention takes a causal flag, a sliding window or variable sequence lengths, but never an
-    # arbitrary mask. Mesh adjacency is none of those, so there is nothing to hand it.
+    # Flash attention cannot take an arbitrary mask, and mesh adjacency is one.
     _supports_flash_attn = False
     _supports_attention_backend = True
     _can_record_outputs = {"attentions": WeatherNext2Attention}

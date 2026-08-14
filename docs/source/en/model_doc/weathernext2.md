@@ -150,9 +150,7 @@ it drops the oldest frame, appends the forecast, recomputes the clock variables,
 also inputs (precipitation and the cyclone diagnostics).
 
 [`WeatherNext2FeatureExtractor`] hands back whatever array type it was given, so moving the state onto the accelerator
-once keeps the entire loop there - no per-step host transfer, and the normalization and residual arithmetic run as
-torch ops on the same device as the model. At 0.25° that is the difference between roughly 5.0 and 3.6 seconds per
-step on an H100, because the forward is compute-bound and everything else effectively disappears.
+once keeps the whole loop there and avoids a host transfer per step.
 
 ```python
 state = {name: torch.as_tensor(values).to(model.device) for name, values in state.items()}
@@ -179,15 +177,8 @@ Passing numpy arrays instead works exactly the same way and returns numpy, at th
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.
-- `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise. `sdpa`, the default, is
-  also the fastest by a wide margin; `flex_attention` is much slower here, because the mask is sparse but irregular
-  rather than block-structured, so little of it can be skipped a tile at a time.
-- Flash Attention is not supported in any form. Its kernels take a causal flag, a sliding window or variable sequence
-  lengths - masks computable from index arithmetic - and never an arbitrary mask, which is what mesh adjacency is. The
-  mask is banded, but only 17.7% dense inside its own band at 1°, so substituting a sliding window would attend to
-  4.6x more pairs than the model was trained with. `flash_attention_2` and `flash_attention_3` are refused at load
-  time; naming a kernel repository such as `kernels-community/vllm-flash-attn3` instead bypasses that check and fails
-  inside the kernel.
+- `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise; `sdpa` is the default and
+  the fastest. Flash Attention is not supported: it cannot take an arbitrary attention mask.
 - The 0.25° checkpoints need roughly an H100's worth of memory for a single ensemble member. The 1° mini checkpoints
   run comfortably on a much smaller GPU.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.
