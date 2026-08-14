@@ -15,6 +15,7 @@
 
 import gc
 import unittest
+from dataclasses import replace
 
 from transformers import AutoTokenizer, BitNetConfig, is_torch_available
 from transformers.testing_utils import (
@@ -165,6 +166,31 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_without_sub_norms(self):
+        config, input_ids, input_mask = self.model_tester.prepare_config_and_inputs()
+        config = replace(config, use_sub_norms=False)
+        model = BitNetForCausalLM(config=config).to(torch_device)
+        model.eval()
+
+        # Sub-norms are `nn.Identity`, so they do not normalise and carry no
+        # weights in the state dict.
+        for layer in model.model.layers:
+            self.assertIsInstance(layer.mlp.ffn_sub_norm, torch.nn.Identity)
+            self.assertIsInstance(layer.self_attn.attn_sub_norm, torch.nn.Identity)
+        self.assertFalse(any("sub_norm" in key for key in model.state_dict()))
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
+        )
+
+    def test_config_use_sub_norms_roundtrip(self):
+        config = BitNetConfig(use_sub_norms=False)
+        config_dict = config.to_dict()
+        self.assertIs(config_dict["use_sub_norms"], False)
+        self.assertIs(BitNetConfig.from_dict(config_dict).use_sub_norms, False)
 
 
 @require_torch

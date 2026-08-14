@@ -15,6 +15,7 @@
 from collections.abc import Callable
 
 import torch
+from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -42,33 +43,32 @@ class BitNetRMSNorm(LlamaRMSNorm):
     pass
 
 
+def _make_sub_norm(config: BitNetConfig, hidden_size: int):
+    """
+    Build a per-projection sub-layer RMSNorm, or `nn.Identity` when `use_sub_norms=False`.
+
+    `use_sub_norms=False` describes checkpoints trained through a weight-quant-only BitLinear, where the
+    sub-layer normalisations are absent rather than set to a neutral value. They cannot be neutralised by
+    initialising the weight to one, because RMSNorm still normalises; the normalisation has to be removed
+    from the forward entirely. `nn.Identity` does exactly that while keeping the module graph uniform and
+    the state dict identical (it has no parameters, so no `*_sub_norm.*` keys appear either way).
+    """
+    return BitNetRMSNorm(hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else nn.Identity()
+
+
 class BitNetMLP(GemmaMLP):
     def __init__(self, config: BitNetConfig):
         super().__init__(config)
-        # `use_sub_norms=False` describes checkpoints trained through a
-        # weight-quant-only BitLinear, where the sub-layer normalisations are
-        # absent rather than set to a neutral value. They cannot be neutralised
-        # by initialising the weight to one, because RMSNorm still normalises;
-        # the module has to not exist. See BitNetAttention for the same case.
-        self.ffn_sub_norm = (
-            BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
-        )
+        self.ffn_sub_norm = _make_sub_norm(config, config.intermediate_size)
 
-    def forward(self, x):
-        hidden = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        if self.ffn_sub_norm is not None:
-            hidden = self.ffn_sub_norm(hidden)
-        return self.down_proj(hidden)
+    def forward(self, x) -> torch.Tensor:
+        return self.down_proj(self.ffn_sub_norm(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
 
 
 class BitNetAttention(LlamaAttention):
     def __init__(self, config: BitNetConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # See BitNetMLP: absent, not neutral, when the checkpoint was trained
-        # without the sub-layer normalisation.
-        self.attn_sub_norm = (
-            BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_sub_norms else None
-        )
+        self.attn_sub_norm = _make_sub_norm(config, config.hidden_size)
 
     def forward(
         self,
@@ -107,8 +107,7 @@ class BitNetAttention(LlamaAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        if self.attn_sub_norm is not None:
-            attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
+        attn_output = self.attn_sub_norm(attn_output)  # diff with Llama
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

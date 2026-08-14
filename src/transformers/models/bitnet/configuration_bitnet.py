@@ -27,8 +27,12 @@ class BitNetConfig(PreTrainedConfig):
         Whether to use per-projection sub-layer RMSNorm modules
         (`attn_sub_norm` / `ffn_sub_norm`). Set to `False` for
         weight-quant-only BitLinear checkpoints, whose forward skips the
-        sub-layer normalisations entirely (they must be absent, not neutral —
-        an RMSNorm initialised to ones still normalises).
+        sub-layer normalisations entirely (they are replaced by `nn.Identity`
+        modules without parameters, so no `*_sub_norm.*` weights appear in the
+        state dict — an RMSNorm initialised to ones would still normalise).
+        Loading a checkpoint that *does* contain sub-norm weights with
+        `use_sub_norms=False` simply leaves them unused; transformers reports
+        them as unused weights at load time.
 
     ```python
     >>> from transformers import BitNetModel, BitNetConfig
