@@ -435,9 +435,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
-            # Downmix before resampling. `F.resample` operates on the last axis, so a
-            # multi-channel array has to be reduced first or the resampler works on the
-            # wrong axis. The stride arithmetic below also reads `shape[0]` as samples.
+            # Downmix first: the stride arithmetic below reads `shape[0]` as the
+            # sample count, which it is not until this runs. `F.resample` batches
+            # over leading axes, so it is not the step that breaks here.
             if isinstance(inputs, (np.ndarray, torch.Tensor)):
                 inputs = _to_mono(inputs)
             if in_sampling_rate != self.feature_extractor.sampling_rate:
