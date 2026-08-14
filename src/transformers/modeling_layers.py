@@ -533,12 +533,18 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
-            # Decode one token
+            # Append the drafted logits: the verifier needs the distribution the token was drawn from, i.e. the
+            # processed logits. In the loss path we keep the full raw logits instead.
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
                 next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+            else:
+                next_token_scores = next_token_logits
+            if labels is None:
+                drafted_logits.append(next_token_scores[:, None, :])
+            else:
+                drafted_logits.append(logits)
+            # Decode one token
             if do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)

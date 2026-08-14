@@ -1388,15 +1388,16 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
             last_token_id = outputs.logits.argmax(dim=-1)
             last_hidden_state = outputs.last_hidden_state
 
-            # For stopped sequences, replace drafted tokens with pad and logits with zeros.
+            # For stopped sequences, replace drafted tokens with pad.
             if sequence_stopped.any():
                 stopped = sequence_stopped.unsqueeze(1)  # (batch, 1) for broadcasting
                 last_token_id = torch.where(stopped, self.generation_config.pad_token_id, last_token_id)
-                drafted_logits.append(
-                    torch.where(stopped.unsqueeze(-1), torch.zeros_like(outputs.logits), outputs.logits)
-                )
-            else:
-                drafted_logits.append(outputs.logits)
+
+            # Drafting here is deterministic (argmax), so the proposal distribution is a point mass on the drafted
+            # token. The verifier must receive logits that describe that point mass rather than the raw logits.
+            drafted_logit = torch.full_like(outputs.logits, -torch.inf)
+            drafted_logit.scatter_(-1, last_token_id.unsqueeze(-1), 0.0)
+            drafted_logits.append(drafted_logit)
 
             drafted_tokens.append(last_token_id)
 
@@ -1674,8 +1675,10 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         if self.logits_processor is not None:
             candidate_ids = input_ids
             # We need to sample 1 by 1 for the processors
+            processed_logits = []
             for i in range(candidate_logits.shape[1]):
                 next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                processed_logits.append(next_token_logits)
                 if self.do_sample:
                     probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
@@ -1683,6 +1686,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                     next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
                 # Append it to the full sequence
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+            # The verifier needs the distribution the tokens were actually drawn from, i.e. the processed logits
+            candidate_logits = torch.stack(processed_logits, dim=1)
         # Here we can vectorize as we don't have any processors
         else:
             if self.do_sample:

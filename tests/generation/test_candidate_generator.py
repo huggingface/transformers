@@ -1,16 +1,33 @@
 import gc
 import unittest
 import weakref
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import torch
+from torch import nn
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    Glm4MoeConfig,
+    Glm4MoeForCausalLM,
+    pipeline,
+)
+from transformers.cache_utils import MtpCache
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
+    DFlashTokenCandidateGenerator,
+    SinglePositionMultiTokenCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
 )
+from transformers.generation.logits_process import LogitsProcessorList, TopKLogitsWarper
+from transformers.modeling_layers import MtpModel
+from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from transformers.models.muse_glimmer_assistant import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -336,3 +353,241 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
         # Assert that the outputs match
         cls.assertEqual(usd_text, vanilla_text)
+
+
+@require_torch
+class TestCandidateLogitsContract(unittest.TestCase):
+    """The verifier assumes `candidate_logits` describe the distribution the draft tokens were drawn from
+    (lossless speculative sampling). These tests pin that contract for each candidate generator."""
+
+    top_k = 3
+
+    def _dflash_setup(self):
+        vocab_size, hidden_size, block_size, prompt_length = 8, 32, 8, 6
+        raw_logits = torch.tensor([3.0, 2.6, 2.2, 1.0, 0.6, 0.2, 0.0, -0.4])
+
+        class PinnedOutputEmbeddings(nn.Module):
+            def forward(self, hidden_states):
+                return raw_logits.to(hidden_states.device).expand(*hidden_states.shape[:2], vocab_size).clone()
+
+        config = MuseGlimmerAssistantConfig(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            head_dim=8,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            intermediate_size=37,
+            block_size=block_size,
+            target_layer_ids=[0, 2],
+            mask_token_id=1,
+            bos_token_id=2,
+            eos_token_id=3,
+            pad_token_id=4,
+        )
+        assistant_model = MuseGlimmerAssistantModel(config).to(torch_device).eval()
+        input_embeddings = nn.Embedding(vocab_size, hidden_size).to(torch_device)
+        input_ids = torch.zeros(1, prompt_length, dtype=torch.long, device=torch_device)
+        model_kwargs = {
+            "position_ids": torch.arange(prompt_length, device=torch_device)[None],
+            "attention_mask": torch.ones(1, prompt_length, dtype=torch.long, device=torch_device),
+        }
+        model_outputs = BaseModelOutputWithPast(
+            last_hidden_state=torch.randn(1, prompt_length, hidden_size, device=torch_device),
+            hidden_states=tuple(torch.randn(1, prompt_length, hidden_size, device=torch_device) for _ in range(4)),
+        )
+        generation_config = GenerationConfig(do_sample=True, top_k=self.top_k, max_length=1024)
+        generator = DFlashTokenCandidateGenerator(
+            assistant_model=assistant_model,
+            main_model_input_embeddings=input_embeddings,
+            main_model_output_embeddings=PinnedOutputEmbeddings(),
+            generation_config=generation_config,
+            logits_processor=LogitsProcessorList([TopKLogitsWarper(top_k=self.top_k)]),
+        )
+        return generator, input_ids, model_kwargs, model_outputs, raw_logits, block_size
+
+    def test_dflash_returns_processed_logits(self):
+        generator, input_ids, model_kwargs, model_outputs, raw_logits, block_size = self._dflash_setup()
+        torch.manual_seed(0)
+        candidate_ids, candidate_logits = generator.get_candidates(
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            is_first_iteration=False,
+            n_last_matches=0,
+        )
+        # The top-k warper ignores `input_ids`, so the processed logits are the raw pinned logits with the
+        # out-of-top-k tokens masked to -inf.
+        num_drafted = candidate_logits.shape[1]
+        expected = torch.stack(
+            [
+                TopKLogitsWarper(top_k=self.top_k)(input_ids, raw_logits[None].float().to(torch_device))
+                for _ in range(num_drafted)
+            ],
+            dim=1,
+        )
+        self.assertTrue(torch.equal(candidate_logits, expected))
+        drafted = candidate_ids[0, input_ids.shape[1] :]
+        self.assertEqual(drafted.numel(), num_drafted)
+        # The returned distribution must only have mass on tokens the drafter can propose.
+        self.assertTrue((candidate_logits[0].softmax(dim=-1) > 0).sum(dim=-1).eq(self.top_k).all())
+
+    def _build_mtp(self, num_mtp_layers):
+        config = Glm4MoeConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=37,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_mtp_layers=num_mtp_layers,
+        )
+        model = Glm4MoeForCausalLM(config).to(torch_device).eval()
+        mtp_model = MtpModel(model, num_mtp_layers=num_mtp_layers)
+        input_ids = torch.zeros(1, 2, dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(1, 2, dtype=torch.long, device=torch_device)
+        position_ids = torch.arange(2, device=torch_device)[None]
+        last_hidden_states = torch.randn(1, 2, config.hidden_size, device=torch_device)
+        return mtp_model, config, input_ids, attention_mask, position_ids, last_hidden_states
+
+    def _run_mtp(
+        self,
+        mtp_model,
+        config,
+        input_ids,
+        attention_mask,
+        position_ids,
+        last_hidden_states,
+        do_sample,
+        logits_processor,
+        full_input_ids,
+        seed,
+    ):
+        torch.manual_seed(seed)
+        mtp_cache = MtpCache(config=config.get_mtp_config())
+        mtp_cache.activate_past_recording()
+        return mtp_model(
+            input_ids=input_ids,
+            last_hidden_states=last_hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            mtp_cache=mtp_cache,
+            do_sample=do_sample,
+            logits_processor=logits_processor,
+            full_input_ids=full_input_ids,
+        )
+
+    def _check_mtp_contract(self, do_sample):
+        # With sampling, the drafted tokens differ between the two runs, so a single MTP layer is used (its logits
+        # are computed before any drafting). Without sampling, top-k keeps the argmax, so multiple layers are fine.
+        num_mtp_layers = 1 if do_sample else 2
+        mtp_model, config, input_ids, attention_mask, position_ids, last_hidden_states = self._build_mtp(
+            num_mtp_layers
+        )
+        warper = TopKLogitsWarper(top_k=self.top_k)
+        _, raw, _ = self._run_mtp(
+            mtp_model,
+            config,
+            input_ids,
+            attention_mask,
+            position_ids,
+            last_hidden_states,
+            do_sample,
+            None,
+            None,
+            seed=0,
+        )
+        _, processed, _ = self._run_mtp(
+            mtp_model,
+            config,
+            input_ids,
+            attention_mask,
+            position_ids,
+            last_hidden_states,
+            do_sample,
+            LogitsProcessorList([warper]),
+            input_ids.clone(),
+            seed=0,
+        )
+        expected = torch.stack([warper(input_ids, raw[:, i, :].float()) for i in range(raw.shape[1])], dim=1)
+        self.assertTrue(torch.equal(processed, expected))
+
+    def test_mtp_returns_processed_logits_with_sampling(self):
+        self._check_mtp_contract(do_sample=True)
+
+    def test_mtp_returns_processed_logits_without_sampling(self):
+        self._check_mtp_contract(do_sample=False)
+
+    def test_single_position_returns_point_mass_logits(self):
+        vocab_size, hidden_size, num_tokens = 8, 16, 4
+        logits = torch.tensor([1.0, 2.5, 0.5, 2.0, -1.0, -2.0, 0.0, 1.5])
+
+        class FakeGemma4Assistant(nn.Module):
+            def __init__(self, logits, hidden_size):
+                super().__init__()
+                self.register_buffer("logits", logits)
+                self.dummy_param = nn.Parameter(torch.zeros(1))
+                self.hidden_size = hidden_size
+                self.generation_config = GenerationConfig(
+                    do_sample=False, num_assistant_tokens=num_tokens, eos_token_id=None
+                )
+                self.config = SimpleNamespace(is_encoder_decoder=False)
+
+            @property
+            def device(self):
+                return self.dummy_param.device
+
+            def forward(
+                self,
+                inputs_embeds,
+                attention_mask=None,
+                position_ids=None,
+                shared_kv_states=None,
+                use_cache=False,
+                **kwargs,
+            ):
+                batch, seq, _ = inputs_embeds.shape
+                out_logits = self.logits.to(inputs_embeds.device).expand(batch, seq, -1)
+                return ModelOutput(
+                    logits=out_logits,
+                    last_hidden_state=torch.zeros(batch, seq, self.hidden_size, device=inputs_embeds.device),
+                )
+
+        assistant_model = FakeGemma4Assistant(logits, hidden_size).to(torch_device)
+        seq_len = 3
+        input_ids = torch.zeros(1, seq_len, dtype=torch.long, device=torch_device)
+        model_kwargs = {"attention_mask": torch.ones(1, seq_len, dtype=torch.long, device=torch_device)}
+        model_outputs = ModelOutput(
+            hidden_states=(torch.randn(1, seq_len, hidden_size, device=torch_device),),
+            shared_kv_states={
+                "layer_0": (
+                    torch.zeros(1, 2, seq_len, 16, device=torch_device),
+                    torch.zeros(1, 2, seq_len, 16, device=torch_device),
+                )
+            },
+        )
+        generation_config = GenerationConfig(
+            max_length=32, pad_token_id=0, eos_token_id=None, num_assistant_tokens=num_tokens
+        )
+        generator = SinglePositionMultiTokenCandidateGenerator(
+            input_ids=input_ids,
+            assistant_model=assistant_model,
+            target_model_input_embeddings=nn.Embedding(vocab_size, hidden_size).to(torch_device),
+            generation_config=generation_config,
+            model_kwargs=model_kwargs,
+        )
+        candidate_ids, candidate_logits = generator.get_candidates(
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            is_first_iteration=False,
+            n_last_matches=0,
+        )
+        drafted = candidate_ids[0, seq_len:]
+        self.assertEqual(drafted.numel(), num_tokens)
+        argmax_id = logits.to(torch_device).argmax()
+        self.assertTrue((drafted == argmax_id).all())
+        # Deterministic drafting: the proposal distribution is a point mass on the drafted token.
+        expected = torch.full_like(candidate_logits, -torch.inf)
+        expected.scatter_(-1, drafted[None, :, None], 0.0)
+        self.assertTrue(torch.equal(candidate_logits, expected))
