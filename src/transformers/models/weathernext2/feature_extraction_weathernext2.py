@@ -17,6 +17,10 @@ Turns a physical atmospheric state - a mapping of named variables on a lat/lon g
 normalized tensors the model consumes, and turns the model's normalized output back into physical
 units. It also owns the two things the network itself has no notion of: the normalization statistics
 and the calendar forcings.
+
+The arithmetic runs in torch rather than numpy so that an autoregressive rollout can stay on the
+accelerator: numpy inputs are adopted with `torch.as_tensor`, which does not copy, and results are
+handed back as numpy again unless the caller passed tensors.
 """
 
 from collections.abc import Mapping, Sequence
@@ -25,7 +29,11 @@ from typing import Any
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging, requires_backends
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -109,6 +117,8 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         grid_longitudes: int = 1440,
         **kwargs,
     ):
+        # The arithmetic here is all torch, so that a rollout can stay on the accelerator.
+        requires_backends(self, ["torch"])
         super().__init__(**kwargs)
         self.input_variables = list(input_variables)
         self.target_variables = list(target_variables)
@@ -160,7 +170,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
         return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
 
-    def _statistic(self, table: Mapping[str, Any], variable: str) -> np.ndarray | None:
+    def _statistic(self, table: Mapping[str, Any], variable: str) -> "torch.Tensor | None":
         """Per-level statistic for a variable, or `None` if it has none.
 
         The cyclone diagnostics are already dimensionless and carry no statistics; the original
@@ -169,12 +179,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         if variable not in table:
             logger.warning_once(f"No normalization statistic for {variable!r}; leaving it unscaled.")
             return None
-        value = np.asarray(table[variable], dtype=np.float32)
+        value = torch.as_tensor(table[variable], dtype=torch.float32).reshape(-1)
         expected = self.num_levels(variable)
-        if value.ndim == 0:
-            value = value.reshape(1)
         if value.shape != (expected,):
-            raise ValueError(f"Statistic for {variable!r} has shape {value.shape}, expected ({expected},).")
+            raise ValueError(f"Statistic for {variable!r} has shape {tuple(value.shape)}, expected ({expected},).")
         return value
 
     def normalize(self, values: np.ndarray, variable: str) -> np.ndarray:
@@ -185,19 +193,19 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         """
         mean = self._statistic(self.mean_by_level, variable)
         stddev = self._statistic(self.stddev_by_level, variable)
+        values = torch.as_tensor(values, dtype=torch.float32)
         normalized = values if mean is None else values - self._broadcast(mean, values)
         if stddev is not None:
             normalized = normalized / self._broadcast(stddev, values)
         if variable in self.nan_filled_variables:
-            normalized = np.nan_to_num(normalized, nan=0.0)
+            normalized = torch.nan_to_num(normalized, nan=0.0)
         return normalized
 
     @staticmethod
-    def _broadcast(statistic: np.ndarray, values: np.ndarray) -> np.ndarray:
+    def _broadcast(statistic: "torch.Tensor", values: "torch.Tensor") -> "torch.Tensor":
         """Aligns a per-level statistic against `[..., levels, lat, lon]` or `[..., lat, lon]`."""
-        if statistic.shape[0] == 1:
-            return statistic.reshape([1] * values.ndim)
-        return statistic.reshape([1] * (values.ndim - 3) + [-1, 1, 1])
+        shape = [1] * values.ndim if statistic.shape[0] == 1 else [1] * (values.ndim - 3) + [-1, 1, 1]
+        return statistic.to(values.device).reshape(shape)
 
     def compute_forcings(self, seconds_since_epoch: np.ndarray) -> dict[str, np.ndarray]:
         """Clock-derived variables at the given times.
@@ -221,10 +229,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         Static fields have no batch axis, so they cannot be used; every other input does, and they must agree.
         """
         sizes = {
-            np.asarray(values).shape[0]
+            torch.as_tensor(values).shape[0]
             for source in (state, forcings)
             for name, values in source.items()
-            if name not in self.static_variables and np.asarray(values).ndim > 0
+            if name not in self.static_variables and torch.as_tensor(values).ndim > 0
         }
         if len(sizes) != 1:
             raise ValueError(f"Inconsistent batch sizes across the inputs: {sorted(sizes)}.")
@@ -232,28 +240,24 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
 
     def _field(
         self, state: Mapping[str, Any], variable: str, time_index: int | None, batch_size: int = 1
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """Extracts `[batch, levels, lat, lon]` for one variable at one conditioning frame."""
-        values = np.asarray(state[variable], dtype=np.float32)
+        values = torch.as_tensor(state[variable], dtype=torch.float32)
         if variable in self.static_variables:
             # Static fields carry no batch axis of their own, so they are shared by every member.
             values = values.reshape(-1, 1, self.grid_latitudes, self.grid_longitudes)
-            return np.broadcast_to(values, (batch_size, 1, self.grid_latitudes, self.grid_longitudes))
+            return values.expand(batch_size, 1, self.grid_latitudes, self.grid_longitudes)
 
         values = values[:, time_index]
         if variable in self.global_variables:
             # [batch] -> broadcast over the whole grid.
-            return np.broadcast_to(
-                values.reshape(-1, 1, 1, 1), (values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
-            )
+            return values.reshape(-1, 1, 1, 1).expand(values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
         if values.ndim == 3:
             # [batch, lat, lon] or [batch, lon] for the longitude-only forcings.
             if values.shape[-2:] == (self.grid_latitudes, self.grid_longitudes):
                 return values[:, None]
         if values.ndim == 2 and values.shape[-1] == self.grid_longitudes:
-            return np.broadcast_to(
-                values[:, None, None], (values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
-            )
+            return values[:, None, None].expand(values.shape[0], 1, self.grid_latitudes, self.grid_longitudes)
         return values
 
     def __call__(
@@ -262,6 +266,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         seconds_since_epoch: np.ndarray | None = None,
         forcings: Mapping[str, Any] | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
+        device: "torch.device | str | None" = None,
     ) -> BatchFeature:
         """Encodes a physical state into model inputs.
 
@@ -277,6 +282,9 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 Precomputed forcings for the predicted step, overriding `seconds_since_epoch`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `"pt"`):
                 Framework of the returned tensors.
+            device (`torch.device` or `str`, *optional*):
+                Device to encode on. Defaults to the device of `state` when it holds tensors, and to the CPU
+                otherwise, so an autoregressive rollout that starts on an accelerator stays there.
 
         Returns:
             [`BatchFeature`] with `grid_features` of shape `[batch, channels, latitudes, longitudes]` and
@@ -286,8 +294,15 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
             if seconds_since_epoch is None:
                 raise ValueError("Pass either `seconds_since_epoch` or `forcings`.")
             forcings = self.compute_forcings(np.asarray(seconds_since_epoch))
-        forcings = {name: np.asarray(values, dtype=np.float32)[:, None] for name, values in forcings.items()}
+        forcings = {name: torch.as_tensor(values, dtype=torch.float32)[:, None] for name, values in forcings.items()}
 
+        # The clock forcings and any static fields are built on the host, so every channel is moved to
+        # one device before they are concatenated.
+        if device is None:
+            device = next(
+                (values.device for values in state.values() if isinstance(values, torch.Tensor)),
+                torch.device("cpu"),
+            )
         batch_size = self._batch_size(state, forcings)
         grid_channels = []
         global_channels = []
@@ -298,14 +313,14 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 field = self._field(state, variable, None, batch_size)
             else:
                 field = self._field(state, variable, self.past_time_offsets.index(offset), batch_size)
-            field = self.normalize(field, variable)
+            field = self.normalize(field.to(device), variable)
             grid_channels.append(field)
             if variable in self.global_variables:
                 global_channels.append(field[..., 0, 0])
 
         data = {
-            "grid_features": np.concatenate(grid_channels, axis=1),
-            "global_features": np.concatenate(global_channels, axis=1),
+            "grid_features": torch.cat(grid_channels, dim=1),
+            "global_features": torch.cat(global_channels, dim=1),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -322,19 +337,19 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                 The same state that was passed to `__call__`.
 
         Returns:
-            `dict[str, np.ndarray]`: physical values keyed by variable, shaped `[batch, (levels,) lat, lon]`.
+            `dict[str, array]`: physical values keyed by variable, shaped `[batch, (levels,) lat, lon]`, as
+            tensors on the device of `prediction` if it was a tensor and as numpy arrays otherwise.
         """
-        prediction = np.asarray(
-            prediction.detach().cpu() if hasattr(prediction, "detach") else prediction, dtype=np.float32
-        )
-        outputs: dict[str, np.ndarray] = {}
+        as_numpy = not isinstance(prediction, torch.Tensor)
+        prediction = torch.as_tensor(prediction, dtype=torch.float32).detach()
+        outputs: dict[str, Any] = {}
         offset = 0
         for variable, _, levels in self.target_channel_layout:
             values = prediction[:, offset : offset + levels]
             offset += levels
             if state is not None and variable in state and variable not in self.static_variables:
                 residual_scale = self._statistic(self.diffs_stddev_by_level, variable)
-                last_frame = np.asarray(state[variable], dtype=np.float32)[:, -1]
+                last_frame = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device)[:, -1]
                 if last_frame.ndim == 3:
                     last_frame = last_frame[:, None]
                 if residual_scale is not None:
@@ -349,11 +364,12 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                     values = values + self._broadcast(mean, values)
             if state is not None and variable in self.nan_filled_variables and variable in state:
                 # The land mask is constant across the conditioning frames, so any frame will do.
-                missing = np.isnan(np.asarray(state[variable], dtype=np.float32)).any(axis=1)
+                missing = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device).isnan().any(dim=1)
                 if missing.ndim == values.ndim - 1:
                     missing = missing[:, None]
-                values = np.where(missing, np.nan, values)
-            outputs[variable] = values[:, 0] if levels == 1 else values
+                values = torch.where(missing, torch.nan, values)
+            values = values[:, 0] if levels == 1 else values
+            outputs[variable] = values.numpy() if as_numpy else values
         return outputs
 
     def advance_state(
@@ -367,18 +383,20 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         Drops the oldest frame, appends the forecast, and recomputes the clock variables. Targets that are not also
         inputs (precipitation, the cyclone diagnostics) are simply discarded.
         """
-        next_state: dict[str, np.ndarray] = {}
+        next_state: dict[str, Any] = {}
         forcings = self.compute_forcings(np.asarray(seconds_since_epoch))
         for variable in self.input_variables:
+            previous = torch.as_tensor(state[variable], dtype=torch.float32)
+            as_numpy = not isinstance(state[variable], torch.Tensor)
             if variable in self.static_variables:
-                next_state[variable] = np.asarray(state[variable], dtype=np.float32)
+                updated = previous
             elif variable in forcings:
-                previous = np.asarray(state[variable], dtype=np.float32)
-                latest = np.asarray(forcings[variable], dtype=np.float32)[:, None]
-                next_state[variable] = np.concatenate([previous[:, 1:], latest], axis=1)
+                latest = torch.as_tensor(forcings[variable], dtype=torch.float32).to(previous.device)[:, None]
+                updated = torch.cat([previous[:, 1:], latest], dim=1)
             else:
-                previous = np.asarray(state[variable], dtype=np.float32)
-                next_state[variable] = np.concatenate([previous[:, 1:], forecast[variable][:, None]], axis=1)
+                latest = torch.as_tensor(forecast[variable], dtype=torch.float32).to(previous.device)[:, None]
+                updated = torch.cat([previous[:, 1:], latest], dim=1)
+            next_state[variable] = updated.numpy() if as_numpy else updated
         return next_state
 
 

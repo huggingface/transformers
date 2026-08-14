@@ -264,6 +264,43 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             for key in ("grid_features", "global_features"):
                 np.testing.assert_allclose(single[key][0], batched[key][member], rtol=1e-6, atol=1e-6)
 
+    @require_torch
+    def test_tensor_inputs_are_returned_as_tensors(self):
+        """Passing tensors keeps every stage on their device, so a rollout never round-trips to the host."""
+        import torch
+
+        tester = self.feat_extract_tester
+        extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        state = tester.prepare_state()
+        times = tester.prepare_times()
+
+        tensor_state = {name: torch.from_numpy(values) for name, values in state.items()}
+        numpy_inputs = extractor(state, seconds_since_epoch=times, return_tensors="np")
+        tensor_inputs = extractor(tensor_state, seconds_since_epoch=times)
+        for key in ("grid_features", "global_features"):
+            self.assertIsInstance(tensor_inputs[key], torch.Tensor)
+            np.testing.assert_allclose(tensor_inputs[key].numpy(), numpy_inputs[key], rtol=1e-6, atol=1e-6)
+
+        channels = sum(levels for _, _, levels in extractor.target_channel_layout)
+        prediction = (
+            np.random.default_rng(0)
+            .standard_normal((tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes))
+            .astype(np.float32)
+        )
+
+        numpy_forecast = extractor.postprocess(prediction, state)
+        tensor_forecast = extractor.postprocess(torch.from_numpy(prediction), tensor_state)
+        for name, values in numpy_forecast.items():
+            self.assertIsInstance(tensor_forecast[name], torch.Tensor)
+            np.testing.assert_allclose(tensor_forecast[name].numpy(), values, rtol=1e-6, atol=1e-6, equal_nan=True)
+
+        next_times = times + tester.time_step_hours * 3600
+        numpy_next = extractor.advance_state(state, numpy_forecast, next_times)
+        tensor_next = extractor.advance_state(tensor_state, tensor_forecast, next_times)
+        for name, values in numpy_next.items():
+            self.assertIsInstance(tensor_next[name], torch.Tensor)
+            np.testing.assert_allclose(tensor_next[name].numpy(), values, rtol=1e-6, atol=1e-6, equal_nan=True)
+
     def test_call_rejects_a_missing_time(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
