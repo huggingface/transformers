@@ -146,6 +146,28 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
+    def test_gated_delta_net_a_log_initialization_uses_float32_sampling(self):
+        previous_dtype = torch.get_default_dtype()
+        try:
+            torch.manual_seed(3)
+            torch.set_default_dtype(torch.bfloat16)
+
+            config = self.model_tester.get_config()
+            model = Qwen3_5TextModel(config)
+
+            a_logs = [
+                module.A_log
+                for module in model.modules()
+                if hasattr(module, "A_log")
+            ]
+
+            self.assertTrue(a_logs)
+            for a_log in a_logs:
+                self.assertEqual(a_log.dtype, torch.bfloat16)
+                self.assertTrue(torch.isfinite(a_log).all())
+        finally:
+            torch.set_default_dtype(previous_dtype)
+
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
