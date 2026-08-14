@@ -118,6 +118,10 @@ class MetalLinear(nn.Linear):
 
         kernel = _get_metal_kernel()
 
+        orig_shape = input.shape
+        if input.ndim > 2:
+            input = input.reshape(-1, self.in_features)
+
         output = kernel.affine_qmm_t(
             input,
             self.weight,
@@ -126,6 +130,9 @@ class MetalLinear(nn.Linear):
             self.group_size,
             self.bits,
         )
+
+        if len(orig_shape) > 2:
+            output = output.reshape(*orig_shape[:-1], self.out_features)
 
         if self.bias is not None:
             output = output + self.bias

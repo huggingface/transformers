@@ -336,6 +336,36 @@ class MetalLinearTest(unittest.TestCase):
         elems_per_int = 32 // 2  # 16
         self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
 
+    def test_forward_quantized_multidimensional_input_reshaping(self):
+        """When weight is uint32, forward should flatten ND input to 2D for affine_qmm_t and restore ND shape."""
+        from transformers.integrations.metal_quantization import MetalLinear
+
+        layer = MetalLinear(in_features=128, out_features=64, bias=True, bits=4, group_size=64)
+        mock_kernel = unittest.mock.MagicMock()
+
+        def mock_affine_qmm_t(x, weight, scales, qbiases, group_size, bits):
+            self.assertEqual(x.ndim, 2)
+            self.assertEqual(x.shape[1], 128)
+            return torch.zeros(x.shape[0], 64, dtype=x.dtype)
+
+        mock_kernel.affine_qmm_t.side_effect = mock_affine_qmm_t
+
+        with patch("transformers.integrations.metal_quantization._get_metal_kernel", return_value=mock_kernel):
+            # 2D input [M=10, K=128]
+            x2 = torch.randn(10, 128)
+            out2 = layer(x2)
+            self.assertEqual(out2.shape, (10, 64))
+
+            # 3D input [batch_size=2, seq_len=5, in_features=128]
+            x3 = torch.randn(2, 5, 128)
+            out3 = layer(x3)
+            self.assertEqual(out3.shape, (2, 5, 64))
+
+            # 4D input [2, 3, 4, 128]
+            x4 = torch.randn(2, 3, 4, 128)
+            out4 = layer(x4)
+            self.assertEqual(out4.shape, (2, 3, 4, 64))
+
 
 @require_torch
 class ReplaceWithMetalLinearTest(unittest.TestCase):
