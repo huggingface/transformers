@@ -5263,6 +5263,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     "out_hidden_size",
                     "hidden_size",
                     "hidden_dim",
+                    "mm_embed_dim", # gemma4-only
                 ]
                 hidden_size = None
                 for attr in attribute_candidates:

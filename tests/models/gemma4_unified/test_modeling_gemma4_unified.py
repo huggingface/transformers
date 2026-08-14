@@ -239,9 +239,11 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any images/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
+            "test_get_image_features_output",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
             "test_get_audio_features_hidden_states",
@@ -393,6 +395,7 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any audio/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
@@ -400,6 +403,7 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
             "test_get_video_features_attentions",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
+            "test_get_audio_features_output",
         ]
 
         for test in skippable_tests:
