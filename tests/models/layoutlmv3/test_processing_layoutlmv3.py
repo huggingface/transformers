@@ -60,6 +60,10 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         return tokenizer_class.from_pretrained(cls.tmpdirname, unk_token="<unk>")
 
+    @unittest.skip("LayoutLMv3Processor can't process string text, requires pre-tokenized words")
+    def test_subprocessor_defaults_0_text(self):
+        pass
+
 
 # different use cases tests
 @require_torch

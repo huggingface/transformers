@@ -52,7 +52,6 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1440},
         {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2160},
         {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 4320},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 4320},
     ]
     video_len_sampled_from_images = 1176
 

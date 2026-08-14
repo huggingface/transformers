@@ -284,3 +284,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         pass
+
+    @unittest.skip("ColModernVBert has no chat template, force-set to None at runtime")
+    def test_chat_template_save_loading(self):
+        pass

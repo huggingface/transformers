@@ -17,13 +17,8 @@ import unittest
 
 from transformers import QianfanOCRProcessor
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_torch_available():
-    pass
 
 
 @slow

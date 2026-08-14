@@ -18,16 +18,13 @@ import pytest
 
 from transformers import AutoProcessor, TokenizersBackend
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Ernie4_5_VLMoeImageProcessor, Ernie4_5_VLMoeProcessor
-
-if is_torch_available():
-    pass
 
 
 @require_vision
@@ -41,24 +38,17 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
     video_sampling_expectations = [
-        {"num_frames": None, "fps": 3, "expected_dim": 0, "output_length": 2304},
+        {"num_frames": None, "fps": 3, "expected_dim": 0, "output_length": 384},
         {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 2304},
         {"do_sample_frames": False, "expected_dim": 0, "output_length": 2304},
         {"expected_dim": 0, "output_length": 2304},
     ]
     video_len_sampled_from_images = None
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def _setup_video_processor(cls):
+        component = AutoProcessor.from_pretrained(cls.tiny_model_id, min_frames=1).video_processor
+        return component
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
@@ -74,9 +64,9 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(output["num_image_patches"]), 3)
 
     def test_save_load_pretrained_default(self):
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
+        tokenizer = self.get_component("tokenizer")
+        image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
 
         processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
@@ -90,9 +80,9 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.image_processor, Ernie4_5_VLMoeImageProcessor)
 
     def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+        video_processor = self.get_component("video_processor")
 
         processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
@@ -107,9 +97,9 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+        video_processor = self.get_component("video_processor")
 
         processor = Ernie4_5_VLMoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor

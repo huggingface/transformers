@@ -17,16 +17,13 @@ import unittest
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Kimi_K25Processor
-
-if is_torch_available():
-    pass
 
 
 @require_vision

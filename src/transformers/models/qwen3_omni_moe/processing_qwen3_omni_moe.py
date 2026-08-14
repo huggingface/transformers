@@ -28,7 +28,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -179,9 +179,8 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos)
+            fps = [fps] * len(videos_inputs["video_grid_thw"])
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]

@@ -14,17 +14,16 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Glm4vProcessor
-
-if is_torch_available():
-    pass
 
 
 @require_vision
@@ -47,3 +46,8 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+
+    @parameterized.expand([(1, "pt")])
+    @unittest.skip("Mode requires metadata to be always passed by users")
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        pass
