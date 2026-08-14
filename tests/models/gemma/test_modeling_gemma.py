@@ -403,7 +403,10 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        # Compile __call__ instead of forward (copied from test_modeling_mistral.py): compiling forward
+        # causes a CUDA graph RuntimeError when multiple generate() calls are made on the same model.
+        forward_function = model.__call__
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
