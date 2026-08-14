@@ -24,7 +24,6 @@ from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, Semantic
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ...utils.output_capturing import capture_outputs
 from .configuration_segformer import SegformerConfig
 
 
@@ -414,10 +413,6 @@ class SegformerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    @property
-    def _can_record_outputs(self) -> dict[str, str]:
-        return {"hidden_states": "SegformerEncoder", "attentions": "SegformerEncoder"}
-
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
@@ -471,11 +466,6 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": "SegformerForImageClassification",
-        "attentions": "SegformerForImageClassification",
-    }
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -489,7 +479,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
