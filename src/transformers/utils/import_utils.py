@@ -1508,6 +1508,10 @@ def is_natten_available() -> bool:
     return _is_package_available("natten")[0]
 
 
+def is_trimesh_available() -> bool:
+    return _is_package_available("trimesh")[0]
+
+
 @lru_cache
 @_make_compile_constant
 def is_nltk_available() -> bool:
@@ -2142,6 +2146,11 @@ shi-labs.com/natten . You can also install it with pip (may take longer to build
 `pip install natten`. Please note that you may need to restart your runtime after installation.
 """
 
+TRIMESH_IMPORT_ERROR = """
+{0} requires the trimesh library but it was not found in your environment. You can install it with pip:
+`pip install trimesh rtree`. Please note that you may need to restart your runtime after installation.
+"""
+
 NUMEXPR_IMPORT_ERROR = """
 {0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
 https://numexpr.readthedocs.io/en/latest/index.html.
@@ -2292,6 +2301,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
+        ("trimesh", (is_trimesh_available, TRIMESH_IMPORT_ERROR)),
         ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),

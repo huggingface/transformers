@@ -18,7 +18,7 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_trimesh, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -160,6 +160,7 @@ class WeatherNext2ModelTester:
 
 
 @require_torch
+@require_trimesh
 class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
     # There is no `weather-forecasting` pipeline yet; the inputs are global gridded states rather than
@@ -385,6 +386,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
 
 @require_torch
+@require_trimesh
 class WeatherNext2GeometryTest(unittest.TestCase):
     def test_mesh_sizes_and_banded_mask(self):
         geometry = build_geometry(
@@ -423,6 +425,7 @@ class WeatherNext2GeometryTest(unittest.TestCase):
 
 @require_torch
 @slow
+@require_trimesh
 class WeatherNext2ModelIntegrationTest(unittest.TestCase):
     """End-to-end check against the released 1 degree Mini checkpoint.
 

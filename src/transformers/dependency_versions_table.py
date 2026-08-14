@@ -77,6 +77,7 @@ deps = {
     "torch": "torch>=2.5",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
+    "trimesh": "trimesh",
     "pyctcdecode": "pyctcdecode>=0.4.0",
     "tqdm": "tqdm>=4.60",
     "typer": "typer",

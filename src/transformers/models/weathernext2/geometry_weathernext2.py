@@ -36,7 +36,11 @@ from scipy.sparse.csgraph import reverse_cuthill_mckee
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
-from ...utils import logging
+from ...utils import is_trimesh_available, logging, requires_backends
+
+
+if is_trimesh_available():
+    import trimesh
 
 
 logger = logging.get_logger(__name__)
@@ -216,100 +220,23 @@ def ball_query_edges(grid_xyz: np.ndarray, mesh_xyz: np.ndarray, radius: float) 
     return grid_indices.astype(np.int64), mesh_indices.astype(np.int64)
 
 
-def _point_triangle_sq_distance(points: np.ndarray, tri: np.ndarray) -> np.ndarray:
-    """Squared distance from each point to its candidate triangle.
-
-    `points` is [N, 3], `tri` is [N, 3, 3] (three vertices per point). Standard closest-point-on-
-    triangle: solve the 2D quadratic in barycentric coordinates and clamp to the triangle's region.
-    """
-    a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
-    ab, ac, ap = b - a, c - a, points - a
-
-    d1 = np.einsum("ij,ij->i", ab, ap)
-    d2 = np.einsum("ij,ij->i", ac, ap)
-    bp = points - b
-    d3 = np.einsum("ij,ij->i", ab, bp)
-    d4 = np.einsum("ij,ij->i", ac, bp)
-    cp = points - c
-    d5 = np.einsum("ij,ij->i", ab, cp)
-    d6 = np.einsum("ij,ij->i", ac, cp)
-
-    closest = np.empty_like(points)
-    assigned = np.zeros(len(points), dtype=bool)
-
-    def assign(where, value):
-        sel = where & ~assigned
-        if sel.any():
-            closest[sel] = value[sel] if value.ndim == 2 else value
-            assigned[sel] = True
-
-    # Vertex regions.
-    assign((d1 <= 0) & (d2 <= 0), a)
-    assign((d3 >= 0) & (d4 <= d3), b)
-    assign((d6 >= 0) & (d5 <= d6), c)
-
-    with np.errstate(divide="ignore", invalid="ignore"):
-        # Edge AB.
-        vc = d1 * d4 - d3 * d2
-        v = np.where(d1 - d3 != 0, d1 / np.where(d1 - d3 != 0, d1 - d3, 1.0), 0.0)
-        assign((vc <= 0) & (d1 >= 0) & (d3 <= 0), a + v[:, None] * ab)
-
-        # Edge AC.
-        vb = d5 * d2 - d1 * d6
-        w = np.where(d2 - d6 != 0, d2 / np.where(d2 - d6 != 0, d2 - d6, 1.0), 0.0)
-        assign((vb <= 0) & (d2 >= 0) & (d6 <= 0), a + w[:, None] * ac)
-
-        # Edge BC.
-        va = d3 * d6 - d5 * d4
-        denom = (d4 - d3) + (d5 - d6)
-        w_bc = np.where(denom != 0, (d4 - d3) / np.where(denom != 0, denom, 1.0), 0.0)
-        assign((va <= 0) & (d4 - d3 >= 0) & (d5 - d6 >= 0), b + w_bc[:, None] * (c - b))
-
-        # Interior.
-        denom_i = va + vb + vc
-        inv = np.where(denom_i != 0, 1.0 / np.where(denom_i != 0, denom_i, 1.0), 0.0)
-        interior = a + ab * (vb * inv)[:, None] + ac * (vc * inv)[:, None]
-        assign(np.ones(len(points), dtype=bool), interior)
-
-    return np.einsum("ij,ij->i", points - closest, points - closest)
-
-
 def in_triangle_edges(
-    grid_xyz: np.ndarray, mesh_xyz: np.ndarray, mesh_faces: np.ndarray, num_candidates: int = 12
+    grid_xyz: np.ndarray, mesh_xyz: np.ndarray, mesh_faces: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     """Connect every grid point to the 3 vertices of its nearest mesh face.
 
-    "Nearest" is the euclidean-closest point on the triangulated surface, matching
-    ``trimesh.proximity.nearest.on_surface`` used upstream. Candidate faces come from a KD-tree over
-    face centroids; ``num_candidates`` is comfortably above what this mesh geometry requires (the
-    true nearest face's centroid is always among the nearest few for a mesh this regular).
-
-    A grid point that falls exactly on a shared mesh edge is equidistant from both adjacent faces.
-    Upstream resolves such ties by whatever order its R-tree happens to return, which no index rule
-    reproduces; we break them towards the lowest face index instead. At 1 degree this picks a
-    different face for 177 of 65160 grid points (0.27%), 174 of them exact ties. Both choices are
-    equally correct geometrically, but the model was trained with theirs, and the resulting forecast
-    differs locally: mean 3.8e-4 K in 2m temperature, up to 1 K at the affected points.
+    "Nearest" is the euclidean-closest point on the triangulated surface. Grid points that fall
+    exactly on a shared mesh edge are equidistant from both adjacent faces, and which one is picked
+    is decided by the order the query returns rather than by geometry, so this calls trimesh exactly
+    as the original implementation does. A different tie-break changes the forecast locally by up to
+    about 1 K in 2m temperature.
     """
-    centroids = mesh_xyz[mesh_faces].mean(axis=1)
-    centroids /= np.linalg.norm(centroids, axis=-1, keepdims=True)
-    tree = cKDTree(centroids)
-    num_candidates = min(num_candidates, len(mesh_faces))
-    _, candidate_faces = tree.query(grid_xyz, k=num_candidates)
+    requires_backends(in_triangle_edges, ["trimesh"])
+    mesh = trimesh.Trimesh(vertices=mesh_xyz, faces=mesh_faces, process=False)
+    _, _, face_indices = mesh.nearest.on_surface(grid_xyz)
 
     num_points = grid_xyz.shape[0]
-    sq_dists = np.stack(
-        [
-            _point_triangle_sq_distance(grid_xyz, mesh_xyz[mesh_faces[candidate_faces[:, i]]])
-            for i in range(num_candidates)
-        ],
-        axis=1,
-    )
-    # Among candidates within numerical tie tolerance of the minimum, take the lowest face index.
-    tied = sq_dists <= sq_dists.min(axis=1, keepdims=True) + 1e-14
-    best_face = np.where(tied, candidate_faces, np.iinfo(np.int64).max).min(axis=1)
-
-    mesh_indices = mesh_faces[best_face].reshape(-1).astype(np.int64)
+    mesh_indices = mesh_faces[face_indices].reshape(-1).astype(np.int64)
     grid_indices = np.repeat(np.arange(num_points), 3).astype(np.int64)
     return grid_indices, mesh_indices
 
@@ -476,6 +403,8 @@ def build_geometry_cached(
     """
     key = "|".join(
         [
+            # Bump when the construction changes, so stale caches are not reused.
+            "v2",
             str(mesh_splits),
             str(attention_k_hop),
             f"{ball_query_radius_fraction:.6f}",
