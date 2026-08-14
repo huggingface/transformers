@@ -924,13 +924,14 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
-        # We only scatter non-padding patches into the placeholder token positions - (batch, num_patches)
-        padding_mask = (image_position_ids == -1).all(dim=-1).to(vision_outputs.pooler_output.device)
+        # We only scatter non-padding patches into the placeholder token positions.
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)  # (batch, num_patches)
 
         # Flatten valid patches: keep only non-padding patches across the batch
-        # Output will be of shape - (total_valid_patches, text_hidden_size)
-        vision_outputs.pooler_output = vision_outputs.pooler_output[~padding_mask]
-
+        # The final output shape is (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        split_sizes = non_pad_mask.sum(dim=-1).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1024,7 +1025,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1041,7 +1042,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1166,12 +1167,18 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
         """
-        # Flatten video frames: (num_videos, num_frames, ...) → (num_videos*num_frames, ...)
-        pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
+        vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
 
-        # Use the same unified pipeline as images
-        return self.get_image_features(pixel_values_videos, video_position_ids, **kwargs)
+        # Strip padding patches before scattering into text sequence.
+        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.device)
+
+        # Flatten valid patches: keep only non-padding patches across all frames
+        vision_outputs = vision_outputs[non_pad_mask.flatten(0, 1)]  # (total_valid_patches, text_hidden_size)
+
+        split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
+        return Gemma4UnifiedVisionModelOutput(
+            pooler_output=torch.split(vision_outputs, split_sizes),
+        )
 
 
 def create_masks_for_vision_model(
