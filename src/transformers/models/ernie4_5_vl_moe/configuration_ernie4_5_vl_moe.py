@@ -186,6 +186,8 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     image_start_token_id: int = 101304
     image_end_token_id: int = 101305
     image_token_id: int = 100295
+    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
+    mrope_layout: str = "interleaved_runs"
     video_start_token_id: int = 101306
     video_end_token_id: int = 101307
     video_token_id: int = 103367

@@ -35,6 +35,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import get_mrope_index
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
@@ -159,6 +160,10 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     num_attention_heads: int = 16
     num_patches: int = 256
     spatial_merge_size: int = 2
+    # Whether the processor separates video frames with timestamp text, making each frame its own visual
+    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
+    # (`modeling_rope_utils.get_mrope_index`).
+    timestamped_video_frames: bool = True
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
@@ -189,6 +194,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
     vision_config: Cosmos3EdgeVisionConfig | dict | None = None
     projector_hidden_size: int = 11520
     image_token_id: int = 19
+    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
+    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 18
     vision_start_token_id: int = 20
     vision_end_token_id: int = 21
@@ -654,21 +661,15 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        **super_kwargs,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Edge's processor emits one timestamped visual span per frame, so split each video's temporal grid before
-        # applying Qwen2-VL's common multimodal position-index routine.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0).clone()
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(
-            input_ids=input_ids,
+        return get_mrope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
-            mm_token_type_ids=mm_token_type_ids,
-            **super_kwargs,
         )
 
     @can_return_tuple

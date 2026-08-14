@@ -1678,6 +1678,20 @@ class ConfigArgs:
     """,
     }
 
+    timestamped_video_frames = {
+        "description": """
+    Whether the processor separates video frames with timestamp text, making each frame its own visual span.
+    The decoder's M-RoPE positions then lay out a video one `T=1` frame at a time.
+    """,
+    }
+
+    mrope_layout = {
+        "description": """
+    Which M-RoPE layout produces the model's decoder position ids — see
+    [`~transformers.modeling_rope_utils.get_mrope_index`] for the available layouts.
+    """,
+    }
+
     vision_start_token_id = {
         "description": """
     Token ID that marks the start of a visual segment in the multimodal input sequence.

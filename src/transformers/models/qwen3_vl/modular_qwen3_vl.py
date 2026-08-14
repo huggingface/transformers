@@ -31,7 +31,7 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, get_mrope_index
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -111,6 +111,10 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     in_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 16
     spatial_merge_size: int = 2
+    # Whether the processor separates video frames with timestamp text, making each frame its own visual
+    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
+    # (`modeling_rope_utils.get_mrope_index`).
+    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
@@ -192,6 +196,8 @@ class Qwen3VLConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151655
+    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
+    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151656
     vision_start_token_id: int = 151652
     vision_end_token_id: int = 151653
@@ -667,12 +673,18 @@ class Qwen3VLModel(Qwen2VLModel):
 
     def get_rope_index(
         self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
+        Calculate the 3D rope index. Vision tokens use 3D RoPE (temporal, height, width), text tokens use
+        standard 1D RoPE. Difference from Qwen2VL/Qwen2.5VL: Qwen3-VL uses timestamps to separate videos,
+        like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, so each
+        video grid is split into one `T=1` frame per timestamp (`split_video_frames`).
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -694,13 +706,14 @@ class Qwen3VLModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
+        return get_mrope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+        )
 
     def get_image_features(
         self,

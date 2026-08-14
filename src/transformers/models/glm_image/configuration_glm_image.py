@@ -70,6 +70,10 @@ class GlmImageVisionConfig(PreTrainedConfig):
     image_size: int | list[int] | tuple[int, int] = 2048
     patch_size: int | list[int] | tuple[int, int] = 16
     spatial_merge_size: int = 1
+    # Whether the processor separates video frames with timestamp text, making each frame its own visual
+    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
+    # (`modeling_rope_utils.get_mrope_index`).
+    timestamped_video_frames: bool = True
     intermediate_size: int = 6144
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06

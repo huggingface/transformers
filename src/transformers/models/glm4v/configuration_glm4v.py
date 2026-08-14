@@ -60,6 +60,10 @@ class Glm4vVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     rms_norm_eps: float = 1e-05
     spatial_merge_size: int = 2
+    # Whether the processor separates video frames with timestamp text, making each frame its own visual
+    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
+    # (`modeling_rope_utils.get_mrope_index`).
+    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
@@ -159,6 +163,8 @@ class Glm4vConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151343
+    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
+    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151344
     image_start_token_id: int = 151339
     image_end_token_id: int = 151340

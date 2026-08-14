@@ -29,7 +29,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, get_mrope_index
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -106,6 +106,10 @@ class Glm4vVisionConfig(PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 14
     rms_norm_eps: float = 1e-05
     spatial_merge_size: int = 2
+    # Whether the processor separates video frames with timestamp text, making each frame its own visual
+    # span: the decoder's M-RoPE positions then lay out a video one `T=1` frame at a time
+    # (`modeling_rope_utils.get_mrope_index`).
+    timestamped_video_frames: bool = True
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
@@ -205,6 +209,8 @@ class Glm4vConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151343
+    # Which M-RoPE layout lays out this model's decoder position ids (`modeling_rope_utils.get_mrope_index`).
+    mrope_layout: str = "interleaved_runs"
     video_token_id: int = 151344
     image_start_token_id: int = 151339
     image_end_token_id: int = 151340
@@ -853,12 +859,17 @@ class Glm4vModel(Qwen2VLModel):
 
     def get_rope_index(
         self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - GLM4V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
+        Calculate the 3D rope index. Vision tokens use 3D RoPE (temporal, height, width), text tokens use
+        standard 1D RoPE. Difference from Qwen2VL/Qwen2.5VL: GLM4V uses timestamps to separate each video
+        frame, so each video grid is split into one `T=1` frame per timestamp (`split_video_frames`).
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -880,13 +891,14 @@ class Glm4vModel(Qwen2VLModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
+        return get_mrope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+        )
 
     @auto_docstring
     @can_return_tuple
