@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import itertools
 import math
 import warnings
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from .utils import is_torch_available, logging
 
@@ -132,11 +134,11 @@ def dynamic_rope_update(rope_forward):
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
     Args:
@@ -192,12 +194,12 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_proportional_rope_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
     head_dim_key: str = "head_dim",
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with proportional RoPE.
 
@@ -268,11 +270,11 @@ def _compute_proportional_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig | None = None,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
@@ -344,11 +346,11 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
     [original paper](https://huggingface.co/papers/2309.00071)
@@ -485,11 +487,11 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
     [original implementation](https://github.com/microsoft/LongRoPE)
@@ -579,11 +581,11 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: "PreTrainedConfig",
-    device: Optional["torch.device"] = None,
+    config: PreTrainedConfig,
+    device: torch.device | None = None,
     seq_len: int | None = None,
     layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
+) -> tuple[torch.Tensor, float]:
     """
     Computes the inverse frequencies for llama 3.1.
 
@@ -666,7 +668,7 @@ def _compute_llama3_parameters(
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
-ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
+ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -813,7 +815,7 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self: PreTrainedConfig):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
@@ -1096,7 +1098,7 @@ def get_mrope_vision_positions(
     temporal_merge_size: int = 1,
     spatial_merge_size: int = 1,
     time_interval: float = 1,
-    dtype: torch.dtype = torch.long,
+    dtype: torch.dtype | None = None,
     device: str | torch.device | None = None,
 ) -> torch.Tensor:
     """3D M-RoPE positions (temporal, height, width) for one image/video grid, in the *decoder* sequence.
@@ -1120,6 +1122,7 @@ def get_mrope_vision_positions(
     Returns:
         `(3, T'*H'*W')` — temporal/height/width position ids, offset by `start_position`.
     """
+    dtype = dtype if dtype is not None else torch.long
     llm_grid_t = grid_thw[0].item() // temporal_merge_size
     llm_grid_h = grid_thw[1].item() // spatial_merge_size
     llm_grid_w = grid_thw[2].item() // spatial_merge_size
@@ -1146,7 +1149,7 @@ def uses_mrope(config) -> bool:
 def get_mrope_text_positions(
     attention_mask: torch.Tensor,
     num_axes: int = 3,
-    dtype: torch.dtype = torch.long,
+    dtype: torch.dtype | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Plain 1D positions broadcast over `num_axes` M-RoPE axes: `(position_ids, rope_deltas)`.
 
@@ -1154,6 +1157,7 @@ def get_mrope_text_positions(
     (including audio ones, which carry no spatial axes of their own) just counts up, padded slots keeping
     position 1.
     """
+    dtype = dtype if dtype is not None else torch.long
     position_ids = attention_mask.to(dtype).cumsum(-1) - 1
     position_ids.masked_fill_(attention_mask == 0, 1)
     position_ids = position_ids.unsqueeze(0).expand(num_axes, -1, -1)
@@ -1398,13 +1402,14 @@ def _mrope_positions_block(
     length: int | torch.Tensor,
     start_position: int | torch.Tensor,
     num_axes: int = 3,
-    dtype: torch.dtype = torch.long,
+    dtype: torch.dtype | None = None,
     device: str | torch.device | None = None,
 ) -> torch.Tensor:
     """`(num_axes, length)` block of consecutive positions from `start_position`, the same on every axis.
 
     What a text run — or an audio span, which is 1D in time — contributes to a multi-axis layout.
     """
+    dtype = dtype if dtype is not None else torch.long
     return torch.arange(int(length), dtype=dtype, device=device).view(1, -1).expand(num_axes, -1) + start_position
 
 
