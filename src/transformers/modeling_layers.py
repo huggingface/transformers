@@ -534,9 +534,10 @@ class MtpModel(PreTrainedModel):
                 )
 
             # Append the drafted logits
+            logits = logits.to(input_ids.device)
             drafted_logits.append(logits)
             # Decode one token
-            next_token_logits = logits[:, -1, :].to(device=input_ids.device)
+            next_token_logits = logits[:, -1, :]
             if logits_processor is not None and full_input_ids is not None:
                 next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
             if do_sample:

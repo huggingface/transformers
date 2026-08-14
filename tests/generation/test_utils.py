@@ -24,6 +24,7 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -110,6 +111,8 @@ if is_torch_available():
     from transformers.generation.candidate_generator import (
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
+        DFlashTokenCandidateGenerator,
+        SinglePositionMultiTokenCandidateGenerator,
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
@@ -3944,6 +3947,161 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    @require_torch_multi_accelerator
+    def test_gemma_candidate_generator_keeps_ids_on_input_device(self):
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+        hidden_size = 4
+        vocab_size = 8
+
+        class Gemma4AssistantForCausalLM(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = SimpleNamespace(is_encoder_decoder=False)
+                self.generation_config = GenerationConfig(
+                    eos_token_id=vocab_size - 1,
+                    pad_token_id=0,
+                    max_length=8,
+                    num_assistant_tokens=2,
+                    num_assistant_tokens_schedule="constant",
+                )
+
+            @property
+            def device(self):
+                return assistant_device
+
+            def forward(self, **kwargs):
+                batch_size = kwargs["inputs_embeds"].shape[0]
+                logits = torch.zeros(batch_size, 1, vocab_size, device=assistant_device)
+                logits[..., 1] = 1
+                return SimpleNamespace(
+                    logits=logits,
+                    last_hidden_state=torch.zeros(batch_size, 1, hidden_size, device=assistant_device),
+                )
+
+        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
+        target_embeddings = torch.nn.Embedding(vocab_size, hidden_size, device=input_device)
+        model_kwargs = {
+            "attention_mask": torch.ones_like(input_ids),
+            "position_ids": torch.arange(input_ids.shape[1], device=input_device).unsqueeze(0),
+        }
+        gemma_generator = SinglePositionMultiTokenCandidateGenerator(
+            input_ids=input_ids,
+            assistant_model=Gemma4AssistantForCausalLM(),
+            target_model_input_embeddings=target_embeddings,
+            generation_config=GenerationConfig(eos_token_id=vocab_size - 1, pad_token_id=0, max_length=8),
+            model_kwargs=model_kwargs,
+        )
+        gemma_outputs = SimpleNamespace(
+            hidden_states=(torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),),
+            shared_kv_states={
+                "layer": (
+                    torch.zeros(1, 1, input_ids.shape[1], hidden_size, device=input_device),
+                    torch.zeros(1, 1, input_ids.shape[1], hidden_size, device=input_device),
+                )
+            },
+        )
+        candidate_ids, candidate_logits = gemma_generator.get_candidates(
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=gemma_outputs,
+            is_first_iteration=False,
+            n_last_matches=0,
+        )
+        self.assertEqual(candidate_ids.device, input_device)
+        self.assertEqual(candidate_logits.device, input_device)
+
+    @require_torch_multi_accelerator
+    def test_mtp_candidate_generator_keeps_ids_on_input_device(self):
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+        hidden_size = 4
+        vocab_size = 8
+        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
+
+        class FakeMtpLayer(torch.nn.Module):
+            def forward(self, inputs_embeds, last_hidden_states, **kwargs):
+                return last_hidden_states + inputs_embeds
+
+        fake_mtp_model = SimpleNamespace(
+            layers=[FakeMtpLayer(), FakeMtpLayer()],
+            embed_tokens=torch.nn.Embedding(vocab_size, hidden_size, device=input_device),
+            rotary_emb=None,
+            use_shared_post_norm=False,
+            create_masks_for_mtp_layer=lambda *args, **kwargs: {},
+            _project_to_logits=lambda hidden_states: torch.zeros(
+                hidden_states.shape[0], hidden_states.shape[1], vocab_size, device=assistant_device
+            ),
+        )
+        mtp_candidate_ids, mtp_candidate_logits, _ = MtpModel.forward(
+            fake_mtp_model,
+            input_ids=input_ids[:, -1:],
+            last_hidden_states=torch.zeros(1, 1, hidden_size, device=assistant_device),
+            attention_mask=torch.ones(1, 1, device=input_device),
+            position_ids=torch.ones(1, 1, dtype=torch.long, device=input_device),
+            mtp_cache=None,
+            logits_processor=LogitsProcessorList(),
+            full_input_ids=input_ids,
+        )
+        self.assertEqual(mtp_candidate_ids.device, input_device)
+        self.assertEqual(mtp_candidate_logits.device, input_device)
+
+    @require_torch_multi_accelerator
+    def test_dflash_candidate_generator_keeps_ids_on_input_device(self):
+        input_device = torch.device(f"{torch_device}:0")
+        assistant_device = torch.device(f"{torch_device}:1")
+        hidden_size = 4
+        vocab_size = 8
+        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
+        model_kwargs = {
+            "attention_mask": torch.ones_like(input_ids),
+            "position_ids": torch.arange(input_ids.shape[1], device=input_device).unsqueeze(0),
+        }
+
+        class FakeDFlashAssistant(torch.nn.Module):
+            def forward(self, **kwargs):
+                batch_size = kwargs["noise_embeds"].shape[0]
+                return SimpleNamespace(
+                    last_hidden_state=torch.zeros(batch_size, 3, hidden_size, device=assistant_device)
+                )
+
+        class FakeDFlashCache:
+            def set_previous_accepted_tokens(self, *args, **kwargs):
+                pass
+
+            def crop(self, *args, **kwargs):
+                pass
+
+        dflash_generator = DFlashTokenCandidateGenerator.__new__(DFlashTokenCandidateGenerator)
+        dflash_generator.assistant_model = FakeDFlashAssistant()
+        dflash_generator.main_model_max_length = 8
+        dflash_generator.main_model_input_embeddings = torch.nn.Embedding(vocab_size, hidden_size, device=input_device)
+        dflash_generator.main_model_output_embeddings = torch.nn.Linear(hidden_size, vocab_size, device=assistant_device)
+        dflash_generator.target_layer_ids = [0]
+        dflash_generator.block_size = 3
+        dflash_generator.mask_token_id = 0
+        dflash_generator.noise_ids_mask = torch.tensor([[0, 0]])
+        dflash_generator.cache = FakeDFlashCache()
+        dflash_generator.do_sample = False
+        dflash_generator.logits_processor = None
+        dflash_generator.is_main_model_prefill = True
+
+        dflash_outputs = SimpleNamespace(
+            hidden_states=(
+                torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),
+                torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),
+            )
+        )
+        dflash_candidate_ids, dflash_candidate_logits = dflash_generator.get_candidates(
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=dflash_outputs,
+            is_first_iteration=False,
+            n_last_matches=0,
+        )
+        self.assertEqual(dflash_candidate_ids.device, input_device)
+        self.assertEqual(dflash_candidate_logits.device, input_device)
 
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
