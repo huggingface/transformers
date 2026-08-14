@@ -1006,7 +1006,7 @@ def group_images_by_shape(
 
     Returns:
         tuple[dict, ...]:
-            - A dictionary with shape or indexas key and list/batch of images with that shape as value.
+            - A dictionary with shape or index as key and list/batch of images with that shape as value.
               The key is the shape of the images if `disable_grouping` evaluates to True, and the index
               of the image in the original list otherwise.
             - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`; these carry
