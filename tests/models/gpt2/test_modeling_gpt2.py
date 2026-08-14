@@ -321,7 +321,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
             self.model_tester.prepare_config_and_inputs_for_decoder()
         )
         config.add_cross_attention = True
-        model = GPT2Model(config).eval()
+        model = GPT2Model(config).to(device=torch_device).eval()
 
         # Mark the second half of encoder sequence as padding
         padding = encoder_attention_mask.shape[1] // 2
