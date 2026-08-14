@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.pytorch_utils import Conv1D
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -278,6 +279,14 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_openai_gpt_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_openai_gpt_for_sequence_classification(*config_and_inputs)
+
+    def test_conv1d_weights_respect_initializer_range(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.initializer_range = 0.0
+        model = OpenAIGPTModel(config=config)
+        conv1d_weights = [m.weight for m in model.modules() if isinstance(m, Conv1D)]
+        self.assertTrue(conv1d_weights)
+        self.assertTrue(all(torch.all(p == 0) for p in conv1d_weights))
 
     @slow
     def test_model_from_pretrained(self):

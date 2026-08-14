@@ -18,6 +18,7 @@ import unittest
 from functools import cached_property
 
 from transformers import ImageGPTConfig
+from transformers.pytorch_utils import Conv1D
 from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -273,6 +274,14 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_imagegpt_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_imagegpt_for_image_classification(*config_and_inputs)
+
+    def test_conv1d_weights_respect_initializer_range(self):
+        config = self.model_tester.get_config()
+        config.initializer_range = 0.0
+        model = ImageGPTModel(config=config)
+        conv1d_weights = [m.weight for m in model.modules() if isinstance(m, Conv1D)]
+        self.assertTrue(conv1d_weights)
+        self.assertTrue(all(torch.all(p == 0) for p in conv1d_weights))
 
     @slow
     def test_model_from_pretrained(self):

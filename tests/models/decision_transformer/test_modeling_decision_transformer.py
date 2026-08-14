@@ -17,6 +17,7 @@ import inspect
 import unittest
 
 from transformers import DecisionTransformerConfig, is_torch_available
+from transformers.pytorch_utils import Conv1D
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -174,6 +175,14 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
             ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_conv1d_weights_respect_initializer_range(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.initializer_range = 0.0
+        model = DecisionTransformerModel(config=config)
+        conv1d_weights = [m.weight for m in model.modules() if isinstance(m, Conv1D)]
+        self.assertTrue(conv1d_weights)
+        self.assertTrue(all(torch.all(p == 0) for p in conv1d_weights))
 
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):

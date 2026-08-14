@@ -260,6 +260,10 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, Conv1D):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Attention):
             n_positions = module.n_positions
             init.copy_(
