@@ -32,6 +32,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -610,7 +611,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
 
 
 @auto_docstring
-class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
+class Exaone4_5_Model(Exaone4_5_PreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -761,7 +762,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         )
 
 
-class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
+class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     """
     Main EXAONE 4.5 conditional generation class.
 
@@ -882,43 +883,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             attentions=outputs.attentions,
         )
 
-    def _get_image_nums_and_video_nums(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns per-sample counts of image and video placeholder tokens.
-
-        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
-        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
-        computed directly from `input_ids`.
-        """
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-
-        if inputs_embeds is not None:
-            image_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            video_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-        else:
-            image_mask = input_ids == image_token_id
-            video_mask = input_ids == video_token_id
-
-        image_nums = torch.sum(image_mask, dim=1)
-        video_nums = torch.sum(video_mask, dim=1)
-
-        return image_nums, video_nums
-
     def _expand_inputs_for_generation(
         self,
         expand_size: int = 1,
@@ -1006,6 +970,43 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns per-sample counts of image and video placeholder tokens.
+
+        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
+        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
+        computed directly from `input_ids`.
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+
+        if inputs_embeds is not None:
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
+        image_nums = torch.sum(image_mask, dim=1)
+        video_nums = torch.sum(video_mask, dim=1)
+
+        return image_nums, video_nums
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)

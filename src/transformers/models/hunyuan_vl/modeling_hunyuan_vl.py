@@ -31,6 +31,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, get_mrope_index
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -855,7 +856,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
     The HunYuanVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class HunYuanVLModel(HunYuanVLPreTrainedModel):
+class HunYuanVLModel(HunYuanVLPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -868,88 +869,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_vision_position_ids(
-        self,
-        start_position: int,
-        grid_thw: list[int, int, int] | torch.Tensor,
-        temp_merge_size: int = 1,
-        spatial_merge_size: int = 1,
-        time_interval: int = 1,
-        device: str | torch.device | None = None,
-    ):
-        """
-        Compute 3D positional indices for vision tokens derived from a single image or video input.
-
-        The positions are generated from the input grid defined by temporal (T), height (H), and
-        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
-        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
-
-        Args:
-            start_position (`int`):
-                Offset added to all computed positional indices.
-            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
-                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
-            temp_merge_size (`int`, *optional*):
-                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
-                by this value. Defaults to 1.
-            spatial_merge_size (`int`, *optional*):
-                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
-                by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
-            device (`str` or `torch.device`, *optional*):
-                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
-
-        Returns:
-            torch.LongTensor of shape (3, sequence_length):
-                Positional indices for temporal, height, and width dimensions,
-                flattened into sequence form and offset by `start_position`.
-        """
-        llm_grid_t, llm_grid_h, llm_grid_w = (
-            grid_thw[0].item() // temp_merge_size,
-            grid_thw[1].item() // spatial_merge_size,
-            grid_thw[2].item() // spatial_merge_size,
-        )
-
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-
-        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
-        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
-        vision_position_ids[0] += start_position  # must be after time_interval multiply
-        return vision_position_ids
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.LongTensor, torch.LongTensor]:
-        """
-        Build HunYuanVL multimodal RoPE position ids.
-
-        `rope_parameters["mrope_section"]` controls both the number and order of multimodal RoPE axes. Each section
-        value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
-        `head_dim // 2`.
-
-        This method returns only the multimodal rotary axes consumed by the text backbone. The last three axes are
-        `(width, height, image_index)`; any preceding axes keep their default 1D sequence positions.
-
-        `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
-        image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
-        `1`, and so on. Text-only 1D positions for the causal mask are inferred by the text backbone and are not part
-        of this return value.
-        """
-        return get_mrope_index(
-            self.config,
-            input_ids,
-            mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            attention_mask=attention_mask,
-        )
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -990,32 +909,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
                 f"features {image_features.shape[0]}"
             )
         return special_image_mask
-
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.LongTensor | None,
-        image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-    ) -> torch.LongTensor | None:
-        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-        if image_grid_thw is not None and mm_token_type_ids is None and input_ids is not None:
-            raise ValueError(
-                "Multimodal data was passed via `image_grid_thw` but `mm_token_type_ids` is missing. Please pass "
-                "`mm_token_type_ids` to the model so that multimodal RoPE can be computed correctly. "
-                "`mm_token_type_ids` is returned by the processor alongside `input_ids`."
-            )
-        if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
-            return None
-        rope_positions, rope_deltas = self.get_rope_index(
-            input_ids,
-            mm_token_type_ids=mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            attention_mask=attention_mask,
-        )
-        self.rope_deltas = rope_deltas
-        return rope_positions
 
     @can_return_tuple
     @auto_docstring
@@ -1076,6 +969,62 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_embeds if pixel_values is not None else None,
         )
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.LongTensor]:
+        """
+        Build HunYuanVL multimodal RoPE position ids.
+
+        `rope_parameters["mrope_section"]` controls both the number and order of multimodal RoPE axes. Each section
+        value is the number of half-rotary dimensions assigned to the corresponding axis, and the sections must sum to
+        `head_dim // 2`.
+
+        This method returns only the multimodal rotary axes consumed by the text backbone. The last three axes are
+        `(width, height, image_index)`; any preceding axes keep their default 1D sequence positions.
+
+        `width` and `height` index the pooled visual grid inside one image. `image_index` is the ordinal of the
+        image/frame in the input sequence, so all visual tokens from the first image get `0`, the second image get
+        `1`, and so on. Text-only 1D positions for the causal mask are inferred by the text backbone and are not part
+        of this return value.
+        """
+        return get_mrope_index(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
+        )
+
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.LongTensor | None,
+        image_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+    ) -> torch.LongTensor | None:
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if image_grid_thw is not None and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed via `image_grid_thw` but `mm_token_type_ids` is missing. Please pass "
+                "`mm_token_type_ids` to the model so that multimodal RoPE can be computed correctly. "
+                "`mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        if input_ids is None or image_grid_thw is None or past_seen_tokens != 0:
+            return None
+        rope_positions, rope_deltas = self.get_rope_index(
+            input_ids,
+            mm_token_type_ids=mm_token_type_ids,
+            image_grid_thw=image_grid_thw,
+            attention_mask=attention_mask,
+        )
+        self.rope_deltas = rope_deltas
+        return rope_positions
 
 
 @auto_docstring
@@ -1232,9 +1181,8 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Same as qwen-vl with variable `num_mrope_axes` based on config values
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
+        # Same as the shared layout, with a variable `num_mrope_axes` read off the config
 
         rope_parameters = self.config.text_config.rope_parameters or {}
         num_mrope_axes = len(rope_parameters.get("mrope_section", []))

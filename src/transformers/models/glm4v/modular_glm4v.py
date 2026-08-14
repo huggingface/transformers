@@ -29,7 +29,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, get_mrope_index
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -856,49 +856,6 @@ class Glm4vModel(Qwen2VLModel):
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index. Vision tokens use 3D RoPE (temporal, height, width), text tokens use
-        standard 1D RoPE. Difference from Qwen2VL/Qwen2.5VL: GLM4V uses timestamps to separate each video
-        frame, so each video grid is split into one `T=1` frame per timestamp (`split_video_frames`).
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-        return get_mrope_index(
-            self.config,
-            input_ids,
-            mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-        )
 
     @auto_docstring
     @can_return_tuple

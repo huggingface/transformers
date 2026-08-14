@@ -24,7 +24,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -35,7 +34,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import get_mrope_index
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
@@ -654,24 +652,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        return get_mrope_index(
-            self.config,
-            input_ids,
-            mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-        )
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -741,10 +721,9 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
-        # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
-        text_positions = GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
+        # visual axes directly, so it returns those three rather than the shared four-axis layout.
 
         # Early exit in case we are continuing generation from past kv.
         past_length = 0

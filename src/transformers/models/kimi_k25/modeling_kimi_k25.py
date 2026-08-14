@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -721,7 +722,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         )
 
 
-class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin):
+class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

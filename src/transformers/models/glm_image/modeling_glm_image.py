@@ -34,6 +34,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalPreTrainedModelMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -891,7 +892,7 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 
 
 @auto_docstring
-class GlmImageModel(GlmImagePreTrainedModel):
+class GlmImageModel(GlmImagePreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -912,57 +913,149 @@ class GlmImageModel(GlmImagePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_vision_position_ids(
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
         self,
-        start_position: int,
-        grid_thw: list[int, int, int] | torch.Tensor,
-        temp_merge_size: int = 1,
-        spatial_merge_size: int = 1,
-        time_interval: int = 1,
-        device: str | torch.device | None = None,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        image_ids: torch.LongTensor,
     ):
         """
-        Compute 3D positional indices for vision tokens derived from a single image or video input.
-
-        The positions are generated from the input grid defined by temporal (T), height (H), and
-        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
-        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
 
         Args:
-            start_position (`int`):
-                Offset added to all computed positional indices.
-            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
-                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
-            temp_merge_size (`int`, *optional*):
-                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
-                by this value. Defaults to 1.
-            spatial_merge_size (`int`, *optional*):
-                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
-                by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
-            device (`str` or `torch.device`, *optional*):
-                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders.
+            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
+                Discrete token indices from the VQVAE codebook.
 
         Returns:
-            torch.LongTensor of shape (3, sequence_length):
-                Positional indices for temporal, height, and width dimensions,
-                flattened into sequence form and offset by `start_position`.
+            special_image_mask (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Mask indicating positions in input ids that will be replaced by actual image tokens.
         """
-        llm_grid_t, llm_grid_h, llm_grid_w = (
-            grid_thw[0].item() // temp_merge_size,
-            grid_thw[1].item() // spatial_merge_size,
-            grid_thw[2].item() // spatial_merge_size,
+
+        special_image_mask = input_ids == self.config.image_token_id
+        n_placeholder_tokens = special_image_mask.sum()
+        n_image_tokens = image_ids.shape[0]
+
+        if n_placeholder_tokens != n_image_tokens:
+            raise ValueError(
+                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
+                f"number of image tokens from VQVAE ({n_image_tokens})"
+            )
+
+        return special_image_mask
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | GlmImageModelOutputWithPast:
+        r"""
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Number of images (including target grids) for each sample in the batch.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+
+        if pixel_values is not None:
+            # Process source images (image-to-image mode)
+            # Source images are identified by counting image_end_token_id in input_ids
+            # Note: We must exclude padding tokens since pad_token_id == image_end_token_id
+            if images_per_sample is not None:
+                grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
+                # Create mask for non-padding tokens (attention_mask=1 means non-padding)
+                # Handle 4D attention mask (from static cache) by extracting diagonal
+                if attention_mask is not None and attention_mask.ndim == 4:
+                    non_pad_mask = torch.diagonal(attention_mask[:, 0], dim1=1, dim2=2)
+                    if non_pad_mask.dtype.is_floating_point:
+                        non_pad_mask = non_pad_mask / torch.finfo(non_pad_mask.dtype).min
+                        non_pad_mask = (1.0 - non_pad_mask).int()
+                    # Only keep columns matching input_ids length
+                    non_pad_mask = non_pad_mask[:, -input_ids.shape[1] :]
+                else:
+                    non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
+
+                source_grids_list = []
+                is_image_end = input_ids == self.config.image_end_token_id
+                is_non_pad = non_pad_mask == 1
+                num_source_per_sample = (is_image_end & is_non_pad).sum(dim=1).tolist()
+                for sample_idx in range(batch_size):
+                    num_source = num_source_per_sample[sample_idx]
+                    if num_source > 0:
+                        source_grids_list.append(grids_per_sample[sample_idx][:num_source])
+                if len(source_grids_list) == 0:
+                    raise ValueError(
+                        "pixel_values provided but no source images found in input_ids. "
+                        "Ensure input_ids contains image_end_token_id for each source image."
+                    )
+                source_grids = torch.cat(source_grids_list, dim=0)
+            else:
+                # Fallback for batch_size=1: all but last grid are source images
+                source_grids = image_grid_thw[:-1]
+
+            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
+            image_embeds = torch.cat(image_features.pooler_output, dim=0)
+            image_ids = self.get_image_tokens(image_embeds, source_grids)
+            image_ids = image_ids.view(-1).to(input_ids.device)
+            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                images_per_sample=images_per_sample,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
         )
 
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_height = torch.arange(llm_grid_h, device=device) + start_position
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
-
-        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
-        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
-        vision_position_ids[0] += start_position  # must be after time_interval multiply
-        return vision_position_ids
+        return GlmImageModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
+        )
 
     def get_rope_index(
         self,
@@ -1133,53 +1226,36 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         return position_ids, mrope_position_deltas
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
+    def get_image_tokens(
         self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = image_embeds
-
-        return vision_outputs
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        image_ids: torch.LongTensor,
-    ):
+        hidden_states: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
+    ) -> torch.LongTensor:
         """
-        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
+        Tokenizes image features into discrete tokens with VQVAE module.
 
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
-                Input token ids with image placeholders.
-            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
-                Discrete token indices from the VQVAE codebook.
+            hidden_states (`torch.FloatTensor` of shape `(total_patches, hidden_size)`):
+                The packed image features from vision encoder.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width of feature shape of each image.
 
         Returns:
-            special_image_mask (`torch.LongTensor` of shape `(batch_size, seq_len)`):
-                Mask indicating positions in input ids that will be replaced by actual image tokens.
+            image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
+                Discrete token indices from the VQVAE codebook.
         """
+        hidden_size = hidden_states.shape[-1]
+        split_sizes = (image_grid_thw.prod(dim=-1)).tolist()
+        hidden_states_list = torch.split(hidden_states, split_sizes, dim=0)
 
-        special_image_mask = input_ids == self.config.image_token_id
-        n_placeholder_tokens = special_image_mask.sum()
-        n_image_tokens = image_ids.shape[0]
-
-        if n_placeholder_tokens != n_image_tokens:
-            raise ValueError(
-                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
-                f"number of image tokens from VQVAE ({n_image_tokens})"
-            )
-
-        return special_image_mask
+        all_image_toks = []
+        for i, hs in enumerate(hidden_states_list):
+            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
+            hs = hs.view(grid_t, grid_h, grid_w, hidden_size)
+            hs = hs.permute(0, 3, 1, 2).contiguous()
+            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
+            all_image_toks.append(vqmodel_outputs.image_tokens)
+        return torch.cat(all_image_toks, dim=0)
 
     def compute_3d_position_ids(
         self,
@@ -1219,133 +1295,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
-
-    @auto_docstring
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        images_per_sample: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageModelOutputWithPast:
-        r"""
-        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Number of images (including target grids) for each sample in the batch.
-        """
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-
-        if pixel_values is not None:
-            # Process source images (image-to-image mode)
-            # Source images are identified by counting image_end_token_id in input_ids
-            # Note: We must exclude padding tokens since pad_token_id == image_end_token_id
-            if images_per_sample is not None:
-                grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-                # Create mask for non-padding tokens (attention_mask=1 means non-padding)
-                # Handle 4D attention mask (from static cache) by extracting diagonal
-                if attention_mask is not None and attention_mask.ndim == 4:
-                    non_pad_mask = torch.diagonal(attention_mask[:, 0], dim1=1, dim2=2)
-                    if non_pad_mask.dtype.is_floating_point:
-                        non_pad_mask = non_pad_mask / torch.finfo(non_pad_mask.dtype).min
-                        non_pad_mask = (1.0 - non_pad_mask).int()
-                    # Only keep columns matching input_ids length
-                    non_pad_mask = non_pad_mask[:, -input_ids.shape[1] :]
-                else:
-                    non_pad_mask = attention_mask if attention_mask is not None else torch.ones_like(input_ids)
-
-                source_grids_list = []
-                is_image_end = input_ids == self.config.image_end_token_id
-                is_non_pad = non_pad_mask == 1
-                num_source_per_sample = (is_image_end & is_non_pad).sum(dim=1).tolist()
-                for sample_idx in range(batch_size):
-                    num_source = num_source_per_sample[sample_idx]
-                    if num_source > 0:
-                        source_grids_list.append(grids_per_sample[sample_idx][:num_source])
-                if len(source_grids_list) == 0:
-                    raise ValueError(
-                        "pixel_values provided but no source images found in input_ids. "
-                        "Ensure input_ids contains image_end_token_id for each source image."
-                    )
-                source_grids = torch.cat(source_grids_list, dim=0)
-            else:
-                # Fallback for batch_size=1: all but last grid are source images
-                source_grids = image_grid_thw[:-1]
-
-            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
-            image_embeds = torch.cat(image_features.pooler_output, dim=0)
-            image_ids = self.get_image_tokens(image_embeds, source_grids)
-            image_ids = image_ids.view(-1).to(input_ids.device)
-            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                images_per_sample=images_per_sample,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
-
-        outputs = self.language_model(
-            input_ids=None,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        return GlmImageModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-    def get_image_tokens(
-        self,
-        hidden_states: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
-    ) -> torch.LongTensor:
-        """
-        Tokenizes image features into discrete tokens with VQVAE module.
-
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(total_patches, hidden_size)`):
-                The packed image features from vision encoder.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width of feature shape of each image.
-
-        Returns:
-            image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
-                Discrete token indices from the VQVAE codebook.
-        """
-        hidden_size = hidden_states.shape[-1]
-        split_sizes = (image_grid_thw.prod(dim=-1)).tolist()
-        hidden_states_list = torch.split(hidden_states, split_sizes, dim=0)
-
-        all_image_toks = []
-        for i, hs in enumerate(hidden_states_list):
-            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
-            hs = hs.view(grid_t, grid_h, grid_w, hidden_size)
-            hs = hs.permute(0, 3, 1, 2).contiguous()
-            vqmodel_outputs: GlmImageVQVAEModelOutput = self.vqmodel.encode(hs)
-            all_image_toks.append(vqmodel_outputs.image_tokens)
-        return torch.cat(all_image_toks, dim=0)
 
 
 @auto_docstring

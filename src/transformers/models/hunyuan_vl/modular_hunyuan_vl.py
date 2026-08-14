@@ -1370,9 +1370,8 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Same as qwen-vl with variable `num_mrope_axes` based on config values
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+    def _prepare_mrope_position_ids_for_generation(self, text_positions, inputs_tensor, model_kwargs):
+        # Same as the shared layout, with a variable `num_mrope_axes` read off the config
 
         rope_parameters = self.config.text_config.rope_parameters or {}
         num_mrope_axes = len(rope_parameters.get("mrope_section", []))

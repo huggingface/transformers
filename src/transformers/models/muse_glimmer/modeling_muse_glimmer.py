@@ -30,6 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1066,7 +1067,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         )
 
 
-class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, GenerationMixin):
+class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

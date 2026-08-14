@@ -28,7 +28,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update, get_mrope_index
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
@@ -837,65 +837,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         del self.visual
         self.vision_tower = Ernie4_5_VLMoeVisionTransformerPretrainedModel._from_config(config.vision_config)
         self.resampler_model = Ernie4_5_VLMoeVariableResolutionResamplerModel(config)
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-
-        return get_mrope_index(
-            self.config,
-            input_ids,
-            mm_token_type_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-        )
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
