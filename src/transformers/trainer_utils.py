@@ -106,7 +106,7 @@ def validate_quantization_for_training(model):
     Raises `ValueError` when:
     - A quantized + compiled model is used (torch.compile is not supported with PEFT fine-tuning).
     - A purely quantized model has no trainable adapters attached (unless it supports QAT).
-    - The quantization method does not support training.
+    - The quantization method does not support training, unless trainable adapters are attached via PEFT.
 
     Args:
         model: The model to validate.
@@ -134,7 +134,7 @@ def validate_quantization_for_training(model):
             " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
             " for more details"
         )
-    elif _is_quantized_and_base_model and not _quantization_method_supports_training:
+    elif _is_quantized_and_base_model and not _is_peft_model(model) and not _quantization_method_supports_training:
         raise ValueError(
             f"The model you are trying to fine-tune is quantized with {model.hf_quantizer.quantization_config.quant_method}"
             " but that quantization method do not support training. Please open an issue on GitHub: https://github.com/huggingface/transformers"
