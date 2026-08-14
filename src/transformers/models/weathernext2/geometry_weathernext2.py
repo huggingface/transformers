@@ -285,10 +285,11 @@ def in_triangle_edges(
     true nearest face's centroid is always among the nearest few for a mesh this regular).
 
     A grid point that falls exactly on a shared mesh edge is equidistant from both adjacent faces.
-    Upstream resolves such ties by whatever order its R-tree happens to return, which is not
-    reproducible; we break them towards the lowest face index instead. Both choices are equally
-    correct geometrically, but it means that for ~0.25% of grid points at 1 degree (162 of 65160)
-    the three connected mesh vertices differ from the original implementation by one vertex.
+    Upstream resolves such ties by whatever order its R-tree happens to return, which no index rule
+    reproduces; we break them towards the lowest face index instead. At 1 degree this picks a
+    different face for 177 of 65160 grid points (0.27%), 174 of them exact ties. Both choices are
+    equally correct geometrically, but the model was trained with theirs, and the resulting forecast
+    differs locally: mean 3.8e-4 K in 2m temperature, up to 1 K at the affected points.
     """
     centroids = mesh_xyz[mesh_faces].mean(axis=1)
     centroids /= np.linalg.norm(centroids, axis=-1, keepdims=True)
