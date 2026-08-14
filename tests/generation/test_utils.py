@@ -3950,6 +3950,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @require_torch_multi_accelerator
     def test_gemma_candidate_generator_keeps_ids_on_input_device(self):
+        """Regression test for Gemma4Assistant candidate generation with the assistant on a different device."""
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
 
@@ -4034,18 +4035,21 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(candidate_logits.device, input_device)
 
     @require_torch_multi_accelerator
+    @require_accelerate
     def test_mtp_candidate_generator_keeps_ids_on_input_device(self):
+        """Regression test for MTP draft logits being moved back to the input IDs device."""
+        from accelerate import dispatch_model
+
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model.config.get_text_config().num_mtp_layers = 2
         mtp_model = MtpModel(model, num_mtp_layers=2).eval()
-        mtp_model.layers.to(assistant_device)
-        mtp_model.embed_tokens.to(input_device)
-        mtp_model.shared_head.to(assistant_device)
+        device_map = {"embed_tokens": input_device, "layers": assistant_device, "shared_head": assistant_device}
         if mtp_model.rotary_emb is not None:
-            mtp_model.rotary_emb.to(assistant_device)
+            device_map["rotary_emb"] = assistant_device
+        dispatch_model(mtp_model, device_map=device_map)
 
         input_ids = torch.tensor([[1, 2]], device=input_device)
         mtp_candidate_ids, mtp_candidate_logits, _ = MtpModel.forward(
@@ -4063,6 +4067,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @require_torch_multi_accelerator
     def test_dflash_candidate_generator_keeps_ids_on_input_device(self):
+        """Regression test for DFlash candidate logits being moved back to the input IDs device."""
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
         hidden_size = 4
