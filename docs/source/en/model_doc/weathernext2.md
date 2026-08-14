@@ -179,8 +179,13 @@ Passing numpy arrays instead works exactly the same way and returns numpy, at th
 - Attention is computed over the three block-diagonals induced by the reverse Cuthill-McKee ordering of the mesh. This
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.
-- `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise. Flash Attention is not:
-  its kernels only express causal and sliding-window patterns, and this mask is neither.
+- `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise. `sdpa`, the default, is
+  also the fastest by a wide margin; `flex_attention` is much slower here, because the mask is only about 10% dense
+  and irregular rather than block-structured, so little of it can be skipped a tile at a time.
+- Flash Attention is not supported, whether requested as `flash_attention_2/3` or as a `kernels-community/flash-attn*`
+  repository: those kernels express causal, sliding-window and variable-length patterns, and mesh adjacency is none of
+  them. Passing the kernel repository directly bypasses the model's `_supports_flash_attn = False` and fails inside the
+  kernel instead of at load time.
 - The 0.25° checkpoints need roughly an H100's worth of memory for a single ensemble member. The 1° mini checkpoints
   run comfortably on a much smaller GPU.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.
