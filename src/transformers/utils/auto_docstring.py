@@ -1692,6 +1692,45 @@ class ConfigArgs:
     """,
     }
 
+    interpolation_mode = {
+        "description": """
+    Interpolation mode the vision embedding resamples its learned position-embedding grid with.
+    """,
+    }
+
+    interpolation_padding = {
+        "description": """
+    Padding mode used when resampling the learned position-embedding grid.
+    """,
+    }
+
+    interpolation_align_corners = {
+        "description": """
+    Whether the learned position-embedding grid is resampled with aligned corners.
+    """,
+    }
+
+    include_temporal_position_ids = {
+        "description": """
+    Whether the vision position ids carry a temporal axis in addition to height and width, i.e. the
+    encoder's rotary embedding rotates all three.
+    """,
+    }
+
+    resample_before_merge = {
+        "description": """
+    Whether the learned position-embedding grid is resampled at patch resolution, before the spatial merge
+    (so the resampling helpers take a merge size of 1), rather than on the merged grid.
+    """,
+    }
+
+    merge_temporal_attention = {
+        "description": """
+    Whether packed vision attention spans all frames of a clip jointly, rather than treating each frame as
+    its own attention segment.
+    """,
+    }
+
     vision_start_token_id = {
         "description": """
     Token ID that marks the start of a visual segment in the multimodal input sequence.

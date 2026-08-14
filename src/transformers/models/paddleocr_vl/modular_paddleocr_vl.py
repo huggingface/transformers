@@ -278,6 +278,14 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     image_size: int = 384
     patch_size: int = 14
     spatial_merge_size: int = 2
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
+    resample_before_merge: bool = True
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the square learned position grid (`num_positions = (image_size // patch_size) ** 2`)."""
+        return self.image_size // self.patch_size
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -483,9 +491,10 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = int(self.num_positions**0.5)
-        self.interpolation_align_corners = True
-        self.interpolation_mode = "bilinear"
+        self.num_grid_per_side = config.num_grid_per_side
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         warnings.warn(
@@ -500,7 +509,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
+            spatial_merge_size=self.resample_merge_size,
         )
         return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
 
@@ -529,7 +538,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
+            spatial_merge_size=self.resample_merge_size,
             kwargs=kwargs,
         )
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)

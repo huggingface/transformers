@@ -175,6 +175,9 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     patch_size: int = 14
     temporal_patch_size: int = 2
     spatial_merge_size: int = 2
+    # This encoder's rotary embedding rotates T/H/W, so `vision_utils.get_vision_position_ids` must
+    # prepend a temporal column
+    include_temporal_position_ids: bool = True
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-05
     attention_dropout: float = 0.0

@@ -51,13 +51,37 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
 
     hidden_size: int = 1536
     intermediate_size: int = 8960
+
     hidden_act: str = "gelu"
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = False
+    resample_before_merge: bool = True
+    # Packed vision attention spans all frames of a clip jointly rather than one segment per frame
+    # (`vision_utils.get_vision_cu_seqlens(..., merge_temporal=...)`)
+    merge_temporal_attention: bool = True
+
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     patch_temporal: int = 2
     merge_size: int = 2
+    interpolation_padding: str = "zeros"
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the learned position-embedding grid, as the vision module derives it."""
+        return self.pos_emb_height
+
+    @property
+    def spatial_merge_size(self) -> int:
+        """Spatial merge factor under the name every other vision config uses for it."""
+        return self.merge_size
+
+    @property
+    def window_size(self) -> int:
+        """Attention window in pixels, as the vision module derives it from the position grid."""
+        return self.pos_emb_height * self.patch_size
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

@@ -1039,7 +1039,12 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         dtype: torch.dtype,
         kwargs: dict | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        coords = get_vision_position_ids(grid_thw, self.spatial_merge_size, include_temporal=True, kwargs=kwargs)
+        coords = get_vision_position_ids(
+            grid_thw,
+            self.spatial_merge_size,
+            include_temporal=self.config.include_temporal_position_ids,
+            kwargs=kwargs,
+        )
         coords = coords.to(device=device, dtype=torch.float32)
         inv_freq = 1.0 / (
             self.theta ** (torch.arange(0, self.axis_dim, 2, dtype=torch.float32, device=device) / self.axis_dim)

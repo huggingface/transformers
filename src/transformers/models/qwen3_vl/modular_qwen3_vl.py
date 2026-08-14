@@ -118,8 +118,18 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+    # How the vision embedding resamples its learned position-embedding grid, so that
+    # `vision_utils.get_vision_interpolation_indices_and_weights` can be called from the config alone.
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
+    resample_before_merge: bool = False
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+
+    @property
+    def num_grid_per_side(self) -> int:
+        """Side length of the square learned position-embedding grid, as the vision module derives it."""
+        return int(self.num_position_embeddings**0.5)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -437,9 +447,10 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
-        self.interpolation_align_corners = True
-        self.interpolation_mode = "bilinear"
+        self.num_grid_per_side = config.num_grid_per_side
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
@@ -486,7 +497,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.resample_merge_size,
         )
         return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
@@ -510,7 +521,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.resample_merge_size,
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)

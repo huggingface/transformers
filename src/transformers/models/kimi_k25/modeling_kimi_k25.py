@@ -133,9 +133,10 @@ class Kimi_K25VisionPositionEmbeddings(nn.Module):
             torch.zeros(config.pos_emb_height, config.pos_emb_width, config.hidden_size)
         )
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = config.pos_emb_height
-        self.interpolation_align_corners = False
-        self.interpolation_mode = "bicubic"
+        self.num_grid_per_side = config.num_grid_per_side
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
         # Time-axis pos_emb are an additive sinusoidal table, i.e. add pos to hiddens rather than rotating
         time_position_embeddings = self.compute_pos_embed()
@@ -535,12 +536,12 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.resample_merge_size, kwargs=kwargs)
         position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+            grid_thw, self.config, merge_temporal=self.config.merge_temporal_attention, kwargs=kwargs
         )
 
         for block in self.layers:

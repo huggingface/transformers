@@ -1115,9 +1115,10 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
 
         self.pos_embed = nn.Embedding(config.num_position_embeddings, config.hidden_size)
         # How the (square) learned position grid is resampled to each image's grid.
-        self.num_grid_per_side = int(config.num_position_embeddings**0.5)
-        self.interpolation_align_corners = True
-        self.interpolation_mode = "bilinear"
+        self.num_grid_per_side = config.num_grid_per_side
+        self.interpolation_align_corners = config.interpolation_align_corners
+        self.interpolation_mode = config.interpolation_mode
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
 
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Qwen3_5MoeVisionRotaryEmbedding(head_dim // 2)
@@ -1153,7 +1154,7 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
+            spatial_merge_size=self.resample_merge_size,
         )
         return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
