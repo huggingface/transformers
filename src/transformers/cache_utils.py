@@ -688,11 +688,26 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def offload(self):
+        super().offload()
+        if self.is_indexer_initialized:
+            self.indexer_keys = self.indexer_keys.to("cpu", non_blocking=True)
+
+    def prefetch(self):
+        super().prefetch()
+        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
+            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
+
     def reset(self) -> None:
         super().reset()
         if self.is_indexer_initialized:
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
 
 class QuantizedLayer(DynamicLayer):
@@ -1126,6 +1141,42 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         DynamicLayer.crop(self, tokens_to_remove)
 
 
+class LinearAttentionAndIndexedAttentionLayer(LinearAttentionLayer, DynamicIndexedLayer):
+    """Dynamic cache carrying linear-attention states, full-attention K/V and sparse-indexer keys."""
+
+    is_compileable = False
+
+    def __init__(self, number_of_states: int = 1, **kwargs):
+        DynamicIndexedLayer.__init__(self)
+        LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        if len(args) == 2 and len(kwargs) == 0:
+            DynamicIndexedLayer.lazy_initialization(self, *args)
+        if len(args) == 0 and len(kwargs) in (1, 2, 3):
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def offload(self):
+        DynamicIndexedLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        DynamicIndexedLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
+    def reset(self) -> None:
+        LinearAttentionLayer.reset(self)
+        DynamicIndexedLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
+        DynamicIndexedLayer.reorder_cache(self, beam_idx)
+
+    def crop(self, max_length: int) -> None:
+        LinearAttentionLayer.crop(self, max_length)
+        DynamicIndexedLayer.crop(self, max_length)
+
+
 class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
     # The dynamic sliding attention part makes it non-compilable
     is_compileable = False
@@ -1190,6 +1241,36 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
         StaticLayer.reorder_cache(self, beam_idx)
 
 
+class LinearAttentionAndStaticIndexedAttentionLayer(LinearAttentionLayer, StaticIndexedLayer):
+    """Static counterpart of `LinearAttentionAndIndexedAttentionLayer`."""
+
+    def __init__(self, max_cache_len: int, number_of_states: int = 1, **kwargs):
+        StaticIndexedLayer.__init__(self, max_cache_len=max_cache_len)
+        LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
+
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        if len(args) == 2 and len(kwargs) == 0:
+            StaticIndexedLayer.lazy_initialization(self, *args)
+        if len(args) == 0 and len(kwargs) in (1, 2, 3):
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
+
+    def offload(self):
+        StaticIndexedLayer.offload(self)
+        LinearAttentionLayer.offload(self)
+
+    def prefetch(self):
+        StaticIndexedLayer.prefetch(self)
+        LinearAttentionLayer.prefetch(self)
+
+    def reset(self) -> None:
+        LinearAttentionLayer.reset(self)
+        StaticIndexedLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
+        StaticIndexedLayer.reorder_cache(self, beam_idx)
+
+
 class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
     def __init__(self, max_cache_len: int, sliding_window: int, number_of_states: int = 1, **kwargs):
         StaticSlidingWindowLayer.__init__(self, max_cache_len=max_cache_len, sliding_window=sliding_window)
@@ -1226,6 +1307,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
+    "hybrid_indexed": LinearAttentionAndIndexedAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
@@ -1247,6 +1329,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "linear_attention": LinearAttentionLayer,
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
+    "hybrid_indexed": LinearAttentionAndStaticIndexedAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
@@ -1721,7 +1804,10 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
         layer_kwargs["config"] = config
     # We may need more than 1 conv/recurrent state
-    if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):
+    if any(
+        layer_type in ("conv", "linear_attention", "hybrid", "hybrid_indexed", "hybrid_sliding")
+        for layer_type in layer_types
+    ):
         layer_kwargs["number_of_states"] = getattr(config, "number_of_conv_states", 1)
 
     return layer_types, layer_kwargs

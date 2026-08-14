@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from .core_model_loading import (
     Chunk,
     Concatenate,
+    ConcatenateShards,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Interleave,
@@ -1676,6 +1677,15 @@ def _build_checkpoint_conversion_mapping():
     mapping["axk1"] = mapping["qwen2_moe"].copy()
     mapping["axk1"] += [
         WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
+    ]
+
+    mapping["qwen4_exp_text"] = [
+        PrefixChange(prefix_to_remove="language_model", model_prefix="model"),
+        WeightConverter(
+            source_patterns=r"ngram_embedding\.shard_\d+\.weight",
+            target_patterns="ngram_embedding.weight",
+            operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
+        ),
     ]
 
     mapping["MtpModel"] = [

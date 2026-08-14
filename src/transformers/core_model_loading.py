@@ -178,6 +178,61 @@ class Concatenate(ConversionOps):
         return Chunk(self.dim)
 
 
+class ConcatenateShards(Concatenate):
+    """Concatenate checkpoint shards and split them back according to a config attribute when saving."""
+
+    def __init__(self, dim: int = 0, num_shards_attribute: str = "num_shards"):
+        super().__init__(dim)
+        self.num_shards_attribute = num_shards_attribute
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitShards(self.dim, self.num_shards_attribute)
+
+
+class SplitShards(ConversionOps):
+    """Split a tensor into checkpoint shards using the original ceil-divided shard layout."""
+
+    def __init__(self, dim: int = 0, num_shards_attribute: str = "num_shards"):
+        self.dim = dim
+        self.num_shards_attribute = num_shards_attribute
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 1:
+            raise ValueError(f"Failed to convert {kwargs.get('full_layer_name')}")
+
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        subconfig = getattr(config, "text_config", config)
+        num_shards = getattr(subconfig, self.num_shards_attribute)
+        shard_size = math.ceil(tensor.size(self.dim) / num_shards)
+
+        target_pattern = target_patterns[0]
+        full_layer_name = kwargs.get("full_layer_name", target_pattern)
+        if target_pattern in full_layer_name:
+            target_pattern = full_layer_name
+
+        shards = {}
+        for shard_index in range(num_shards):
+            shard_start = min(shard_index * shard_size, tensor.size(self.dim))
+            shard_rows = min(shard_size, tensor.size(self.dim) - shard_start)
+            target = target_pattern.replace(r"\d+", str(shard_index))
+            shards[target] = tensor.narrow(self.dim, shard_start, shard_rows).contiguous()
+        return shards
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ConcatenateShards(self.dim, self.num_shards_attribute)
+
+
 class Interleave(ConversionOps):
     """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
 
@@ -1251,17 +1306,11 @@ def spawn_materialize(
 
 
 def dot_natural_key(s: str):
-    """Sort key for state-dict names: split on `"."` and sort digits numerically
-    and strings alphabetically. We emit a tuple at each point to sort ints
-    first and strings second to avoid int-string comparison failures.
-    """
-    parts = []
-    for part in s.split("."):
-        if part.isdigit():
-            parts.append((0, int(part)))
-        else:
-            parts.append((1, part))
-    return parts
+    """Sort state-dict names naturally, including digits embedded inside a dot-separated component."""
+    return tuple(
+        tuple((0, int(token)) if token.isdigit() else (1, token) for token in re.split(r"(\d+)", part) if token)
+        for part in s.split(".")
+    )
 
 
 @contextmanager
@@ -1691,6 +1740,16 @@ def convert_and_load_state_dict_in_model(
                     sharding_op = mapping.distributed_operation
                     materialize_device = device_map[""]
 
+            # Concatenating many checkpoint shards directly on the destination GPU temporarily requires memory for
+            # both every input shard and the merged parameter. Stage unsharded inputs on CPU and transfer only the
+            # completed tensor to its destination below.
+            if (
+                sharding_op is None
+                and isinstance(mapping, WeightConverter)
+                and any(isinstance(operation, ConcatenateShards) for operation in mapping.operations)
+            ):
+                materialize_device = "cpu"
+
             future_or_tensor = spawn_materialize(
                 thread_pool,
                 tensor,
@@ -1727,6 +1786,10 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
+                        if isinstance(mapping, WeightConverter) and any(
+                            isinstance(operation, ConcatenateShards) for operation in mapping.operations
+                        ):
+                            param = param.to(param_device)
                         set_param_for_module(
                             model,
                             target_name,

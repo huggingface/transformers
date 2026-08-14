@@ -400,6 +400,7 @@ if TYPE_CHECKING:
     from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
+    from .qwen4_exp import *
     from .radio import *
     from .rag import *
     from .recurrent_gemma import *
