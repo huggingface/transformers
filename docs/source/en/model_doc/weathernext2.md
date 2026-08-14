@@ -180,12 +180,14 @@ Passing numpy arrays instead works exactly the same way and returns numpy, at th
   is exactly equivalent to masking the full attention matrix, but avoids materializing a mask that would be 1.7 GB at
   0.25°.
 - `eager`, `sdpa` and `flex_attention` are all supported and agree to within float noise. `sdpa`, the default, is
-  also the fastest by a wide margin; `flex_attention` is much slower here, because the mask is only about 10% dense
-  and irregular rather than block-structured, so little of it can be skipped a tile at a time.
-- Flash Attention is not supported in any form. Its kernels express causal, sliding-window and variable-length
-  patterns, and mesh adjacency is none of them, so there is no mask to hand them. `flash_attention_2` and
-  `flash_attention_3` are refused at load time; naming a kernel repository such as `kernels-community/vllm-flash-attn3`
-  instead bypasses that check and fails inside the kernel.
+  also the fastest by a wide margin; `flex_attention` is much slower here, because the mask is sparse but irregular
+  rather than block-structured, so little of it can be skipped a tile at a time.
+- Flash Attention is not supported in any form. Its kernels take a causal flag, a sliding window or variable sequence
+  lengths - masks computable from index arithmetic - and never an arbitrary mask, which is what mesh adjacency is. The
+  mask is banded, but only 17.7% dense inside its own band at 1°, so substituting a sliding window would attend to
+  4.6x more pairs than the model was trained with. `flash_attention_2` and `flash_attention_3` are refused at load
+  time; naming a kernel repository such as `kernels-community/vllm-flash-attn3` instead bypasses that check and fails
+  inside the kernel.
 - The 0.25° checkpoints need roughly an H100's worth of memory for a single ensemble member. The 1° mini checkpoints
   run comfortably on a much smaller GPU.
 - Model weights are released by Google DeepMind under CC-BY-4.0, separately from the Apache-2.0 code.

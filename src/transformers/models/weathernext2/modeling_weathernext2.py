@@ -416,9 +416,10 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["WeatherNext2Layer"]
     _supports_sdpa = True
     _supports_flex_attn = True
-    # Flash attention kernels only express causal and sliding-window patterns; WeatherNext 2 masks
-    # by mesh adjacency, which is neither.
+    # Flash attention takes a causal flag, a sliding window or variable sequence lengths, but never an
+    # arbitrary mask. Mesh adjacency is none of those, so there is nothing to hand it.
     _supports_flash_attn = False
+    _supports_attention_backend = True
     _can_record_outputs = {"attentions": WeatherNext2Attention}
 
     def _init_weights(self, module):
