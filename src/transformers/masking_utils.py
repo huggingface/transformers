@@ -884,6 +884,7 @@ def _preprocess_mask_arguments(
     if (
         attention_mask is not None
         and ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation] is sdpa_mask
+        and attention_mask.shape[-1] == kv_length
         and not _is_padded(attention_mask, past_key_values)
     ):
         attention_mask = None
