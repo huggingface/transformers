@@ -3952,54 +3952,75 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_gemma_candidate_generator_keeps_ids_on_input_device(self):
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
-        hidden_size = 4
-        vocab_size = 8
 
-        class Gemma4AssistantForCausalLM(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.config = SimpleNamespace(is_encoder_decoder=False)
-                self.generation_config = GenerationConfig(
-                    eos_token_id=vocab_size - 1,
-                    pad_token_id=0,
-                    max_length=8,
-                    num_assistant_tokens=2,
-                    num_assistant_tokens_schedule="constant",
-                )
-
-            @property
-            def device(self):
-                return assistant_device
-
-            def forward(self, **kwargs):
-                batch_size = kwargs["inputs_embeds"].shape[0]
-                logits = torch.zeros(batch_size, 1, vocab_size, device=assistant_device)
-                logits[..., 1] = 1
-                return SimpleNamespace(
-                    logits=logits,
-                    last_hidden_state=torch.zeros(batch_size, 1, hidden_size, device=assistant_device),
-                )
+        assistant = AutoModelForCausalLM.from_pretrained("tiny-random/gemma-4-assistant").to(assistant_device).eval()
+        dtype = next(assistant.parameters()).dtype
+        text_config = assistant.config.get_text_config()
+        backbone_hidden_size = assistant.config.backbone_hidden_size
+        vocab_size = text_config.vocab_size
 
         input_ids = torch.tensor([[1, 2, 3]], device=input_device)
-        target_embeddings = torch.nn.Embedding(vocab_size, hidden_size, device=input_device)
+        target_embeddings = torch.nn.Embedding(vocab_size, backbone_hidden_size, device=input_device, dtype=dtype)
         model_kwargs = {
             "attention_mask": torch.ones_like(input_ids),
             "position_ids": torch.arange(input_ids.shape[1], device=input_device).unsqueeze(0),
         }
         gemma_generator = SinglePositionMultiTokenCandidateGenerator(
             input_ids=input_ids,
-            assistant_model=Gemma4AssistantForCausalLM(),
+            assistant_model=assistant,
             target_model_input_embeddings=target_embeddings,
             generation_config=GenerationConfig(eos_token_id=vocab_size - 1, pad_token_id=0, max_length=8),
             model_kwargs=model_kwargs,
         )
+        gemma_generator.num_assistant_tokens = 2
+
+        full_attention_head_dim = text_config.per_layer_config[
+            text_config.layer_types.index("full_attention")
+        ].head_dim
+        sliding_attention_head_dim = text_config.per_layer_config[
+            text_config.layer_types.index("sliding_attention")
+        ].head_dim
         gemma_outputs = SimpleNamespace(
-            hidden_states=(torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),),
+            hidden_states=(
+                torch.zeros(1, input_ids.shape[1], backbone_hidden_size, device=input_device, dtype=dtype),
+            ),
             shared_kv_states={
-                "layer": (
-                    torch.zeros(1, 1, input_ids.shape[1], hidden_size, device=input_device),
-                    torch.zeros(1, 1, input_ids.shape[1], hidden_size, device=input_device),
-                )
+                "full_attention": (
+                    torch.zeros(
+                        1,
+                        text_config.num_key_value_heads,
+                        input_ids.shape[1],
+                        full_attention_head_dim,
+                        device=input_device,
+                        dtype=dtype,
+                    ),
+                    torch.zeros(
+                        1,
+                        text_config.num_key_value_heads,
+                        input_ids.shape[1],
+                        full_attention_head_dim,
+                        device=input_device,
+                        dtype=dtype,
+                    ),
+                ),
+                "sliding_attention": (
+                    torch.zeros(
+                        1,
+                        text_config.num_key_value_heads,
+                        input_ids.shape[1],
+                        sliding_attention_head_dim,
+                        device=input_device,
+                        dtype=dtype,
+                    ),
+                    torch.zeros(
+                        1,
+                        text_config.num_key_value_heads,
+                        input_ids.shape[1],
+                        sliding_attention_head_dim,
+                        device=input_device,
+                        dtype=dtype,
+                    ),
+                ),
             },
         )
         candidate_ids, candidate_logits = gemma_generator.get_candidates(
@@ -4016,30 +4037,23 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_mtp_candidate_generator_keeps_ids_on_input_device(self):
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
-        hidden_size = 4
-        vocab_size = 8
-        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
 
-        class FakeMtpLayer(torch.nn.Module):
-            def forward(self, inputs_embeds, last_hidden_states, **kwargs):
-                return last_hidden_states + inputs_embeds
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model.config.get_text_config().num_mtp_layers = 2
+        mtp_model = MtpModel(model, num_mtp_layers=2).eval()
+        mtp_model.layers.to(assistant_device)
+        mtp_model.embed_tokens.to(input_device)
+        mtp_model.shared_head.to(assistant_device)
+        if mtp_model.rotary_emb is not None:
+            mtp_model.rotary_emb.to(assistant_device)
 
-        fake_mtp_model = SimpleNamespace(
-            layers=[FakeMtpLayer(), FakeMtpLayer()],
-            embed_tokens=torch.nn.Embedding(vocab_size, hidden_size, device=input_device),
-            rotary_emb=None,
-            use_shared_post_norm=False,
-            create_masks_for_mtp_layer=lambda *args, **kwargs: {},
-            _project_to_logits=lambda hidden_states: torch.zeros(
-                hidden_states.shape[0], hidden_states.shape[1], vocab_size, device=assistant_device
-            ),
-        )
+        input_ids = torch.tensor([[1, 2]], device=input_device)
         mtp_candidate_ids, mtp_candidate_logits, _ = MtpModel.forward(
-            fake_mtp_model,
-            input_ids=input_ids[:, -1:],
-            last_hidden_states=torch.zeros(1, 1, hidden_size, device=assistant_device),
-            attention_mask=torch.ones(1, 1, device=input_device),
-            position_ids=torch.ones(1, 1, dtype=torch.long, device=input_device),
+            mtp_model,
+            input_ids=input_ids,
+            last_hidden_states=torch.zeros(1, input_ids.shape[1], model.config.hidden_size, device=assistant_device),
+            attention_mask=torch.ones_like(input_ids, device=assistant_device),
+            position_ids=torch.arange(input_ids.shape[1], device=assistant_device).unsqueeze(0),
             mtp_cache=None,
             logits_processor=LogitsProcessorList(),
             full_input_ids=input_ids,

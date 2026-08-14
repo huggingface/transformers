@@ -1385,17 +1385,18 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
                     use_cache=False,
                 )
 
-            logits = outputs.logits.to(input_ids.device)
-            last_token_id = logits.argmax(dim=-1)
-            last_hidden_state = outputs.last_hidden_state.to(input_ids.device)
+            last_token_id = outputs.logits.argmax(dim=-1)
+            last_hidden_state = outputs.last_hidden_state
 
             # For stopped sequences, replace drafted tokens with pad and logits with zeros.
             if sequence_stopped.any():
                 stopped = sequence_stopped.unsqueeze(1)  # (batch, 1) for broadcasting
                 last_token_id = torch.where(stopped, self.generation_config.pad_token_id, last_token_id)
-                drafted_logits.append(torch.where(stopped.unsqueeze(-1), torch.zeros_like(logits), logits))
+                drafted_logits.append(
+                    torch.where(stopped.unsqueeze(-1), torch.zeros_like(outputs.logits), outputs.logits)
+                )
             else:
-                drafted_logits.append(logits)
+                drafted_logits.append(outputs.logits)
 
             drafted_tokens.append(last_token_id)
 
