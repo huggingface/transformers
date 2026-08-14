@@ -4077,7 +4077,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         dflash_generator.assistant_model = FakeDFlashAssistant()
         dflash_generator.main_model_max_length = 8
         dflash_generator.main_model_input_embeddings = torch.nn.Embedding(vocab_size, hidden_size, device=input_device)
-        dflash_generator.main_model_output_embeddings = torch.nn.Linear(hidden_size, vocab_size, device=assistant_device)
+        dflash_generator.main_model_output_embeddings = torch.nn.Linear(
+            hidden_size, vocab_size, device=assistant_device
+        )
         dflash_generator.target_layer_ids = [0]
         dflash_generator.block_size = 3
         dflash_generator.mask_token_id = 0

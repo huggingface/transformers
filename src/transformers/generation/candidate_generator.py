@@ -1393,9 +1393,7 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
             if sequence_stopped.any():
                 stopped = sequence_stopped.unsqueeze(1)  # (batch, 1) for broadcasting
                 last_token_id = torch.where(stopped, self.generation_config.pad_token_id, last_token_id)
-                drafted_logits.append(
-                    torch.where(stopped.unsqueeze(-1), torch.zeros_like(logits), logits)
-                )
+                drafted_logits.append(torch.where(stopped.unsqueeze(-1), torch.zeros_like(logits), logits))
             else:
                 drafted_logits.append(logits)
 
@@ -1676,9 +1674,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             candidate_ids = input_ids
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(
-                    candidate_ids, candidate_logits[:, i, :].float()
-                )
+                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
                 if self.do_sample:
                     probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
