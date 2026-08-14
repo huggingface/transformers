@@ -14,6 +14,7 @@ from .utils import (
 )
 from .utils.deprecation import deprecate_kwarg
 
+
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
@@ -49,9 +50,7 @@ class CacheLayerMixin(ABC):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def lazy_initialization(
-        self, key_states: torch.Tensor, value_states: torch.Tensor
-    ) -> None: ...
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None: ...
 
     @abstractmethod
     def update(
@@ -119,9 +118,7 @@ class DynamicLayer(CacheLayerMixin):
 
     is_sliding = False
 
-    def lazy_initialization(
-        self, key_states: torch.Tensor, value_states: torch.Tensor
-    ) -> None:
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
         self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
@@ -222,9 +219,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
-        self._sliding_window_tensor = torch.tensor(
-            self.sliding_window, dtype=torch.long
-        )
+        self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
         self.record_past = False
 
     def activate_past_recording(self):
@@ -234,9 +229,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """
         self.record_past = True
 
-    def lazy_initialization(
-        self, key_states: torch.Tensor, value_states: torch.Tensor
-    ) -> None:
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
         self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
@@ -359,9 +352,7 @@ class DynamicIndexedLayer(DynamicLayer):
             indexer_key_states.dtype,
             indexer_key_states.device,
         )
-        self.indexer_keys = torch.tensor(
-            [], dtype=self.indexer_dtype, device=self.indexer_device
-        )
+        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
         self.is_indexer_initialized = True
 
     def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
@@ -397,9 +388,7 @@ class DynamicIndexedLayer(DynamicLayer):
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.index_select(
-                0, beam_idx.to(self.indexer_keys.device)
-            )
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
@@ -445,9 +434,7 @@ class StaticLayer(CacheLayerMixin):
         # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
         self.cumulative_length = torch.tensor(0, dtype=int)
 
-    def lazy_initialization(
-        self, key_states: torch.Tensor, value_states: torch.Tensor
-    ) -> None:
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
         Lazy initialization of the keys and values tensors. This allows to get all properties (dtype, device,
         num_heads in case of TP etc...) at runtime directly, which is extremely practical as it avoids moving
@@ -504,9 +491,7 @@ class StaticLayer(CacheLayerMixin):
 
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
-        cache_position = (
-            torch.arange(kv_length, device=self.device) + self.cumulative_length
-        )
+        cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
         # Note that has to be performed in-place, as we have a static address that we need to keep
         self.cumulative_length.add_(kv_length)
 
@@ -601,12 +586,8 @@ class StaticSlidingWindowLayer(StaticLayer):
                 return self.keys, self.values
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
             else:
-                full_key_states = torch.cat(
-                    (self.keys[:, :, 1:, :], key_states), dim=-2
-                )
-                full_value_states = torch.cat(
-                    (self.values[:, :, 1:, :], value_states), dim=-2
-                )
+                full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
         elif current_length + kv_length > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
@@ -614,18 +595,12 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = key_states
                 full_value_states = value_states
             else:
-                full_key_states = torch.cat(
-                    (self.keys[:, :, :current_length, :], key_states), dim=-2
-                )
-                full_value_states = torch.cat(
-                    (self.values[:, :, :current_length, :], value_states), dim=-2
-                )
+                full_key_states = torch.cat((self.keys[:, :, :current_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:, :, :current_length, :], value_states), dim=-2)
         else:
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
-            cache_position = (
-                torch.arange(kv_length, device=self.device) + self.cumulative_length
-            )
+            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
             try:
                 self.keys.index_copy_(2, cache_position, key_states)
                 self.values.index_copy_(2, cache_position, value_states)
@@ -702,9 +677,7 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
-        self.indexer_cumulative_length = self.indexer_cumulative_length.to(
-            self.indexer_device
-        )
+        self.indexer_cumulative_length = self.indexer_cumulative_length.to(self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.indexer_keys)
@@ -727,10 +700,7 @@ class StaticIndexedLayer(StaticLayer):
             self.lazy_initialization_indexer(indexer_key_states)
 
         seq_len = indexer_key_states.shape[1]
-        cache_position = (
-            torch.arange(seq_len, device=self.indexer_device)
-            + self.indexer_cumulative_length
-        )
+        cache_position = torch.arange(seq_len, device=self.indexer_device) + self.indexer_cumulative_length
         # In-place to preserve the static data pointer (required for cudagraphs).
         self.indexer_cumulative_length.add_(seq_len)
         try:
@@ -794,33 +764,19 @@ class QuantizedLayer(DynamicLayer):
         # Lazy initialization
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
-            self._quantized_keys = self._quantize(
-                key_states.contiguous(), axis=self.axis_key
-            )
-            self._quantized_values = self._quantize(
-                value_states.contiguous(), axis=self.axis_value
-            )
+            self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
             return key_states, value_states
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
-        values_to_return = torch.cat(
-            [dequant_values, self.values, value_states], dim=-2
-        )
+        values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
         if self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length:
-            self._quantized_keys = self._quantize(
-                keys_to_return.contiguous(), axis=self.axis_key
-            )
-            self._quantized_values = self._quantize(
-                values_to_return.contiguous(), axis=self.axis_value
-            )
-            self.keys = torch.tensor(
-                [], dtype=key_states.dtype, device=key_states.device
-            )
-            self.values = torch.tensor(
-                [], dtype=key_states.dtype, device=key_states.device
-            )
+            self._quantized_keys = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(values_to_return.contiguous(), axis=self.axis_value)
+            self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
         else:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
@@ -869,14 +825,10 @@ class QuantoQuantizedLayer(QuantizedLayer):
             )
 
         if self.nbits not in [2, 4]:
-            raise ValueError(
-                f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}"
-            )
+            raise ValueError(f"`nbits` for `quanto` backend has to be one of [`2`, `4`] but got {self.nbits}")
 
         if self.axis_key not in [0, -1]:
-            raise ValueError(
-                f"`axis_key` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_key}"
-            )
+            raise ValueError(f"`axis_key` for `quanto` backend has to be one of [`0`, `-1`] but got {self.axis_key}")
 
         if self.axis_value not in [0, -1]:
             raise ValueError(
@@ -884,17 +836,13 @@ class QuantoQuantizedLayer(QuantizedLayer):
             )
 
         self.qtype = qint4 if self.nbits == 4 else qint2
-        self.optimizer = (
-            MaxOptimizer()
-        )  # hardcode as it's the only one for per-channel quantization
+        self.optimizer = MaxOptimizer()  # hardcode as it's the only one for per-channel quantization
 
     def _quantize(self, tensor, axis):
         from optimum.quanto import quantize_weight
 
         scale, zeropoint = self.optimizer(tensor, self.qtype, axis, self.q_group_size)
-        qtensor = quantize_weight(
-            tensor, self.qtype, axis, scale, zeropoint, self.q_group_size
-        )
+        qtensor = quantize_weight(tensor, self.qtype, axis, scale, zeropoint, self.q_group_size)
         return qtensor
 
     def _dequantize(self, qtensor):
@@ -930,14 +878,10 @@ class HQQQuantizedLayer(QuantizedLayer):
             )
 
         if self.axis_key not in [0, 1]:
-            raise ValueError(
-                f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}"
-            )
+            raise ValueError(f"`axis_key` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_key}")
 
         if self.axis_value not in [0, 1]:
-            raise ValueError(
-                f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}"
-            )
+            raise ValueError(f"`axis_value` for `HQQ` backend has to be one of [`0`, `1`] but got {self.axis_value}")
 
         self.quantizer = HQQQuantizer
 
@@ -951,9 +895,7 @@ class HQQQuantizedLayer(QuantizedLayer):
             group_size=self.q_group_size,
         )
         meta["compute_dtype"] = self.keys.dtype
-        self.quantizer.cuda(
-            qtensor, meta=meta, device=self.keys.device
-        )  # Move to device and cast to dtype
+        self.quantizer.cuda(qtensor, meta=meta, device=self.keys.device)  # Move to device and cast to dtype
         meta["scale"] = meta["scale"].to(qtensor.device)
         meta["zero"] = meta["zero"].to(qtensor.device)
         return qtensor, meta
@@ -975,16 +917,10 @@ class LinearAttentionCacheLayerMixin(ABC):
     def __init__(self, number_of_states: int = 1, **kwargs):
         self.number_of_states = number_of_states
         # We allow to have an arbitrary number of cached states inside a single layer
-        self.conv_states: dict[int, torch.Tensor | None] = dict.fromkeys(
-            range(number_of_states)
-        )
-        self.recurrent_states: dict[int, torch.Tensor | None] = dict.fromkeys(
-            range(number_of_states)
-        )
+        self.conv_states: dict[int, torch.Tensor | None] = dict.fromkeys(range(number_of_states))
+        self.recurrent_states: dict[int, torch.Tensor | None] = dict.fromkeys(range(number_of_states))
         self.is_conv_states_initialized = dict.fromkeys(range(number_of_states), False)
-        self.is_recurrent_states_initialized = dict.fromkeys(
-            range(number_of_states), False
-        )
+        self.is_recurrent_states_initialized = dict.fromkeys(range(number_of_states), False)
         self.has_previous_state = dict.fromkeys(range(number_of_states), False)
         self.conv_kernel_size = dict.fromkeys(range(number_of_states))
         self.device = None
@@ -1003,14 +939,10 @@ class LinearAttentionCacheLayerMixin(ABC):
     ) -> None: ...
 
     @abstractmethod
-    def update_conv_state(
-        self, conv_states: torch.Tensor, state_idx: int = 0
-    ) -> torch.Tensor: ...
+    def update_conv_state(self, conv_states: torch.Tensor, state_idx: int = 0) -> torch.Tensor: ...
 
     @abstractmethod
-    def update_recurrent_state(
-        self, recurrent_states: torch.Tensor, state_idx: int = 0
-    ) -> torch.Tensor: ...
+    def update_recurrent_state(self, recurrent_states: torch.Tensor, state_idx: int = 0) -> torch.Tensor: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -1018,27 +950,15 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_conv_states_initialized[i]:
                 self.conv_states[i] = self.conv_states[i].to("cpu", non_blocking=True)
             if self.is_recurrent_states_initialized[i]:
-                self.recurrent_states[i] = self.recurrent_states[i].to(
-                    "cpu", non_blocking=True
-                )
+                self.recurrent_states[i] = self.recurrent_states[i].to("cpu", non_blocking=True)
 
     def prefetch(self):
         """In case of layer offloading, this allows to move the data back to the layer's device ahead of time."""
         for i in range(self.number_of_states):
-            if (
-                self.is_conv_states_initialized[i]
-                and self.conv_states[i].device != self.device
-            ):
-                self.conv_states[i] = self.conv_states[i].to(
-                    self.device, non_blocking=True
-                )
-            if (
-                self.is_recurrent_states_initialized[i]
-                and self.recurrent_states[i].device != self.device
-            ):
-                self.recurrent_states[i] = self.recurrent_states[i].to(
-                    self.device, non_blocking=True
-                )
+            if self.is_conv_states_initialized[i] and self.conv_states[i].device != self.device:
+                self.conv_states[i] = self.conv_states[i].to(self.device, non_blocking=True)
+            if self.is_recurrent_states_initialized[i] and self.recurrent_states[i].device != self.device:
+                self.recurrent_states[i] = self.recurrent_states[i].to(self.device, non_blocking=True)
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects"""
@@ -1053,14 +973,10 @@ class LinearAttentionCacheLayerMixin(ABC):
         """Reorders the cache for beam search, given the selected beam indices."""
         for i in range(self.number_of_states):
             if self.is_conv_states_initialized[i]:
-                self.conv_states[i] = self.conv_states[i].index_select(
-                    0, beam_idx.to(self.device)
-                )
+                self.conv_states[i] = self.conv_states[i].index_select(0, beam_idx.to(self.device))
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
-                self.recurrent_states[i] = self.recurrent_states[i].index_select(
-                    0, beam_idx.to(self.device)
-                )
+                self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
     def activate_past_recording(self):
         """
@@ -1089,9 +1005,7 @@ class LinearAttentionCacheLayerMixin(ABC):
             tokens_to_remove = abs(tokens_to_remove)
             # In this case, simply restrict the size back to `conv_kernel_size` without cropping
             if tokens_to_remove == 0:
-                self.conv_states[i] = self.conv_states[i][
-                    ..., -self.conv_kernel_size[i] :
-                ]
+                self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
             # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
             # need more for the next forward
             else:
@@ -1118,9 +1032,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
                 self.dtype, self.device = conv_states.dtype, conv_states.device
             # Even if prefill is larger/shorter than the conv_size, the tensor is usually either padded or truncated, except if
             # self.record_past is true and conv_kernel_size is provided explicitly
-            conv_kernel_size = (
-                conv_states.shape[-1] if conv_kernel_size is None else conv_kernel_size
-            )
+            conv_kernel_size = conv_states.shape[-1] if conv_kernel_size is None else conv_kernel_size
             self.conv_kernel_size[state_idx] = conv_kernel_size
             # The shape is always static, so we init as such
             self.conv_states[state_idx] = torch.zeros(
@@ -1170,29 +1082,18 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             full_conv_states = conv_states
             self.has_previous_state[state_idx] = True
             # In this case, need to pad it to fit the conv_kernel_size
-            if (
-                not self.record_past
-                and full_conv_states.shape[-1] < self.conv_kernel_size[state_idx]
-            ):
-                padding_length = (
-                    self.conv_kernel_size[state_idx] - full_conv_states.shape[-1]
-                )
-                full_conv_states = torch.nn.functional.pad(
-                    full_conv_states, (padding_length, 0), value=0
-                )
+            if not self.record_past and full_conv_states.shape[-1] < self.conv_kernel_size[state_idx]:
+                padding_length = self.conv_kernel_size[state_idx] - full_conv_states.shape[-1]
+                full_conv_states = torch.nn.functional.pad(full_conv_states, (padding_length, 0), value=0)
         # We need to return the concatenation of the current state and the full new one so that the causal conv can see the
         # correct left context - however we usually cache only the last part
         else:
-            full_conv_states = torch.cat(
-                [self.conv_states[state_idx], conv_states], dim=-1
-            )
+            full_conv_states = torch.cat([self.conv_states[state_idx], conv_states], dim=-1)
 
         # Usually, keep only the last `conv_kernel_size` tokens
         if not self.record_past:
             # Copy instead of assigning to keep the static address
-            self.conv_states[state_idx].copy_(
-                full_conv_states[..., -self.conv_kernel_size[state_idx] :]
-            )
+            self.conv_states[state_idx].copy_(full_conv_states[..., -self.conv_kernel_size[state_idx] :])
         # If we need to record the past, keep the full states for now to be able to rollback later
         else:
             self.conv_states[state_idx] = full_conv_states
@@ -1200,9 +1101,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         # Return full states no matter what
         return full_conv_states
 
-    def update_recurrent_state(
-        self, recurrent_states: torch.Tensor, state_idx: int = 0, **kwargs
-    ) -> torch.Tensor:
+    def update_recurrent_state(self, recurrent_states: torch.Tensor, state_idx: int = 0, **kwargs) -> torch.Tensor:
         """
         Update the linear attention cache in-place, and return the necessary ssm states.
 
@@ -1213,9 +1112,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             `torch.Tensor`: The updated ssm states.
         """
         if not self.is_recurrent_states_initialized[state_idx]:
-            self.lazy_initialization(
-                recurrent_states=recurrent_states, state_idx=state_idx
-            )
+            self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
         # Note that we copy instead of assigning, to preserve the static address for cudagraphs
         self.recurrent_states[state_idx].copy_(recurrent_states)
         return self.recurrent_states[state_idx]
@@ -1261,9 +1158,7 @@ class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
         DynamicLayer.crop(self, tokens_to_remove)
 
 
-class LinearAttentionAndSlidingWindowAttentionLayer(
-    LinearAttentionLayer, DynamicSlidingWindowLayer
-):
+class LinearAttentionAndSlidingWindowAttentionLayer(LinearAttentionLayer, DynamicSlidingWindowLayer):
     # The dynamic sliding attention part makes it non-compilable
     is_compileable = False
 
@@ -1327,9 +1222,7 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
         StaticLayer.reorder_cache(self, beam_idx)
 
 
-class LinearAttentionAndStaticSlidingWindowAttentionLayer(
-    LinearAttentionLayer, StaticSlidingWindowLayer
-):
+class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
     def __init__(
         self,
         max_cache_len: int,
@@ -1337,9 +1230,7 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(
         number_of_states: int = 1,
         **kwargs,
     ):
-        StaticSlidingWindowLayer.__init__(
-            self, max_cache_len=max_cache_len, sliding_window=sliding_window
-        )
+        StaticSlidingWindowLayer.__init__(self, max_cache_len=max_cache_len, sliding_window=sliding_window)
         LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
 
     def lazy_initialization(self, *args, **kwargs) -> None:
@@ -1429,9 +1320,7 @@ class Cache:
     def __init__(
         self,
         layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
-        layer_class_to_replicate: (
-            type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None
-        ) = None,
+        layer_class_to_replicate: (type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None) = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
     ):
@@ -1450,11 +1339,7 @@ class Cache:
         self.offloading = offloading
         if self.offloading:
             self.only_non_sliding = offload_only_non_sliding
-            self.prefetch_stream = (
-                torch.Stream()
-                if _is_torch_greater_or_equal_than_2_7
-                else torch.cuda.Stream()
-            )
+            self.prefetch_stream = torch.Stream() if _is_torch_greater_or_equal_than_2_7 else torch.cuda.Stream()
 
     def __repr__(self):
         return f"{self.__class__.__name__}(layers={self.layers})"
@@ -1487,11 +1372,7 @@ class Cache:
             layer_idx = is_offloaded.index(True)
 
         # Prefetch
-        with (
-            self.prefetch_stream
-            if _is_torch_greater_or_equal_than_2_7
-            else torch.cuda.stream(self.prefetch_stream)
-        ):
+        with self.prefetch_stream if _is_torch_greater_or_equal_than_2_7 else torch.cuda.stream(self.prefetch_stream):
             self.layers[layer_idx].prefetch()
 
     def offload(self, layer_idx: int, only_non_sliding: bool = True):
@@ -1532,14 +1413,10 @@ class Cache:
 
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
-            torch.cuda.default_stream(key_states.device).wait_stream(
-                self.prefetch_stream
-            )
+            torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
-        keys, values = self.layers[layer_idx].update(
-            key_states, value_states, *args, **kwargs
-        )
+        keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
 
         if self.offloading:
             self.offload(layer_idx, self.only_non_sliding)
@@ -1564,12 +1441,8 @@ class Cache:
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
         if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
-            raise ValueError(
-                "Cannot call `update_conv_state` on a non-LinearAttention layer!"
-            )
-        conv_states = self.layers[layer_idx].update_conv_state(
-            conv_states, state_idx, **kwargs
-        )
+            raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
+        conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
 
     def update_recurrent_state(
@@ -1594,17 +1467,11 @@ class Cache:
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
         if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
-            raise ValueError(
-                "Cannot call `update_conv_state` on a non-LinearAttention layer!"
-            )
-        recurrent_states = self.layers[layer_idx].update_recurrent_state(
-            recurrent_states, state_idx, **kwargs
-        )
+            raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
+        recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, state_idx, **kwargs)
         return recurrent_states
 
-    def update_indexer(
-        self, indexer_key_states: torch.Tensor, layer_idx: int
-    ) -> torch.Tensor:
+    def update_indexer(self, indexer_key_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
         """
         Updates the indexer key cache for layer `layer_idx`.
 
@@ -1652,9 +1519,7 @@ class Cache:
                 f"`head_dim` was provided as a list of length {len(num_heads)}, but the Cache currently has {len(self.layers)} layers"
             )
 
-        for layer, layer_num_heads, layer_head_dim in zip(
-            self.layers, num_heads, head_dim
-        ):
+        for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
             if not layer.supports_early_init or layer.is_initialized:
                 continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
@@ -1683,11 +1548,7 @@ class Cache:
                 )
             try:
                 # Use the first attention layer
-                layer_idx = next(
-                    idx
-                    for idx in range(len(self))
-                    if isinstance(self.layers[idx], CacheLayerMixin)
-                )
+                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
             except StopIteration:
                 raise ValueError(
                     "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
@@ -1712,9 +1573,7 @@ class Cache:
         else:
             return self.layers[layer_idx].get_max_length()
 
-    def has_previous_state(
-        self, layer_idx: int | None = None, state_idx: int | None = None
-    ) -> bool:
+    def has_previous_state(self, layer_idx: int | None = None, state_idx: int | None = None) -> bool:
         """Returns whether the LinearAttention layer at index `layer_idx` has previous state or not."""
         if layer_idx is not None and layer_idx >= len(self.layers):
             return False
@@ -1765,11 +1624,7 @@ class Cache:
                 )
             try:
                 # Use the first attention layer
-                layer_idx = next(
-                    idx
-                    for idx in range(len(self))
-                    if isinstance(self.layers[idx], CacheLayerMixin)
-                )
+                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
             except StopIteration:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
@@ -1830,15 +1685,11 @@ class Cache:
         (e.g. an all-linear-attention cache queried before the first forward)."""
         # ``LinearAttentionLayer`` sets ``batch_size`` lazily — skip layers that haven't been
         # initialized yet (``generate`` queries this on a fresh cache during cache-reuse checks).
-        values = [
-            layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")
-        ]
+        values = [layer.batch_size for layer in self.layers if hasattr(layer, "batch_size")]
         if not values:
             return -1
         if len(set(values)) > 1:
-            raise ValueError(
-                f"The batch size is not consistent across layers: {values}"
-            )
+            raise ValueError(f"The batch size is not consistent across layers: {values}")
         return values[0]
 
     @property
@@ -1918,16 +1769,10 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if "chunked_attention" in layer_types:
         layer_kwargs["sliding_window"] = config.attention_chunk_size
     # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if (
-        "heavily_compressed_attention" in layer_types
-        or "compressed_sparse_attention" in layer_types
-    ):
+    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
         layer_kwargs["config"] = config
     # We may need more than 1 conv/recurrent state
-    if any(
-        layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding")
-        for layer_type in layer_types
-    ):
+    if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):
         layer_kwargs["number_of_states"] = getattr(config, "number_of_conv_states", 1)
 
     return layer_types, layer_kwargs
@@ -1989,10 +1834,7 @@ class DynamicCache(Cache):
             decoder_config = config.get_text_config(decoder=True)
             layer_types, layer_kwargs = get_layer_types_and_kwargs(decoder_config)
             # Dispatch the layer types
-            layers = [
-                DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
-                for layer_type in layer_types
-            ]
+            layers = [DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
 
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
@@ -2002,24 +1844,16 @@ class DynamicCache(Cache):
                 if config is None:
                     # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
                     # contain a third element, which is an optional sliding window tensor.
-                    sliding_window_tensor = (
-                        kv_and_optional_sliding[2]
-                        if len(kv_and_optional_sliding) == 3
-                        else None
-                    )
+                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
                     # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
                         # Since the same layer is dispatched across replicas, sliding_window is the same for all
                         sliding_window = sliding_window_tensor[0].item()
-                        layers.append(
-                            DynamicSlidingWindowLayer(sliding_window=sliding_window)
-                        )
+                        layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
                     else:
                         layers.append(DynamicLayer())
                 # Update the layer with the data
-                _, _ = layers[layer_idx].update(
-                    kv_and_optional_sliding[0], kv_and_optional_sliding[1]
-                )
+                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -2037,9 +1871,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield layer.keys, layer.values, getattr(
-                layer, "_sliding_window_tensor", None
-            )
+            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
@@ -2090,15 +1922,10 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
-        layer_types, layer_kwargs = get_layer_types_and_kwargs(
-            config.get_text_config(decoder=True)
-        )
+        layer_types, layer_kwargs = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
         layer_kwargs["max_cache_len"] = max_cache_len
         # Dispatch the layer types
-        layers = [
-            STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
-            for layer_type in layer_types
-        ]
+        layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
         super().__init__(
             layers=layers,
             offloading=offloading,
@@ -2207,29 +2034,21 @@ class EncoderDecoderCache(Cache):
         if len(caches) == 1:
             self_attention_cache_data, cross_attention_cache_data = [], []
             for combined_cache_data in caches[0]:
-                if (
-                    len(combined_cache_data) == 6
-                ):  # two tuple of style (self_attn_k, self_attn_v, self_attn_sliding)
+                if len(combined_cache_data) == 6:  # two tuple of style (self_attn_k, self_attn_v, self_attn_sliding)
                     self_attention_cache_data.append(combined_cache_data[:3])
                     cross_attention_cache_data.append(combined_cache_data[3:])
                 # To support old DDP-style init, we handle the case where the tuple has no sliding window tensor
-                elif (
-                    len(combined_cache_data) == 4
-                ):  # two tuple of style (self_attn_k, self_attn_v)
+                elif len(combined_cache_data) == 4:  # two tuple of style (self_attn_k, self_attn_v)
                     self_attention_cache_data.append(combined_cache_data[:2])
                     cross_attention_cache_data.append(combined_cache_data[2:])
                 else:
-                    raise ValueError(
-                        f"Expected {len(combined_cache_data) = } to be 4 or 6.\n{combined_cache_data = }"
-                    )
+                    raise ValueError(f"Expected {len(combined_cache_data) = } to be 4 or 6.\n{combined_cache_data = }")
             self.self_attention_cache = DynamicCache(self_attention_cache_data)
             self.cross_attention_cache = DynamicCache(cross_attention_cache_data)
         # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
         elif len(caches) == 2:
             if not isinstance(caches[0], Cache) or not isinstance(caches[1], Cache):
-                raise TypeError(
-                    f"One of the two arguments is not a Cache: {type(caches[0]) = }, {type(caches[1]) = }"
-                )
+                raise TypeError(f"One of the two arguments is not a Cache: {type(caches[0]) = }, {type(caches[1]) = }")
             self.self_attention_cache = caches[0]
             self.cross_attention_cache = caches[1]
         # Error case
@@ -2238,15 +2057,11 @@ class EncoderDecoderCache(Cache):
 
         self.is_updated = {}
         for layer_idx in range(len(self.cross_attention_cache)):
-            self.is_updated[layer_idx] = bool(
-                self.cross_attention_cache.get_seq_length(layer_idx) > 0
-            )
+            self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
 
     def __iter__(self):
         """Returns tuples of style (self_attn_k, self_attn_v, self_attn_sliding, cross_attn_k, cross_attn_v, cross_attn_sliding)"""
-        for self_attention_layer, cross_attention_layer in zip(
-            self.self_attention_cache, self.cross_attention_cache
-        ):
+        for self_attention_layer, cross_attention_layer in zip(self.self_attention_cache, self.cross_attention_cache):
             yield self_attention_layer + cross_attention_layer
 
     def __repr__(self) -> str:
@@ -2364,6 +2179,7 @@ class MtpCache(DynamicCache):
         new_token = torch.tensor([[[[1.0]]]])
         cache.update(new_token, new_token, layer_idx=0)
         self.assertEqual(cache.get_seq_length(), 1)
+
 
 class DFlashCache(DynamicCache):
     def __init__(self, *args, **kwargs):
