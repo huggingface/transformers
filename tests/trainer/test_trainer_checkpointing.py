@@ -983,7 +983,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading

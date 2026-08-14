@@ -56,7 +56,7 @@ def process_file(
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
         shutil.copy(file_path, file_path + BACKUP_EXT)
-        # we always save the generated content, to be able to update dependant files
+        # we always save the generated content, to be able to update dependent files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
         if not show_diff:

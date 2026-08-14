@@ -106,15 +106,6 @@ class Gemma4UnifiedTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4Unified uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
-
     @unittest.skip(
         "Flaky on CI, but not locally on Mac. If model is set to fp32 instead of bf16, not flaky anymore."
         "TODO Cyril/Anton: investigate where the loss of precision between bf16 and fp32 comes from."

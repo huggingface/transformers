@@ -14,7 +14,7 @@
 # limitations under the License.
 """
 Integration with GGML / The file is copied and adapted from https://github.com/99991/pygguf
-with extra methods beings exposed
+with extra methods being exposed
 """
 
 from array import array
