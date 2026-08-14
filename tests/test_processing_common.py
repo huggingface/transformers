@@ -1119,7 +1119,6 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
 
     # text + audio kwargs testing
-    @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
@@ -1142,7 +1141,6 @@ class ProcessorTesterMixin:
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
         self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
-    @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
@@ -1172,7 +1170,6 @@ class ProcessorTesterMixin:
 
         self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
-    @require_torch
     def test_unstructured_kwargs_audio(self):
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
@@ -1197,7 +1194,6 @@ class ProcessorTesterMixin:
 
         self.assertEqual(len(inputs[self.text_input_name][0]), self.audio_text_kwargs_max_length)
 
-    @require_torch
     def test_doubly_passed_kwargs_audio(self):
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
@@ -1220,7 +1216,6 @@ class ProcessorTesterMixin:
                 padding="max_length",
             )
 
-    @require_torch
     @require_vision
     def test_structured_kwargs_audio_nested(self):
         if (
@@ -1572,7 +1567,6 @@ class ProcessorTesterMixin:
                 processor.save_pretrained(save_dir)
             self.assertFalse(canary.exists())
 
-    @require_torch
     def _test_apply_chat_template(
         self,
         modality: str,
@@ -1733,7 +1727,6 @@ class ProcessorTesterMixin:
             "image", batch_size, return_tensors, "images_input_name", "image_processor", MODALITY_INPUT_DATA["images"]
         )
 
-    @require_torch
     def test_apply_chat_template_video_frame_sampling(self):
         processor = self.get_processor()
 
@@ -1916,7 +1909,6 @@ class ProcessorTesterMixin:
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
 
-    @require_torch
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
 
@@ -1990,7 +1982,6 @@ class ProcessorTesterMixin:
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
 
-    @require_torch
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
 

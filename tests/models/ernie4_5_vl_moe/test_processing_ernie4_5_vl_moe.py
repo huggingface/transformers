@@ -43,7 +43,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         {"do_sample_frames": False, "expected_dim": 0, "output_length": 2304},
         {"expected_dim": 0, "output_length": 2304},
     ]
-    video_len_sampled_from_images = None
+    video_len_sampled_from_images = 48
 
     @classmethod
     def _setup_video_processor(cls):
