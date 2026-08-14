@@ -136,13 +136,19 @@ def statistics_from_fiddle(fiddle: dict[str, Any], name: str) -> dict[str, Any]:
     return {variable: entry["data"] for variable, entry in data_vars.items()}
 
 
-def nan_filled_variables_from_fiddle(fiddle: dict[str, Any]) -> list[str]:
-    """Variables the original `NaNCleaner` wrapper fills before the network sees them."""
-    variables = []
+def nan_fill_values_from_fiddle(fiddle: dict[str, Any]) -> dict[str, float]:
+    """Value the original `NaNCleaner` wrapper substitutes for missing data, per variable.
+
+    This is not the variable's mean: `sea_surface_temperature` is filled with a fixed temperature
+    that normalizes to roughly -1.5, and the wrapper runs before normalization.
+    """
+    fill_values = {}
     for wrapper in fiddle["predictor_wrappers"]:
         if wrapper["constructor"].endswith("NaNCleaner"):
-            variables.append(wrapper["kwargs"]["var_to_clean"])
-    return variables
+            variable = wrapper["kwargs"]["var_to_clean"]
+            data_vars = wrapper["kwargs"]["fill_value"]["data"]["data_vars"]
+            fill_values[variable] = float(data_vars[variable]["data"])
+    return fill_values
 
 
 def split_weight_name(config: WeatherNext2Config, variable: str, time_offset: int | None, prefix: str) -> str:
@@ -349,7 +355,7 @@ def main():
         mean_by_level=statistics_from_fiddle(fiddle, "mean_by_level"),
         stddev_by_level=statistics_from_fiddle(fiddle, "stddev_by_level"),
         diffs_stddev_by_level=statistics_from_fiddle(fiddle, "diffs_stddev_by_level"),
-        nan_filled_variables=nan_filled_variables_from_fiddle(fiddle),
+        nan_fill_values=nan_fill_values_from_fiddle(fiddle),
         num_input_timesteps=config.num_input_timesteps,
         time_step_hours=config.time_step_hours,
         grid_latitudes=grid_latitudes,

@@ -83,9 +83,10 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         diffs_stddev_by_level (`dict[str, float | list[float]]`):
             Per-variable standard deviation of the one-step difference. Predictions of variables that are also inputs
             are residuals scaled by this.
-        nan_filled_variables (`Sequence[str]`, *optional*):
-            Variables whose missing values are filled with their mean before normalization, and masked out again in
-            the prediction. `sea_surface_temperature` is undefined over land, and the network cannot ingest NaNs.
+        nan_fill_values (`dict[str, float]`, *optional*):
+            Value substituted for missing data, per variable, before normalization; the prediction is masked out
+            again wherever the input was missing. `sea_surface_temperature` is undefined over land and the network
+            cannot ingest NaNs, so it is filled with a fixed temperature rather than with its own mean.
         num_input_timesteps (`int`, *optional*, defaults to 2):
             Number of past states the model conditions on.
         time_step_hours (`int`, *optional*, defaults to 6):
@@ -110,7 +111,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         mean_by_level: Mapping[str, Any],
         stddev_by_level: Mapping[str, Any],
         diffs_stddev_by_level: Mapping[str, Any],
-        nan_filled_variables: Sequence[str] | None = None,
+        nan_fill_values: Mapping[str, float] | None = None,
         num_input_timesteps: int = 2,
         time_step_hours: int = 6,
         grid_latitudes: int = 721,
@@ -130,7 +131,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         self.mean_by_level = dict(mean_by_level)
         self.stddev_by_level = dict(stddev_by_level)
         self.diffs_stddev_by_level = dict(diffs_stddev_by_level)
-        self.nan_filled_variables = list(nan_filled_variables or [])
+        self.nan_fill_values = dict(nan_fill_values or {})
         self.num_input_timesteps = num_input_timesteps
         self.time_step_hours = time_step_hours
         self.grid_latitudes = grid_latitudes
@@ -188,17 +189,17 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     def normalize(self, values: np.ndarray, variable: str) -> np.ndarray:
         """Maps a variable to roughly zero mean and unit variance, level by level.
 
-        Variables listed in `nan_filled_variables` have their missing values replaced by the mean,
-        which lands on exactly zero after normalization.
+        Missing values are replaced first, in physical units, so that the substituted value lands
+        wherever the statistics put it rather than on zero.
         """
+        values = torch.as_tensor(values, dtype=torch.float32)
+        if variable in self.nan_fill_values:
+            values = torch.nan_to_num(values, nan=self.nan_fill_values[variable])
         mean = self._statistic(self.mean_by_level, variable)
         stddev = self._statistic(self.stddev_by_level, variable)
-        values = torch.as_tensor(values, dtype=torch.float32)
         normalized = values if mean is None else values - self._broadcast(mean, values)
         if stddev is not None:
             normalized = normalized / self._broadcast(stddev, values)
-        if variable in self.nan_filled_variables:
-            normalized = torch.nan_to_num(normalized, nan=0.0)
         return normalized
 
     @staticmethod
@@ -362,7 +363,7 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
                     values = values * self._broadcast(stddev, values)
                 if mean is not None:
                     values = values + self._broadcast(mean, values)
-            if state is not None and variable in self.nan_filled_variables and variable in state:
+            if state is not None and variable in self.nan_fill_values and variable in state:
                 # The land mask is constant across the conditioning frames, so any frame will do.
                 missing = torch.as_tensor(state[variable], dtype=torch.float32).to(values.device).isnan().any(dim=1)
                 if missing.ndim == values.ndim - 1:

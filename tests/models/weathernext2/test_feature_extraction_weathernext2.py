@@ -81,7 +81,7 @@ class WeatherNext2FeatureExtractionTester:
                 "sea_surface_temperature": 0.5,
                 "temperature": [1.5] * levels,
             },
-            "nan_filled_variables": ["sea_surface_temperature"],
+            "nan_fill_values": {"sea_surface_temperature": 269.48291015625},
             "num_input_timesteps": self.num_input_timesteps,
             "time_step_hours": self.time_step_hours,
             "grid_latitudes": self.grid_latitudes,
