@@ -32,16 +32,6 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2-VL-7B-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_vl"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 384},
-        {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 576},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 1152},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 1152},
-        {"expected_dim": 0, "output_length": 1152},
-    ]
-    video_len_sampled_from_images = 96
-
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
@@ -49,6 +39,16 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 384},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 576},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 1152},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 1152},
+            {"expected_dim": 0, "output_length": 1152},
+        ]
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"

@@ -31,16 +31,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
     tiny_model_id = "hf-internal-testing/tiny-processor-smolvlm"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 1},
-        {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 7},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
-        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
-        {"expected_dim": 1, "output_length": 1},
-    ]
-    video_len_sampled_from_images = 2
-
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
@@ -91,6 +81,16 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_seq_len": 2,
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 1},
+            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 7},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 1},
+        ]
 
     # Override as SmolVLM needs images/video to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size: int | None = None):

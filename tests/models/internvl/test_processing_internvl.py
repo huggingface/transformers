@@ -34,16 +34,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "OpenGVLab/InternVL3-1B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-internvl"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3},
-        {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 5},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 11},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
-        {"expected_dim": 0, "output_length": 11},
-    ]
-    video_len_sampled_from_images = 3
-
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
@@ -76,6 +66,16 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_length": 2}
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3},
+            {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 5},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
+            {"expected_dim": 0, "output_length": 11},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

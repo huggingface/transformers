@@ -34,15 +34,6 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "RaushanTurganbay/kimi2.7-processor"
     tiny_model_id = "hf-internal-testing/tiny-processor-kimi_k25"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1848},
-        {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 3080},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 6776},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 6776},
-    ]
-    video_len_sampled_from_images = 3
-
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, trust_remote_code=False, **kwargs)
@@ -72,6 +63,15 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1848},
+            {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 3080},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 6776},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 6776},
+        ]
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()

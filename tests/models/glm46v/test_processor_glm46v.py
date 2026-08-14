@@ -33,15 +33,6 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "THUDM/GLM-4.1V-9B-Thinking"
     tiny_model_id = "hf-internal-testing/tiny-processor-glm4v"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 4},
-        {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 12},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 24},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 24},
-    ]
-    video_len_sampled_from_images = 96
-
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
@@ -55,6 +46,15 @@ class Glm46VProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
             **kwargs,
         )
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 4},
+            {"num_frames": None, "fps": 16, "expected_dim": 0, "output_length": 12},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 24},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 24},
+        ]
 
     def test_model_input_names(self):
         processor = self.get_processor()

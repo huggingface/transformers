@@ -36,20 +36,20 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_max_length = 870
     video_text_kwargs_override_max_length = 870
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 96},
-        {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 72},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 48},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 48},
-        {"expected_dim": 0, "output_length": 96},
-    ]
-    video_len_sampled_from_images = 96
-
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 96},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 72},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 48},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 48},
+            {"expected_dim": 0, "output_length": 96},
+        ]
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"

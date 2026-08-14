@@ -39,15 +39,6 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "openbmb/MiniCPM-V-4_6"
     tiny_model_id = "hf-internal-testing/tiny-processor-minicpmv4_6"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": -1, "output_length": 224},
-        {"num_frames": None, "fps": 18, "expected_dim": -1, "output_length": 224},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": -1, "output_length": 2464},
-        {"do_sample_frames": False, "expected_dim": -1, "output_length": 2464},
-    ]
-    video_len_sampled_from_images = 3
-
     video_text_kwargs_max_length = 600
     video_text_kwargs_override_max_length = 550
     video_unstructured_max_length = 600
@@ -73,6 +64,15 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": -1, "output_length": 224},
+            {"num_frames": None, "fps": 18, "expected_dim": -1, "output_length": 224},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": -1, "output_length": 2464},
+            {"do_sample_frames": False, "expected_dim": -1, "output_length": 2464},
+        ]
 
     def test_image_processing(self):
         """Test that the processor correctly handles image inputs."""

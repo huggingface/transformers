@@ -48,15 +48,15 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cosmos3EdgeProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-cosmos3-edge"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 240},
-        {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 176},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 176},
-        {"expected_dim": 0, "output_length": 176},
-    ]
-    video_len_sampled_from_images = 768
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 240},
+            {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 176},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 176},
+            {"expected_dim": 0, "output_length": 176},
+        ]
 
     def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).

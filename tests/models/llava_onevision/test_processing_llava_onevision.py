@@ -33,15 +33,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
     model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
-        {"num_frames": None, "fps": 16, "expected_dim": 1, "output_length": 5},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
-        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
-    ]
-    video_len_sampled_from_images = 2
-
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor", use_fast=False)
@@ -59,6 +50,15 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "num_image_tokens": 6,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 16, "expected_dim": 1, "output_length": 5},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

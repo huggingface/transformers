@@ -47,16 +47,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "Qwen/Qwen2.5-Omni-7B"
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen2_5_omni"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1120},
-        {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 1680},
-        {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 3360},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 3360},
-        {"expected_dim": 0, "output_length": 3360},
-    ]
-    video_len_sampled_from_images = 1176
-
     video_unstructured_max_length = 690
     video_text_kwargs_max_length = 690
     video_text_kwargs_override_max_length = 690
@@ -82,6 +72,16 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # (batch, 128, 30000) to (batch, 128, 3000), cutting the audio call's peak
         # memory from ~178 MB to ~20 MB per test.
         return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 1120},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 1680},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 3360},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 3360},
+            {"expected_dim": 0, "output_length": 3360},
+        ]
 
     def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""

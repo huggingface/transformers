@@ -42,16 +42,6 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "lkhl/VideoLLaMA3-2B-Image-HF"
     tiny_model_id = "hf-internal-testing/tiny-processor-video_llama_3"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 160},
-        {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 88},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 88},
-        {"expected_dim": 0, "output_length": 88},
-    ]
-    video_len_sampled_from_images = 48
-
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
@@ -67,6 +57,16 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
         return prepare_image_inputs() * batch_size
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 160},
+            {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 88},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 88},
+            {"expected_dim": 0, "output_length": 88},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):

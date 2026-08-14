@@ -133,16 +133,6 @@ class ProcessorTesterMixin:
     video_text_kwargs_override_max_length = 162
     video_unstructured_max_length = 176
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
-        {"num_frames": None, "fps": 10, "expected_dim": 1, "output_length": 3},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 1, "output_length": 11},
-        {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
-        {"expected_dim": 1, "output_length": 11},
-    ]
-    video_len_sampled_from_images = 2
-
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
 
@@ -495,6 +485,17 @@ class ProcessorTesterMixin:
             modality = modality[:-1]  # FIXME
         func = getattr(self, f"prepare_{modality}_inputs")
         return func(batch_size=batch_size)
+
+    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 10, "expected_dim": 1, "output_length": 3},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 11},
+        ]
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
@@ -1754,7 +1755,7 @@ class ProcessorTesterMixin:
         ]
 
         # FIXME: instead of clone make it a property or instance attr
-        for processor_kwargs in self.video_sampling_expectations.copy():
+        for processor_kwargs in self.video_sampling_expectations:
             exp_output_length = processor_kwargs.pop("output_length")
             expected_dim = processor_kwargs.pop("expected_dim")
 
@@ -1781,17 +1782,15 @@ class ProcessorTesterMixin:
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
-        if self.video_len_sampled_from_images is not None:
-            out_dict_with_video = processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-                processor_kwargs={"do_sample_frames": False},
-            )
-            self.assertTrue(self.videos_input_name in out_dict_with_video)
-            self.assertEqual(out_dict_with_video[self.videos_input_name].shape[1], self.video_len_sampled_from_images)
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"do_sample_frames": False},
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.

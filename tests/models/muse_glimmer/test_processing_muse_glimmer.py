@@ -47,15 +47,6 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MuseGlimmerProcessor
     model_id = "meta-models/Muse-Glimmer-30B"
 
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 140},
-        {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 140},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 840},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 840},
-        {"expected_dim": 0, "output_length": 840},
-    ]
-    video_len_sampled_from_images = 1176
-
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
@@ -66,6 +57,16 @@ class MuseGlimmerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor_class = cls._get_component_class_from_processor("video_processor")
         # `replace_video_token` needs the metadata to write one timestamp per temporal group
         return video_processor_class(max_video_frame_tokens=40, do_sample_frames=False, return_metadata=True)
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 140},
+            {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 140},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 840},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 840},
+            {"expected_dim": 0, "output_length": 840},
+        ]
 
     def test_image_boundary_tokens(self):
         processor = self.get_processor()

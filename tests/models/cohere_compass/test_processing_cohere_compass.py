@@ -35,15 +35,6 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     video_text_kwargs_override_max_length = 870
     model_id = "CohereLabs/North-Micro-Vision-Instruct"
 
-    video_sampling_expectations = [
-        {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 640},
-        {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 640},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 1512},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 1512},
-        {"expected_dim": 0, "output_length": 640},
-    ]
-    video_len_sampled_from_images = 1536
-
     @classmethod
     def _setup_image_processor(cls):
         return CohereCompassImageProcessor(
@@ -60,9 +51,19 @@ class CohereCompassProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         # For some reason the tokenizer has saved image processing fields, unset it all!
         tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
-        del tokenizer.init_kwargs["min_pixels"] # delete and not set `None` - it causes another error
+        del tokenizer.init_kwargs["min_pixels"]  # delete and not set `None` - it causes another error
         del tokenizer.init_kwargs["max_pixels"]
         return tokenizer
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 640},
+            {"num_frames": None, "fps": 2, "expected_dim": 0, "output_length": 640},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 1512},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 1512},
+            {"expected_dim": 0, "output_length": 640},
+        ]
 
     def _image(self, height=56, width=56):
         from PIL import Image

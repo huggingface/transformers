@@ -36,19 +36,19 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/Ernie-VL-Moe-Small"
     tiny_model_id = "hf-internal-testing/tiny-processor-ernie4_5_vl_moe"
 
-    # Video sampling inputs and expected sampled frame length. Override for models with custom sampling
-    video_sampling_expectations = [
-        {"num_frames": None, "fps": 3, "expected_dim": 0, "output_length": 384},
-        {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 2304},
-        {"do_sample_frames": False, "expected_dim": 0, "output_length": 2304},
-        {"expected_dim": 0, "output_length": 2304},
-    ]
-    video_len_sampled_from_images = 48
-
     @classmethod
     def _setup_video_processor(cls):
         component = AutoProcessor.from_pretrained(cls.tiny_model_id, min_frames=1).video_processor
         return component
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": None, "fps": 3, "expected_dim": 0, "output_length": 384},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 2304},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 2304},
+            {"expected_dim": 0, "output_length": 2304},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
