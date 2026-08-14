@@ -70,7 +70,7 @@ def _json(text: str, args: dict) -> Any:
         working = re.sub(pattern, _capture, working, flags=re.DOTALL)
 
     if unquoted_keys:
-        working = re.sub(r"(?<=[{,])(\w+):", r'"\1":', working)
+        working = re.sub(r"([{,]\s*)(\w+):", r'\1"\2":', working)
 
     for i, s in enumerate(captured):
         working = working.replace(f"{_LAX_OPEN}{i}{_LAX_CLOSE}", json.dumps(s))

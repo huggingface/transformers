@@ -545,6 +545,31 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
             },
         )
 
+    def test_gemma4_tool_call_with_spaces_between_args(self):
+        # Models often emit ", " (or newlines) between arguments; unquoted key
+        # detection must tolerate whitespace before the key
+        model_out = (
+            "<|channel>thought\nThe user is asking for the current temperature in Paris.<channel|>"
+            '<|tool_call>call:get_current_temperature{detail_level: 0, location: <|"|>Paris, France<|"|>,\n'
+            'unit: <|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        )
+        self.assertEqual(
+            parse_response(model_out, gemma4_template, prefix=""),
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": 0, "location": "Paris, France", "unit": "celsius"},
+                        },
+                    }
+                ],
+            },
+        )
+
     def test_gemma4_complex_tool_call(self):
         model_out = (
             "<|channel>thought\nLet me call the tool.<channel|>"
