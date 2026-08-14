@@ -161,10 +161,10 @@ for step in range(1, 21):  # 5 days
     with torch.no_grad():
         outputs = model(**inputs)
     forecast = processor.postprocess(outputs.prediction, state)
-    # `valid_time` moves first: it is the time of the frame `advance_state` is about to append, and
-    # the same time the next iteration conditions on.
-    valid_time = valid_time + step_seconds
+    # `valid_time` is the time this forecast is valid at, so it stamps the frame being appended.
+    # Only then does it move on to the step after.
     state = processor.advance_state(state, forecast, valid_time)
+    valid_time = valid_time + step_seconds
 ```
 
 Passing numpy arrays instead works exactly the same way and returns numpy, at the cost of two transfers per step.

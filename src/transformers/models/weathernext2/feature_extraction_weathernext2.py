@@ -382,6 +382,16 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
 
         Drops the oldest frame, appends the forecast, and recomputes the clock variables. Targets that are not also
         inputs (precipitation, the cyclone diagnostics) are simply discarded.
+
+        Args:
+            state (`Mapping[str, array]`):
+                The state the forecast was produced from.
+            forecast (`Mapping[str, array]`):
+                Physical values from [`~WeatherNext2FeatureExtractor.postprocess`].
+            seconds_since_epoch (`np.ndarray` of shape `(batch,)`):
+                Valid time of `forecast`, which is the same value that was passed to `__call__` to produce it. The
+                appended frame is stamped with it, so advancing the clock before calling this puts the physical
+                fields and the clock variables a step out of sync.
         """
         next_state: dict[str, Any] = {}
         forcings = self.compute_forcings(np.asarray(seconds_since_epoch))

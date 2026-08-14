@@ -301,6 +301,35 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
             self.assertIsInstance(tensor_next[name], torch.Tensor)
             np.testing.assert_allclose(tensor_next[name].numpy(), values, rtol=1e-6, atol=1e-6, equal_nan=True)
 
+    def test_rollout_keeps_the_clock_aligned_with_the_frames(self):
+        """Each frame's clock variables must describe the time that frame is valid at.
+
+        `advance_state` stamps the frame it appends, so it takes the time the forecast is valid at - the same value
+        `__call__` was given - and the caller advances the clock afterwards. Doing it the other way round leaves the
+        physical fields a step behind their own clock, which no shape check would catch.
+        """
+        tester = self.feat_extract_tester
+        extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        step_seconds = tester.time_step_hours * 3600
+
+        state = tester.prepare_state()
+        valid_time = tester.prepare_times() + step_seconds
+
+        for _ in range(3):
+            forecast = {name: np.zeros_like(state[name][:, -1]) for name in tester.surface_variables}
+            forecast["temperature"] = np.zeros_like(state["temperature"][:, -1])
+            state = extractor.advance_state(state, forecast, valid_time)
+
+            frame_times = np.stack(
+                [valid_time - offset * step_seconds for offset in reversed(range(tester.num_input_timesteps))], axis=1
+            )
+            for index in range(tester.num_input_timesteps):
+                expected = extractor.compute_forcings(frame_times[:, index])
+                for name in tester.forcing_variables:
+                    np.testing.assert_allclose(state[name][:, index], expected[name], rtol=1e-5, atol=1e-5)
+
+            valid_time = valid_time + step_seconds
+
     def test_call_rejects_a_missing_time(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
