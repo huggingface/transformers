@@ -23,6 +23,13 @@ from ...utils import auto_docstring
 @strict
 class BitNetConfig(PreTrainedConfig):
     r"""
+    use_sub_norms (`bool`, *optional*, defaults to `True`):
+        Whether to use per-projection sub-layer RMSNorm modules
+        (`attn_sub_norm` / `ffn_sub_norm`). Set to `False` for
+        weight-quant-only BitLinear checkpoints, whose forward skips the
+        sub-layer normalisations entirely (they must be absent, not neutral —
+        an RMSNorm initialised to ones still normalises).
+
     ```python
     >>> from transformers import BitNetModel, BitNetConfig
 
