@@ -155,11 +155,7 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             config = self.model_tester.get_config()
             model = Qwen3_5TextModel(config)
 
-            a_logs = [
-                module.A_log
-                for module in model.modules()
-                if hasattr(module, "A_log")
-            ]
+            a_logs = [module.A_log for module in model.modules() if hasattr(module, "A_log")]
 
             self.assertTrue(a_logs)
             for a_log in a_logs:
