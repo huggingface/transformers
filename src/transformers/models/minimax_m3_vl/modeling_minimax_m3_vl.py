@@ -1022,7 +1022,13 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
     `apply_rotary_pos_emb_vision`. Any head dims past `3 * axis_dim` are left unrotated.
     """
 
-    def __init__(self, head_dim: int, theta: float = 10000.0, spatial_merge_size: int = 1):
+    def __init__(
+        self,
+        head_dim: int,
+        theta: float = 10000.0,
+        spatial_merge_size: int = 1,
+        include_temporal_position_ids: bool = False,
+    ):
         super().__init__()
         # `2 * (head_dim // 2)` rotary dims are split evenly across T/H/W, each axis rounded
         # down to a multiple of 2. With head_dim=80 that is 26 dims/axis (39 freqs total); the
@@ -1030,6 +1036,7 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         rope_dims = 2 * (head_dim // 2)
         self.axis_dim = 2 * ((rope_dims // 3) // 2)
         self.spatial_merge_size = spatial_merge_size
+        self.include_temporal_position_ids = include_temporal_position_ids
         self.theta = theta
 
     def forward(
@@ -1042,7 +1049,7 @@ class MiniMaxM3VL3DRotaryEmbedding(nn.Module):
         coords = get_vision_position_ids(
             grid_thw,
             self.spatial_merge_size,
-            include_temporal=self.config.include_temporal_position_ids,
+            include_temporal=self.include_temporal_position_ids,
             kwargs=kwargs,
         )
         coords = coords.to(device=device, dtype=torch.float32)
@@ -1192,7 +1199,10 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_emb = MiniMaxM3VL3DRotaryEmbedding(
-            head_dim, theta=config.rope_parameters["rope_theta"], spatial_merge_size=config.spatial_merge_size
+            head_dim,
+            theta=config.rope_parameters["rope_theta"],
+            spatial_merge_size=config.spatial_merge_size,
+            include_temporal_position_ids=config.include_temporal_position_ids,
         )
         self.post_init()
 

@@ -402,6 +402,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25VisionConfig):
         super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
+        self.resample_merge_size = 1 if config.resample_before_merge else config.spatial_merge_size
         self.patch_embed = Kimi_K25VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi_K25VisionRotaryEmbedding(config)
