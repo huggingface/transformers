@@ -540,6 +540,8 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     pos_emb_width: int = 32
     interpolation_mode: str = "bilinear"
     interpolation_padding: str = "zeros"
+    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
+    merge_temporal_attention: bool = False
 
     @property
     def window_size(self) -> int:
@@ -1024,7 +1026,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(
+            grid_thw, merge_temporal=self.config.merge_temporal_attention, kwargs=kwargs
+        )
         # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,

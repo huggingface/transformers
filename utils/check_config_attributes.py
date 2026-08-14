@@ -41,6 +41,13 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
+# Shared modeling code that reads config attributes on a model's behalf, so an attribute used there counts
+# as used (it is still modeling code, just not the model's own file).
+SHARED_MODELING_SOURCES = [
+    "src/transformers/modeling_rope_utils.py",
+    "src/transformers/modeling_multimodal_utils.py",
+]
+
 SPECIAL_CASES_TO_ALLOW = {
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
@@ -333,6 +340,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     for attribute in attributes:
         for modeling_source in source_strings:
             # check if we can find `config.xxx`, `getattr(config, "xxx", ...)` or `getattr(self.config, "xxx", ...)`
+            # (the `getattr` forms also accept a qualified name such as `vision_config` / `audio_config`)
             if (
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
@@ -346,7 +354,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
             # Deal with multi-line cases
             elif (
                 re.search(
-                    rf'getattr[ \t\v\n\r\f]*\([ \t\v\n\r\f]*(self\.)?config,[ \t\v\n\r\f]*"{attribute}"',
+                    rf'getattr[ \t\v\n\r\f]*\([ \t\v\n\r\f]*(self\.)?[\w.]*config,[ \t\v\n\r\f]*"{attribute}"',
                     modeling_source,
                 )
                 is not None
@@ -393,6 +401,9 @@ def check_config_attributes_being_used(config_class):
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
+    # A model may read an attribute in shared modeling code rather than in its own file — e.g. the M-RoPE
+    # layouts and the multimodal mixins are driven from the config
+    modeling_paths += SHARED_MODELING_SOURCES
 
     # Get the source code strings
     modeling_sources = []

@@ -56,9 +56,8 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = False
     resample_before_merge: bool = True
-    # Packed vision attention spans all frames of a clip jointly rather than one segment per frame
-    # (`vision_utils.get_vision_cu_seqlens(..., merge_temporal=...)`)
-    merge_temporal_attention: bool = True
+    # unlike kimi_k25, this encoder attends per frame rather than over the whole clip
+    merge_temporal_attention: bool = False
 
     rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
