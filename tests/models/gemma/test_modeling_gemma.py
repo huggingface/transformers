@@ -305,7 +305,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     "Hello I am doing a project on a 1999 4.0L 4x4. I",
-                    "Hi today I am going to show you how to make a simple and easy to make a DIY mini-f",
+                    "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
                 ],
             }
         )
