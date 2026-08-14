@@ -116,9 +116,9 @@ class PixtralRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_to_2d(self, freq):
+        # block-concat grids as H-W-H-W
         freq_h, freq_w = (m[:, i % 2] for i, m in enumerate(freq.chunk(2, dim=-1)))
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        print(freq_hw.shape, freq_h.shape)
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
@@ -130,6 +130,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
