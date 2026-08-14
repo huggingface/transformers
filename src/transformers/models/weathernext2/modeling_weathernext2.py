@@ -522,8 +522,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         None of this is learned, and all of it follows deterministically from the mesh refinement
         level and the grid, so it lives in non-persistent buffers rather than in the checkpoint.
         """
-        # scipy and trimesh build the mesh and the two bipartite graphs; neither is used at inference.
-        requires_backends(self, ["scipy", "trimesh"])
+        # scipy builds the mesh and the sparse adjacency; the forward pass reads buffers only.
+        # trimesh is needed too, but only on a cache miss, so `in_triangle_edges` asks for it itself.
+        requires_backends(self, ["scipy"])
         from .geometry_weathernext2 import build_geometry_cached
 
         config = self.config
