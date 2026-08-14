@@ -39,6 +39,7 @@ class ResponseTemplateField:
     content: str
     content_args: dict
     repeats: bool
+    join: str | None
     optional: bool
     transform: Any
     transform_each: bool
@@ -147,6 +148,7 @@ def _build_field(name: str, field: dict) -> ResponseTemplateField:
         "content",
         "content_args",
         "repeats",
+        "join",
         "optional",
         "transform",
         "transform_each",
@@ -161,6 +163,11 @@ def _build_field(name: str, field: dict) -> ResponseTemplateField:
         raise ValueError(f"{scope}: unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}")
     open_re, open_literals, open_literal_can_extend = _compile_anchor(scope, field, "open", "open_pattern")
     close_re, close_literals, close_literal_can_extend = _compile_anchor(scope, field, "close", "close_pattern")
+    join = field.get("join")
+    if join is not None and not isinstance(join, str):
+        raise ValueError(f"{scope}: 'join' must be a string, got {type(join).__name__}")
+    if join is not None and not field.get("repeats", False):
+        raise ValueError(f"{scope}: 'join' requires 'repeats': true")
     transform = field.get("transform")
     transform_each = field.get("transform_each", False)
     if not isinstance(transform_each, bool):
@@ -195,6 +202,7 @@ def _build_field(name: str, field: dict) -> ResponseTemplateField:
         content=content,
         content_args=field.get("content_args", {}),
         repeats=field.get("repeats", False),
+        join=join,
         optional=field.get("optional", True),
         transform=transform,
         transform_each=transform_each,

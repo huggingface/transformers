@@ -16,15 +16,19 @@ import base64
 import gc
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import torch
 
+from tests.integrations.mistral.tekken_fixtures import write_fake_tekken_json
 from transformers.image_utils import load_image
+from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     require_mistral_common,
@@ -191,6 +195,141 @@ class TestMistralCommonBackend(unittest.TestCase):
         ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.tokenizer.save_pretrained(tmp_dir, unk_args="")
+
+    def test_save_pretrained_hf_format_produces_loadable_hf_tokenizer(self):
+        """Saving in HF format writes tokenizer.json + tokenizer_config.json, and the reloaded
+        tokenizer encodes identically to a direct convert_tekken_tokenizer call."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = str(tmp_path / "out")
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            backend.save_pretrained(out_dir, save_format="hf")
+
+            out_path = Path(out_dir)
+            self.assertTrue((out_path / "tokenizer.json").exists())
+            self.assertTrue((out_path / "tokenizer_config.json").exists())
+
+            text = "hello world"
+            reloaded = AutoTokenizer.from_pretrained(out_dir, mistral_format=False)
+            expected = convert_tekken_tokenizer(str(tekken_path)).encode(text, add_special_tokens=False)
+            actual = reloaded.encode(text, add_special_tokens=False)
+            self.assertEqual(actual, expected)
+
+    def test_save_pretrained_hf_format_missing_source_raises(self):
+        """save_pretrained(save_format='hf') raises OSError when the source tekken.json is gone."""
+        with tempfile.TemporaryDirectory() as src_dir:
+            src_path = Path(src_dir)
+            tekken_path = write_fake_tekken_json(src_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            # Delete the source file so the path is no longer valid.
+            tekken_path.unlink()
+
+        with tempfile.TemporaryDirectory() as out_dir:
+            with self.assertRaises(OSError):
+                backend.save_pretrained(out_dir, save_format="hf")
+
+    def test_save_pretrained_hf_format_missing_source_leaves_no_directory(self):
+        """A failed hf-format save (missing source tekken.json) must not create the output directory."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            # Delete the source file so the path is no longer valid.
+            tekken_path.unlink()
+
+            out_dir = tmp_path / "does-not-exist-yet"
+            with self.assertRaises(OSError):
+                backend.save_pretrained(str(out_dir), save_format="hf")
+            self.assertFalse(out_dir.exists())
+
+    def test_save_pretrained_mistral_format_copy_is_byte_identical(self):
+        """Saving with save_format='mistral' writes the native tekken.json byte-for-byte."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = str(tmp_path / "out")
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+            backend.save_pretrained(out_dir, save_format="mistral")
+
+            saved = Path(out_dir) / "tekken.json"
+            self.assertTrue(saved.exists())
+            with open(tekken_path, encoding="utf-8") as f:
+                original = json.load(f)
+            with open(saved, encoding="utf-8") as f:
+                copied = json.load(f)
+            self.assertEqual(original, copied)
+
+    def test_save_pretrained_mistral_format_in_place_resave_succeeds(self):
+        """Resaving into the same directory the tokenizer was loaded from is idempotent: no
+        `shutil.SameFileError`, and the source tekken.json is left byte-for-byte unchanged."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tekken_path = write_fake_tekken_json(Path(tmp_dir))
+            original_bytes = tekken_path.read_bytes()
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            result = backend.save_pretrained(tmp_dir, save_format="mistral")
+
+            self.assertEqual(result, (str(tekken_path),))
+            self.assertEqual(tekken_path.read_bytes(), original_bytes)
+
+    def test_save_pretrained_mistral_format_push_to_hub_uploads_copied_tekken_json(self):
+        """The files-timestamps snapshot for push_to_hub must be taken before tekken.json is
+        copied into the (not yet existing) output directory, otherwise `_upload_modified_files`
+        sees it as already-present and never uploads it."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            src_dir = tmp_path / "src"
+            src_dir.mkdir()
+            tekken_path = write_fake_tekken_json(src_dir)
+            out_dir = tmp_path / "does-not-exist-yet"
+
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            with (
+                patch("transformers.tokenization_mistral_common.hf_api") as mock_hf_api,
+                patch.object(MistralCommonBackend, "_upload_modified_files") as mock_upload,
+            ):
+                mock_hf_api.return_value.create_repo.return_value.repo_id = "fake-repo"
+                backend.save_pretrained(str(out_dir), save_format="mistral", push_to_hub=True)
+
+            mock_upload.assert_called_once()
+            files_timestamps = mock_upload.call_args.args[2]
+            self.assertNotIn("tekken.json", files_timestamps)
+
+    def test_save_pretrained_rejects_file_path_as_save_directory(self):
+        """save_pretrained on a path that is already a file logs an error and returns without
+        writing anything, matching `PreTrainedTokenizerBase.save_pretrained`."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            existing_file = tmp_path / "already-a-file"
+            existing_file.write_text("sentinel", encoding="utf-8")
+
+            result = backend.save_pretrained(str(existing_file), save_format="mistral")
+
+            self.assertIsNone(result)
+            self.assertEqual(existing_file.read_text(encoding="utf-8"), "sentinel")
+
+    def test_save_pretrained_unknown_format_raises_value_error(self):
+        """save_pretrained rejects any save_format outside 'hf'/'mistral'/None."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            tekken_path = write_fake_tekken_json(tmp_path)
+            backend = MistralCommonBackend(tokenizer_path=str(tekken_path))
+
+            with tempfile.TemporaryDirectory() as out_dir:
+                with self.assertRaises(ValueError) as ctx:
+                    backend.save_pretrained(out_dir, save_format="bogus")
+                self.assertIn("Unknown save_format", str(ctx.exception))
 
     def test_encode(self):
         string = "Hello, world!"
@@ -894,7 +1033,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         # with tokenize
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=False, reasoning_effort=None),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
 
         # Test 2:
@@ -919,7 +1058,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=True),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tokenize=True, continue_final_message=True).input_ids,
@@ -1015,7 +1154,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
         self.assertEqual(
             self.tokenizer.apply_chat_template(conversation, tools=tools, tokenize=False),
-            expected_tokenized.text,
+            self.ref_tokenizer.decode(tokens=expected_tokenized.tokens, special_token_policy=SpecialTokenPolicy.KEEP),
         )
 
     def test_apply_chat_template_with_image(self):
@@ -1262,7 +1401,9 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(len(text_outputs), len(token_outputs))
         self.assertEqual(len(text_outputs), len(expected_tokenized))
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
-            self.assertEqual(text, expected.text)
+            self.assertEqual(
+                text, self.ref_tokenizer.decode(tokens=expected.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+            )
             self.assertEqual(token, expected.tokens)
 
     def test_batch_apply_chat_template_images(self):
@@ -1569,7 +1710,13 @@ class TestMistralCommonBackend(unittest.TestCase):
         token_outputs = self.tokenizer.apply_chat_template(
             self.fixture_conversations, tokenize=False, return_tensors="pt", padding=True, return_dict=False
         )
-        self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
+        self.assertEqual(
+            token_outputs,
+            [
+                self.ref_tokenizer.decode(tokens=t.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+                for t in self.tokenized_fixture_conversations
+            ],
+        )
 
     def test_batch_apply_chat_template_return_dict(self):
         # Test 1:
@@ -1588,7 +1735,13 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.fixture_conversations, tokenize=False, return_dict=True
         )
         self.assertNotIsInstance(token_outputs, dict)
-        self.assertEqual(token_outputs, [t.text for t in self.tokenized_fixture_conversations])
+        self.assertEqual(
+            token_outputs,
+            [
+                self.ref_tokenizer.decode(tokens=t.tokens, special_token_policy=SpecialTokenPolicy.KEEP)
+                for t in self.tokenized_fixture_conversations
+            ],
+        )
 
     def test_call(self):
         # Test 1:

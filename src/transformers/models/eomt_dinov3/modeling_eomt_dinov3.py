@@ -402,8 +402,8 @@ class EomtDinov3RotaryEmbedding(nn.Module):
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -721,7 +721,7 @@ class EomtDinov3Loss(nn.Module):
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
@@ -1188,7 +1188,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
 
         self.criterion = EomtDinov3Loss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
 
         self.num_prefix_tokens = 1 + config.num_register_tokens
         self.dropout = nn.Dropout(config.hidden_dropout_prob)

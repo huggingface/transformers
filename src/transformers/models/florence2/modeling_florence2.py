@@ -95,7 +95,7 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         pos_idx_to_embed[:, 0::2] = sine
         pos_idx_to_embed[:, 1::2] = cosine
         # Save the positional embeddings in a constant buffer.
-        self.register_buffer("pos_idx_to_embed", pos_idx_to_embed)
+        self.pos_idx_to_embed = nn.Buffer(pos_idx_to_embed)
 
     @staticmethod
     def get_sinusoid_embeddings(max_positions: int, embed_dim: int):
@@ -680,7 +680,7 @@ class Florence2Model(Florence2PreTrainedModel):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)

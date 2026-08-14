@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
-    """ShieldGemma2 classifies imags as violative or not relative to a specific policy
+    """ShieldGemma2 classifies images as violative or not relative to a specific policy
     Args:
     """
 

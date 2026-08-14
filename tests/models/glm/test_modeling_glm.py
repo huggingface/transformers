@@ -109,6 +109,10 @@ class GlmIntegrationTest(unittest.TestCase):
                 'Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the',
                 'Hi today I am going to show you how to make a simple and easy to make a DIY paper lantern.',
             ],
+            ("xpu", 5): [
+                "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+                "Hi today I am going to show you how to make a simple and easy to make a DIY paper lantern.",
+            ],
             ("rocm", (9, 5)) : [
                 "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
                 "Hi today I am going to show you how to make a simple and easy to make a paper airplane. First",
