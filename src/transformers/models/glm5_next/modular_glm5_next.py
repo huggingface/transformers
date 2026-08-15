@@ -241,7 +241,7 @@ class Glm5NextVisionConfig(GlmOcrVisionConfig):
     """
 
     model_type = "glm5_next_vision"
-    projection_intermediate_size = 10240
+    projection_intermediate_size: int = 10240
     swiglu_limit: float = 10.0
 
 
@@ -1260,7 +1260,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
-        elif isinstance(module, Glm5NextVisionRotaryEmbedding): # noqa: F821
+        elif isinstance(module, Glm5NextVisionRotaryEmbedding):  # noqa: F821
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
