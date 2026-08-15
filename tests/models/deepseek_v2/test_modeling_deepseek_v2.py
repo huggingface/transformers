@@ -139,7 +139,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
     def test_deepseek_v2_lite(self):
-        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.\n\nAttention functions are used in a variety of applications, including natural language processing, computer vision, and reinforcement learning.\n\nThe attention function is a function that takes a query and a set of key-value pairs as input and outputs a vector']  # fmt: skip
+        EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The query and keys are used to compute a similarity score between each key and the query, and the values are used to compute a weighted sum of the similarity scores. The output is a vector that represents the attention score for each key-value pair.']  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         model = DeepseekV2ForCausalLM.from_pretrained(
@@ -178,8 +178,8 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
     def test_batch_fa2(self):
         EXPECTED_TEXT = [
-            "Simply put, the theory of relativity states that \nthe laws of physics are the same for all observers, regardless of their \nrelative motion.\nThe theory of relativity is a theory of space, time, and gravity.\nThe theory of",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love ketchup. I love ketchup on my hot dogs, hamburgers, french fries, and even on my eggs. I love ketchup. I love ketchup so much that I",  # fmt: skip
+            "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",  # fmt: skip
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don't like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",  # fmt: skip
         ]
 
         prompts = [
