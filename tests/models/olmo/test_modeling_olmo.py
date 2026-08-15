@@ -196,7 +196,8 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids).to(model.device)).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
