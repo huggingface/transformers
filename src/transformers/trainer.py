@@ -1000,7 +1000,7 @@ class Trainer:
         if is_torch_greater_or_equal_than_2_6:
             dataloader_params["in_order"] = self.args.dataloader_in_order
 
-        sampler: torch.utils.data.Sampler | None = None
+        sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
             sampler = sampler_fn(dataset) if sampler_fn is not None else None
             if isinstance(sampler, BatchRebalanceSampler):
@@ -1018,14 +1018,9 @@ class Trainer:
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # `BatchRebalanceSampler` is already rank-aware: it assigns per-rank groups itself and each
-        # rank only iterates its own portion. `accelerator.prepare` unconditionally wraps every
-        # map-style `batch_sampler` in Accelerate's `BatchSamplerShard` (which keeps every
-        # `num_processes`-th batch per rank), so leaving it active would re-shard on top of the
-        # sampler's own per-rank yields -> double sharding that silently drops most samples each
-        # epoch. Make that wrapper a passthrough (num_processes=1) so the prepared dataloader
-        # iterates the rank-aware sampler directly. (The wrapper has plain settable attrs; we can't
-        # reassign `batch_sampler` on the underlying DataLoader after init.)
+        # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
+        # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
+        # it by making the wrapper a passthrough (num_processes=1)
         if isinstance(sampler, BatchRebalanceSampler):
             prepared_bs = getattr(dataloader, "batch_sampler", None)
             if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
@@ -1046,9 +1041,12 @@ class Trainer:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
-            if train_dataset is not None and self.args.train_sampling_strategy == "group_by_length":
+            if train_dataset is not None and self.args.train_sampling_strategy in (
+                "group_by_length",
+                "batch_rebalance",
+            ):
                 logger.warning(
-                    "`train_sampling_strategy='group_by_length'` is ignored because the training dataset does not "
+                    f"`train_sampling_strategy='{self.args.train_sampling_strategy}'` is ignored because the training dataset does not "
                     "implement `__len__` (e.g. an `IterableDataset`). Examples will be consumed in the dataset's own "
                     "order."
                 )
@@ -1099,11 +1097,6 @@ class Trainer:
             world_size = max(1, self.args.world_size)
             rank = self.args.process_index if self.args.world_size > 1 else 0
             grad_accum = self.args.gradient_accumulation_steps
-            # `self.args.train_batch_size` is the per-process batch (per_device_train_batch_size *
-            # #GPUs in this process) and already excludes world_size. Multiplying it by grad_accum
-            # and world_size yields the true global effective batch size across all processes and
-            # accumulation steps, covering both DDP (world_size > 1, n_gpu == 1) and DP
-            # (world_size == 1, n_gpu > 1).
             effective_batch_size = self.args.train_batch_size * grad_accum * world_size
 
             return BatchRebalanceSampler(
@@ -1113,7 +1106,6 @@ class Trainer:
                 grad_accum=grad_accum,
                 rank=rank,
                 drop_last=self.args.dataloader_drop_last,
-                alpha=self.args.batch_rebalance_alpha,
                 max_tokens=self.args.batch_rebalance_max_tokens,
             )
         elif self.args.train_sampling_strategy == "sequential":
@@ -1774,6 +1766,12 @@ class Trainer:
 
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
+        # `DataLoaderShard.set_epoch` (accelerate) does not forward to a batch sampler wrapped
+        # in `BatchSamplerShard`, so reach it explicitly.
+        shard_wrapper = getattr(train_dataloader, "batch_sampler", None)
+        underlying_sampler = getattr(shard_wrapper, "batch_sampler", None)
+        if hasattr(underlying_sampler, "set_epoch"):
+            underlying_sampler.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches

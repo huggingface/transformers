@@ -662,9 +662,9 @@ class BatchRebalanceSampler(Sampler):
        cost across ranks.
     5. Each rank yields its `grad_accum` micro-batches (one from each slot).
 
-    Cost model (configurable via `alpha`, `intercept`, or `cost_fn`):
+    Cost model (fixed; captures padding waste plus attention's quadratic cost):
 
-        cost(bs, max_len) = intercept + bs * max_len + alpha * bs * max_len^2
+        cost(bs, max_len) = bs * max_len + QUADRATIC_COST_COEF * bs * max_len^2
 
     where `bs` is the number of samples in the micro-batch and `max_len` is the length of the longest
     sample (all samples are padded to this length). The linear term captures linear-layer compute and
@@ -697,16 +697,9 @@ class BatchRebalanceSampler(Sampler):
             Current rank index.
         drop_last (`bool`, *optional*, defaults to `True`):
             Drop incomplete last batch.
-        alpha (`float`, *optional*, defaults to 0.001):
-            Quadratic cost weight for attention O(L^2) term.
         max_tokens (`int`, *optional*, defaults to 0):
             Maximum padded tokens (`bs * max_len`) per micro-batch. 0 = unlimited. Prevents OOM
             when many short sequences are assigned to one group.
-        intercept (`float`, *optional*, defaults to 0.0):
-            Fixed overhead per micro-batch (e.g., weight loading). Set to 0 for small models.
-        cost_fn (`Callable[[int, int], float]`, *optional*):
-            Custom cost function `(bs, max_len) -> float`. If provided, overrides `alpha` and
-            `intercept`.
 
     Example:
 
@@ -725,6 +718,9 @@ class BatchRebalanceSampler(Sampler):
     ```
     """
 
+    # Weight of the attention's O(L^2) term in the cost model.
+    QUADRATIC_COST_COEF = 0.001
+
     def __init__(
         self,
         lengths: list[int],
@@ -735,10 +731,7 @@ class BatchRebalanceSampler(Sampler):
         seed: int = 42,
         rank: int = 0,
         drop_last: bool = True,
-        alpha: float = 0.001,
         max_tokens: int = 0,
-        intercept: float = 0.0,
-        cost_fn=None,
     ):
         assert dp_size >= 1
         assert grad_accum >= 1
@@ -752,10 +745,7 @@ class BatchRebalanceSampler(Sampler):
         self.seed = seed
         self.rank = rank
         self.drop_last = drop_last
-        self.alpha = alpha
         self.max_tokens = max_tokens
-        self.intercept = intercept
-        self.cost_fn = cost_fn
         self.epoch = 0
 
         self.num_full_batches = len(self.lengths) // effective_batch_size
@@ -766,7 +756,6 @@ class BatchRebalanceSampler(Sampler):
         # dropped even though the user asked to keep them.
         self.has_tail = (not drop_last) and self.remainder > 0
         self.num_global_batches = self.num_full_batches + (1 if self.has_tail else 0)
-        self.total_steps = self.num_global_batches
 
     def set_epoch(self, epoch: int):
         self.epoch = epoch
@@ -812,9 +801,7 @@ class BatchRebalanceSampler(Sampler):
         return self.num_global_batches * self.grad_accum
 
     def _cost(self, bs: int, max_len: int) -> float:
-        if self.cost_fn is not None:
-            return self.cost_fn(bs, max_len)
-        return self.intercept + bs * max_len + self.alpha * bs * max_len * max_len
+        return bs * max_len + self.QUADRATIC_COST_COEF * bs * max_len * max_len
 
     def _padded_tokens(self, count, sorted_pairs, group_start):
         if count <= 0:

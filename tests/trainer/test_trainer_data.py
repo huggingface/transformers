@@ -808,40 +808,6 @@ class TrainerSamplerTest(unittest.TestCase):
             )
             self.assertEqual(list(s1), list(s2))
 
-    def test_batch_rebalance_cost_fn(self):
-        """Test that a custom `cost_fn` overrides the default cost model."""
-        lengths = [100, 200, 500, 1000, 2000, 3000, 50, 150]
-
-        def my_cost(bs, max_len):
-            return bs * max_len + max_len * max_len * 0.01
-
-        sampler_default = BatchRebalanceSampler(
-            lengths=lengths,
-            effective_batch_size=8,
-            dp_size=2,
-            grad_accum=2,
-            rank=0,
-            alpha=0.001,
-        )
-        sampler_custom = BatchRebalanceSampler(
-            lengths=lengths,
-            effective_batch_size=8,
-            dp_size=2,
-            grad_accum=2,
-            rank=0,
-            cost_fn=my_cost,
-        )
-
-        for bs, max_len in [(1, 100), (2, 500), (4, 2000), (8, 3000)]:
-            # Default sampler should use the built-in cost formula, not `my_cost`.
-            self.assertEqual(
-                sampler_default._cost(bs, max_len),
-                0.0 + bs * max_len + 0.001 * bs * max_len * max_len,
-            )
-            # Custom sampler should delegate directly to `my_cost`, overriding
-            # `alpha`/`intercept` entirely.
-            self.assertEqual(sampler_custom._cost(bs, max_len), my_cost(bs, max_len))
-
     def test_batch_rebalance_converges_for_large_effective_batch_size(self):
         """
         Regression test for the rebalance iteration budget.
@@ -874,7 +840,6 @@ class TrainerSamplerTest(unittest.TestCase):
                 dp_size=dp_size,
                 grad_accum=grad_accum,
                 rank=rank,
-                alpha=0.001,
             )
             for batch in sampler:
                 all_indices.update(batch)
@@ -890,7 +855,6 @@ class TrainerSamplerTest(unittest.TestCase):
             dp_size=dp_size,
             grad_accum=grad_accum,
             rank=0,
-            alpha=0.001,
         )
         indices = list(range(effective_batch_size))
         batch_lengths = [lengths[i] for i in indices]
@@ -1095,7 +1059,6 @@ class TrainerSamplerTest(unittest.TestCase):
             fake_trainer.args.train_batch_size = per_device_train_batch_size * max(1, n_gpu)
             fake_trainer.args.gradient_accumulation_steps = grad_accum
             fake_trainer.args.length_column_name = "length"
-            fake_trainer.args.batch_rebalance_alpha = 0.001
             fake_trainer.args.batch_rebalance_max_tokens = 0
             fake_trainer.args.dataloader_drop_last = True
             fake_trainer.processing_class = None
