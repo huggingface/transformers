@@ -209,6 +209,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4v_vision", "Glm4vVisionModel"),
         ("glm5_next", "Glm5NextModel"),
         ("glm5_next_text", "Glm5NextTextModel"),
+        ("glm5_next_vision", "Glm5NextVisionModel"),
         ("glm_image", "GlmImageModel"),
         ("glm_image_text", "GlmImageTextModel"),
         ("glm_image_vision", "GlmImageVisionModel"),
