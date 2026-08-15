@@ -762,7 +762,10 @@ class ExportTesterMixin:
         device = runtime.device
         model = model.to(device)
         inputs = self.prepare_config_and_inputs_for_generate()[1]
-        inputs = {k: v.to(device) for k, v in inputs.items() if isinstance(v, torch.Tensor) and k != "labels"}
+        inputs = {k: v for k, v in inputs.items() if isinstance(v, torch.Tensor) and k != "labels"}
+        # the half-precision models (`needs_half_precision_export`) need their float inputs cast the same
+        # way the export path casts them, or the eager side hits its own tower with fp32 `pixel_values`
+        inputs = cast_leaf_tensors(inputs, dtype=module_dtype(model), device=device)
 
         # Called exactly like a normal model: the same generate inputs go to both, and no hand-rolled cache
         # — the runtime builds the cache the exported graph needs, static or growing (`_prepare_cache_for_generation`).
