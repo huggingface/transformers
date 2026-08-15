@@ -255,18 +255,11 @@ class Olmo3IntegrationTest(unittest.TestCase):
         self.assertEqual(expectations.get_expectation(), text)
 
     def test_real_model_7b_greedy_generation_batched(self):
-        # NOTE: when the two prompts have unequal lengths, the shorter one is
-        # padded. In batched greedy generation the model generates EOS
-        # immediately after "assistant\n" for the padded (shorter) sequence,
-        # producing an empty response for item[1]. This behaviour was present
-        # from the commit that introduced this test (326683dc4d) and is
-        # consistent regardless of padding side (left or right). The expected
-        # values below reflect the actual model output.
         expectations = Expectations(
             {
                 ("cuda", None): [
                     'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
-                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\n',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein\u2019s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
                 ],
             }
         )  # fmt: skip
@@ -275,6 +268,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
             [{"role": "user", "content": "Simply put, the theory of relativity"}],
         ]
+        self.tokenizer.padding_side = "left"  # required for decoder-only batched generation
         inputs = self.tokenizer.apply_chat_template(
             message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
         ).to(self.model.device)
