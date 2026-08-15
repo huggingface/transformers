@@ -63,6 +63,8 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
     "recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
@@ -481,7 +483,7 @@ if is_kernels_available():
                     )
                 }
             },
-            "chunk_kimi_delta_attention": {
+            "chunk_kda": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
@@ -495,7 +497,7 @@ if is_kernels_available():
                     ),
                 },
             },
-            "recurrent_kimi_delta_attention": {
+            "fused_recurrent_kda": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",

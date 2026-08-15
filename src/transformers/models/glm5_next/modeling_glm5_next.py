@@ -35,7 +35,6 @@ from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
     use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
@@ -60,7 +59,6 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..auto.modeling_auto import AutoModel
 from .configuration_glm5_next import Glm5NextConfig, Glm5NextTextConfig, Glm5NextVisionConfig
 
 
@@ -426,7 +424,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x / inv_norm
 
 
-@use_kernel_func_from_hub("recurrent_kimi_delta_attention")
+@use_kernel_func_from_hub_with_fallback("fused_recurrent_kda", "fla")
 def recurrent_kimi_delta_attention(
     query,
     key,
@@ -480,7 +478,7 @@ def recurrent_kimi_delta_attention(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
-@use_kernel_func_from_hub("chunk_kimi_delta_attention")
+@use_kernel_func_from_hub_with_fallback("chunk_kda", "fla")
 def chunk_kimi_delta_attention(
     query,
     key,
@@ -1344,7 +1342,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1401,6 +1399,9 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
+        elif isinstance(module, Glm5NextVisionRotaryEmbedding):  # noqa: F821
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 # Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
@@ -1507,9 +1508,9 @@ class Glm5NextVisionMLP(nn.Module):
     def forward(self, hidden_state):
         gate = self.gate_proj(hidden_state)
         up = self.up_proj(hidden_state)
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -1530,9 +1531,9 @@ class Glm5NextVisionPatchMerger(nn.Module):
         hidden_state = self.act1(self.post_projection_norm(hidden_state))
         gate = self.gate_proj(hidden_state)
         up = self.up_proj(hidden_state)
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -1697,14 +1698,12 @@ class Glm5NextVisionBlock(GradientCheckpointingLayer):
 
 
 class Glm5NextVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
         self.dim = dim
         self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
         return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
@@ -1833,7 +1832,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = AutoModel.from_config(config.vision_config)
+        self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
 
         # Initialize weights and apply final processing

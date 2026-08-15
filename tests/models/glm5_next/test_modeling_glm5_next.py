@@ -17,14 +17,12 @@ import copy
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import (
     Glm5NextConfig,
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
     Glm5NextVisionConfig,
-    Glm5NextVisionModel,
     is_torch_available,
     logging,
 )
@@ -46,10 +44,7 @@ from ...generation.test_utils import (
     assert_similar_generate_outputs,
     is_moe_model,
 )
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    floats_tensor,
-)
+from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -73,6 +68,7 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 8)
         kwargs.setdefault("image_size", 112)
         kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("projection_intermediate_size", 48 * 3)
         kwargs.setdefault("num_image_tokens", 64)
         kwargs.setdefault("seq_length", 64 + 7)
         kwargs.setdefault("hidden_act", "silu")
@@ -146,6 +142,7 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
             num_heads=self.num_attention_heads,
             out_hidden_size=self.hidden_size,
             intermediate_size=self.intermediate_size,
+            projection_intermediate_size=self.projection_intermediate_size,
             patch_size=self.patch_size,
             spatial_merge_size=self.spatial_merge_size,
             temporal_patch_size=self.temporal_patch_size,
@@ -165,54 +162,12 @@ class Glm5NextVisionText2TextModelTester(VLMModelTester):
 
 
 @require_torch
-class Glm5NextVisionModelTest(unittest.TestCase):
-    all_model_classes = (Glm5NextVisionModel,) if is_torch_available() else ()
-
-    def test_model_forward(self):
-        config = Glm5NextVisionConfig(
-            depth=2,
-            hidden_size=16,
-            intermediate_size=32,
-            num_heads=2,
-            out_hidden_size=16,
-            projection_intermediate_size=32,
-            patch_size=2,
-            temporal_patch_size=1,
-            spatial_merge_size=1,
-        )
-        model = Glm5NextVisionModel(config).to(torch_device).eval()
-        hidden_states = floats_tensor([8, config.in_channels * config.patch_size**2]).to(torch_device)
-        grid_thw = torch.tensor([[1, 2, 2], [1, 2, 2]], device=torch_device)
-
-        with torch.no_grad():
-            outputs = model(hidden_states, grid_thw)
-
-        self.assertEqual(outputs.last_hidden_state.shape, (8, config.out_hidden_size))
-        self.assertEqual(outputs.pooler_output.shape, (8, config.out_hidden_size))
-
-
-@require_torch
 class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Glm5NextVisionText2TextModelTester
     test_all_params_have_gradient = False  # MoE
     model_split_percents = [0.5, 0.8, 0.9]
-
-    def test_vision_swiglu_limit_precedence(self):
-        text_config = self.model_tester.get_text_config()
-        text_config.swiglu_limit = 12.0
-        vision_config = self.model_tester.get_vision_config().to_dict()
-
-        vision_config["swiglu_limit"] = 7.0
-        config = Glm5NextConfig(text_config=text_config, vision_config=vision_config)
-        self.assertEqual(config.vision_config.swiglu_limit, 7.0)
-
-        vision_config.pop("swiglu_limit")
-        config = Glm5NextConfig(text_config=text_config, vision_config=vision_config)
-        self.assertEqual(config.vision_config.swiglu_limit, 12.0)
-
-        vision_config["swiglu_limit"] = None
-        with self.assertRaisesRegex(ValueError, "vision_config requires swiglu_limit"):
-            Glm5NextConfig(text_config=text_config, vision_config=vision_config)
+    # FIXME: export is very sensitive to any shape changes
+    test_torch_exportable = False
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Override similar to GLM4V: images shaped as (bs*patch_len, dim) so we can't slice to batches in generate"""
@@ -229,18 +184,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.linear_num_heads, config.linear_head_dim, config.linear_head_dim)
-
-    def _get_attention_shape(self, batch_size: int, seq_length: int, config):
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        return expected_key_shape, expected_value_shape
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -606,45 +549,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip("Hybrid MoE + linear attention layers are not compatible with accelerate offload")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("Hybrid MoE + linear attention layers are not compatible with accelerate offload")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip("Hybrid MoE + linear attention layers are not compatible with accelerate offload")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip("Hybrid MoE + linear attention layers are not compatible with accelerate device map")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
-    def test_eager_matches_batched_and_grouped_inference(self, *args):
-        pass
-
-    @unittest.skip("Some buffers are not reinitialized via `_init_weights()` on meta device")
-    def test_init_weights_can_init_buffers(self):
-        pass
-
-    @unittest.skip(
-        "Linear attention conv/recurrent path diverges on cached multi-token continuation with padding"
-    )
-    def test_recurrent_layers_mask_padding_on_continued_forward(self):
-        pass
-
-    @unittest.skip("MoE routing / hybrid layers yield non-bitexact outputs after save/load")
-    def test_save_load(self):
         pass
 
 

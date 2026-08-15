@@ -22,7 +22,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
@@ -235,7 +234,7 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 1536):
         The output hidden size of the vision model.
-    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+    projection_intermediate_size (`int`, *optional*, defaults to 10240):
         The projection_intermediate_size size for the vision patch merger.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to the vision SwiGLU gate/up projections.
@@ -245,7 +244,6 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
 
     depth: int = 24
-
     hidden_size: int = 1024
     hidden_act: str = "silu"
     attention_bias: bool = True
@@ -260,14 +258,8 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
-    projection_intermediate_size: int | None = None
-    swiglu_limit: float | None = 10.0
-
-    def __post_init__(self, **kwargs):
-        if self.projection_intermediate_size is None:
-            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
-
-        super().__post_init__(**kwargs)
+    projection_intermediate_size = 10240
+    swiglu_limit: float = 10.0
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
@@ -295,7 +287,7 @@ class Glm5NextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm5_next"
-    sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextTextConfig}
+    sub_configs = {"vision_config": Glm5NextVisionConfig, "text_config": Glm5NextTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -316,19 +308,10 @@ class Glm5NextConfig(PreTrainedConfig):
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        text_swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
         if isinstance(self.vision_config, dict):
-            vision_config = dict(self.vision_config)
-            vision_config["model_type"] = "glm5_next_vision"
-            swiglu_limit = vision_config.get("swiglu_limit", text_swiglu_limit)
-            if swiglu_limit is None:
-                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
-            vision_config["swiglu_limit"] = swiglu_limit
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
-            if text_swiglu_limit is None:
-                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
-            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=text_swiglu_limit)
+            self.vision_config = self.sub_configs["vision_config"]()
 
         super().__post_init__(**kwargs)
 

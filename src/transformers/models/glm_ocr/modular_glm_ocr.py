@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
@@ -57,25 +56,11 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict
 class GlmOcrVisionConfig(Glm4vVisionConfig):
-    r"""
-    out_hidden_size (`int`, *optional*, defaults to 4096):
-        The output hidden size of the vision model.
-    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
-        The projection_intermediate_size size for the vision patch merger.
-    """
-
     hidden_size: int = 1024
     attention_bias: bool = True
     num_heads: int = 16
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
-    projection_intermediate_size: int | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.projection_intermediate_size is None:
-            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
-
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
@@ -258,7 +243,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         del self.post_conv_layernorm
         self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,
-            context_dim=config.projection_intermediate_size,
+            context_dim=config.out_hidden_size * config.in_channels,
             hidden_act=config.hidden_act,
         )
 

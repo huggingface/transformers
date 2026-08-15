@@ -31,15 +31,26 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
         The output hidden size of the vision model.
-    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
-        The projection_intermediate_size size for the vision patch merger.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import GlmOcrVisionConfig, GlmOcrVisionModel
+
+    >>> # Initializing a GlmOcrVisionConfig GLM-4.1V-9B style configuration
+    >>> configuration = GlmOcrVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> model = GlmOcrVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
 
     depth: int = 24
-
     hidden_size: int = 1024
     hidden_act: str = "silu"
     attention_bias: bool = True
@@ -54,13 +65,6 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 1536
     intermediate_size: int = 4096
     initializer_range: float = 0.02
-    projection_intermediate_size: int | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.projection_intermediate_size is None:
-            self.projection_intermediate_size = self.out_hidden_size * self.in_channels
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")

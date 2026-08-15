@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import (
     use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
+    use_kernel_func_from_hub_with_fallback,
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
@@ -46,8 +46,6 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata
-from ..auto import CONFIG_MAPPING, AutoConfig
-from ..auto.modeling_auto import AutoModel
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
@@ -236,14 +234,15 @@ class Glm5NextVisionConfig(GlmOcrVisionConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 1536):
         The output hidden size of the vision model.
-    projection_intermediate_size (`int`, *optional*, defaults to `out_hidden_size * in_channels`):
+    projection_intermediate_size (`int`, *optional*, defaults to 10240):
         The projection_intermediate_size size for the vision patch merger.
     swiglu_limit (`float`, *optional*, defaults to 10.0):
         Clamp limit applied to the vision SwiGLU gate/up projections.
     """
 
     model_type = "glm5_next_vision"
-    swiglu_limit: float | None = 10.0
+    projection_intermediate_size = 10240
+    swiglu_limit: float = 10.0
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5-Next")
@@ -271,7 +270,7 @@ class Glm5NextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm5_next"
-    sub_configs = {"vision_config": AutoConfig, "text_config": Glm5NextTextConfig}
+    sub_configs = {"vision_config": Glm5NextVisionConfig, "text_config": Glm5NextTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -292,19 +291,10 @@ class Glm5NextConfig(PreTrainedConfig):
             # top level; forward them so `text_config` is populated for BC.
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        text_swiglu_limit = getattr(self.text_config, "swiglu_limit", None)
         if isinstance(self.vision_config, dict):
-            vision_config = dict(self.vision_config)
-            vision_config["model_type"] = "glm5_next_vision"
-            swiglu_limit = vision_config.get("swiglu_limit", text_swiglu_limit)
-            if swiglu_limit is None:
-                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
-            vision_config["swiglu_limit"] = swiglu_limit
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
         elif self.vision_config is None:
-            if text_swiglu_limit is None:
-                raise ValueError("GLM-5 Next vision_config requires swiglu_limit")
-            self.vision_config = CONFIG_MAPPING["glm5_next_vision"](swiglu_limit=text_swiglu_limit)
+            self.vision_config = self.sub_configs["vision_config"]()
 
         super().__post_init__(**kwargs)
 
@@ -432,7 +422,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x / inv_norm
 
 
-@use_kernel_func_from_hub("recurrent_kimi_delta_attention")
+@use_kernel_func_from_hub_with_fallback("fused_recurrent_kda", "fla")
 def recurrent_kimi_delta_attention(
     query,
     key,
@@ -486,7 +476,7 @@ def recurrent_kimi_delta_attention(
     return core_attn_out.to(initial_dtype), last_recurrent_state if output_final_state else None
 
 
-@use_kernel_func_from_hub("chunk_kimi_delta_attention")
+@use_kernel_func_from_hub_with_fallback("chunk_kda", "fla")
 def chunk_kimi_delta_attention(
     query,
     key,
@@ -1213,7 +1203,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1270,6 +1260,9 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
+        elif isinstance(module, Glm5NextVisionRotaryEmbedding): # noqa: F821
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 # Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
@@ -1370,9 +1363,9 @@ class Glm5NextVisionMLP(GlmOcrVisionMlp):
     def forward(self, hidden_state):
         gate = self.gate_proj(hidden_state)
         up = self.up_proj(hidden_state)
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -1386,9 +1379,9 @@ class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
         hidden_state = self.act1(self.post_projection_norm(hidden_state))
         gate = self.gate_proj(hidden_state)
         up = self.up_proj(hidden_state)
-        if self.swiglu_limit is not None:
-            gate = gate.clamp(min=None, max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.down_proj(self.act_fn(gate) * up)
 
 
@@ -1415,7 +1408,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = AutoModel.from_config(config.vision_config)
+        self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
         del self.rope_deltas
 

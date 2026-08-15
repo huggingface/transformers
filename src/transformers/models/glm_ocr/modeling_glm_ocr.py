@@ -553,7 +553,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         self.blocks = nn.ModuleList([GlmOcrVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,
-            context_dim=config.projection_intermediate_size,
+            context_dim=config.out_hidden_size * config.in_channels,
             hidden_act=config.hidden_act,
         )
         self.downsample = nn.Conv2d(
