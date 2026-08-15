@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
-from typing import Dict, List, Optional, Tuple, Union
 import math
 import warnings
 from dataclasses import dataclass
@@ -1045,10 +1044,10 @@ class GroundingDinoEncoderLayer(nn.Module):
 
     def get_text_position_embeddings(
         self,
-        text_features: torch.FloatTensor,
-        text_position_embedding: Optional[torch.FloatTensor] = None,
-        text_position_ids: Optional[torch.LongTensor] = None,
-    ) -> torch.FloatTensor:
+        text_features,
+        text_position_embedding=None,
+        text_position_ids=None,
+    ):
         if text_position_embedding is None:
             if text_position_ids is not None:
                 text_position_embedding = encode_sinusoidal_position_embedding(
