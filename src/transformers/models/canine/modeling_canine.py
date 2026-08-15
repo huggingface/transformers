@@ -433,6 +433,11 @@ class CanineAttention(nn.Module):
         if not self.local:
             self_outputs = self.self(hidden_states, hidden_states, attention_mask, output_attentions)
             attention_output = self_outputs[0]
+        elif self._use_blocked_local_attention(output_attentions):
+            # `range(seq_len)` is specialized by torch.export/dynamo, which freezes the
+            # example sequence length. The default CANINE encoder uses equal-stride
+            # local windows, so we can run the same attention as blocked tensors.
+            attention_output = self._local_attention_blocked(hidden_states, attention_mask)
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
             from_tensor = to_tensor = hidden_states
@@ -493,9 +498,27 @@ class CanineAttention(nn.Module):
         outputs = (attention_output,)
         if not self.local:
             outputs = outputs + self_outputs[1:]  # add attentions if we output them
-        else:
-            outputs = outputs + tuple(attention_probs_chunks)  # add attentions if we output them
+        elif output_attentions:
+            outputs = outputs + tuple(attention_probs_chunks)
         return outputs
+
+    def _use_blocked_local_attention(self, output_attentions: bool) -> bool:
+        return (
+            self.attend_from_chunk_width == self.attend_from_chunk_stride
+            and self.attend_to_chunk_width == self.attend_to_chunk_stride
+            and self.attend_from_chunk_width == self.attend_to_chunk_width
+            and not self.always_attend_to_first_position
+            and not self.first_position_attends_to_all
+            and not output_attentions
+        )
+
+    def _local_attention_blocked(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        seq_length = hidden_states.shape[1]
+        chunk_size = self.attend_from_chunk_stride
+        positions = torch.arange(seq_length, device=hidden_states.device)
+        local_chunks = (positions // chunk_size).unsqueeze(0) == (positions // chunk_size).unsqueeze(1)
+        local_attention_mask = attention_mask.masked_fill(~local_chunks.unsqueeze(0), 0)
+        return self.self(hidden_states, hidden_states, local_attention_mask, output_attentions=False)[0]
 
 
 class CanineIntermediate(nn.Module):
@@ -787,19 +810,12 @@ class CanineModel(CaninePreTrainedModel):
         return mask
 
     def _downsample_attention_mask(self, char_attention_mask: torch.Tensor, downsampling_rate: int):
-        """Downsample 2D character attention mask to 2D molecule attention mask using MaxPool1d layer."""
-
-        # first, make char_attention_mask 3D by adding a channel dim
+        """Downsample 2D character attention mask to 2D molecule attention mask."""
         batch_size, char_seq_len = char_attention_mask.shape
-        poolable_char_mask = torch.reshape(char_attention_mask, (batch_size, 1, char_seq_len))
-
-        # next, apply MaxPool1d to get pooled_molecule_mask of shape (batch_size, 1, mol_seq_len)
-        pooled_molecule_mask = torch.nn.MaxPool1d(kernel_size=downsampling_rate, stride=downsampling_rate)(
-            poolable_char_mask.float()
-        )
-
-        # drop the channel dim added for MaxPool1d to get tensor of shape (batch_size, mol_seq_len)
-        return pooled_molecule_mask.squeeze(dim=1)
+        molecule_seq_len = char_seq_len // downsampling_rate
+        complete_char_seq_len = molecule_seq_len * downsampling_rate
+        poolable_char_mask = char_attention_mask[:, :complete_char_seq_len].to(dtype=torch.float32)
+        return poolable_char_mask.reshape(batch_size, molecule_seq_len, downsampling_rate).amax(dim=-1)
 
     def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""

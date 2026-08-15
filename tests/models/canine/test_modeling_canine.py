@@ -18,7 +18,7 @@ import unittest
 import pytest
 
 from transformers import CanineConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_greater_or_equal, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -35,6 +35,7 @@ if is_torch_available():
         CanineForTokenClassification,
         CanineModel,
     )
+    from transformers.models.canine.modeling_canine import CanineAttention
 
 
 class CanineModelTester:
@@ -263,6 +264,100 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertEqual(output.dtype, torch.float16)
         self.assertFalse(torch.isnan(output).any())
+
+    def test_local_attention_blocked_matches_loop(self):
+        config = self.model_tester.get_config()
+        config.hidden_dropout_prob = 0.0
+        config.attention_probs_dropout_prob = 0.0
+        attention = CanineAttention(
+            config,
+            local=True,
+            attend_from_chunk_width=4,
+            attend_from_chunk_stride=4,
+            attend_to_chunk_width=4,
+            attend_to_chunk_stride=4,
+        ).to(torch_device)
+        attention.eval()
+
+        for sequence_length in (4, 8, 9, 12, 13):
+            hidden_states = torch.randn(2, sequence_length, config.hidden_size, device=torch_device)
+            # Match CANINE's 3D mask: broadcast a 2D padding mask across query positions.
+            for padding_mask in (
+                torch.ones(2, sequence_length, device=torch_device),
+                torch.cat(
+                    [
+                        torch.ones(2, max(sequence_length - 3, 1), device=torch_device),
+                        torch.zeros(2, sequence_length - max(sequence_length - 3, 1), device=torch_device),
+                    ],
+                    dim=1,
+                ),
+            ):
+                if padding_mask[:, -1].eq(0).all():
+                    padding_mask[:, -1] = 1
+                attention_mask = padding_mask[:, None, :].expand(2, sequence_length, sequence_length)
+
+                with torch.no_grad():
+                    blocked_output = attention(hidden_states, attention_mask, output_attentions=False)[0]
+                    loop_output = attention(hidden_states, attention_mask, output_attentions=True)[0]
+
+                self.assertTrue(torch.allclose(blocked_output, loop_output, atol=1e-5, rtol=1e-5))
+
+    def test_downsample_attention_mask_matches_max_pool(self):
+        model = CanineModel(self.model_tester.get_config())
+        downsampling_rate = 4
+
+        for sequence_length in (4, 5, 8, 9, 12, 13):
+            attention_mask = torch.randint(0, 2, (2, sequence_length))
+            expected = torch.nn.functional.max_pool1d(
+                attention_mask[:, None, :].float(), kernel_size=downsampling_rate, stride=downsampling_rate
+            ).squeeze(1)
+            actual = model._downsample_attention_mask(attention_mask, downsampling_rate)
+
+            self.assertTrue(torch.equal(actual, expected))
+
+    @require_torch_greater_or_equal("2.6")
+    def test_torch_export_with_dynamic_sequence_length(self):
+        config = CanineConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            intermediate_size=64,
+            max_position_embeddings=64,
+            num_hash_functions=4,
+            num_hash_buckets=64,
+            downsampling_rate=4,
+            upsampling_kernel_size=4,
+            local_transformer_stride=4,
+            hidden_dropout_prob=0.0,
+            attention_probs_dropout_prob=0.0,
+        )
+        model = CanineModel(config).eval()
+        example_input_ids = torch.ones(2, 12, dtype=torch.long)
+
+        class ExportableCanine(torch.nn.Module):
+            def __init__(self, canine_model):
+                super().__init__()
+                self.canine_model = canine_model
+
+            def forward(self, input_ids, attention_mask):
+                return self.canine_model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+
+        sequence_length = 4 * torch.export.Dim("molecule_sequence_length", min=3, max=8)
+        exported = torch.export.export(
+            ExportableCanine(model),
+            (example_input_ids, example_input_ids),
+            dynamic_shapes={
+                "input_ids": {1: sequence_length},
+                "attention_mask": {1: sequence_length},
+            },
+            strict=True,
+        )
+
+        exported_module = exported.module()
+        for length in (12, 16):
+            input_ids = torch.ones(2, length, dtype=torch.long)
+            output = exported_module(input_ids, input_ids)
+            self.assertEqual(tuple(output.shape), (2, length, config.hidden_size))
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
