@@ -66,7 +66,7 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "chunk_kda": "ops.kda",
     "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
-    "recurrent_gated_delta_rule": "ops.gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
     "selective_state_update": "ops.triton.selective_state_update",
     "mamba_chunk_scan_combined": "ops.triton.ssd_combined",
@@ -207,7 +207,7 @@ if is_kernels_available():
                     ),
                 },
             },
-            "recurrent_gated_delta_rule": {
+            "fused_recurrent_gated_delta_rule": {
                 "cuda": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
