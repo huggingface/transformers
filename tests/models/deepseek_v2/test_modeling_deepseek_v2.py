@@ -17,7 +17,7 @@ import math
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -138,6 +138,9 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV2IntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_deepseek_v2_lite(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The query and keys are used to compute a similarity score between each key and the query, and the values are used to compute a weighted sum of the similarity scores. The output is a vector that represents the attention score for each key-value pair.']  # fmt: skip
 
@@ -179,7 +182,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
     def test_batch_fa2(self):
         EXPECTED_TEXT = [
             "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don't like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",  # fmt: skip
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",  # fmt: skip
         ]
 
         prompts = [
