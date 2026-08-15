@@ -29,8 +29,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import get_mrope_index
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_rope_utils import get_mrope_index
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
