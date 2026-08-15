@@ -288,12 +288,16 @@ class FineGrainedHfQuantizer(HfQuantizer):
                         "mlp.experts.*.up_proj.weight_scale_2",
                     ],
                     target_patterns="mlp.experts.gate_up_proj_global_scale",
-                    operations=[FineGrainedFuseEqualGlobals(self)],
+                    # MergeModulelist is what stamps each source with its expert index, which
+                    # is what lets expert parallelism keep only this rank's experts (see
+                    # `tensor_idx` in core_model_loading). Without it every rank collects all
+                    # E globals and the forward asserts on the per-expert count.
+                    operations=[MergeModulelist(dim=0), FineGrainedFuseEqualGlobals(self)],
                 ),
                 WeightConverter(
                     source_patterns="mlp.experts.*.down_proj.weight_scale_2",
                     target_patterns="mlp.experts.down_proj_global_scale",
-                    operations=[FineGrainedFuseEqualGlobals(self)],
+                    operations=[MergeModulelist(dim=0), FineGrainedFuseEqualGlobals(self)],
                 ),
             ]
             # No converters for non-expert modules: this checkpoint family quantizes ONLY

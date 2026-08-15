@@ -332,11 +332,12 @@ def finegrained_linear(
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
 
     Dispatch order — both backends handle FP8 and FP4 weights with fp32 or UE8M0 scales:
-      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — 3-6× faster on the shapes it supports.
-         Preferred for FP4, UE8M0 SFs, and 128×128 block FP8.
-      2. Triton finegrained-fp8 fallback — used when DeepGEMM is unavailable, when the
-         caller passes ``activation_scale`` (DeepGEMM is dynamic-only), or for any
-         shape DeepGEMM declined.
+      1. DeepGEMM (`deepgemm_fp8_fp4_linear`) — on the pre-SM100 shapes it supports (FP4,
+         UE8M0 SFs, 128×128 block FP8). Never preferred on SM100: the Triton path is tuned
+         per shape there and is the only one that reads the pre-swizzled SWIZZLE_32_4_4
+         scales, and DeepGEMM's context-bound kernels are the multi-device hazard below.
+      2. Triton finegrained fallback — everywhere else: SM100, an ``activation_scale``
+         (DeepGEMM is dynamic-only), or any shape DeepGEMM declined.
 
     Args:
         input: (..., K) bf16/fp16 activations.
@@ -363,13 +364,23 @@ def finegrained_linear(
     # degrades end-to-end generation on B200 (per-row kernel outputs still measure bit-perfect, but final
     # tokens drift; not reproducible with the DeepGEMM linear off).
     deepgemm_preferred = (
-        allow_deepgemm
+        # SM100 perf: Triton measures 2.9x (decode) / 1.45x (prefill) over DeepGEMM on the DSV4
+        # qkv linear — the 128x128 block-FP8 shape DeepGEMM is otherwise preferred for, which the
+        # gate above never catches (block-FP8's (N/128, K/128) grid has no swizzled layout).
+        not is_sm100()
+        # If the model is on multiple devices, DeepGEMM's context-bound kernels corrupt across devices. The
+        # multi-device guard in `quantizer_finegrained.py` flips `_deepgemm_disabled` True at load, which
+        # this dispatcher sees and respects. The Triton fallback is context-free and safe.
+        and allow_deepgemm
+        # A pre-swizzled (SWIZZLE_32_4_4) scale is not readable as row-major: DeepGEMM would
+        # consume the permuted buffer as affine and silently return garbage. Correctness gate,
+        # true on any arch, for whatever `swizzle_scales_after_loading` has already swizzled.
+        and weight_scale_inv.ndim <= 2
         and is_deepgemm_loadable()
         and activation_scale is None
         # DeepGEMM serves neither the NVFP4 two-level global nor an explicit activation format
         and weight_global_scale is None
         and activation_format is None
-        and not (is_sm100() and weight_scale_inv.dtype == torch.float32)
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
     )
@@ -992,21 +1003,37 @@ def swizzle_scales_after_loading(model: nn.Module) -> None:
     a BUFFER next to the affine scale Parameter (which stays the state_dict source of truth, so
     save/dequantize round-trip untouched; scale tensors are small). gate_up scales take the
     gate-interleaved artifact the fused GATE arm reads natively.
-    ``TRANSFORMERS_FINEGRAINED_NO_SWIZZLE=1`` skips the pass (debug / pre-Blackwell A/B)."""
+
+    SM100 only. The layout exists for the Blackwell tcgen05 scaled-MMA; elsewhere it buys
+    nothing, costs the swizzled arm's tile constraints (``swizzled_scales_bm_pruner`` pins
+    BM=BN=128), and collides with DeepGEMM — which stays the preferred linear backend below
+    SM100 and reads plain row-major scales.
+    ``TRANSFORMERS_FINEGRAINED_NO_SWIZZLE=1`` skips the pass (debug / A/B)."""
     if os.environ.get("TRANSFORMERS_FINEGRAINED_NO_SWIZZLE", "0") == "1":
+        return
+    if not is_sm100():
         return
     try:
         kernel = load_finegrained_kernel()
     except ImportError:
         return  # dequantize fallback path: nothing to swizzle for
+    formats = _weight_formats()
     for module in model.modules():
         if not isinstance(module, FineGrainedExperts):
             continue
+        # Only the GROUP-scaled families have a layout to pre-arrange: SWIZZLE_32_4_4 is the
+        # scale OPERAND layout the tcgen05 scaled-MMA reads (MX group-32, NVFP4 group-16).
+        # Block-FP8's (N/128, K/128) grid never reaches a scaled-MMA — the block-dynamic loop
+        # applies it on the fp32 accumulator around a plain dot — so it has no swizzled form.
+        # Keyed off the declared recipe, not the scale dtype: V4-style block-FP8 ships UE8M0
+        # scales, so a `dtype == float32` test lets it through (it then survives only by
+        # accident, because N/128 is rarely a multiple of 128).
+        fmt = formats.get(module.weight_format)
+        if fmt is None or fmt.scale_group is None:
+            continue
         for proj in (("gate_up_proj" if module.has_gate else "up_proj"), "down_proj"):
             scale = getattr(module, f"{proj}_scale_inv", None)
-            # only the group-scaled families have a swizzled layout (E8M0 / E4M3 group scales);
-            # block-FP8's fp32 (N/128, K/128) grid has no tcgen05 layout to pre-arrange
-            if scale is None or scale.dtype == torch.float32 or scale.device.type == "meta":
+            if scale is None or scale.device.type == "meta":
                 continue
             gate = proj == "gate_up_proj"
             n_rows = to_local(scale).shape[-2]
