@@ -777,8 +777,14 @@ def materialize_cache_layers(cache: Any, batch_size: int, config: Any, dtype: An
         materialize_cache_layers(cache.cross_attention_cache, batch_size, config, dtype, device)
         return
     text_config = config.get_text_config()
-    num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
-    head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
+    if (kv_lora_rank := getattr(text_config, "kv_lora_rank", None)) is not None:
+        # Multi-head latent attention (deepseek_v3, kimi_k25) caches one compressed latent head of
+        # `kv_lora_rank`, not one entry per KV head — deriving the shape from `num_key_value_heads` would
+        # disagree with what the model, and so the traced graph, actually caches.
+        num_kv_heads, head_dim = 1, kv_lora_rank
+    else:
+        num_kv_heads = getattr(text_config, "num_key_value_heads", None) or text_config.num_attention_heads
+        head_dim = getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
     for layer in cache.layers:
         if getattr(layer, "is_initialized", True):
             continue
