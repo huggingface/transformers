@@ -16,7 +16,7 @@
 import math
 import unittest
 
-from transformers import BitsAndBytesConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -144,15 +144,14 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         input_text = [
             "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors."  # fmt: skip
         ]
-        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=50, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
@@ -163,19 +162,18 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
             attn_implementation="eager",
         )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
-        EXPECTED_MEAN = torch.tensor([[-6.1232, -5.0952, -4.4493, -2.6536, -2.0608, -2.3991, -3.8013, -2.8681]], device=torch_device)  # fmt: skip
+        EXPECTED_MEAN = torch.tensor([[-6.177091121673584, -5.0334978103637695, -3.9929561614990234, -2.515228509902954, -2.128833770751953, -2.458101511001587, -3.771824598312378, -3.6901206970214844]], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-1.2500, -0.9961, -0.0194, -3.1562,  1.2812, -2.7656, -0.8438, -3.0469, -2.7812, -0.6328, -0.4160, -1.9688, -2.4219, -1.0391, -3.8906], device=torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-1.21875, -0.7421875, -0.0201416015625, -2.828125, 1.25, -2.609375, -0.7265625, -2.921875, -2.53125, -0.546875, -0.322265625, -1.828125, -2.109375, -0.8125, -3.78125], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_batch_fa2(self):
@@ -194,11 +192,10 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         model = DeepseekV2ForCausalLM.from_pretrained(
             "deepseek-ai/DeepSeek-V2-Lite",
-            device_map=torch_device,
+            device_map="auto",
             dtype=torch.bfloat16,
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
