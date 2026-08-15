@@ -173,10 +173,10 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
 
-        EXPECTED_MEAN = torch.tensor([[-6.177091121673584, -5.0334978103637695, -3.9929561614990234, -2.515228509902954, -2.128833770751953, -2.458101511001587, -3.771824598312378, -3.6901206970214844]], device=torch_device)  # fmt: skip
+        EXPECTED_MEAN = torch.tensor([[-6.1771, -5.0335, -3.9930, -2.5152, -2.1288, -2.4581, -3.7718, -3.6901]], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits.float().mean(-1), EXPECTED_MEAN, atol=1e-3, rtol=1e-3)
 
-        EXPECTED_SLICE = torch.tensor([-1.21875, -0.7421875, -0.0201416015625, -2.828125, 1.25, -2.609375, -0.7265625, -2.921875, -2.53125, -0.546875, -0.322265625, -1.828125, -2.109375, -0.8125, -3.78125], device=torch_device)  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-1.2188, -0.7422, -0.0201, -2.8281, 1.2500, -2.6094, -0.7266, -2.9219, -2.5313, -0.5469, -0.3223, -1.8281, -2.1094, -0.8125, -3.7813], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
     def test_batch_fa2(self):
