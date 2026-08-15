@@ -596,6 +596,7 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(actual, torch.nn.functional.normalize(expected, dim=-1))
 
 
+@unittest.skip("NeoMME checkpoints are not public yet.")
 @slow
 @require_torch
 @require_vision
@@ -688,6 +689,7 @@ class NeoMMEModelIntegrationTest(unittest.TestCase):
         self.assertTrue(((scores >= -1.0) & (scores <= 1.0)).all())
 
 
+@unittest.skip("NeoMME checkpoints are not public yet.")
 @slow
 @require_torch
 @require_vision
@@ -730,6 +732,7 @@ class NeoMMEBaseModelIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
 
 
+@unittest.skip("NeoMME checkpoints are not public yet.")
 @slow
 @require_torch
 class NeoMMEMaskedLMIntegrationTest(unittest.TestCase):
