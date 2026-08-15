@@ -47,7 +47,7 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
 from .configs import ExecutorchConfig
-from .exporter_dynamo import DynamoExporter
+from .exporter_dynamo import DynamoExporter, varlen_attn_masked_sdpa
 from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
@@ -146,13 +146,35 @@ class ExecutorchExporter(DynamoExporter):
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
+                exported_program,
+                partitioner=partitioner,
+                compile_config=_get_edge_compile_config(),
+                constant_methods=_signature_constant_methods(exported_program),
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
                 config=_get_backend_config(config)
             )
 
         return executorch_programs_manager
+
+
+def _signature_constant_methods(exported_program: ExportedProgram) -> dict[str, list]:
+    """Baked-in methods that make the ``.pte`` self-describing, so a runner needs nothing but the loaded
+    program (`ExecutorchModelRunner`).
+
+    A ``.pte`` otherwise keeps only positional inputs, and a loaded method's metadata carries just counts
+    and tensor shapes — no names, and no way to tell the model's own outputs from the mutated-input copies
+    ExecuTorch emits. Both facts live in the source graph signature, so they ride along as constant methods
+    (the mechanism llama.pte uses for ``get_vocab_size`` & co.): ``input_names`` in flat input order, and
+    ``num_user_outputs`` — the model's own outputs are the LAST that many (lowering emits the
+    mutated-input copies first, and adds its own, so only the count survives from here; the runner turns it
+    into positions using the loaded method's output count).
+    """
+    signature = exported_program.graph_signature
+    return {
+        "input_names": [name for name in signature.user_inputs if isinstance(name, str)],
+        "num_user_outputs": [sum(spec.kind.name == "USER_OUTPUT" for spec in signature.output_specs)],
+    }
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:
@@ -167,6 +189,7 @@ def _get_edge_compile_config() -> EdgeCompileConfig:
     """
     return EdgeCompileConfig(
         _core_aten_ops_exception_list=[
+            torch.ops.aten._embedding_bag_forward_only.default,
             torch.ops.aten._fft_c2c.default,
             torch.ops.aten._is_all_true.default,
             torch.ops.aten.bincount.default,
@@ -527,6 +550,19 @@ def _patch_broadcast_mask_expansion(_original):
         return _expanded
 
     return patch
+
+
+@register_patch("executorch", "torch.nn.attention.varlen.varlen_attn")
+def _patch_varlen_attn(original):
+    """The chunked vision/audio attention patch calls `varlen_attn`, whose CUDA flash op stays opaque
+    through edge lowering (its aux outputs trip the edge-dialect verifier). Swap it for the block-diagonal
+    masked SDPA — core-aten ops ExecuTorch can lower — returning just the output tensor (`varlen_attn`'s
+    contract, vs the underlying op's `(output, *aux)` tuple)."""
+
+    def varlen_attn(*args, **kwargs):
+        return varlen_attn_masked_sdpa(*args, **kwargs)
+
+    return varlen_attn
 
 
 @register_patch("executorch", "torch.nn.functional.scaled_dot_product_attention")

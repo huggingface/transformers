@@ -157,7 +157,7 @@ class HfExporter(ABC):
             config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
                 Backend-specific configuration. Pass a single config to apply to every
                 component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
-                `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
+                `"text_decoder"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 Forwarded to the `generate()` capture (defaults to the model's own). Pass one with

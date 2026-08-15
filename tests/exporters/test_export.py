@@ -23,7 +23,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
-from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
+from transformers.exporters.exporter_dynamo import _VARLEN_ATTENTION_PATHS, DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
@@ -34,6 +34,7 @@ from transformers.exporters.utils import (
     is_multimodal,
     module_device,
     module_dtype,
+    precompute_export_inputs,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -342,21 +343,46 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
     name_func=lambda f, _, p: f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}",
 )
 
-# Generation export tests run the cartesian product of two axes: dynamic vs static shapes, and the
-# generation config used for the capture. `generation_config=None` is the model's own config (growing
-# `DynamicCache`); `cache_implementation="static"` exports against a `StaticCache`. Every cache runs
-# under both shape modes — under dynamic shapes a static cache still keeps a symbolic (resizable) size,
-# it just writes at fixed positions. A dynamic-shape export also captures the `decode` stage multi-token
-# (a symbolic query axis — continuation-from-past, or a plain prefill on an empty cache) rather than the
-# single-token step, since a single-token axis can't stay symbolic.
+# Generation export tests run the product of three axes: shape dynamism, single- vs multi-token decode
+# capture, and the generation config used for the capture.
 _EXPORT_SHAPE_MODES = [False, True]  # dynamic=False (static shapes) / dynamic=True
-_EXPORT_GENERATION_CONFIGS = [None, GenerationConfig(cache_implementation="static")]
+# `multi_token_decode=False` captures the classic single-token decode (its query axis specializes to 1;
+# the separate `prefill` graph serves the prompt); `True` merges two decode steps so the query axis stays
+# symbolic and one graph serves prefill and decode — the only option for multi-modal models, which export
+# no standalone prefill graph.
+_EXPORT_DECODE_MODES = [False, True]  # multi_token_decode
+# `generation_config=None` is the model's own config (growing `DynamicCache`);
+# `cache_implementation="static"` exports against a `StaticCache`. Every cache runs under every shape
+# mode — under dynamic shapes a static cache still keeps a symbolic (resizable) size, it just writes at
+# fixed positions. The static entry declares `max_cache_len` explicitly — a static-cache export's
+# contract: the runtime is handed the same generation config the model was exported with and builds the
+# cache it declares; without it, the capture sizes the cache from its own internal token count and the
+# runtime from the caller's, and backends that freeze the traced length reject the mismatch.
+# `max_cache_len` must fit every tester's prompt + new tokens: `generate` silently grows an under-sized
+# static cache, which bakes the grown length into the traced graph while the runtime builds the declared
+# one (multi-modal prompts with image tokens run ~80 long).
+# Both entries declare `use_cache=True`: an exported decode graph is only useful with a cache, and a model
+# whose own config disables caching (bart's standalone decoder) would otherwise be captured cacheless —
+# re-feeding the whole growing sequence every step, which a frozen-shape graph can't serve at all.
+_EXPORT_GENERATION_CONFIGS = [
+    GenerationConfig(use_cache=True),
+    GenerationConfig(cache_implementation="static", max_cache_len=128, use_cache=True),
+]
 
 GENERATE_EXPORT_PARAMS = parameterized.expand(
-    list(itertools.product(_EXPORT_SHAPE_MODES, _EXPORT_GENERATION_CONFIGS)),
+    [
+        (dynamic, multi_token, config)
+        for dynamic, multi_token, config in itertools.product(
+            _EXPORT_SHAPE_MODES, _EXPORT_DECODE_MODES, _EXPORT_GENERATION_CONFIGS
+        )
+        # A merged multi-token decode under static shapes would freeze its query axis at 2 — a graph no
+        # decode step could ever run.
+        if not (multi_token and not dynamic)
+    ],
     name_func=lambda f, _, p: (
         f"{f.__name__}_{'dynamic' if p.args[0] else 'static'}"
-        + (f"_{p.args[1].cache_implementation}_cache" if p.args[1] is not None else "")
+        + ("_multi_token" if p.args[1] else "")
+        + (f"_{p.args[2].cache_implementation}_cache" if p.args[2].cache_implementation else "")
     ),
 )
 
@@ -533,6 +559,21 @@ def _onnx_optimize_enabled(model_class, dynamic: bool) -> bool:
     return not any(name in ONNX_DISABLE_OPTIMIZE.get(scope, {}) for scope in scopes)
 
 
+def needs_half_precision_export(model) -> bool:
+    """Whether `model` exercises a kernel that only runs in half precision, so the export test builds it in
+    half precision rather than fp32. Two such kernels: grouped-mm MoE experts (`config._experts_implementation`
+    resolves to `"grouped_mm"`; the eager/batched paths are fp32-fine) and the vision/audio varlen flash
+    attention (the forwards patched in `_VARLEN_ATTENTION_PATHS`, matched by full module-qualified class path so
+    a generic name like `VisionAttention` can't collide). Everything else exports fine — and more faithfully —
+    in fp32."""
+    if getattr(getattr(model, "config", None), "_experts_implementation", None) == "grouped_mm":
+        return True
+    return any(
+        f"{type(module).__module__}.{type(module).__qualname__}.forward" in _VARLEN_ATTENTION_PATHS
+        for module in model.modules()
+    )
+
+
 # ──────────────────────────── mixins ────────────────────────────
 
 
@@ -592,7 +633,7 @@ class ExportTesterMixin:
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
+    def _prepare_export_model_and_inputs(self, model_class, backend, device=torch_device):
         """Create model and forward inputs ready for export.
 
         ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
@@ -610,7 +651,14 @@ class ExportTesterMixin:
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
+        model = model_class(config).eval()
+        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
+        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
+        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
+        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
+        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
+        model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
@@ -629,8 +677,133 @@ class ExportTesterMixin:
                 assert eager_outputs[name], f"Eager outputs are empty for {name}."
         return eager_outputs
 
+    def _make_backend_runner(self, backend, name, exported):
+        """Wrap `backend`'s runtime handle around component `name`'s artifact from the test loop — the
+        session / module the runner drives, nothing is exported here. The ONNX session runs on CPU (host
+        round-trips), so the parity check's eager side runs on CPU too."""
+        if backend == "dynamo":
+            from transformers.exporters import DynamoModelRunner
+
+            return DynamoModelRunner(exported[name].module())
+        elif backend == "executorch":
+            from executorch.runtime import Runtime, Verification
+
+            from transformers.exporters import ExecutorchModelRunner
+
+            program = Runtime.get().load_program(exported[name].buffer, verification=Verification.Minimal)
+            return ExecutorchModelRunner(program)
+        elif backend == "onnx":
+            import onnxruntime as ort
+
+            from transformers.exporters import OnnxModelRunner
+
+            session = ort.InferenceSession(
+                exported[name].model_proto.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            return OnnxModelRunner(session)
+        else:
+            raise ValueError(f"Unknown backend {backend}")
+
+    def _assert_generate_matches_eager(
+        self, components, exported, backend, generation_config, dynamic, multi_token_decode
+    ):
+        """Wrap the exported components in `backend`'s `ModelRunner`s, reassemble them into the
+        `generate`-driving runtime via `ExportedGenerator.from_runners` — the same artifacts-plus-configs
+        path a deployment would use (`generation_config` is the one the components were exported with, the
+        runtime's cache contract; `None` means the model's own defaults) — and assert it generates like the
+        eager model. Runs both on the runner's device with greedy decoding. fp32 models must match token
+        ids exactly; half-precision models (the varlen-attention VLM families and grouped-mm MoEs, see
+        `needs_half_precision_export`) compare per-step scores at the dtype-calibrated tolerance and ids
+        only until the first near-tie — export re-rounds ops by ~2^-8, and a tiny random model's argmax
+        legitimately flips on ties that small, while a real wiring bug (wrong cache / mask / positions)
+        shows up as systematic score divergence which the closeness check catches regardless. Covers
+        decoder-only text, VLMs (including M-RoPE, whose 4-axis position ids the runtime rebuilds
+        config-only in `_prepare_position_ids_for_generation`) and encoder-decoder models (encoder +
+        decoder-step graphs).
+
+        Text models wire the exported `prefill` graph as the generator's dedicated prefill runner, so the
+        `decode` graph only ever sees query=1 steps — which is what lets the *static-shape* variants run
+        parity too (over a static cache, every step reproduces the frozen shapes). Multi-modal models have
+        no standalone prefill graph; their multi-token `decode` serves both, exercising the single-graph
+        path (dynamic shapes only)."""
+        from transformers.exporters import ExportedGenerator
+        from transformers.exporters.utils import _MODALITY_SPECS
+
+        model = components["decode"][0]
+        config = model.config
+        if (
+            multi_token_decode
+            and not _needs_static_cache(generation_config)
+            and getattr(config, "sliding_window", None) is not None
+        ):
+            # A growing sliding cache merged multi-token bakes the sliding layers' python `is_full` branch
+            # and a trace-time lower bound on the mask's kv axis (`attention_mask.size(1) >= prompt+2`),
+            # which the runtime's query=1 steps violate. Single-token decode over a growing sliding cache
+            # works (within the window), and static sliding caches work in every mode.
+            return
+        if (
+            backend == "executorch"
+            and getattr(config, "sliding_window", None) is not None
+            and dynamic
+            and (not multi_token_decode or _needs_static_cache(generation_config))
+        ):
+            # The `.pte` method rejects these feeds at `set_inputs` (0x10 "can't resize static tensor" /
+            # 0x12). Root cause is broader than sliding: ET's cache dynamism is bounded AT the traced
+            # shapes — any model's growing-cache decode rejects (or segfaults on) cache lengths past the
+            # traced one, and the passing ET growing-cache variants only fit because 2-token generation
+            # never exceeds them; sliding caches additionally trip it within the window in these variants.
+            # Deployment guidance for ET is a static cache. TODO: real upper-bound dynamism in the ET
+            # lowering, then ungate.
+            return
+
+        wanted = {"decode", "prefill", "encoder", "embed_tokens", *(spec[0] for spec in _MODALITY_SPECS)}
+        runners = {name: self._make_backend_runner(backend, name, exported) for name in components if name in wanted}
+        runtime = ExportedGenerator.from_runners(runners, model.config, model.generation_config)
+        device = runtime.device
+        model = model.to(device)
+        inputs = self.prepare_config_and_inputs_for_generate()[1]
+        inputs = {k: v.to(device) for k, v in inputs.items() if isinstance(v, torch.Tensor) and k != "labels"}
+
+        # Called exactly like a normal model: the same generate inputs go to both, and no hand-rolled cache
+        # — the runtime builds the cache the exported graph needs, static or growing (`_prepare_cache_for_generation`).
+        # `eos_token_id=-1` keeps both running the full `max_new_tokens` so the ids compare directly.
+        # The same capture generation config goes to both sides, exactly as it went to the export's own
+        # generate — the runtime builds the cache it declares.
+        gen_kwargs = {
+            "do_sample": False,
+            "eos_token_id": -1,
+            "max_new_tokens": 2,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+            "generation_config": generation_config,
+        }
+        eager_out = model.generate(**inputs, **gen_kwargs)
+        exported_out = runtime.generate(**inputs, **gen_kwargs)
+        if module_dtype(model) not in (torch.float16, torch.bfloat16):
+            self.assertEqual(exported_out.sequences.tolist(), eager_out.sequences.tolist())
+            return
+        # Half precision: scores must agree at the dtype's rounding scale (same tolerance as
+        # `_check_outputs_close`), ids only while eager's greedy choice is unambiguous at that scale.
+        atol = rtol = 1.6e-2
+        start = eager_out.sequences.shape[1] - len(eager_out.scores)
+        for step, (eager_scores, exported_scores) in enumerate(zip(eager_out.scores, exported_out.scores)):
+            torch.testing.assert_close(exported_scores, eager_scores, atol=atol, rtol=rtol)
+            top2 = eager_scores.float().topk(2, dim=-1).values
+            if (top2[:, 0] - top2[:, 1]).min() < 2 * atol:
+                break
+            self.assertEqual(
+                exported_out.sequences[:, start + step].tolist(), eager_out.sequences[:, start + step].tolist()
+            )
+
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
-        """Assert outputs are close, allowing up to 5% element-level mismatch."""
+        """Assert outputs are close, allowing up to 5% element-level mismatch.
+
+        For bf16/fp16 outputs the fp32-calibrated tolerance is far too tight — export re-rounds ops (fusion,
+        reordered reductions), which perturbs half-precision values by ~2^-8. Widen to the dtype's rounding
+        scale so genuine bugs (systematic, larger drift) still fail while benign bf16 noise passes.
+        """
+        if any(t.dtype in (torch.bfloat16, torch.float16) for t in expected.values()):
+            atol, rtol = max(atol, 1.6e-2), max(rtol, 1.6e-2)
         try:
             torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=check_device)
         except AssertionError as e:
@@ -660,7 +833,7 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class, "dynamo")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -673,6 +846,60 @@ class ExportTesterMixin:
                         self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
+    @slow
+    @pytest.mark.torch_export_test
+    @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
+    @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
+    @disable_hub_kernels
+    def test_precomputed_inputs_match_eager(self):
+        """`prepare_for_export` must not change what the model computes.
+
+        The preparers replace data-dependent work (`cu_seqlens`, vision `position_ids`, interpolation
+        indices, ...) with tensors derived from the config, and the model then skips its own branch. Those
+        tensors therefore have to equal what the model would have computed itself: a preparer that derives
+        them differently -- say at the wrong merge size -- yields an export that quietly disagrees with the
+        model it came from.
+        """
+        self._skip_if_not_exportable()
+
+        for model_class in self.all_model_classes:
+            if self._should_skip(model_class, backend="dynamo"):
+                continue
+
+            components = self._prepare_export_model_and_inputs(model_class, "dynamo")
+            for name, (model, inputs) in components.items():
+                with self.subTest(f"{model_class.__name__}/{name}"):
+                    with torch.no_grad():
+                        set_seed(1234)
+                        without_precompute = get_leaf_tensors(model(**copy.deepcopy(inputs)))
+
+                    config = getattr(model, "config", None)
+                    if config is None:
+                        continue  # a bare module (lm_head) has no config and nothing to precompute
+
+                    with torch.no_grad():
+                        precomputed_inputs = precompute_export_inputs(config, copy.deepcopy(inputs))
+
+                    if not set(precomputed_inputs) - set(inputs):
+                        continue  # nothing is precomputed for this component
+
+                    with torch.no_grad():
+                        set_seed(1234)
+                        with_precompute = get_leaf_tensors(model(**precomputed_inputs))
+
+                    self.assertTrue(with_precompute, f"Outputs are empty for {name}.")
+                    # exact: a preparer reproduces the model's own tensors, so any drift is a wrong
+                    # precompute rather than numerical noise
+                    self.assertEqual(with_precompute.keys(), without_precompute.keys())
+                    for key, expected in without_precompute.items():
+                        torch.testing.assert_close(
+                            with_precompute[key],
+                            expected,
+                            atol=0,
+                            rtol=0,
+                            msg=lambda more, key=key: f"{name}: precomputed inputs change `{key}`\n{more}",
+                        )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -696,7 +923,7 @@ class ExportTesterMixin:
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components = self._prepare_export_model_and_inputs(model_class, "onnx")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -731,7 +958,7 @@ class ExportTesterMixin:
             # (arange/zeros/sinusoids) without `device=`, which default to CPU and then mismatch a
             # CUDA model (`FakeTensor Device Propagation ... cuda:0, cpu`). The exporter *can* take a
             # CUDA model, but the suite exercises the canonical CPU-traced path.
-            components = self._prepare_export_model_and_inputs(model_class, device="cpu")
+            components = self._prepare_export_model_and_inputs(model_class, "executorch", device="cpu")
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
@@ -760,7 +987,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     """
 
     def _prepare_export_generate_model_and_inputs(
-        self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
+        self, model_class, backend, device=torch_device, generation_config=None, multi_token_decode=False
     ):
         """Decompose a generative model into exportable components.
 
@@ -786,7 +1013,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
-        model = model_class(config).eval().to(device)
+        model = model_class(config).eval()
+        # Use half precision only when the model has a half-precision-only kernel — the vision varlen flash
+        # attention or grouped-mm MoE experts (see `needs_half_precision_export`); everything else stays fp32
+        # (realistic, and avoids spurious dtype mismatches). The half type is per-backend: fp16 for ONNX
+        # (ORT has no bf16 kernels for many ops), bf16 for torch.export/ExecuTorch (flash + grouped_mm need it).
+        half_dtype = torch.float16 if backend == "onnx" else torch.bfloat16
+        dtype = half_dtype if needs_half_precision_export(model) else torch.float32
+        model = model.to(device, dtype)
         set_model_for_less_flaky_test(model)
 
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
@@ -803,7 +1037,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
+    def test_torch_export_generate(self, dynamic, multi_token_decode, generation_config, atol=1e-4, rtol=1e-4):
         """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
@@ -816,10 +1050,11 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             ):
                 continue
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config, multi_token_decode=dynamic
+                model_class, "dynamo", generation_config=generation_config, multi_token_decode=multi_token_decode
             )
             eager_outputs = self._collect_eager_outputs(components)
 
+            exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported_program = exporter.export(model, inputs, config=config)
@@ -830,6 +1065,20 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
                     self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    exported[name] = exported_program
+
+            # End-to-end id-parity (text and VLM), over both cache kinds (static `cache_implementation`
+            # and the default growing `DynamicCache`). Runs whenever the exported graphs can serve
+            # `generate`'s loop: via the dedicated `prefill` graph (text models — always under dynamic
+            # shapes; under static shapes only with a static cache, whose frozen prefill/decode shapes
+            # reproduce every step, while a growing cache changes shape each step), or via the multi-token
+            # decode serving prefill and decode from one graph (the only option for multi-modal models,
+            # which export no standalone prefill graph).
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                self._assert_generate_matches_eager(
+                    components, exported, "dynamo", generation_config, dynamic, multi_token_decode
+                )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -841,7 +1090,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export_generate(self, dynamic, generation_config):
+    def test_onnx_export_generate(self, dynamic, multi_token_decode, generation_config):
         """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
@@ -853,20 +1102,29 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             optimize = _onnx_optimize_enabled(model_class, dynamic)
             exporter = OnnxExporter()
-            config = OnnxConfig(dynamic=dynamic, optimize=optimize)
+            config = OnnxConfig(dynamic=dynamic, optimize=optimize, external_data=False)
 
             components = self._prepare_export_generate_model_and_inputs(
-                model_class, generation_config=generation_config, multi_token_decode=dynamic
+                model_class, "onnx", generation_config=generation_config, multi_token_decode=multi_token_decode
             )
             eager_outputs = self._collect_eager_outputs(components)
 
+            exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     onnx_program = exporter.export(model, inputs, config=config)
-                    set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                    exported[name] = onnx_program
+
+            # End-to-end id-parity (text and VLM) — see `_make_backend_runner` for the ONNX re-export and
+            # the dynamo call site for the gate.
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                self._assert_generate_matches_eager(
+                    components, exported, "onnx", generation_config, dynamic, multi_token_decode
+                )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -877,7 +1135,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_executorch_export_generate(self, dynamic, generation_config):
+    def test_executorch_export_generate(self, dynamic, multi_token_decode, generation_config):
         """Export prefill and decode stages to ExecuTorch, run each, and verify output count matches eager."""
 
         self._skip_if_not_exportable()
@@ -892,12 +1150,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             components = self._prepare_export_generate_model_and_inputs(
                 model_class,
+                "executorch",
                 device="cpu",
                 generation_config=generation_config,
-                multi_token_decode=dynamic,
+                multi_token_decode=multi_token_decode,
             )
             eager_outputs = self._collect_eager_outputs(components)
 
+            exported = {}
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     program = exporter.export(model, inputs, config=config)
@@ -905,3 +1165,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+                    exported[name] = program
+
+            # End-to-end id-parity (text and VLM). Multi-token decode works on ExecuTorch because
+            # `_fix_range_constraints` bounds the otherwise-unbounded sequence dim (XNNPACK can't size a
+            # static tensor from an unbounded extent). Runs on CPU (device="cpu" above), matching the
+            # runner's device. See the dynamo call site for the gate.
+            can_split_prefill = "prefill" in exported and (dynamic or _needs_static_cache(generation_config))
+            if (can_split_prefill or (dynamic and multi_token_decode)) and components.keys() <= exported.keys():
+                self._assert_generate_matches_eager(
+                    components, exported, "executorch", generation_config, dynamic, multi_token_decode
+                )
