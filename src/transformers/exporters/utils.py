@@ -620,7 +620,7 @@ def precompute_export_inputs(config: PreTrainedConfig, inputs: Mapping[str, Any]
       `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
       A preparer fires only when every one of its markers is present in `inputs`.
     """
-    from ..modeling_rope_utils import get_mrope_index
+    from ..modeling_multimodal_utils import get_mrope_index
 
     inputs = dict(inputs)
 

@@ -530,7 +530,7 @@ class ExportedGenerator(GenerationMixin):
         from `modeling_rope_utils.get_mrope_index` — the very call the model's own override makes — and the
         decode step advances the text row by the cached rope-delta. Models that don't declare M-RoPE (plain
         decoders, VLMs with 1D text positions like Llava) keep the standard positions."""
-        from ..modeling_rope_utils import get_mrope_index, uses_mrope
+        from ..modeling_multimodal_utils import get_mrope_index, uses_mrope
 
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
         if self._text_embed is None or not uses_mrope(self.config):
