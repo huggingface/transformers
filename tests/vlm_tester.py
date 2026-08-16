@@ -16,6 +16,8 @@ import copy
 import unittest
 from inspect import signature
 
+from transformers.testing_utils import scoped_kernels_class
+
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
     floats_tensor,
@@ -119,6 +121,7 @@ class VLMModelTester(MultiModalModelTester):
         return self.vision_config_class(**kwargs)
 
 
+@scoped_kernels_class
 class VLMModelTest(MultiModalModelTest):
     """
     Base test class for Vision-Language Models.

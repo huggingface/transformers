@@ -66,6 +66,7 @@ from .integrations.accelerate import (
     accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
+    device_map_uses_accelerator,
     expand_device_map,
     get_device,
     load_offloaded_parameter,
@@ -76,7 +77,7 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
+from .integrations.hub_kernels import _kernels_enabled, allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -4122,7 +4123,7 @@ class PreTrainedModel(
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
-        use_kernels = kwargs.pop("use_kernels", False)
+        use_kernels = kwargs.pop("use_kernels", True)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
@@ -4239,12 +4240,6 @@ class PreTrainedModel(
                     "loaded from GGUF files."
                 )
 
-        if kernel_config is not None and not use_kernels:
-            logger.warning_once(
-                "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
-            )
-            use_kernels = True
-
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             variant=variant,
@@ -4289,8 +4284,15 @@ class PreTrainedModel(
 
             register_fusion_patches(cls, config, fusion_config)
 
+        if use_kernels and not _kernels_enabled():
+            logger.warning_once(
+                "Detected the usage of `use_kernels=True` but the env variable `USE_HUB_KERNELS` is set to turn kernels off. "
+                "We set `use_kernels=False` to follow the priority of the env varibale. Please consider passing `use_kernels=False` as well."
+            )
+            use_kernels = False
+
         # Kernel patches: single-layer replacement (stateful __init__) then fusions.
-        if kernel_config is not None and use_kernels:
+        if use_kernels and kernel_config is not None:
             from .integrations.hub_kernels import register_kernel_replacements_and_fusions
 
             # For remote kernels, we need to apply the context manager
@@ -4326,6 +4328,12 @@ class PreTrainedModel(
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+
+            if device_map_uses_accelerator(device_map) and not use_kernels:
+                logger.warning_once(
+                    "We detected the usage of an accelerator (e.g. cuda) but kernels is turned off (`use_kernels=False`). "
+                    "Consider turning on kernels to gain maximum speedups!"
+                )
 
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(

@@ -174,7 +174,7 @@ def deps_list(*pkgs):
 
 extras = {}
 
-extras["torch"] = deps_list("torch", "accelerate")
+extras["torch"] = deps_list("torch", "accelerate", "kernels")
 extras["vision"] = deps_list("torchvision", "Pillow")
 extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
 if PYTHON_MINOR_VERSION < 13:
@@ -185,7 +185,6 @@ extras["quality"] = deps_list(
     "datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli", "transformers-mlinter"
 )
 extras["docs"] = deps_list("hf-doc-builder")
-extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[image]")
@@ -247,7 +246,6 @@ extras["all"] = (
     + extras["vision"]
     + extras["audio"]
     + extras["video"]
-    + extras["kernels"]
     + extras["timm"]
     + extras["sentencepiece"]
     + extras["tiktoken"]

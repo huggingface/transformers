@@ -91,8 +91,6 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
-# For kernels
-RUN python3 -m pip install --no-cache-dir kernels
 
 # For ONNX export tests (onnxscript pulls in onnx + onnx_ir; onnxruntime-gpu validates the exported
 # graph on GPU for faster export testing)
@@ -144,9 +142,6 @@ RUN python3 -m pip install --no-cache-dir einops
 
 # For `VibeVoice` (added in PR #40546)
 RUN python3 -m pip install --no-cache-dir diffusers
-
-# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
-RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
