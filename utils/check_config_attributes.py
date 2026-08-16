@@ -58,6 +58,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
+    "MiniMaxVL01TextConfig": ["output_router_logits", "router_aux_loss_coef"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],

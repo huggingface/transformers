@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 _MODEL_TO_CONVERSION_PATTERN = {
     # Mixtral-style MoE
     "minimax": "mixtral",
+    "minimax_vl_01_text": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "afmoe": "qwen2_moe",
@@ -660,6 +661,15 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
+        ],
+        "minimax_vl_01": [
+            WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
+            WeightRenaming(source_patterns=r"^vision_tower\.", target_patterns="model.vision_tower."),
+            WeightRenaming(
+                source_patterns=r"^multi_modal_projector\.", target_patterns="model.multi_modal_projector."
+            ),
+            WeightRenaming(source_patterns=r"^image_newline$", target_patterns="model.image_newline"),
         ],
         # Important to refer to classes by name, not model-type! Several classes share the same model type
         "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
