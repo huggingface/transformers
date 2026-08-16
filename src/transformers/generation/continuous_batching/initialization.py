@@ -24,6 +24,7 @@ from ...generation.configuration_utils import CompileConfig, ContinuousBatchingC
 from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
+from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
 from .requests import logger
 from .utils import WorkloadHints
 
@@ -33,6 +34,9 @@ FALLBACK_DEFAULTS = {
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
     "kv_padding_interval_size": 64 * 256,  # 64 blocks of 256 tokens ie. 16384 tokens
+}
+BOUNDS = {
+    "page_size": (4, 2**32),
 }
 
 
@@ -78,6 +82,8 @@ def resolve_continuous_batching_config(
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
     resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors)
+    # Check bounds on some of the config values
+    check_cb_values_bounds(cb_config)
     return cb_config
 
 
@@ -88,7 +94,7 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
     if cb_config.max_blocks_per_request is None and workload_hints is not None:
         max_sequence_length = workload_hints.max_prompt_length + workload_hints.max_generated_length
         if max_sequence_length > 0:
-            blocks_per_request = int(ceil(max_sequence_length / cb_config.block_size)) + 1
+            blocks_per_request = int(ceil(max_sequence_length / cb_config.page_size)) + 1
             cb_config.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
     # The maximum number of requests per batch is the minimum of the workload hints and the fallback default
     if cb_config.max_requests_per_batch is None and workload_hints is not None:
@@ -116,6 +122,18 @@ def ensure_decode_fast_path_is_available(
 ) -> None:
     """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
     available, and no user-provided max blocks per request, set it to the fallback default."""
+    # The block table path needs to be supported by every attention type to be available
+    all_types_support_block_table = all(
+        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table for attn_type in group_layers_by_attn_type(config)
+    )
+    if cb_config.max_blocks_per_request != 0 and not all_types_support_block_table:
+        if user_requested:
+            logger.warning(
+                f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available because "
+                "some of the model's attention types do not support kernel block tables."
+            )
+        cb_config.max_blocks_per_request = 0
+
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:
         cuda_available = torch.cuda.is_available()
@@ -164,7 +182,8 @@ def resolve_compile_configs(
             if is_flash_attn:
                 varlen_config = None
             else:
-                varlen_config = CompileConfig(mode=default_mode, fullgraph=True, dynamic=default_dynamic)
+                # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
+                varlen_config = CompileConfig(mode=default_mode, fullgraph=False, dynamic=default_dynamic)
         elif fallback_compile_config is not None:
             varlen_config = fallback_compile_config
         else:
@@ -268,6 +287,8 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
 
 
 def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
+    """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
+    0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
     if cb_config.max_memory_percent is None:
         cb_config.max_memory_percent = 0.8 if has_logit_processors else 0.9
 
@@ -276,7 +297,6 @@ def update_cb_config_after_cache_creation(
     cb_config: ContinuousBatchingConfig,
     num_blocks: int,
     max_batch_tokens: int,
-    use_prefix_sharing: bool,
 ) -> None:
     """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
     # Memoize concrete values
@@ -284,7 +304,12 @@ def update_cb_config_after_cache_creation(
     cb_config.max_batch_tokens = max_batch_tokens
     # Cap the number of max requests per batch to the max tokens per batch
     cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
-    # And if there is no prefix sharing, we can cap the number of request per batch (1 request = 1 block at least)
-    if not use_prefix_sharing:
-        cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, num_blocks)
-    # TODO: should we align the max number of request per batch to a multiple of 32 ?
+    # TODO: add a cap based on the cache size to the number of concurrent requests if it's usefull
+
+
+def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:
+    """Checks the bounds on some values of the continuous batching config."""
+    if cb_config.page_size < BOUNDS["page_size"][0]:
+        raise ValueError(
+            f"page_size must be at least {BOUNDS['page_size'][0]} but got {cb_config.page_size = }"
+        )

@@ -180,3 +180,13 @@ class DistributedHelper:
             logger.info(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
         # Set the seed while accounting for DP replicas
         torch.manual_seed(tp_seed + self.dp_rank)
+
+    def are_kv_heads_tp_ed(self) -> bool:
+        """Checks if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP."""
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        kv_is_tp = True
+        for key in ["layers.*.self_attn.k_proj", "layers.*.self_attn.v_proj"]:
+            if not (key in self.tp_plan or "model." + key in self.tp_plan):
+                kv_is_tp = False
+                break
+        return kv_is_tp

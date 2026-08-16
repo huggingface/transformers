@@ -80,13 +80,14 @@ class TestBatchGeneration(unittest.TestCase):
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
+
     @require_deterministic_for_xpu
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         self.model.config.attn_implementation = attn_impl
 
         cb_config = ContinuousBatchingConfig(
             num_blocks=num_blocks,
-            block_size=block_size,
+            page_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
         generation_config = GenerationConfig(
@@ -131,7 +132,7 @@ class TestBatchGeneration(unittest.TestCase):
 
         cb_config = ContinuousBatchingConfig(
             num_blocks=num_blocks,
-            block_size=block_size,
+            page_size=block_size,
             max_batch_tokens=max_batch_tokens,
         )
         generation_config = GenerationConfig(

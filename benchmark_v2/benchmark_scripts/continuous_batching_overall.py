@@ -1,8 +1,12 @@
 """
 Continuous batching overall benchmark suite.
 
-Runs CB in-process across many configurations (GSM8K prompts and synthetic
-data) and can compare throughput against a previously-saved run.
+Runs CB in-process across many configurations: GSM8K-Platinum and IFEval (throughput + lighteval accuracy), raw
+synthetic-data benchmarks, and RL-style rollouts.
+Each entry records generation time, e2e wall-clock time, tokens, throughput, peak memory and optional accuracy.
+Runs are saved as timestamped JSONs under benchmark_results/cb_overall/ and can be compared to a previously-saved run
+with --compare-to. Supports TP (--tp-size) and DP through torchrun (--dp-size).
+--rollouts-lengths restricts the run to the rollouts benchmarks, with the given generation lengths.
 """
 
 import argparse
@@ -155,6 +159,7 @@ class BenchmarkEntry:
     cb_config: dict[str, Any]
     gen_config: dict[str, Any]
     time_seconds: float | None = None
+    e2e_time_seconds: float | None = None  # wall-clock around generate_batch, includes warmup and setup
     num_tokens: int | None = None
     throughput_tok_per_sec: float | None = None
     peak_memory_gb: float | None = None
@@ -163,7 +168,8 @@ class BenchmarkEntry:
 
 
 class BenchmarkResults:
-    """Holds all CB benchmark runs and the shared model they execute against."""
+    """Runs CB benchmarks (a fresh model per entry) and accumulates their entries. Also handles TP/DP placement,
+    persistence and comparison against saved runs."""
 
     def __init__(self, model_id: str, attn_impl: str, tp_size: int = 1, dp_size: int = 1):
         self.model_id = model_id
@@ -211,7 +217,7 @@ class BenchmarkResults:
         label: str | None = None,
         score_fn: Callable[[Any], float] | None = None,
     ) -> None:
-        """Run one CB benchmark and record time, tokens, and peak memory."""
+        """Run one CB benchmark and record its timings, tokens, peak memory and optional accuracy."""
 
         gen_config = GenerationConfig() if gen_config is None else gen_config
         gen_config.max_new_tokens = max_new_tokens
@@ -240,12 +246,15 @@ class BenchmarkResults:
         self.cleanup()
 
         try:
+            e2e_start = time.perf_counter()
             outputs = model.generate_batch(
                 inputs=data,
                 generation_config=gen_config,
                 continuous_batching_config=cb_config,
                 progress_bar=self.dp_size == 1,
             )
+            entry.e2e_time_seconds = time.perf_counter() - e2e_start
+            # Generation time spans first request created to last request finished: excludes setup and warmup
             gen_start = min(out.created_time for out in outputs.values())
             gen_end = max(out.lifespan[1] for out in outputs.values())
             gen_time = gen_end - gen_start
@@ -258,7 +267,8 @@ class BenchmarkResults:
             entry.peak_memory_gb = torch.cuda.max_memory_allocated() / (1024**3)
             if score_fn is not None:
                 entry.accuracy = score_fn(outputs)
-            details = f"time={gen_time:.2f}s tokens={num_tokens} tok/s={tps:.2f} GB={entry.peak_memory_gb:.2f}"
+            details = f"time={gen_time:.2f}s e2e={entry.e2e_time_seconds:.2f}s tokens={num_tokens} tok/s={tps:.2f}"
+            details += f" GB={entry.peak_memory_gb:.2f}"
             details += f", acc={entry.accuracy:.3f}" if entry.accuracy is not None else ""
             print(f"\n{tag} [{entry.label}] Finished with {details}")
         except Exception as e:
@@ -314,6 +324,7 @@ class BenchmarkResults:
                 "avg_in": f"{e.avg_input_tokens:.1f}",
                 "max_new": e.max_new_tokens,
                 "time (s)": _fmt(e.time_seconds, ".2f"),
+                "e2e (s)": _fmt(e.e2e_time_seconds, ".2f"),
                 "tokens": _fmt(e.num_tokens, "d"),
                 "tok/s": _fmt(e.throughput_tok_per_sec, ".2f", "ERROR"),
                 "mem (GB)": _fmt(e.peak_memory_gb, ".2f"),
@@ -324,8 +335,9 @@ class BenchmarkResults:
         print("\n" + tabulate(rows, headers="keys", tablefmt="github"))
 
     def compare_to(self, baseline: "BenchmarkResults") -> None:
-        """Print a side-by-side throughput comparison against a baseline run."""
+        """Print a side-by-side throughput and e2e time comparison against a baseline run."""
         base_tps = {e.label: e.throughput_tok_per_sec for e in baseline.entries}
+        base_e2e = {e.label: e.e2e_time_seconds for e in baseline.entries}
 
         def diff(cur: float | None, base: float | None) -> str:
             if cur is None or not base:
@@ -338,6 +350,9 @@ class BenchmarkResults:
                 "baseline (tok/s)": _fmt(base_tps.get(e.label), ".2f", "N/A"),
                 "current (tok/s)": _fmt(e.throughput_tok_per_sec, ".2f", e.error or "N/A"),
                 "diff": diff(e.throughput_tok_per_sec, base_tps.get(e.label)),
+                "baseline e2e (s)": _fmt(base_e2e.get(e.label), ".2f", "N/A"),
+                "current e2e (s)": _fmt(e.e2e_time_seconds, ".2f", "N/A"),
+                "e2e diff": diff(e.e2e_time_seconds, base_e2e.get(e.label)),  # negative = current is faster
             }
             for e in self.entries
         ]
@@ -351,7 +366,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, default=None, help="Name of the benchmark run (for saving).")
     parser.add_argument("--compare-to", type=str, default=None, help="Name of a previous run to compare against.")
     parser.add_argument("--model-id", type=str, default="meta-llama/Llama-3.1-8B-Instruct")
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3")
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn3", help="Attention implementation.")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size (1 = no TP).")
     parser.add_argument("--dp-size", type=int, default=1, help="Data parallel size (1 = no DP).")
     parser.add_argument(

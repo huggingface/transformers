@@ -40,9 +40,6 @@ class Scheduler(ABC):
             raise ValueError(f"Got {safety_margin = } but expected a value in [0, 1]")
         if max_requests_per_batch < 1:
             raise ValueError(f"Got {max_requests_per_batch = } but expected a value >= 1")
-        # This is to compute the read cache used by a new request being scheduled
-        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
-        self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
         # Initialize mutable states via reset()
         self.reset()
 
@@ -54,8 +51,7 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
-        # Active requests that failed block allocation in the last scheduled batch, with their physical block demand.
-        # The offloading manager uses this to size bulk evictions.
+        # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
         self.starved_requests: list[tuple[RequestState, int]] = []
 
     def add_waiting_request(self, state: RequestState):
@@ -119,29 +115,6 @@ class Scheduler(ABC):
             request_id not in self.active_requests and request_id not in self.waiting_requests
         )
 
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
-        """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
-        accommodate the next tokens. It calculates how many blocks are needed based on the request's current
-        cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
-        objects. Returns a boolean indicating if the allocation was successful or not.
-        """
-        # First we check that the occupancy is less than the requested length, then we allocate enough blocks to cover
-        # the requested length. This is done using `current_len` so it also works for offloaded requests.
-        current_len = state.current_len()
-        occupancy = state.allocated_blocks * self.cache.block_size - current_len
-        if occupancy < len_next_tokens or state.allocated_blocks == 0:
-            blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id, state.allocated_blocks)
-            if allocated is None:
-                # Starved active requests are tracked so the offloading manager can size bulk evictions. Waiting
-                # requests are not: they hold no cache and can simply keep waiting.
-                if state.request_id in self.active_requests:
-                    physical_blocks = self.cache.blocks_needed(blocks_needed, state.allocated_blocks)
-                    self.starved_requests.append((state, physical_blocks))
-                return False
-            state.allocated_blocks += allocated
-        return True
-
     def _infer_request_tokens(self, state: RequestState, request_ids_to_remove_from_waiting: set[str]) -> list[int]:
         """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
         pending, this is where we look for a prefix match and split the request if found."""
@@ -150,12 +123,10 @@ class Scheduler(ABC):
             prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
             if prefill_length > 0:
                 self.active_requests[state.request_id] = state
+                self.waiting_requests.pop(state.request_id, None)  # takes effect even if scheduling fails later
                 request_ids_to_remove_from_waiting.add(state.request_id)
                 state.status = RequestStatus.PREFILLING
-                # We keep track of the number of allocated blocks to avoid double allocation
-                state.allocated_blocks += prefill_length // self.cache.block_size
-                # Even if we match the whole request, we keep at least 1 token to start decoding
-                prefill_length = min(prefill_length, len(state.remaining_prefill_tokens) - 1)
+                # The match never covers the whole prompt, so there is always at least 1 token left to prefill
                 state.remaining_prefill_tokens = state.remaining_prefill_tokens[prefill_length:]
                 state.position_offset += prefill_length
 
@@ -205,6 +176,23 @@ class Scheduler(ABC):
             state.remaining_prefill_tokens = request_tokens[token_budget:]
             state.tokens_to_process = request_tokens[:token_budget]
 
+    def _try_to_meet_safety_margin(self) -> bool:
+        """Tries to meet the safety_margin by freeing unused sectors and (if needed) evicting cached blocks. Returns a
+        boolean indicating if the safety margin is met."""
+        # Once before loop starts, does not affect cache but non-referenced blocks
+        self.cache.pool.try_to_free_sectors()
+        cache_free_percent = self.cache.compute_free_capacity()
+        in_safety_margin = cache_free_percent >= self.safety_margin
+        # When under the margin, evicting the blocks cached for de-duplication may free enough memory
+        if not in_safety_margin and self.cache.evict_cached_blocks():
+            self.cache.pool.try_to_free_sectors()
+            cache_free_percent = self.cache.compute_free_capacity()
+            in_safety_margin = cache_free_percent >= self.safety_margin
+        # Log and return
+        if not in_safety_margin:
+            logger.debug(f"{cache_free_percent = } < {self.safety_margin = }: limiting the requests scheduled.")
+        return in_safety_margin
+
     def _process_candidates(
         self,
         candidates: list[RequestState],
@@ -221,19 +209,17 @@ class Scheduler(ABC):
         scheduled_requests = []
         one_allocation_failed = False
         self.starved_requests = []
-        decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
-        safety_margins = self.safety_margin * self.cache.num_blocks
+        decode_fast_path = self.cache.max_blocks_per_request > 0  # zeroed at resolution when the path is unavailable
         original_token_budget, original_cache_budget = token_budget, cache_budget
         request_budget = self.max_requests_per_batch
 
+        # Check safety margin
+        in_safety_margin = self._try_to_meet_safety_margin()
+
         for state in candidates:
-            num_free_blocks = self.cache.get_num_free_blocks()
-            # If we are out the safety margin, we only accept decoding requests or the first prefill request
-            outside_safety_margin = num_free_blocks < safety_margins
-            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-                logger.debug(
-                    f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
-                )
+
+            # If we are outside the safety margin, we only accept decoding requests or the first prefill request
+            if not in_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
                 break
 
             # Infer the tokens that will be present in the batch if token budget is enough
@@ -244,25 +230,21 @@ class Scheduler(ABC):
             # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
             # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
             # goes from decode to varlen
-            is_decode_eligible = request_len == 1 and state.position_offset < self.max_decode_fast_path_length
+            is_decode_eligible = request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
             read_cache_needed = state.current_len()
-            if self.read_cache_limit is not None:
-                read_cache_needed = min(read_cache_needed, self.read_cache_limit)
+            if self.cache.read_cache_limit is not None:
+                read_cache_needed = min(read_cache_needed, self.cache.read_cache_limit)
             # A request that would change the batch from decode to varlen is rejected if the cache budget is too low
             if not (decode_fast_path and is_decode_eligible) and cache_budget < read_cache_needed:
                 continue
 
-            # Check there will be enough cache for the new tokens
-            allocation_successful = self._allocate_blocks_if_needed(state, request_len)
-
-            # If the allocation would not be successful, we move on to the next request
-            if not allocation_successful:
+            # Final check before we schedule the request: can the cache handle it, or is the request starved?
+            request_fits = self.cache.can_store_request_tokens(state, request_len)
+            if not request_fits:
                 one_allocation_failed = True
-                # If we reached a waiting request and the cache is full, all subsequent waiting requests will need
-                # allocation as well, so we can safely break out of the scheduling loop.
-                if num_free_blocks == 0 and state.request_id in self.waiting_requests:
-                    logger.info(f"Breaking mid-loop for request {state.request_id} because the cache is full")
-                    break
+                # If the request is active and cannot be scheduled, we mark it as starved
+                if state.request_id in self.active_requests:
+                    self.starved_requests.append((state, request_len))
                 continue
 
             # If this point is reached, it means we can safely schedule the request
@@ -270,20 +252,15 @@ class Scheduler(ABC):
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
-            decode_fast_path &= request_len == 1 and state.position_offset < self.max_decode_fast_path_length
+            decode_fast_path &= request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
 
             # Update the token and cache budgets
             token_budget -= request_len
             cache_budget -= read_cache_needed
             request_budget -= 1
 
-            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.allow_block_sharing:
-                tokens_in_current_block = state.current_len() % self.cache.block_size
-                tokens_after_forward = tokens_in_current_block + request_len
-                complete_blocks = tokens_after_forward // self.cache.block_size
-            else:
-                complete_blocks = 0
+            # If using prefix sharing, we make note of the blocks that will be completed by the forward pass
+            complete_blocks = self.cache.count_new_complete_blocks(state, request_len)
 
             # Store the future request state
             has_new_token = not state.remaining_prefill_tokens

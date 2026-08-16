@@ -18,18 +18,20 @@ Handles two offloading strategies when the GPU KV cache is full:
   2. Soft reset: discard the KV cache and re-prefill from scratch when the request is re-scheduled. This incurs no data
     transfer overhead, but we need to re-run prefill over all initial + generated tokens (so more compute overhead).
 
-The CPU swap pool is a static set of pinned tensors allocated once at init (like vLLM/SGLang). Blocks are tracked
-with a simple free set — no dynamic allocation or deallocation of tensors ever happens at runtime.
+The CPU swap pool is a single pinned tensor allocated once at init (like vLLM/SGLang), mirroring the GPU cache
+geometry: it is tracked by its own CachePool with the same sector size and per-allocator blocks, but no trash
+sectors.
 """
 
 import logging
 from contextlib import nullcontext
-from itertools import chain
+from math import ceil
 
 import torch
 
 from ...utils import is_psutil_available
 from .cache import PagedAttentionCache
+from .cache_allocators import CachePool
 from .distributed import DistributedHelper
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 from .scheduler import Scheduler
@@ -74,52 +76,38 @@ class OffloadingManager:
         self._compute_stream = compute_stream
 
         # Bookkeeping defaults, valid whether or not the pool is allocated
-        self._cpu_key_cache: list[torch.Tensor] = []
-        self._cpu_value_cache: list[torch.Tensor] = []
-        self._gpu_key_views: list[torch.Tensor] = []
-        self._gpu_value_views: list[torch.Tensor] = []
-        self._free_cpu_blocks: list[int] = []
-        self._request_id_to_cpu_blocks: dict[str, list[int]] = {}
-        self._request_id_to_group_block_counts: dict[str, list[int]] = {}
+        self._cpu_pool: CachePool | None = None
+        self._cpu_views: dict[str, torch.Tensor] = {}
+        self._request_id_to_cpu_blocks: dict[str, dict[str, list[int]]] = {}
 
-        # Compute the size of the CPU swap pool in blocks
-        num_cpu_blocks = self._compute_num_cpu_blocks(cpu_offload_space_gib, safety_threshold)
-        num_cpu_blocks = torch.tensor(num_cpu_blocks, dtype=torch.int32, device="cpu")
-        self._num_cpu_blocks = int(distributed_helper.tp_all_reduce_min(num_cpu_blocks, on_cpu=True).item())
+        # Compute the size of the CPU swap pool in sectors
+        num_cpu_sectors = self._compute_num_cpu_sectors(cpu_offload_space_gib, safety_threshold)
+        num_cpu_sectors = torch.tensor(num_cpu_sectors, dtype=torch.int32, device="cpu")
+        self._num_cpu_sectors = int(distributed_helper.tp_all_reduce_min(num_cpu_sectors, on_cpu=True).item())
 
         offloading_enabled = cpu_offload_space_gib is not None and cpu_offload_space_gib > 0
-        if self._num_cpu_blocks == 0:
+        if self._num_cpu_sectors == 0:
             if offloading_enabled:
                 logger.warning(
-                    f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. "
+                    f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one sector. "
                     "No CPU offloading."
                 )
             return None
 
-        # Allocate the CPU swap pool
-        cpu_cache_shape = (self._num_cpu_blocks, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-        for _ in cache.key_cache:
-            self._cpu_key_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
-            self._cpu_value_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
-
-        # Pre-view the GPU cache tensors as block-shaped so the hot copy paths avoid per-op .view() calls
-        block_shape = (-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-        for k_cache, v_cache in zip(cache.key_cache, cache.value_cache):
-            self._gpu_key_views.append(k_cache.view(*block_shape))
-            self._gpu_value_views.append(v_cache.view(*block_shape))
-
-        # The free list is kept sorted so bulk offloads land in (mostly) contiguous pool slices
-        self._free_cpu_blocks = list(range(self._num_cpu_blocks))
-
-        # Log the size of the CPU swap pool
-        cache_tensor = self._cpu_key_cache[0]
-        size_in_bytes = 2 * cache_tensor.numel() * cache_tensor.element_size() * len(cache.key_cache)
+        # Allocate the pinned CPU tensor. It uses the same sector-based system as the GPU cache, but no trash sectors.
+        cpu_cache_size = self._num_cpu_sectors * cache.bytes_per_sector
+        self._cpu_tensor = torch.empty(cpu_cache_size, dtype=torch.uint8, pin_memory=True)
+        self._cpu_pool = CachePool(self._num_cpu_sectors, len(cache.cache_allocators), num_reserved_sectors=0)
+        for name, allocator in cache.cache_allocators.items():
+            self._cpu_pool.set_blocks_per_sector(allocator.index, allocator.blocks_per_sector)
+            self._cpu_views[name] = self._cpu_tensor.view(-1, allocator.bytes_per_block)
         logger.info(
-            f"CPU swap pool initialized: {self._num_cpu_blocks} blocks ({size_in_bytes / (1024**3):.2f} GiB pinned)"
+            f"CPU swap pool initialized: {self._num_cpu_sectors} sectors "
+            f"({self._cpu_tensor.numel() / 1024**3:.2f} GiB pinned)"
         )
 
-    def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float | None, safety_threshold: float) -> int:
-        """Returns the number of blocks that can fit in the CPU swap pool."""
+    def _compute_num_cpu_sectors(self, cpu_offload_space_gib: float | None, safety_threshold: float) -> int:
+        """Returns the number of sectors that can fit in the CPU swap pool."""
         # Compute the CPU pool size in bytes
         offload_bytes = int(cpu_offload_space_gib * (1024**3)) if cpu_offload_space_gib is not None else None
 
@@ -158,53 +146,67 @@ class OffloadingManager:
                 "explicit GiB value."
             )
 
-        # Compute how many blocks fit in CPU pool
-        bytes_per_block = (
-            2                                 # one for key, one for value
-            * len(self.cache.key_cache)       # number of layers in a layer group
-            * self.cache.block_size           # block size
-            * self.cache.num_key_value_heads  # number of key value heads
-            * self.cache.head_dim             # head dimension
-            * self.cache.dtype.itemsize       # data type size in bytes
-        )  # fmt: skip
-        if bytes_per_block == 0:
-            raise ValueError("The number of bytes per block is 0. This is not possible.")
-        return offload_bytes // bytes_per_block
+        # The CPU pool mirrors the GPU sector geometry, so its capacity is expressed in whole sectors
+        return offload_bytes // self.cache.bytes_per_sector
 
     def _stream_ctx(self):
         """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
         return torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
 
-    def offload_requests(self) -> int:
+    def offload_requests(self) -> bool:
         """Evict enough active requests that, at the next batch, every remaining starved request can allocate the
-        blocks it needs. Victims are taken from the starved requests reported by the scheduler, newest first, so the
-        batch that was just scheduled is never touched and the demand directly bounds the amount of offloading.
-        Tries CPU offloading first; victims that do not fit in the pool are soft reset. Returns the number of evicted
-        requests."""
+        cache it needs. Offloaded requests are taken from the starved requests reported by the scheduler, newest first,
+        so the batch that was just scheduled is never touched. Offloaded requests are copied to the CPU swap pool when
+        they fit; the others are soft reset: their cache is freed and an equivalent request is requeued. Returns a
+        boolean indicating if offloading was successful."""
         scheduler = self.scheduler
         starved = scheduler.starved_requests
+
+        # Before offloading anything, we evict all cached blocks, and try re-scheduling if there was actual eviction.
+        # It's better to un-cache block that may be used in the future than offloading requests that are active now.
+        cached_blocks_evicted = self.cache.evict_cached_blocks()
         if not starved:
-            return 0
+            return cached_blocks_evicted
+        # Then, we count the blocks needed for each request (computed once but used multiple times)
+        list_blocks_needed = [
+            {
+                name: allocator.needs_new_blocks(state.request_id, state.current_len(), request_len)
+                for name, allocator in self.cache.cache_allocators.items()
+            }
+            for state, request_len in scheduler.starved_requests
+        ]
 
-        # Pick victims until the demand of the remaining starved requests fits in the free blocks. Evicting a victim
-        # both removes its own demand and frees its blocks. We never evict the last active request.
-        free_blocks = self.cache.get_num_free_blocks()
-        demand = sum(blocks_needed for _, blocks_needed in starved)
+        # Offload request until all the remaining starved request can be scheduled
         num_active = len(scheduler.active_requests)
-        victims: list[RequestState] = []
-        while demand > free_blocks and starved and num_active - len(victims) > 1:
-            state, blocks_needed = starved.pop()
-            victims.append(state)
-            demand -= blocks_needed
-            free_blocks += self.cache.blocks_in_use(state.request_id)  # approximation because of prefix sharing
-        if not victims:
-            return 0
-        victims.reverse()  # ensures the oldest (ie. largest) requests are offloaded first
+        offloaded: list[RequestState] = []
+        offloaded_block_tables: dict[str, dict[str, list[int]]] = {}
+        while starved and num_active - len(offloaded) > 1:
+            # Stop when all the remaining starved requests can be scheduled
+            num_storable = self.cache.count_storable_requests(list_blocks_needed)
+            if num_storable == len(starved):
+                break
 
-        # Copy as many victims as fit in the CPU pool, in one batched copy. Must happen before the blocks are freed.
-        cpu_offloaded = self._offload_to_cpu(victims)
+            # Otherwise, we offload the oldest starved request
+            state, _ = starved.pop()
+            list_blocks_needed.pop()
+            offloaded.append(state)
+            # Copy the offloaded block tables before freeing the blocks (which destroys the block tables)
+            offloaded_block_tables[state.request_id] = {
+                name: allocator.block_table.get(state.request_id, [])[:]
+                for name, allocator in self.cache.cache_allocators.items()
+            }
+            self.cache.free_blocks(state.request_id)
+
+        # Sometimes, no request is offloaded because evicting cached blocks has made enough room on its own
+        if not offloaded:
+            return True
+
+        # Copy as many victims as fit in the CPU pool, in one batched copy per allocator
+        cpu_offloaded = self._offload_to_cpu(offloaded, offloaded_block_tables)
+
         # Requeue victims oldest-first so they will become active again in (roughly) their original order
-        for state in victims:
+        offloaded.reverse()
+        for state in offloaded:
             request_id = state.request_id
             if request_id in cpu_offloaded:
                 # We set the allocated blocks to 0 so the scheduler re-allocates all blocks using position_offset.
@@ -232,149 +234,159 @@ class OffloadingManager:
 
         scheduler.block_new_requests = True
         if logger.isEnabledFor(logging.INFO):
-            free_blocks = self.cache.get_num_free_blocks()
             logger.info(
-                f"Offloaded {len(victims)} requests ({len(cpu_offloaded)} to CPU, {len(victims) - len(cpu_offloaded)} "
-                f"soft reset): {len(starved)} starved requests remain for {free_blocks} free blocks."
+                f"Offloaded {len(offloaded)} requests ({len(cpu_offloaded)} to CPU, {len(offloaded) - len(cpu_offloaded)} "
+                f"soft reset): {len(starved)} starved requests remain."
             )
-        return len(victims)
+        return True
 
     def restore_scheduled_requests(self, requests_in_batch: list[FutureRequestState]) -> None:
-        """Restore KV caches from CPU for any CPU-offloaded requests in the scheduled batch. Indices are accumulated
-        per group across all requests, then copied in one batched operation per layer."""
-        cache = self.cache
-        all_cpu_indices: list[int] = []
-        all_gpu_indices: list[int] = []
+        """Restore KV caches from CPU for any CPU-offloaded requests in the scheduled batch. The scheduler has already
+        re-allocated GPU blocks for them, since they came back as pending requests with an empty block table and a
+        preserved position_offset."""
+        if self._cpu_pool is None:
+            return None
+        all_cpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
+        all_gpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
 
         for future_state in requests_in_batch:
-            # Skip state that are not CPU-offloaded
             state = future_state.state
             if not state.is_cpu_offloaded:
                 continue
-            # TODO: if the H2D copy below raises, already-popped entries leak (never returned to _free_cpu_blocks)
-            # Accumulate CPU indices for this request
-            cpu_indices = self._request_id_to_cpu_blocks.pop(state.request_id)
-            group_counts = self._request_id_to_group_block_counts.pop(state.request_id)
-            all_cpu_indices.extend(cpu_indices)
-            # Accumulate GPU indices for this request, but since there may be extra block due to re-allocation, slice to
-            # match the number of blocks offloaded.
-            max_allocated_blocks = 0
-            for group_idx, n in enumerate(group_counts):
-                gpu_blocks = cache.group_cache_managers[group_idx].block_table.get(state.request_id, [])
-                all_gpu_indices.extend(gpu_blocks[:n])
-                # The allocated count must reflect the blocks held NOW (after re-allocation), not the offloaded count:
-                # undercounting creates phantom block demand that can starve the request forever.
-                max_allocated_blocks = max(max_allocated_blocks, len(gpu_blocks))
-            # Restore the state to non-offloaded state
+            # TODO: if the H2D copy below raises, already-popped entries leak (never returned to the CPU pool)
+            cpu_blocks = self._request_id_to_cpu_blocks.pop(state.request_id)
+            for name, cpu_ids in cpu_blocks.items():
+                allocator = self.cache.cache_allocators[name]
+                # The request may have been re-allocated more blocks than were offloaded: slice to match
+                gpu_blocks = allocator.block_table.get(state.request_id, [])
+                num_blocks = min(len(cpu_ids), len(gpu_blocks))
+                all_gpu_ids[name].extend(gpu_blocks[:num_blocks])
+                all_cpu_ids[name].extend(cpu_ids[:num_blocks])
+                self._cpu_pool.free_blocks(allocator.index, cpu_ids)
             state.is_cpu_offloaded = False
-            state.allocated_blocks = max_allocated_blocks
-            # Prefix sharing: restored blocks will be re-hashed during the next update
-            if cache.allow_block_sharing:
-                future_state.complete_blocks += state.position_offset // cache.block_size
+            # Prefix sharing: the restored blocks are fresh and unhashed, so the next update re-hashes them, which
+            # also de-duplicates them against any identical block still living in the cache
+            if self.cache.use_prefix_sharing:
+                for name, allocator in self.cache.cache_allocators.items():
+                    restored_blocks = state.position_offset // allocator.tokens_per_page
+                    if restored_blocks:
+                        new_count = future_state.complete_blocks.get(name, 0) + restored_blocks
+                        future_state.complete_blocks[name] = new_count
             logger.debug(
                 f"Restored CPU-offloaded request {state.request_id} with {len(state.initial_tokens)} prefill tokens "
                 f"and {len(state.generated_tokens)} generated tokens."
             )
 
-        # Early return if there are no copy to perform
-        if not all_cpu_indices:
+        # Early return if there is no copy to perform
+        if not any(all_cpu_ids.values()):
             return None
 
-        # Single batched copy for all requests: a few non-blocking slice copies into a staging tensor per layer, then
-        # one scatter into the cache. All stream-ordered, so the host never waits and the next forward sees the data.
-        n = len(all_cpu_indices)
-        runs = contiguous_runs(all_cpu_indices)
-        cache = self.cache
+        # Single batched copy per allocator: a few non-blocking slice copies into a staging tensor, then one scatter
+        # into the cache. All stream-ordered, so the host never waits and the next forward sees the data.
         with self._stream_ctx():
-            gpu_ids = torch.as_tensor(all_gpu_indices, dtype=torch.long).to(cache.device, non_blocking=True)
-            staging_shape = (n, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-            staging = torch.empty(staging_shape, dtype=cache.dtype, device=cache.device)
-            cpu_caches = chain(self._cpu_key_cache, self._cpu_value_cache)
-            gpu_views = chain(self._gpu_key_views, self._gpu_value_views)
-            for cpu_cache, gpu_view in zip(cpu_caches, gpu_views):
-                for start, offset, length in runs:
-                    staging[offset : offset + length].copy_(cpu_cache[start : start + length], non_blocking=True)
-                gpu_view.index_copy_(0, gpu_ids, staging)
-        self._free_cpu_blocks = sorted(self._free_cpu_blocks + all_cpu_indices)
+            for name, allocator in self.cache.cache_allocators.items():
+                cpu_ids = all_cpu_ids[name]
+                if not cpu_ids:
+                    continue
+                cpu_view = self._cpu_views[name]
+                staging = torch.empty(
+                    (len(cpu_ids), allocator.bytes_per_block), dtype=torch.uint8, device=self.cache.device
+                )
+                for start, offset, length in contiguous_runs(cpu_ids):
+                    staging[offset : offset + length].copy_(cpu_view[start : start + length], non_blocking=True)
+                gpu_ids = torch.as_tensor(all_gpu_ids[name], dtype=torch.long).to(self.cache.device, non_blocking=True)
+                allocator._copy_view.index_copy_(0, gpu_ids, staging)
 
-    def free_request_cpu_cache(self, state: RequestState, keep_unsorted: bool = False) -> None:
+    def free_request_cpu_cache(self, state: RequestState) -> None:
         """Free CPU blocks for a single request (e.g., on cancellation)."""
-        if state.is_cpu_offloaded:
-            self._return_cpu_blocks(state.request_id)
+        if state.is_cpu_offloaded and self._cpu_pool is not None:
+            cpu_blocks = self._request_id_to_cpu_blocks.pop(state.request_id)
+            for name, cpu_ids in cpu_blocks.items():
+                self._cpu_pool.free_blocks(self.cache.cache_allocators[name].index, cpu_ids)
             state.is_cpu_offloaded = False
-            if not keep_unsorted:
-                self._free_cpu_blocks.sort()
 
     def free_all_waiting_cpu_caches(self) -> None:
         """Free all CPU-offloaded caches in the waiting queue (e.g., on fail_all or reset)."""
         for state in self.scheduler.waiting_requests.values():
-            self.free_request_cpu_cache(state, keep_unsorted=True)
-        self._free_cpu_blocks.sort()
+            self.free_request_cpu_cache(state)
 
     def reset(self) -> None:
         """Reset CPU offloading state for a new generation session."""
         self.free_all_waiting_cpu_caches()
         self._request_id_to_cpu_blocks.clear()
-        self._request_id_to_group_block_counts.clear()
-        self._free_cpu_blocks = list(range(self._num_cpu_blocks))
+        if self._cpu_pool is not None:
+            self._cpu_pool.reset()
 
-    def _offload_to_cpu(self, victims: list[RequestState]) -> set[str]:
+    def _reserve_cpu_blocks(self, block_counts: dict[str, int]) -> dict[str, list[int]] | None:
+        """Reserves CPU pool blocks to hold the given per-allocator block counts, allocating new pool sectors as
+        needed. Returns None when the pool cannot fit them."""
+        if self._cpu_pool is None:
+            return None
+        sectors_needed = {}
+        for name, num_blocks in block_counts.items():
+            allocator = self.cache.cache_allocators[name]
+            missing_blocks = num_blocks - self._cpu_pool.count_free_blocks(allocator.index)
+            if missing_blocks > 0:
+                sectors_needed[name] = ceil(missing_blocks / allocator.blocks_per_sector)
+        if self._cpu_pool.num_free_sectors < sum(sectors_needed.values()):
+            self._cpu_pool.try_to_free_sectors()
+            if self._cpu_pool.num_free_sectors < sum(sectors_needed.values()):
+                return None
+        for name, num_sectors in sectors_needed.items():
+            for _ in range(num_sectors):
+                self._cpu_pool.allocate_sector(self.cache.cache_allocators[name].index)
+        # Sorted CPU blocks make the CPU-side copies land in more contiguously
+        return {
+            name: sorted(self._cpu_pool.get_free_blocks(self.cache.cache_allocators[name].index, num_blocks))
+            for name, num_blocks in block_counts.items()
+        }
+
+    def _offload_to_cpu(
+        self, victims: list[RequestState], victim_block_tables: dict[str, dict[str, list[int]]]
+    ) -> set[str]:
         """Copy the KV cache blocks of as many victims as fit in the CPU swap pool from GPU to the pool, in one
-        batched, non-blocking copy per layer. Returns the request ids that were offloaded.
+        batched, non-blocking copy per allocator. Returns the request ids that were offloaded.
 
         All transfers are enqueued on the compute stream with pinned destinations, so the host never waits on them:
         correctness is guaranteed by stream ordering, since restores and cache writes go through the same stream.
         """
-        # Select the victims that fit in the pool and gather their GPU block indices
-        offloaded: list[tuple[RequestState, list[int], list[int]]] = []
-        all_gpu_indices: list[int] = []
-        free_pool_blocks = len(self._free_cpu_blocks)
-        for state in victims:
-            gpu_indices = []
-            group_block_counts = []
-            for cm in self.cache.group_cache_managers:
-                blocks = cm.block_table.get(state.request_id, [])
-                gpu_indices.extend(blocks)
-                group_block_counts.append(len(blocks))
-            # If there is enough free CPU blocks, offload the request to CPU
-            if gpu_indices and len(all_gpu_indices) + len(gpu_indices) <= free_pool_blocks:
-                offloaded.append((state, gpu_indices, group_block_counts))
-                all_gpu_indices.extend(gpu_indices)
-
-        # If no requests were offloaded to CPU, we can stop here
-        if not offloaded:
+        if self._cpu_pool is None:
             return set()
 
-        # Reserve the smallest free CPU blocks: the free list is sorted, so destinations form few contiguous runs
-        n = len(all_gpu_indices)
-        all_cpu_indices = self._free_cpu_blocks[:n]
-        self._free_cpu_blocks = self._free_cpu_blocks[n:]
-        runs = contiguous_runs(all_cpu_indices)
+        # Select the victims that fit in the pool, reserving their CPU blocks as we go
+        cpu_offloaded: list[RequestState] = []
+        all_gpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
+        all_cpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
+        for state in victims:
+            gpu_tables = victim_block_tables[state.request_id]
+            block_counts = {name: len(blocks) for name, blocks in gpu_tables.items() if blocks}
+            if not block_counts:
+                continue
+            cpu_blocks = self._reserve_cpu_blocks(block_counts)
+            if cpu_blocks is None:
+                continue
+            # The pairing is positional: the k-th CPU block holds the content of the k-th block of the GPU table
+            self._request_id_to_cpu_blocks[state.request_id] = cpu_blocks
+            for name, cpu_ids in cpu_blocks.items():
+                all_gpu_ids[name].extend(gpu_tables[name])
+                all_cpu_ids[name].extend(cpu_ids)
+            state.is_cpu_offloaded = True
+            cpu_offloaded.append(state)
+        if not cpu_offloaded:
+            return set()
 
-        # One gather and a few slice copies per layer, all stream-ordered and non-blocking for the host
+        # One gather and a few pinned slice copies per allocator, all stream-ordered and non-blocking for the host
         with self._stream_ctx():
-            gpu_ids = torch.as_tensor(all_gpu_indices, dtype=torch.long).to(self.cache.device, non_blocking=True)
-            gpu_views = chain(self._gpu_key_views, self._gpu_value_views)
-            cpu_caches = chain(self._cpu_key_cache, self._cpu_value_cache)
-            for gpu_view, cpu_cache in zip(gpu_views, cpu_caches):
-                gathered_blocks = gpu_view.index_select(0, gpu_ids)
-                for start, offset, length in runs:
-                    cpu_cache[start : start + length].copy_(
+            for name, allocator in self.cache.cache_allocators.items():
+                if not all_gpu_ids[name]:
+                    continue
+                gpu_ids = torch.as_tensor(all_gpu_ids[name], dtype=torch.long).to(self.cache.device, non_blocking=True)
+                gathered_blocks = allocator._copy_view.index_select(0, gpu_ids)
+                cpu_view = self._cpu_views[name]
+                for start, offset, length in contiguous_runs(all_cpu_ids[name]):
+                    cpu_view[start : start + length].copy_(
                         gathered_blocks[offset : offset + length], non_blocking=True
                     )
 
-        # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream
-        offset = 0
-        for state, gpu_indices, group_block_counts in offloaded:
-            self._request_id_to_cpu_blocks[state.request_id] = all_cpu_indices[offset : offset + len(gpu_indices)]
-            self._request_id_to_group_block_counts[state.request_id] = group_block_counts
-            state.is_cpu_offloaded = True
-            offset += len(gpu_indices)
-        return {state.request_id for state, _, _ in offloaded}
-
-    def _return_cpu_blocks(self, request_id: str) -> tuple[list[int], list[int]]:
-        """Return CPU blocks to the free pool without copying anything."""
-        cpu_ids = self._request_id_to_cpu_blocks.pop(request_id)
-        group_counts = self._request_id_to_group_block_counts.pop(request_id)
-        self._free_cpu_blocks.extend(cpu_ids)
-        return cpu_ids, group_counts
+        # No explicit sync needed: finish_request is a CPU op, and the next forward pass serializes on the same stream
+        return {state.request_id for state in cpu_offloaded}
