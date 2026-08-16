@@ -3032,9 +3032,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         set_seed(42)
         static_generated_ids_reordered = model.generate(input_features, attention_mask=attention_mask, **gen_kwargs)
-        # assert re-ordered static cache run is consistent with the first static cache run:
-        # the cache must be properly reset between calls so that reversed inputs yield the same
-        # per-sample tokens as the original run (just in permuted order).
+        # Verify that generate() correctly resets the static cache between calls.
+        # If the cache were not reset, the second run would read stale KV values from
+        # the first run and produce different tokens for each sample.
+        # Because generate() resets the cache internally, each sample should produce
+        # the same tokens regardless of its position in the batch, so reversing the
+        # batch order and then un-reversing should reproduce the first run exactly.
         # Note: torch.compile may introduce small float differences vs eager mode, so we compare
         # two static runs against each other rather than against eager.
         min_len = min(static_generated_ids.shape[1], static_generated_ids_reordered.shape[1])
