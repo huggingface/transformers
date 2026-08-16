@@ -238,11 +238,6 @@ class Step3p7VisionAttention(nn.Module):
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
-    """Vision encoder layer with layer scale (``lambda_1``/``lambda_2``, naming convention shared with
-    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`) and RoPE-aware 2-D
-    attention via ``position_embeddings`` forwarding.
-    """
-
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
@@ -382,8 +377,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Step3p7RMSNorm):
-            # `Step3p7RMSNorm` computes `normed * (weight + 1)`, so zero (not the default all-ones
-            # from `torch.ones(hidden_size)`) is the identity-scale initialization.
             init.zeros_(module.weight)
 
 

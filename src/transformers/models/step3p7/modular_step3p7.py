@@ -244,9 +244,8 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
                 self.mtp_layer_types = ["full_attention"] * num_nextn_predict_layers
 
         if self.mlp_layer_types is None:
-            # `moe_layers_enum` is the legacy hub-config alias for `mlp_layer_types` (comma-separated
-            # or list of MoE layer indices), read here only, never persisted. Derived over the padded
-            # range so the trailing MTP layers get an `mtp_mlp_layer_types` entry too.
+            # `moe_layers_enum` is the legacy hub-config alias for `mlp_layer_types`, read here only
+            # Derived over the padded range so the trailing MTP layers get an `mtp_mlp_layer_types` entry.
             moe_layers_enum = kwargs.pop("moe_layers_enum", None)
             if moe_layers_enum is not None:
                 items = moe_layers_enum.split(",") if isinstance(moe_layers_enum, str) else moe_layers_enum
@@ -260,8 +259,7 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 
         if self.num_sliding_attention_heads is None:
             # `attention_other_setting` is a legacy hub-config dict overriding num_attention_heads/
-            # num_key_value_heads/head_dim for "sliding_attention" layers. Only `num_attention_heads`
-            # is used here; not persisted as a config field.
+            # num_key_value_heads/head_dim for "sliding_attention" layers. Keep `num_attention_heads`
             attention_other_setting = kwargs.pop("attention_other_setting", None)
             if attention_other_setting:
                 self.num_sliding_attention_heads = attention_other_setting.get(
@@ -607,11 +605,6 @@ class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
-    """Vision encoder layer with layer scale (``lambda_1``/``lambda_2``, naming convention shared with
-    :class:`~transformers.models.internvl.modeling_internvl.InternVLVisionLayer`) and RoPE-aware 2-D
-    attention via ``position_embeddings`` forwarding.
-    """
-
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
@@ -722,8 +715,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Step3p7RMSNorm):
-            # `Step3p7RMSNorm` computes `normed * (weight + 1)`, so zero (not the default all-ones
-            # from `torch.ones(hidden_size)`) is the identity-scale initialization.
             init.zeros_(module.weight)
 
 
