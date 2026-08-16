@@ -888,6 +888,18 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    # The shard filenames come from the (untrusted) index file and are joined to the model
+    # directory below. A value containing a path separator, a `..` component, or an absolute path
+    # would escape that directory and let a malicious checkpoint read arbitrary files off disk
+    # (path traversal). Legitimate shards are always plain filenames sitting next to the index, so
+    # reject anything else.
+    for shard_filename in shard_filenames:
+        if os.path.basename(shard_filename) != shard_filename or shard_filename in (os.curdir, os.pardir):
+            raise ValueError(
+                f"The checkpoint index {index_filename} contains an unexpected shard filename "
+                f"{shard_filename!r}. Shard filenames must be plain filenames located in the same "
+                "directory as the index."
+            )
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()

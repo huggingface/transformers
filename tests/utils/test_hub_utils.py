@@ -22,6 +22,7 @@ from huggingface_hub import constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils.hub import get_checkpoint_shard_files
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -205,3 +206,41 @@ class OfflineModeTests(unittest.TestCase):
                 side_effect=LocalEntryNotFoundError("no snapshot found"),
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])
+
+
+class GetCheckpointShardFilesTest(unittest.TestCase):
+    def _write_index(self, tmp_dir, weight_map):
+        index_filename = os.path.join(tmp_dir, "model.safetensors.index.json")
+        index = {"metadata": {"total_size": 0}, "weight_map": weight_map}
+        with open(index_filename, "w") as f:
+            json.dump(index, f)
+        return index_filename
+
+    def test_get_checkpoint_shard_files_accepts_plain_filenames(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            index_filename = self._write_index(
+                tmp_dir, {"a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"}
+            )
+            shard_files, _ = get_checkpoint_shard_files(tmp_dir, index_filename)
+            self.assertEqual(
+                sorted(shard_files),
+                [
+                    os.path.join(tmp_dir, "model-00001-of-00002.safetensors"),
+                    os.path.join(tmp_dir, "model-00002-of-00002.safetensors"),
+                ],
+            )
+
+    def test_get_checkpoint_shard_files_rejects_path_traversal(self):
+        # A malicious index whose weight_map escapes the model directory must be rejected rather
+        # than joined and read (path traversal / arbitrary file read).
+        for malicious in ["../secret.safetensors", "sub/dir/shard.safetensors", "..", os.path.join("..", "x")]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                index_filename = self._write_index(tmp_dir, {"w": malicious})
+                with self.assertRaises(ValueError):
+                    get_checkpoint_shard_files(tmp_dir, index_filename)
+
+    def test_get_checkpoint_shard_files_rejects_absolute_path(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            index_filename = self._write_index(tmp_dir, {"w": os.path.abspath(os.sep + "etc" + os.sep + "passwd")})
+            with self.assertRaises(ValueError):
+                get_checkpoint_shard_files(tmp_dir, index_filename)
