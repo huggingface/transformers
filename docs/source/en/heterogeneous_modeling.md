@@ -18,8 +18,8 @@ limitations under the License.
 
 [Heterogeneous configurations](./heterogeneous_configurations) record per-layer differences — attribute values that
 differ from the global configuration, or submodules that are skipped entirely — in the model configuration.
-This guide explains how generic heterogeneous modeling works and how built-in and custom models enable or
-disable its patching mechanism.
+This guide explains how generic heterogeneous modeling works and how built-in and custom models opt into its patching
+mechanism.
 
 > [!NOTE]
 > Generic heterogeneous modeling is a power feature for variants that remain close to an existing architecture. It
@@ -29,16 +29,16 @@ disable its patching mechanism.
 
 ## Architecture support
 
-An architecture can use **generic patching**, where a `HeterogeneousModelingSpec` passes each resolved config to its
-layer and applies skips, or have **patching disabled** when that mechanism is not appropriate for the model's structure.
-How that choice is declared depends on whether the model is built into Transformers:
+An architecture can consume `per_layer_config` directly in its modeling code or opt into **generic patching**, where a
+`HeterogeneousModelingSpec` passes each resolved config to its layer and applies skips. Generic patching is active only
+when the config is heterogeneous and a modeling spec is declared:
 
-| Model | Generic patching | Patching disabled |
-| --- | --- | --- |
-| Built-in model | Listed in `MODEL_TYPE_TO_SPEC_FACTORY` | Listed in `MODEL_TYPES_WITH_HETEROGENEOUS_MODELING_PATCHING_DISABLED` |
-| Custom model | [Set a modeling spec](#use-generic-patching) | [Disable generic patching](#disable-generic-patching) |
+| Model | Generic patching opt-in |
+| --- | --- |
+| Built-in model | Listed in `MODEL_TYPE_TO_SPEC_FACTORY` |
+| Custom model | [Set a modeling spec](#configure-a-custom-model) |
 
-Both built-in declarations live in
+The built-in declarations live in
 [`supported_models.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/heterogeneity/supported_models.py).
 
 ## How generic patching works
@@ -244,8 +244,6 @@ class MyModel(MyModelPreTrainedModel):
     ...
 ```
 
-### Use generic patching
-
 To enable generic patching without changing that file, import the shared base class and set
 `_heterogeneous_modeling_spec` on it:
 
@@ -257,15 +255,6 @@ MyModelPreTrainedModel._heterogeneous_modeling_spec = spec
 
 Nothing else is required: constructing any `MyModel*` class with a heterogeneous configuration applies the spec, and
 [`~PreTrainedModel.from_pretrained`] works as usual.
-
-### Disable generic patching
-
-If the model should not use generic heterogeneous patching, set `_disable_heterogeneous_modeling_patching` on the
-shared base class instead:
-
-```py
-MyModelPreTrainedModel._disable_heterogeneous_modeling_patching = True
-```
 
 ## Contribute built-in support
 

@@ -54,7 +54,7 @@ _model_init_stack: contextvars.ContextVar[tuple[PreTrainedModel, ...]] = context
 _layer_patching_lock = threading.Lock()
 
 
-def apply_heterogeneous_modeling(model: PreTrainedModel) -> None:
+def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -> None:
     """Apply heterogeneous per-layer modeling during model construction.
 
     This function resolves the model's ``HeterogeneousModelingSpec``, validates its

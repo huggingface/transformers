@@ -379,13 +379,16 @@ class MtpModel(PreTrainedModel):
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
         mtp_config = main_model.config.get_mtp_config()
-        if mtp_config.is_heterogeneous:
-            main_modeling_spec = get_heterogeneous_modeling_spec(main_model)
+
+        if (
+            mtp_config.is_heterogeneous
+            and (main_heterogeneous_modeling_spec := get_heterogeneous_modeling_spec(main_model)) is not None
+        ):
             self._heterogeneous_modeling_spec = HeterogeneousModelingSpec(
                 layer_cls=MtpLayer,
                 layer_idx_variable_name="layer_idx",
                 skip_descriptors=nest_skip_descriptor_paths(
-                    main_modeling_spec.skip_descriptors, parent_path="mtp_block"
+                    main_heterogeneous_modeling_spec.skip_descriptors, parent_path="mtp_block"
                 ),
             )
 

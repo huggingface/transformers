@@ -20,7 +20,10 @@ from .heterogeneous_modeling_spec import (
     get_heterogeneous_modeling_spec,
     nest_skip_descriptor_paths,
 )
-from .modeling_utils import apply_heterogeneous_modeling, wrap_model_init_with_heterogeneous_context
+from .modeling_utils import (
+    apply_generic_heterogeneous_modeling_if_applicable,
+    wrap_model_init_with_heterogeneous_context,
+)
 from .skip_utils import ReturnEntry, get_skip_replacement
 
 
@@ -30,7 +33,7 @@ __all__ = [
     "HeterogeneousModelingSpec",
     "ReturnEntry",
     "SkipDescriptor",
-    "apply_heterogeneous_modeling",
+    "apply_generic_heterogeneous_modeling_if_applicable",
     "get_heterogeneous_modeling_spec",
     "get_skip_replacement",
     "nest_skip_descriptor_paths",

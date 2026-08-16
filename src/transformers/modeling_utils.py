@@ -76,7 +76,10 @@ from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.heterogeneity import apply_heterogeneous_modeling, wrap_model_init_with_heterogeneous_context
+from .integrations.heterogeneity import (
+    apply_generic_heterogeneous_modeling_if_applicable,
+    wrap_model_init_with_heterogeneous_context,
+)
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
@@ -1380,8 +1383,7 @@ class PreTrainedModel(
 
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
 
-        if self.config.is_heterogeneous:
-            apply_heterogeneous_modeling(self)
+        apply_generic_heterogeneous_modeling_if_applicable(self)
 
     def post_init(self):
         """

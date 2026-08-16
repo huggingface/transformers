@@ -43,7 +43,7 @@ class _HeterogeneitySpec:
     explicit_per_layer_attributes: set[str]
 
     # Layers that never update their KV cache because a skip replaced the submodule responsible for it.
-    # Resolved from the modeling spec by `apply_heterogeneous_modeling`; `None` until a model has been
+    # Resolved from the modeling spec by `apply_generic_heterogeneous_modeling_if_applicable`; `None` until a model has been
     # constructed from this config.
     disabled_kv_layer_indices: tuple[int, ...] | None = None
 
@@ -180,8 +180,6 @@ def _apply_heterogeneous_config(
     sub-layers skipped via the ``skip`` attribute).
 
     This function validates the overrides and stores a ``_HeterogeneitySpec`` on ``config._heterogeneity_spec``.
-    At model-init time, ``apply_heterogeneous_modeling`` reads this spec to patch
-    each layer with its resolved config.
 
     Args:
         config: The global model config to modify in-place.
@@ -351,8 +349,8 @@ class HeterogeneousConfigMixin:
         Raises:
             ValueError: If some layers skip submodules and no model has been constructed from this config yet.
                 Whether a skip disables a layer's KV-cache update is defined by the architecture's
-                `HeterogeneousModelingSpec`, which `apply_heterogeneous_modeling` resolves during model
-                construction.
+                `HeterogeneousModelingSpec`, which `apply_generic_heterogeneous_modeling_if_applicable` resolves during
+                model construction.
         """
         if not self.is_heterogeneous:
             return ()

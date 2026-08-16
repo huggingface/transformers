@@ -22,6 +22,7 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
+from .heterogeneity import get_heterogeneous_modeling_spec
 
 
 logger = logging.get_logger(__name__)
@@ -675,7 +676,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            if model.config.is_heterogeneous:
+            if model.config.is_heterogeneous and get_heterogeneous_modeling_spec(model) is not None:
                 module_path_parts = module_name.split(".")
                 try:
                     layer_idx_component = module_path_parts.index("layers") + 1
