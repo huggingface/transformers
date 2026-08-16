@@ -143,6 +143,15 @@ DATASET_DIR = "code_index_dataset"
 NON_MODEL_DIRS: frozenset[str] = frozenset({"auto", "deprecated"})
 HUB_DATASET_DEFAULT = "itazap/transformers_code_embeddings_v3"
 
+# File-type prefixes that are indexed and can be analyzed. Order matters for prefix
+# stripping (not load-bearing here since none of these prefixes overlap).
+FILE_TYPE_TO_PREFIX: dict[str, str] = {
+    "modeling": "modeling_",
+    "configuration": "configuration_",
+    "image_processing": "image_processing_",
+}
+FILE_PREFIXES: tuple[str, ...] = tuple(FILE_TYPE_TO_PREFIX.values())
+
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
@@ -187,6 +196,24 @@ def _tokenize(code: str) -> set[str]:
         `set[str]`: A set of all identifiers found in the code.
     """
     return set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", code))
+
+
+def _model_name_from_filename(filename: str) -> str:
+    """
+    Strip a known modeling/configuration/image-processing file prefix and the ``.py``
+    suffix from a filename (or stem), returning the bare model name.
+
+    Args:
+        filename (`str`): A file name or stem, e.g. ``"configuration_llama.py"`` or ``"configuration_llama"``.
+
+    Returns:
+        `str`: The bare model name, e.g. ``"llama"``. Returned unchanged if no known prefix matches.
+    """
+    stem = filename.removesuffix(".py")
+    for prefix in FILE_PREFIXES:
+        if stem.startswith(prefix) and len(stem) > len(prefix):
+            return stem[len(prefix) :]
+    return stem
 
 
 def _get_suffix_candidates(name: str) -> list[str]:
@@ -452,9 +479,8 @@ class CodeSimilarityAnalyzer:
         if model:
             return model
         stem = modeling_file.stem
-        if stem.startswith("modeling_") and len(stem) > len("modeling_"):
-            return stem[len("modeling_") :]
-        return None
+        name = _model_name_from_filename(stem)
+        return name if name != stem else None
 
     def _encode_batch(self, texts: list[str]) -> np.ndarray:
         """
@@ -511,7 +537,9 @@ class CodeSimilarityAnalyzer:
     def build_index(self) -> None:
         """Build the code similarity index from all modeling files and save to disk."""
         logging.info("collecting files")
-        files = list(self.models_root.rglob("modeling_*.py"))
+        files = []
+        for prefix in FILE_PREFIXES:
+            files.extend(self.models_root.rglob(f"{prefix}*.py"))
         logging.info(f"parsing {len(files)} files")
 
         identifiers: list[str] = []
@@ -1270,7 +1298,20 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="hf-code-sim")
     parser.add_argument("--build", default=False, action="store_true")
-    parser.add_argument("--modeling-file", type=str, help='You can just specify "vits" if you are lazy like me.')
+    parser.add_argument(
+        "--modeling-file",
+        type=str,
+        help='Path to a modeling_*.py, configuration_*.py, or image_processing_*.py file. '
+        'You can just specify "vits" if you are lazy like me (see --file-type).',
+    )
+    parser.add_argument(
+        "--file-type",
+        type=str,
+        choices=list(FILE_TYPE_TO_PREFIX.keys()),
+        default="modeling",
+        help='Which file to build the default path for when --modeling-file is a bare model name (e.g. "vits"). '
+        "Ignored if --modeling-file already contains a path separator.",
+    )
     parser.add_argument(
         "--push-new-index", action="store_true", help="After --build, push index files to a Hub dataset."
     )
@@ -1326,10 +1367,11 @@ def main():
     dates = build_date_data()
     modeling_file = args.modeling_file
     if os.sep not in modeling_file:
-        modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
+        prefix = FILE_TYPE_TO_PREFIX[args.file_type]
+        modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"{prefix}{modeling_file}.py")
 
     modeling_filename = Path(modeling_file).name
-    release_key = modeling_filename.split("modeling_")[-1][:-3]
+    release_key = _model_name_from_filename(modeling_filename)
     release_date = dates.get(release_key, "unknown release date")
 
     # Parse ignore models from comma-separated list
@@ -1612,7 +1654,7 @@ def main():
                     selected_models=selected_models,
                 )
                 if args.generate_prompt == "__AUTO__":
-                    model_name = Path(modeling_file).stem.replace("modeling_", "")
+                    model_name = _model_name_from_filename(Path(modeling_file).stem)
                     output_path = Path(modeling_file).with_name(f"{model_name}_MODULAR_PROMPT")
                     output_path.write_text(prompt, encoding="utf-8")
                     logging.info("Wrote prompt to %s", output_path)
@@ -1643,7 +1685,7 @@ def generate_modular_prompt(
     Returns:
         A string prompt ready to be fed to an AI agent.
     """
-    model_name = modeling_file.stem.replace("modeling_", "")
+    model_name = _model_name_from_filename(modeling_file.stem)
 
     if per_class_recs and selected_models:
         # Multi-model path: each class gets its own recommended reference.
