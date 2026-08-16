@@ -278,6 +278,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 best_threshold = thresholds[optimal_threshold_index]
 
                 self.assistant_generation_config.assistant_confidence_threshold = best_threshold
+                # Sync to generation_config so ConfidenceCriteria picks up the updated threshold on the next round
+                self.generation_config.assistant_confidence_threshold = best_threshold
 
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
