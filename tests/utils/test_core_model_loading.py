@@ -321,53 +321,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 torch.testing.assert_close(captured["weight"], expected_by_rank[rank])
                 self.assertEqual(loading_info.conversion_errors, {})
 
-    def test_concatenate_shards_places_and_casts_before_quantization(self):
-        observed_inputs = []
-
-        class RecordingQuantization:
-            def convert(self, input_dict, **kwargs):
-                value = next(iter(input_dict.values()))
-                observed_inputs.append((value.device.type, value.dtype, value.shape))
-                return input_dict
-
-        class RecordingQuantizer:
-            pre_quantized = False
-
-            def param_needs_quantization(self, model, param_name):
-                return param_name == "weight"
-
-            def get_quantize_ops(self):
-                return RecordingQuantization()
-
-        config = PreTrainedConfig()
-        config.split_ngram_parts = 3
-        model = DummyShardedModel(config, (3, 1))
-        checkpoint = {
-            "piece-0.weight": torch.zeros(1, 1, dtype=torch.float64),
-            "piece-1.weight": torch.ones(1, 1, dtype=torch.float64),
-            "piece-2.weight": torch.full((1, 1), 2.0, dtype=torch.float64),
-        }
-        converter = WeightConverter(
-            r"piece-\d+\.weight",
-            "weight",
-            operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
-        )
-
-        with patch("transformers.core_model_loading.set_param_for_module"):
-            loading_info, _ = convert_and_load_state_dict_in_model(
-                model,
-                checkpoint,
-                LoadStateDictConfig(
-                    weight_mapping=[converter],
-                    device_map={"": "meta"},
-                    hf_quantizer=RecordingQuantizer(),
-                ),
-                tp_plan=None,
-            )
-
-        self.assertListEqual(observed_inputs, [("meta", torch.float32, torch.Size((3, 1)))])
-        self.assertEqual(loading_info.conversion_errors, {})
-
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 

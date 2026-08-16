@@ -213,8 +213,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
             raise ValueError(f"Unsupported Qwen4-Exp output gate activation: {output_gate_type}.")
         if self.hc_count <= 1:
             raise ValueError(f"Qwen4-Exp requires hc_count > 1, got {self.hc_count}.")
-        if self.hc_lowrank <= 0:
-            raise ValueError(f"hc_lowrank must be > 0, got {self.hc_lowrank}.")
         if self.num_experts <= 0:
             raise ValueError(f"num_experts must be > 0, got {self.num_experts}.")
         if not 0 < self.num_experts_per_tok <= self.num_experts:
@@ -258,7 +256,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
                     f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
                     f"got {invalid_ple_layers}."
                 )
-            if self.eos_token_id is None or isinstance(self.eos_token_id, (list, tuple)) and not self.eos_token_id:
+            if self.eos_token_id is None or isinstance(self.eos_token_id, list) and not self.eos_token_id:
                 raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
         if self.indexer_n_heads is not None:

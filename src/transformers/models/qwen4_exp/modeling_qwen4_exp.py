@@ -630,8 +630,8 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.index_kv_heads = config.indexer_kv_heads
         self.index_head_dim = config.indexer_head_dim
         self.token_budget = config.indexer_budget
-        self.block_size = config.indexer_compress_ratio
-        self.num_selected_blocks = self.token_budget // self.block_size
+        self.compress_ratio = config.indexer_compress_ratio
+        self.block_topk = self.token_budget // self.compress_ratio
         self.index_qk_proj = nn.Linear(
             config.hidden_size,
             (self.index_n_heads + self.index_kv_heads) * self.index_head_dim,
@@ -663,24 +663,20 @@ class Qwen4ExpQSAIndexer(nn.Module):
         sin: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, _ = hidden_states.shape
-        projected_qk_states = self.index_qk_proj(hidden_states)
-        raw_indexer_query_states, raw_indexer_key_states = torch.split(
-            projected_qk_states,
+        qk = self.index_qk_proj(hidden_states)
+        q_raw, token_k = torch.split(
+            qk,
             [
                 self.index_n_heads * self.index_head_dim,
                 self.index_kv_heads * self.index_head_dim,
             ],
             dim=-1,
         )
-        indexer_query_states = raw_indexer_query_states.view(
-            batch_size, sequence_length, self.index_n_heads, self.index_head_dim
-        )
-        indexer_query_states = self.q_layernorm(indexer_query_states)
-        indexer_query_states = self._apply_rope(indexer_query_states, cos, sin, unsqueeze_dim=2)
-        raw_indexer_key_states = raw_indexer_key_states.view(
-            batch_size, sequence_length, self.index_kv_heads, self.index_head_dim
-        )
-        return indexer_query_states, raw_indexer_key_states.squeeze(2)
+        q = q_raw.view(batch_size, sequence_length, self.index_n_heads, self.index_head_dim)
+        q = self.q_layernorm(q)
+        q = self._apply_rope(q, cos, sin, unsqueeze_dim=2)
+        token_k = token_k.view(batch_size, sequence_length, self.index_kv_heads, self.index_head_dim)
+        return q, token_k.squeeze(2)
 
     def _compress_keys(
         self,
@@ -701,45 +697,43 @@ class Qwen4ExpQSAIndexer(nn.Module):
             unsqueeze_dim=1,
         ).squeeze(1)
 
-    def _score_blocks(self, indexer_query_states: torch.Tensor, block_key_states: torch.Tensor) -> torch.Tensor:
-        index_scores = torch.einsum("...hd,nd->...nh", indexer_query_states.float(), block_key_states.float())
-        return torch.relu(index_scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+    def _score_blocks(self, q: torch.Tensor, block_key_states: torch.Tensor) -> torch.Tensor:
+        scores = torch.einsum("...hd,nd->...nh", q.float(), block_key_states.float())
+        return torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
 
     def _select_visible_row(
         self,
-        indexer_query_states: torch.Tensor,
-        raw_indexer_key_states: torch.Tensor,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
         key_cos: torch.Tensor,
         key_sin: torch.Tensor,
         visible_token_indices: torch.Tensor,
     ) -> torch.Tensor:
         selected_token_indices = torch.full(
-            (self.token_budget + self.block_size - 1,),
+            (self.token_budget + self.compress_ratio - 1,),
             -1,
-            device=indexer_query_states.device,
+            device=q.device,
             dtype=torch.int32,
         )
-        num_complete_blocks = visible_token_indices.numel() // self.block_size
+        num_complete_blocks = visible_token_indices.numel() // self.compress_ratio
         selected_tokens = visible_token_indices.new_empty((0,))
         if num_complete_blocks:
-            block_token_indices = visible_token_indices[: num_complete_blocks * self.block_size].view(
+            block_token_indices = visible_token_indices[: num_complete_blocks * self.compress_ratio].view(
                 num_complete_blocks,
-                self.block_size,
+                self.compress_ratio,
             )
             block_key_states = self._compress_keys(
-                raw_indexer_key_states,
+                raw_keys,
                 key_cos,
                 key_sin,
                 block_token_indices,
             )
-            index_scores = self._score_blocks(indexer_query_states, block_key_states)
-            selected_block_indices = index_scores.topk(
-                min(self.num_selected_blocks, num_complete_blocks), dim=0
-            ).indices
+            scores = self._score_blocks(q, block_key_states)
+            selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
             selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
             selected_tokens = selected_tokens[: self.token_budget]
-        trailing_token_indices = visible_token_indices[num_complete_blocks * self.block_size :]
-        selected_tokens = torch.cat([selected_tokens, trailing_token_indices])
+        tail = visible_token_indices[num_complete_blocks * self.compress_ratio :]
+        selected_tokens = torch.cat([selected_tokens, tail])
         selected_token_indices[: selected_tokens.numel()] = selected_tokens.to(torch.int32)
         return selected_token_indices
 
@@ -800,14 +794,14 @@ class Qwen4ExpQSAIndexer(nn.Module):
         batch_size, sequence_length, _ = hidden_states.shape
         cos, sin = position_embeddings
 
-        indexer_query_states, raw_indexer_key_states = self.project_qk(hidden_states, cos, sin)
+        q, token_k = self.project_qk(hidden_states, cos, sin)
 
         rotary_dim = cos.shape[-1]
         indexer_states = torch.cat(
             [
-                raw_indexer_key_states,
-                cos.to(raw_indexer_key_states.dtype),
-                sin.to(raw_indexer_key_states.dtype),
+                token_k,
+                cos.to(token_k.dtype),
+                sin.to(token_k.dtype),
             ],
             dim=-1,
         )
@@ -815,22 +809,22 @@ class Qwen4ExpQSAIndexer(nn.Module):
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
         indexer_states = indexer_states[:, :key_length]
 
-        raw_indexer_key_states, key_cos, key_sin = torch.split(
+        raw_keys, key_cos, key_sin = torch.split(
             indexer_states,
             [self.index_head_dim, rotary_dim, rotary_dim],
             dim=-1,
         )
 
         selected_token_indices = torch.full(
-            (batch_size, sequence_length, self.token_budget + self.block_size - 1),
+            (batch_size, sequence_length, self.token_budget + self.compress_ratio - 1),
             -1,
             dtype=torch.int32,
             device=hidden_states.device,
         )
-        query_start_position = key_length - sequence_length
+        query_start = key_length - sequence_length
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
-                query_position = query_start_position + query_idx
+                query_position = query_start + query_idx
                 visible_token_indices = self._visible_indices(
                     attention_mask,
                     batch_idx,
@@ -840,8 +834,8 @@ class Qwen4ExpQSAIndexer(nn.Module):
                     hidden_states.device,
                 )
                 selected_token_indices[batch_idx, query_idx] = self._select_visible_row(
-                    indexer_query_states[batch_idx, query_idx],
-                    raw_indexer_key_states[batch_idx],
+                    q[batch_idx, query_idx],
+                    raw_keys[batch_idx],
                     key_cos[batch_idx],
                     key_sin[batch_idx],
                     visible_token_indices,
@@ -1093,8 +1087,8 @@ class Qwen4ExpGroupedRMSNorm(Qwen4ExpRMSNorm):
         return super()._norm(hidden_states.reshape(grouped_shape)).flatten(-2)
 
 
-class Qwen4ExpGatedResidualHead(nn.Module):
-    def __init__(self, config: Qwen4ExpTextConfig):
+class Qwen4ExpGatedResidual(nn.Module):
+    def __init__(self, config: Qwen4ExpTextConfig, use_combine: bool = True):
         super().__init__()
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
@@ -1106,44 +1100,35 @@ class Qwen4ExpGatedResidualHead(nn.Module):
         )
         self.input_mix_weight_down = nn.Linear(hc_hidden_size, config.hc_lowrank, bias=False)
         self.input_mix_weight_up = nn.Linear(config.hc_lowrank, hc_hidden_size, bias=False)
+        self.block_inject_weight = nn.Linear(hc_hidden_size, self.hc_count, bias=False) if use_combine else None
 
-    def _collapse(self, flat_hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if flat_hidden_streams.shape[-1] != self.hc_count * self.hidden_size:
+    def forward(
+        self, hyper_input: torch.Tensor
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        if hyper_input.shape[-1] != self.hc_count * self.hidden_size:
             raise ValueError(
-                f"Expected {self.hc_count * self.hidden_size} hyper-connection features, got {flat_hidden_streams.shape[-1]}."
+                f"Expected {self.hc_count * self.hidden_size} hyper-connection features, got {hyper_input.shape[-1]}."
             )
-        normalized_flat_streams = self.hc_norm(flat_hidden_streams)
-        collapse_weights = F.silu(self.input_mix_weight_down(normalized_flat_streams) / self.hc_count)
-        collapse_weights = torch.sigmoid(self.input_mix_weight_up(collapse_weights))
-        collapse_weights = collapse_weights.unflatten(-1, (self.hc_count, self.hidden_size))
-        collapsed_states = (
-            collapse_weights * normalized_flat_streams.unflatten(-1, (self.hc_count, self.hidden_size))
-        ).mean(dim=-2)
-        return collapsed_states, normalized_flat_streams
-
-    def forward(self, flat_hidden_streams: torch.Tensor) -> torch.Tensor:
-        collapsed_states, _ = self._collapse(flat_hidden_streams)
-        return collapsed_states
-
-
-class Qwen4ExpGatedResidualSimple(Qwen4ExpGatedResidualHead):
-    def __init__(self, config: Qwen4ExpTextConfig):
-        super().__init__(config)
-        self.block_inject_weight = nn.Linear(self.hc_count * self.hidden_size, self.hc_count, bias=False)
-
-    def forward(self, flat_hidden_streams: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        collapsed_states, normalized_flat_streams = self._collapse(flat_hidden_streams)
-        injection_weights = 2 * torch.sigmoid(self.block_inject_weight(normalized_flat_streams) / self.hc_count)
-        return collapsed_states, (flat_hidden_streams, injection_weights)
+        hyper_input_normed = self.hc_norm(hyper_input)
+        input_mix_weight = F.silu(self.input_mix_weight_down(hyper_input_normed) / self.hc_count)
+        input_mix_weight = torch.sigmoid(self.input_mix_weight_up(input_mix_weight))
+        input_mix_weight = input_mix_weight.unflatten(-1, (self.hc_count, self.hidden_size))
+        mixed_input = (input_mix_weight * hyper_input_normed.unflatten(-1, (self.hc_count, self.hidden_size))).mean(
+            dim=-2
+        )
+        if self.block_inject_weight is None:
+            return mixed_input
+        injection_weights = 2 * torch.sigmoid(self.block_inject_weight(hyper_input_normed) / self.hc_count)
+        return mixed_input, (hyper_input, injection_weights)
 
     @staticmethod
     def combine(
-        branch_output: torch.Tensor,
+        block_output: torch.Tensor,
         residual_context: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
-        flat_hidden_streams, injection_weights = residual_context
-        injection = branch_output.unsqueeze(-2) * injection_weights.unsqueeze(-1)
-        return flat_hidden_streams + injection.flatten(-2)
+        hyper_input, injection_weights = residual_context
+        injection = block_output.unsqueeze(-2) * injection_weights.unsqueeze(-1)
+        return hyper_input + injection.flatten(-2)
 
 
 class Qwen4ExpNGramEmbedding(nn.Module):
@@ -1152,39 +1137,25 @@ class Qwen4ExpNGramEmbedding(nn.Module):
     _SPLITMIX_M1 = 0xBF58476D1CE4E5B9
     _SPLITMIX_M2 = 0x94D049BB133111EB
     _PRIME_1 = 10007
-    _PLE_TOKEN_CONTEXT_STATE_IDX = 2
+    _CONTEXT_STATE_IDX = 2
 
-    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_ordinal: int = 0):
+    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
         super().__init__()
         self.ngram_size = config.ngram_size
         self.heads_per_ngram = config.heads_per_ngram
         self.ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
-        self.ple_ordinal = ple_ordinal
+        self.ple_layer_index = ple_layer_index
         self.unigram_vocab_size = config.vocab_size
         self.ngram_vocab_size_base = config.ngram_vocab_size_base
         head_dim_per_ngram = embedding_dim // self.ngram_heads
-        eos_token_ids = config.eos_token_id if isinstance(config.eos_token_id, list) else [config.eos_token_id]
-        self.eos_token_ids = tuple(eos_token_ids)
-        self.eos_token_id = eos_token_ids[0]
+        self.eos_token_id = config.eos_token_id[0] if isinstance(config.eos_token_id, list) else config.eos_token_id
 
+        self.layer_multipliers = nn.Buffer(self._build_layer_multipliers(config.seed))
         head_vocab_sizes, head_offsets, total_vocab_size = self._build_head_vocab_and_offsets()
+        self.ngram_heads_vocab_sizes = nn.Buffer(torch.tensor(head_vocab_sizes, dtype=torch.long))
+        self.ngram_heads_offsets = nn.Buffer(torch.tensor(head_offsets, dtype=torch.long))
         ngram_vocab_divisor = config.make_ngram_vocab_size_divisible_by
         padded_vocab_size = math.ceil(total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
-        self.register_buffer(
-            "layer_multipliers",
-            self._build_layer_multipliers(config.seed),
-            persistent=True,
-        )
-        self.register_buffer(
-            "ngram_heads_vocab_sizes",
-            torch.tensor(head_vocab_sizes, dtype=torch.long),
-            persistent=True,
-        )
-        self.register_buffer(
-            "ngram_heads_offsets",
-            torch.tensor(head_offsets, dtype=torch.long),
-            persistent=True,
-        )
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
     def _reset_derived_buffers(self, seed: int) -> None:
@@ -1210,7 +1181,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         max_long = (1 << 63) - 1
         multiplier_max = max_long // max(self.unigram_vocab_size, 1)
         half_bound = max(1, multiplier_max // 2)
-        base_seed = seed + self._PRIME_1 * self.ple_ordinal
+        base_seed = seed + self._PRIME_1 * self.ple_layer_index
         multipliers = []
         for index in range(self.ngram_size):
             value = (base_seed + self._SPLITMIX_GAMMA * (index + 1)) & self._MASK64
@@ -1241,15 +1212,12 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         sizes = []
         offsets = []
         total = 0
-        prime = self._find_nth_prime_after(
-            self.ngram_vocab_size_base - 1,
-            self.ple_ordinal * self.ngram_heads,
-        )
-        for _ in range(self.ngram_heads):
-            prime = self._find_nth_prime_after(prime, 1)
-            sizes.append(prime)
+        for head_idx in range(self.ngram_heads):
+            global_head_idx = self.ple_layer_index * self.ngram_heads + head_idx
+            size = self._find_nth_prime_after(self.ngram_vocab_size_base - 1, global_head_idx + 1)
+            sizes.append(size)
             offsets.append(total)
-            total += prime
+            total += size
         return sizes, offsets, total
 
     def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
@@ -1257,10 +1225,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             return token_ids
         batch_size, seq_len = token_ids.shape
         positions = torch.arange(seq_len, device=token_ids.device, dtype=torch.long)
-        is_eos = token_ids == self.eos_token_ids[0]
-        for eos_token_id in self.eos_token_ids[1:]:
-            is_eos |= token_ids == eos_token_id
-        eos_positions = torch.where(is_eos, positions, -1)
+        eos_positions = torch.where(token_ids == self.eos_token_id, positions, -1)
         previous_eos_inclusive = torch.cummax(eos_positions, dim=1).values
         previous_eos = torch.cat([eos_positions.new_full((batch_size, 1), -1), previous_eos_inclusive[:, :-1]], dim=1)
         segment_start = previous_eos + 1
@@ -1268,7 +1233,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         source_positions = positions - shift
         gather_positions = source_positions.clamp_min(0).unsqueeze(0).expand(batch_size, -1)
         shifted = token_ids.gather(dim=1, index=gather_positions)
-        valid = position_in_segment >= shift
+        valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     def _get_previous_context(
@@ -1282,7 +1247,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         if past_key_values is None:
             return previous_context
 
-        if past_key_values.has_previous_state(layer_idx, state_idx=self._PLE_TOKEN_CONTEXT_STATE_IDX):
+        if past_key_values.has_previous_state(layer_idx, state_idx=self._CONTEXT_STATE_IDX):
             context_update = input_ids
         else:
             # LinearAttentionLayer pads newly initialized states with zeros, while Qwen4-Exp n-grams must be padded
@@ -1291,7 +1256,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         context_states = past_key_values.update_conv_state(
             context_update,
             layer_idx,
-            state_idx=self._PLE_TOKEN_CONTEXT_STATE_IDX,
+            state_idx=self._CONTEXT_STATE_IDX,
             conv_kernel_size=context_len,
         )
         context_end = context_states.shape[-1] - input_ids.shape[-1]
@@ -1306,10 +1271,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         previous_context = self._get_previous_context(input_ids, past_key_values, layer_idx)
         token_history = torch.cat([previous_context, input_ids], dim=-1)
-        shifted_tokens = []
-        for shift in range(self.ngram_size):
-            shifted = self._shift_right_ignore_eos(token_history, shift)[:, -input_ids.shape[1] :]
-            shifted_tokens.append(shifted)
+        shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
 
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
@@ -1326,7 +1288,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             ngram_ids = torch.remainder(mixed_ids.unsqueeze(-1), head_vocab_sizes.view(1, 1, -1))
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
-        ngram_ids = torch.cat(blocks, dim=-1)
+        ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
         return self.ngram_embedding(ngram_ids).flatten(-2)
 
 
@@ -1338,19 +1300,19 @@ class Qwen4ExpPLELayer(nn.Module):
     The returned tensor has shape `(batch_size, sequence_length, hc_count * hidden_size)`.
     """
 
-    _PLE_CONV_STATE_IDX = 1
+    _CONV_STATE_IDX = 1
 
-    def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int, ple_ordinal: int):
+    def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int, ple_layer_index: int):
         super().__init__()
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
         self.hc_count = config.hc_count
         ple_embed_dim = config.ple_embed_dim
         hc_hidden_size = self.hidden_size * self.hc_count
-        self.ple_embedding = Qwen4ExpNGramEmbedding(config, ple_embed_dim, ple_ordinal)
+        self.ple_embedding = Qwen4ExpNGramEmbedding(config, ple_embed_dim, ple_layer_index)
         conv_kernel_size = config.ple_conv_kernel_size
         conv_dilation = config.ngram_size
-        self.ple_conv_state_len = (conv_kernel_size - 1) * conv_dilation
+        self.short_conv_state_len = (conv_kernel_size - 1) * conv_dilation
         self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
         self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
         self.norm_key = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
@@ -1365,24 +1327,20 @@ class Qwen4ExpPLELayer(nn.Module):
             bias=False,
         )
 
-    def _apply_ple_conv(
-        self,
-        hidden_states: torch.Tensor,
-        past_key_values: Cache | None,
-    ) -> torch.Tensor:
+    def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
         sequence_length = hidden_states.shape[-1]
         conv_input = hidden_states
-        if self.ple_conv_state_len:
+        if self.short_conv_state_len:
             if past_key_values is not None:
                 conv_input = past_key_values.update_conv_state(
                     hidden_states,
                     self.layer_idx,
-                    state_idx=self._PLE_CONV_STATE_IDX,
-                    conv_kernel_size=self.ple_conv_state_len,
+                    state_idx=self._CONV_STATE_IDX,
+                    conv_kernel_size=self.short_conv_state_len,
                 )
-            conv_input = F.pad(conv_input, (self.ple_conv_state_len, 0))
-            conv_input = conv_input[..., -(self.ple_conv_state_len + sequence_length) :]
+            conv_input = F.pad(conv_input, (self.short_conv_state_len, 0))
+            conv_input = conv_input[..., -(self.short_conv_state_len + sequence_length) :]
         return F.silu(self.conv1d(conv_input)).transpose(1, 2)
 
     def forward(
@@ -1392,22 +1350,20 @@ class Qwen4ExpPLELayer(nn.Module):
         past_key_values: Cache | None,
         ple_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        ngram_embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
-        ple_key_states = self.norm_key(self.key_proj(ngram_embeddings)).unflatten(
-            -1, (self.hc_count, self.hidden_size)
-        )
-        ple_value_states = self.value_proj(ngram_embeddings)
-        hc_query_states = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
-        ple_gate_logits = (ple_key_states * hc_query_states).sum(dim=-1, keepdim=True) / math.sqrt(self.hidden_size)
-        ple_gate_logits = ple_gate_logits.abs().clamp_min(1e-6).sqrt() * ple_gate_logits.sign()
-        ple_update = torch.sigmoid(ple_gate_logits) * ple_value_states.unsqueeze(-2)
-        normalized_ple_update = self.norm_conv(ple_update.flatten(-2))
-        ple_update = ple_update.flatten(-2)
+        embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
+        key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
+        value = self.value_proj(embeddings)
+        query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
+        gate = (key_normed * query_normed).sum(dim=-1, keepdim=True) / math.sqrt(self.hidden_size)
+        gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
+        gated_value = torch.sigmoid(gate) * value.unsqueeze(-2)
+        gated_value_normed = self.norm_conv(gated_value.flatten(-2))
+        gated_value = gated_value.flatten(-2)
         if ple_padding_mask is not None:
-            current_ple_padding_mask = ple_padding_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(ple_update.dtype)
-            ple_update = ple_update * current_ple_padding_mask
-            normalized_ple_update = normalized_ple_update * current_ple_padding_mask
-        output = ple_update + self._apply_ple_conv(normalized_ple_update, past_key_values)
+            current_ple_padding_mask = ple_padding_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(gated_value.dtype)
+            gated_value = gated_value * current_ple_padding_mask
+            gated_value_normed = gated_value_normed * current_ple_padding_mask
+        output = gated_value + self._short_conv(gated_value_normed, past_key_values)
         return output if ple_padding_mask is None else output * current_ple_padding_mask
 
 
@@ -1417,15 +1373,15 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
         self.block_type = config.layers_block_type[layer_idx]
         if self.block_type == "linear_attention":
             self.linear_attn = Qwen4ExpGatedDeltaNet(config, layer_idx)
-        else:
+        elif self.block_type == "full_attention":
             self.self_attn = Qwen4ExpAttention(config, layer_idx)
         self.mlp = Qwen4ExpSparseMoeBlock(config)
         self.ple = None
         if layer_idx + 1 in config.ple_layer_ids:
-            ple_ordinal = config.ple_layer_ids.index(layer_idx + 1)
-            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_ordinal)
-        self.attn_hyper_connection = Qwen4ExpGatedResidualSimple(config)
-        self.mlp_hyper_connection = Qwen4ExpGatedResidualSimple(config)
+            ple_layer_index = config.ple_layer_ids.index(layer_idx + 1)
+            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index)
+        self.attn_hyper_connection = Qwen4ExpGatedResidual(config)
+        self.mlp_hyper_connection = Qwen4ExpGatedResidual(config)
 
     def forward(
         self,
@@ -1447,7 +1403,7 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 ple_padding_mask=ple_padding_mask,
             )
 
-        hidden_states, residual_context = self.attn_hyper_connection(hidden_states)
+        hidden_states, residual = self.attn_hyper_connection(hidden_states)
         if self.block_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
@@ -1455,7 +1411,7 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        else:
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1463,11 +1419,11 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-        hidden_states = self.attn_hyper_connection.combine(hidden_states, residual_context)
+        hidden_states = self.attn_hyper_connection.combine(hidden_states, residual)
 
-        hidden_states, residual_context = self.mlp_hyper_connection(hidden_states)
+        hidden_states, residual = self.mlp_hyper_connection(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        return self.mlp_hyper_connection.combine(hidden_states, residual_context)
+        return self.mlp_hyper_connection.combine(hidden_states, residual)
 
 
 class Qwen4ExpPreTrainedModel(PreTrainedModel):
@@ -1858,7 +1814,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
             [Qwen4ExpDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = Qwen4ExpTextRotaryEmbedding(config=config)
-        self.hyper_connection_mixer = Qwen4ExpGatedResidualHead(config)
+        self.hyper_connection_mixer = Qwen4ExpGatedResidual(config, use_combine=False)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -1965,11 +1921,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
                 layer_hidden_states = self.hyper_connection_mixer(hidden_states)
                 all_hidden_states += (layer_hidden_states,)
 
-        hidden_states = (
-            all_hidden_states[-1]
-            if output_hidden_states and len(all_hidden_states) > 1
-            else self.hyper_connection_mixer(hidden_states)
-        )
+        hidden_states = self.hyper_connection_mixer(hidden_states)
         return Qwen4ExpModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
