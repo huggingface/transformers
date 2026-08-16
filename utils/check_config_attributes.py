@@ -59,6 +59,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by ConcatenateShards during checkpoint conversion
     "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],

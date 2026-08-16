@@ -1679,8 +1679,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("post_mlp_layernorm", "mlp.post_mlp_layernorm"),
     ]
 
-    mapping["qwen4_exp_text"] = [
-        PrefixChange(prefix_to_remove="language_model", model_prefix="model"),
+    mapping["qwen4_exp_text"] = mapping["qwen3_5_moe_text"].copy()
+    mapping["qwen4_exp_text"] += [
         WeightConverter(
             source_patterns=r"ngram_embedding\.shard_\d+\.weight",
             target_patterns="ngram_embedding.weight",
