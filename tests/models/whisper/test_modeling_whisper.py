@@ -3015,11 +3015,19 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "num_beams": 1,
         }
 
+        set_seed(42)
+        eager_generated_ids = model.generate(**inputs, **gen_kwargs)
+
         # Using static cache compiles forward for each decoding step, so we don't have to manually compile
         model.generation_config.cache_implementation = "static"
 
         set_seed(42)
         static_generated_ids = model.generate(**inputs, **gen_kwargs)
+
+        # torch.compile (used by static cache) can introduce tiny fp differences vs eager mode that
+        # flip argmax at some positions, causing sequences to diverge after ~85-138 generated tokens.
+        # The first 40 generated tokens are identical; compare only those to verify basic correctness.
+        self.assertTrue((eager_generated_ids[:, :41] == static_generated_ids[:, :41]).all())
 
         # check the compiled graph can be re-used and that the cache is correctly reset
         # reverse the ordering of the input features
