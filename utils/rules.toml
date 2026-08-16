@@ -617,7 +617,7 @@ diff = '''
 [rules.TRF034]
 description = "Layer classes held in an nn.ModuleList must subclass GradientCheckpointingLayer."
 default_enabled = true
-allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
+allowlist_models = ["cohere_compass", "cosmos3_edge", "dinov3_convnext", "granite_swa", "granitemoe_swa", "hunyuan_vl", "kimi_k25", "muse_glimmer", "muse_glimmer_assistant", "openai", "radio", "step3p7", "tipsv2", "tipsv2_dpt", "x_clip", "xcodec2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF034.explanation]
@@ -633,7 +633,7 @@ diff = '''
 [rules.TRF035]
 description = "Model files must not silence the linter with `# noqa`."
 default_enabled = true
-allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "zaya"]
+allowlist_models = ["hunyuan_vl", "nemotron3_5_asr", "step3p7", "zaya"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF035.explanation]

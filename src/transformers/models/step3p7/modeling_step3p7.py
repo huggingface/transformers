@@ -335,6 +335,7 @@ class Step3p7VisionEmbeddings(nn.Module):
         return embeddings
 
 
+@auto_docstring
 class Step3p7PreTrainedModel(PreTrainedModel):
     config: Step3p7Config
     base_model_prefix = "model"
@@ -380,6 +381,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
 
 
+@auto_docstring
 class Step3p7VisionModel(Step3p7PreTrainedModel):
     """Vision encoder: patch embeddings → 2-D RoPE transformer layers → conv downsampler.
 
@@ -527,16 +529,21 @@ class Step3p7RMSNorm(nn.Module):
 
 
 class Step3p7MLP(nn.Module):
-    def __init__(self, config, intermediate_size=None, swiglu_limit=None):
+    def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        # CODEPATH: stepfun-ai/Step-3.7-Flash ships a full `swiglu_limits_shared` list, so this reads
+        # the per-layer bound (16 on layers 43-44, `0.0` -- i.e. no clamp -- everywhere else). A config
+        # that omits the list leaves every layer unclamped. `0.0` entries are falsy and mean "no clamp",
+        # hence the `or float("inf")` fallback rather than an `is None` test.
+        # Kept as one statement: the modular converter reorders plain locals relative to `self.*` writes.
+        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
 
     def forward(self, x) -> torch.Tensor:
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
@@ -607,13 +614,14 @@ class Step3p7TopKRouter(nn.Module):
 class Step3p7SparseMoeBlock(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
+        # CODEPATH: stepfun-ai/Step-3.7-Flash ships a full `swiglu_limits` list, clamping the routed
+        # experts on layers 43-44 (bound 7) and leaving the rest at `0.0`, i.e. unclamped. A config that
+        # omits the list leaves every layer unclamped; `or None` maps those `0.0` entries onto the same
+        # "no clamp" path.
         swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
-        self.shared_experts = Step3p7MLP(
-            config, intermediate_size=config.share_expert_dim, swiglu_limit=swiglu_limit_shared
-        )
+        self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)
         self.routed_scaling_factor = config.moe_router_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -762,11 +770,14 @@ class Step3p7DecoderLayer(GradientCheckpointingLayer):
         self.self_attn.config = config
         self.attention_type = config.layer_types[layer_idx]
 
-        swiglu_limit_shared = (config.swiglu_limits_shared[layer_idx] or None) if config.swiglu_limits_shared else None
         self.mlp = (
+            # CODEPATH: both branches run on stepfun-ai/Step-3.7-Flash -- its `moe_layers_enum` marks
+            # layers 3-44 as `"sparse"`, leaving layers 0-2 `"dense"`. A config whose `mlp_layer_types`
+            # is all `"sparse"` (the fallback when neither `mlp_layer_types` nor `moe_layers_enum` is
+            # set) never builds the dense branch.
             Step3p7SparseMoeBlock(config, layer_idx)
             if config.mlp_layer_types[layer_idx] == "sparse"
-            else Step3p7MLP(config, swiglu_limit=swiglu_limit_shared)
+            else Step3p7MLP(config, layer_idx)
         )
 
         self.input_layernorm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -835,6 +846,9 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
         self.norm = Step3p7RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Step3p7RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        # CODEPATH: stepfun-ai/Step-3.7-Flash sets `num_nextn_predict_layers=3`, so its weights carry
+        # three trailing MTP layers that this branch filters out of the plain (non-MTP) load. A
+        # checkpoint without MTP layers leaves the field at 0 and skips it.
         if config.num_nextn_predict_layers:
             # Checkpoints append `num_nextn_predict_layers` MTP layers; ignore them as unexpected keys
             # on regular load. Matches loosely on `layers.<N>.` (not anchored to this model's module
