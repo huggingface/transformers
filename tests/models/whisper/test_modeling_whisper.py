@@ -3049,9 +3049,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # batch order and then un-reversing should reproduce the first run exactly.
         # Note: torch.compile may introduce small float differences vs eager mode, so we compare
         # two static runs against each other rather than against eager.
-        min_len = min(static_generated_ids.shape[1], static_generated_ids_reordered.shape[1])
         self.assertTrue(
-            (static_generated_ids[permutation_idx, :min_len] == static_generated_ids_reordered[:, :min_len]).all()
+            (static_generated_ids[permutation_idx, :] == static_generated_ids_reordered).all()
         )
 
 
