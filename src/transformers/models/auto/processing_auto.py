@@ -78,6 +78,7 @@ else:
             ("unispeech", "Wav2Vec2Processor"),
             ("unispeech-sat", "Wav2Vec2Processor"),
             ("vipllava", "LlavaProcessor"),
+            ("voxtral_tts", "VoxtralTtsProcessor"),
             ("wav2vec2-conformer", "Wav2Vec2Processor"),
             ("wavlm", "Wav2Vec2Processor"),
         ]
