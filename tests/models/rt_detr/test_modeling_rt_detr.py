@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -757,3 +758,41 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(results["scores"][:4], expected_scores, rtol=2e-4, atol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-4, atol=2e-4)
+
+
+@require_torch
+@require_scipy
+@require_vision
+class RTDetrHungarianMatcherTest(unittest.TestCase):
+    def test_infinite_costs_do_not_crash_matcher(self):
+        """
+        Regression test for #47000. Under AMP, fp16 sigmoid saturation makes the focal class cost
+        overflow to +/-inf (the 1e-8 epsilon underflows to 0 in fp16, so ``log(0)`` is hit), and
+        ``scipy.optimize.linear_sum_assignment`` raised ``ValueError: cost matrix is infeasible``.
+        """
+        from transformers.loss.loss_rt_detr import RTDetrHungarianMatcher
+
+        config = RTDetrConfig(num_labels=4)
+        matcher = RTDetrHungarianMatcher(config)
+
+        num_queries, num_targets = 4, 3
+        pred_boxes = torch.rand(1, num_queries, 4) * 0.5 + 0.25
+        targets = [
+            {
+                "class_labels": torch.tensor([0, 1, 2]),
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+
+        for saturating_logit in (-30.0, 30.0, float("nan")):
+            # fp16 logits as produced under AMP: sigmoid saturates to exactly 0.0 (or 1.0),
+            # making ``pos_cost_class`` (or ``neg_cost_class``) infinite
+            logits = torch.full((1, num_queries, config.num_labels), saturating_logit, dtype=torch.float16)
+            outputs = {"logits": logits, "pred_boxes": pred_boxes}
+
+            indices = matcher(outputs, targets)
+
+            self.assertEqual(len(indices), 1)
+            row_indices, col_indices = indices[0]
+            self.assertEqual(len(row_indices), num_targets)
+            self.assertEqual(len(col_indices), num_targets)
