@@ -14,6 +14,7 @@
 import copy
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -28,6 +29,7 @@ from transformers.conversion_mapping import (
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    ConcatenateShards,
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
@@ -242,7 +244,130 @@ class DummyRoot(PreTrainedModel):
         self.post_init()
 
 
+class DummyShardedModel(PreTrainedModel):
+    base_model_prefix = ""
+
+    def __init__(self, config, shape):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(shape))
+        self.post_init()
+
+
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_concatenate_shards_loads_exact_weight(self):
+        config = PreTrainedConfig()
+        config.split_ngram_parts = 3
+        model = DummyShardedModel(config, (5, 1))
+        checkpoint = {
+            "shard_0.weight": torch.zeros(2, 1),
+            "shard_1.weight": torch.ones(2, 1),
+            "shard_2.weight": torch.full((1, 1), 2.0),
+        }
+        converter = WeightConverter(
+            r"shard_\d+\.weight",
+            "weight",
+            operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
+        )
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            checkpoint,
+            LoadStateDictConfig(weight_mapping=[converter]),
+            tp_plan=None,
+        )
+
+        torch.testing.assert_close(model.weight, torch.tensor([[0.0], [0.0], [1.0], [1.0], [2.0]]))
+        self.assertEqual(loading_info.conversion_errors, {})
+
+    def test_concatenate_shards_dtensor_uses_global_offsets_before_sharding(self):
+        full_weight = torch.arange(10, dtype=torch.float32).reshape(5, 2)
+        expected_by_rank = [full_weight[:3], full_weight[3:]]
+
+        for rank in range(2):
+            with self.subTest(rank=rank):
+                config = PreTrainedConfig()
+                config.split_ngram_parts = 3
+                model = DummyShardedModel(config, full_weight.shape)
+                sources = [full_weight[:2], full_weight[2:4], full_weight[4:]]
+                checkpoint = {f"piece-{index}.weight": source for index, source in enumerate(sources)}
+                converter = WeightConverter(
+                    r"piece-\d+\.weight",
+                    "weight",
+                    operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
+                )
+                local_shape = (3, 2) if rank == 0 else (2, 2)
+                shard_op = _make_dtensor_shard_op(
+                    FakeMesh(shape=(2,), rank=rank),
+                    [Shard(0)],
+                    param_shape=(5, 2),
+                    local_shape=local_shape,
+                )
+                captured = {}
+
+                def capture_param(_model, name, value, *_args):
+                    captured[name] = value
+
+                with (
+                    patch("transformers.core_model_loading.is_dtensor", return_value=True),
+                    patch("transformers.core_model_loading.DtensorShardOperation", return_value=shard_op),
+                    patch("transformers.core_model_loading.set_param_for_module", side_effect=capture_param),
+                ):
+                    loading_info, _ = convert_and_load_state_dict_in_model(
+                        model,
+                        checkpoint,
+                        LoadStateDictConfig(weight_mapping=[converter]),
+                        tp_plan=None,
+                    )
+
+                torch.testing.assert_close(captured["weight"], expected_by_rank[rank])
+                self.assertEqual(loading_info.conversion_errors, {})
+
+    def test_concatenate_shards_places_and_casts_before_quantization(self):
+        observed_inputs = []
+
+        class RecordingQuantization:
+            def convert(self, input_dict, **kwargs):
+                value = next(iter(input_dict.values()))
+                observed_inputs.append((value.device.type, value.dtype, value.shape))
+                return input_dict
+
+        class RecordingQuantizer:
+            pre_quantized = False
+
+            def param_needs_quantization(self, model, param_name):
+                return param_name == "weight"
+
+            def get_quantize_ops(self):
+                return RecordingQuantization()
+
+        config = PreTrainedConfig()
+        config.split_ngram_parts = 3
+        model = DummyShardedModel(config, (3, 1))
+        checkpoint = {
+            "piece-0.weight": torch.zeros(1, 1, dtype=torch.float64),
+            "piece-1.weight": torch.ones(1, 1, dtype=torch.float64),
+            "piece-2.weight": torch.full((1, 1), 2.0, dtype=torch.float64),
+        }
+        converter = WeightConverter(
+            r"piece-\d+\.weight",
+            "weight",
+            operations=[ConcatenateShards(dim=0, num_shards_attribute="split_ngram_parts")],
+        )
+
+        with patch("transformers.core_model_loading.set_param_for_module"):
+            loading_info, _ = convert_and_load_state_dict_in_model(
+                model,
+                checkpoint,
+                LoadStateDictConfig(
+                    weight_mapping=[converter],
+                    device_map={"": "meta"},
+                    hf_quantizer=RecordingQuantizer(),
+                ),
+                tp_plan=None,
+            )
+
+        self.assertListEqual(observed_inputs, [("meta", torch.float32, torch.Size((3, 1)))])
+        self.assertEqual(loading_info.conversion_errors, {})
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 

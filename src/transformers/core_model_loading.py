@@ -1191,13 +1191,14 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = ("operations",)
+    __slots__ = ("operations", "_deferred_load_placement")
 
     def __init__(
         self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
     ):
         super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
+        self._deferred_load_placement: tuple[Any, torch.device | str | int, torch.dtype | None] | None = None
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
@@ -1246,6 +1247,26 @@ class WeightConverter(WeightTransform):
         # some quantizers need to already rename in `convert` as they cannot only rely on prefix and suffix
         except StopIteration:
             pass
+
+        # Some conversions (notably ConcatenateShards) operate on pieces of one global parameter. Apply distributed
+        # placement only after those pieces have been converted, otherwise each checkpoint shard is independently
+        # treated as a full tensor and ranks silently receive the wrong global offsets. Placement must also precede
+        # quantization because device-specific quantizers pack on the destination device.
+        if self._deferred_load_placement is not None:
+            sharding_op, device, dtype = self._deferred_load_placement
+            with log_conversion_errors(
+                layer_name, loading_info, (len(collected_tensors), layer_name), self.operations
+            ):
+                if sharding_op is not None:
+                    collected_tensors = {
+                        key: sharding_op.shard_tensor(value, device=device, dtype=dtype)
+                        for key, value in collected_tensors.items()
+                    }
+                else:
+                    collected_tensors = {
+                        key: _materialize_copy(value, device=device, dtype=dtype)
+                        for key, value in collected_tensors.items()
+                    }
 
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_conversion_errors(
@@ -1740,15 +1761,13 @@ def convert_and_load_state_dict_in_model(
                     sharding_op = mapping.distributed_operation
                     materialize_device = device_map[""]
 
-            # Concatenating many checkpoint shards directly on the destination GPU temporarily requires memory for
-            # both every input shard and the merged parameter. Stage unsharded inputs on CPU and transfer only the
-            # completed tensor to its destination below.
-            if (
-                sharding_op is None
-                and isinstance(mapping, WeightConverter)
-                and any(isinstance(operation, ConcatenateShards) for operation in mapping.operations)
+            if isinstance(mapping, WeightConverter) and any(
+                isinstance(operation, ConcatenateShards) for operation in mapping.operations
             ):
-                materialize_device = "cpu"
+                # ConcatenateShards represents pieces of one global parameter. Materialize its sources unsharded on
+                # CPU, then place/shard the converted global tensor exactly once.
+                mapping._deferred_load_placement = (sharding_op, materialize_device, _dtype)
+                materialize_device, sharding_op = "cpu", None
 
             future_or_tensor = spawn_materialize(
                 thread_pool,
@@ -1786,10 +1805,6 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
-                        if isinstance(mapping, WeightConverter) and any(
-                            isinstance(operation, ConcatenateShards) for operation in mapping.operations
-                        ):
-                            param = param.to(param_device)
                         set_param_for_module(
                             model,
                             target_name,
