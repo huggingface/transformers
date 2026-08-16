@@ -22,19 +22,16 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
@@ -46,7 +43,10 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionRotaryEmbedding,
     apply_rotary_pos_emb,
-    eager_attention_forward,
+    causal_conv1d_fn,
+    causal_conv1d_update,
+    torch_chunk_gated_delta_rule,
+    torch_recurrent_gated_delta_rule,
 )
 from ..qwen3_5_moe.configuration_qwen3_5_moe import (
     Qwen3_5MoeConfig,
@@ -64,9 +64,9 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
 )
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextExperts,
+    Qwen3NextRMSNormGated,
     Qwen3NextSparseMoeBlock,
     Qwen3NextTopKRouter,
-    load_balancing_loss_func,
 )
 
 
@@ -109,14 +109,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         Divisor used to pad the combined n-gram embedding vocabulary.
     seed (`int`, *optional*, defaults to 1234):
         Seed used to deterministically derive the per-layer n-gram hash multipliers.
-    moe_intermediate_size (`int`, *optional*, defaults to 512):
-        Intermediate size of each routed expert.
-    shared_expert_intermediate_size (`int`, *optional*, defaults to 512):
-        Intermediate size of the shared expert.
-    num_experts_per_tok (`int`, *optional*, defaults to 10):
-        Number of routed experts selected for every token.
-    num_experts (`int`, *optional*, defaults to 512):
-        Number of routed experts.
     indexer_n_heads (`int`, *optional*):
         Number of query heads used by the QSA token indexer. Setting this enables QSA on full-attention layers.
     indexer_kv_heads (`int`, *optional*):
@@ -128,15 +120,40 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     indexer_compress_ratio (`int`, *optional*):
         Number of consecutive token keys averaged into one QSA index block.
     split_ngram_parts (`int`, *optional*, defaults to 512):
-        Number of checkpoint shards used for each PLE n-gram embedding table. The shards are concatenated into a
-        single embedding weight when loading.
-    norm_topk_prob (`bool`, *optional*, defaults to `True`):
-        Whether to normalize the selected experts' routing probabilities.
+        Number of checkpoint shards used for each PLE n-gram embedding table. Loading concatenates the shards into a
+        single runtime embedding, while `save_pretrained` restores the configured sharded layout.
     """
 
     model_type = "qwen4_exp_text"
-    base_config_key = "text_config"
-    base_model_tp_plan = None
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
+        "layers.*.self_attn.indexer.index_qk_proj": "colwise_gather_output",
+        "layers.*.attn_hyper_connection.input_mix_weight_down": "rowwise_split_input",
+        "layers.*.mlp_hyper_connection.input_mix_weight_down": "rowwise_split_input",
+        "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_rowwise",
+    }
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "hyper_connection_mixer": "keep_full_weight",
+    }
     base_model_pp_plan = None
 
     hc_count: int = 4
@@ -155,30 +172,50 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     indexer_head_dim: int | None = None
     indexer_budget: int | None = None
     indexer_compress_ratio: int | None = None
-    moe_intermediate_size: int = 512
-    shared_expert_intermediate_size: int = 512
     num_experts_per_tok: int = 10
     num_experts: int = 512
     norm_topk_prob: bool = True
     output_gate_type: str | None = None
-    output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.001
 
     def __post_init__(self, **kwargs):
+        self.ple_layer_ids = [] if self.ple_layer_ids is None else sorted(set(self.ple_layer_ids))
+        self.ple_embed_dim = self.hidden_size if self.ple_embed_dim is None else self.ple_embed_dim
+
+        # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
+        # Without PLE, only the GatedDeltaNet state is needed.
+        self.number_of_conv_states = 3 if self.ple_layer_ids else 1
+        super().__post_init__(**kwargs)
+
+        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
+        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
+        block_types = self.layers_block_type
+        self.layer_types = [
+            (
+                "hybrid_indexed"
+                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
+                else "deepseek_sparse_attention"
+                if self.indexer_n_heads is not None
+                else "hybrid"
+                if layer_idx + 1 in self.ple_layer_ids
+                else "full_attention"
+            )
+            if block_type == "full_attention"
+            else block_type
+            for layer_idx, block_type in enumerate(block_types)
+        ]
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
+        unsupported_layer_types = sorted(set(self.layers_block_type) - {"full_attention", "linear_attention"})
+        if unsupported_layer_types:
+            raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
+        output_gate_type = self.output_gate_type or self.hidden_act
+        if output_gate_type not in {"sigmoid", "silu"}:
+            raise ValueError(f"Unsupported Qwen4-Exp output gate activation: {output_gate_type}.")
         if self.hc_count <= 1:
             raise ValueError(f"Qwen4-Exp requires hc_count > 1, got {self.hc_count}.")
-        if self.ngram_size < 2:
-            raise ValueError(f"ngram_size must be >= 2, got {self.ngram_size}.")
-        if self.heads_per_ngram <= 0:
-            raise ValueError(f"heads_per_ngram must be > 0, got {self.heads_per_ngram}.")
-        if self.ple_conv_kernel_size <= 0:
-            raise ValueError(f"ple_conv_kernel_size must be > 0, got {self.ple_conv_kernel_size}.")
-        if self.ngram_vocab_size_base <= 0:
-            raise ValueError("ngram_vocab_size_base must be > 0.")
-        if self.make_ngram_vocab_size_divisible_by <= 0:
-            raise ValueError("make_ngram_vocab_size_divisible_by must be > 0.")
-        if self.split_ngram_parts <= 0:
-            raise ValueError("split_ngram_parts must be > 0.")
+        if self.hc_lowrank <= 0:
+            raise ValueError(f"hc_lowrank must be > 0, got {self.hc_lowrank}.")
         if self.num_experts <= 0:
             raise ValueError(f"num_experts must be > 0, got {self.num_experts}.")
         if not 0 < self.num_experts_per_tok <= self.num_experts:
@@ -207,27 +244,24 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
             if self.indexer_budget % self.indexer_compress_ratio != 0:
                 raise ValueError("indexer_budget must be divisible by indexer_compress_ratio.")
 
-        self.ple_layer_ids = [] if self.ple_layer_ids is None else sorted(set(self.ple_layer_ids))
-        self.ple_embed_dim = self.hidden_size if self.ple_embed_dim is None else self.ple_embed_dim
-        ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
-        if self.ple_embed_dim % ngram_heads != 0:
-            raise ValueError(
-                "ple_embed_dim must be divisible by the total number of n-gram heads: "
-                f"{self.ple_embed_dim} % {ngram_heads} != 0."
-            )
-        invalid_ple_layers = [
-            layer_id for layer_id in self.ple_layer_ids if layer_id < 1 or layer_id > self.num_hidden_layers
-        ]
-        if invalid_ple_layers:
-            raise ValueError(
-                f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
-                f"got {invalid_ple_layers}."
-            )
+        if self.ple_layer_ids:
+            ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
+            if ngram_heads <= 0 or self.ple_embed_dim <= 0 or self.ple_embed_dim % ngram_heads != 0:
+                raise ValueError(
+                    "ple_embed_dim and the total number of n-gram heads must be positive, and ple_embed_dim must be "
+                    f"divisible by the number of heads: {self.ple_embed_dim} % {ngram_heads} != 0."
+                )
+            invalid_ple_layers = [
+                layer_id for layer_id in self.ple_layer_ids if layer_id < 1 or layer_id > self.num_hidden_layers
+            ]
+            if invalid_ple_layers:
+                raise ValueError(
+                    f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
+                    f"got {invalid_ple_layers}."
+                )
+            if self.eos_token_id is None or isinstance(self.eos_token_id, (list, tuple)) and not self.eos_token_id:
+                raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
-        # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
-        # Without PLE, only the GatedDeltaNet state is needed.
-        self.number_of_conv_states = 3 if self.ple_layer_ids else 1
-        super().__post_init__(**kwargs)
         if self.indexer_n_heads is not None:
             partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
             rotary_dim = int(self.head_dim * partial_rotary_factor)
@@ -237,24 +271,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
                     f"rotary_dim={rotary_dim}, indexer_head_dim={self.indexer_head_dim}."
                 )
 
-        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
-        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
-        block_types = self.layers_block_type
-        self.layer_types = [
-            (
-                "hybrid_indexed"
-                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
-                else "deepseek_sparse_attention"
-                if self.indexer_n_heads is not None
-                else "hybrid"
-                if layer_idx + 1 in self.ple_layer_ids
-                else "full_attention"
-            )
-            if block_type == "full_attention"
-            else block_type
-            for layer_idx, block_type in enumerate(block_types)
-        ]
-
     @property
     def layers_block_type(self) -> list[str]:
         full_attention_cache_types = {"deepseek_sparse_attention", "full_attention", "hybrid", "hybrid_indexed"}
@@ -263,26 +279,12 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
             for layer_type in self.layer_types
         ]
 
-    @property
-    def short_conv_layer_ids(self) -> list[int]:
-        return [layer_id - 1 for layer_id in self.ple_layer_ids]
-
-    @property
-    def short_conv_state_shape(self) -> tuple[int, int] | None:
-        if not self.ple_layer_ids:
-            return None
-        state_len = (self.ple_conv_kernel_size - 1) * self.ngram_size
-        return self.hidden_size * self.hc_count, state_len
-
-    @property
-    def ngram_context_len(self) -> int:
-        return self.ngram_size - 1 if self.ple_layer_ids else 0
-
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
 @strict
 class Qwen4ExpVisionConfig(Qwen3_5MoeVisionConfig):
     model_type = "qwen4_exp_vision"
+    base_model_fsdp_plan = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
@@ -301,6 +303,7 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
     """
 
     model_type = "qwen4_exp"
+    base_model_fsdp_plan = None
 
 
 class Qwen4ExpVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
@@ -315,37 +318,21 @@ class Qwen4ExpRMSNorm(Qwen3_5RMSNorm):
     pass
 
 
-class Qwen4ExpRMSNormGated(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6, activation: str = "silu"):
-        super().__init__()
-        if activation not in {"sigmoid", "silu"}:
-            raise ValueError(f"Unsupported Qwen4-Exp output gate activation: {activation}.")
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.activation = activation
-
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        gate = torch.sigmoid(gate.float()) if self.activation == "sigmoid" else F.silu(gate.float())
-        return (hidden_states * gate).to(input_dtype)
+class Qwen4ExpRMSNormGated(Qwen3NextRMSNormGated):
+    pass
 
 
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+)
 class Qwen4ExpGatedDeltaNet(Qwen3_5GatedDeltaNet):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.norm = Qwen4ExpRMSNormGated(
-            self.head_v_dim,
-            eps=self.layer_norm_epsilon,
-            activation=config.output_gate_type or config.hidden_act,
-        )
+        self.norm.activation = config.output_gate_type or config.hidden_act
 
 
 class Qwen4ExpQSAIndexer(nn.Module):
-    """Reference QSA indexer matching the Qwen4-Exp SGLang block-selection semantics."""
+    """Select QSA token indices from compressed key blocks."""
 
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
@@ -353,9 +340,9 @@ class Qwen4ExpQSAIndexer(nn.Module):
         self.index_n_heads = config.indexer_n_heads
         self.index_kv_heads = config.indexer_kv_heads
         self.index_head_dim = config.indexer_head_dim
-        self.token_topk = config.indexer_budget
-        self.compress_ratio = config.indexer_compress_ratio
-        self.block_topk = self.token_topk // self.compress_ratio
+        self.token_budget = config.indexer_budget
+        self.block_size = config.indexer_compress_ratio
+        self.num_selected_blocks = self.token_budget // self.block_size
         self.index_qk_proj = nn.Linear(
             config.hidden_size,
             (self.index_n_heads + self.index_kv_heads) * self.index_head_dim,
@@ -387,19 +374,24 @@ class Qwen4ExpQSAIndexer(nn.Module):
         sin: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, _ = hidden_states.shape
-        qk = self.index_qk_proj(hidden_states)
-        q_raw, token_k = torch.split(
-            qk,
+        projected_qk_states = self.index_qk_proj(hidden_states)
+        raw_indexer_query_states, raw_indexer_key_states = torch.split(
+            projected_qk_states,
             [
                 self.index_n_heads * self.index_head_dim,
                 self.index_kv_heads * self.index_head_dim,
             ],
             dim=-1,
         )
-        q = self.q_layernorm(q_raw.view(batch_size, sequence_length, self.index_n_heads, self.index_head_dim))
-        q = self._apply_rope(q, cos, sin, unsqueeze_dim=2)
-        token_k = token_k.view(batch_size, sequence_length, self.index_kv_heads, self.index_head_dim)
-        return q, token_k.squeeze(2)
+        indexer_query_states = raw_indexer_query_states.view(
+            batch_size, sequence_length, self.index_n_heads, self.index_head_dim
+        )
+        indexer_query_states = self.q_layernorm(indexer_query_states)
+        indexer_query_states = self._apply_rope(indexer_query_states, cos, sin, unsqueeze_dim=2)
+        raw_indexer_key_states = raw_indexer_key_states.view(
+            batch_size, sequence_length, self.index_kv_heads, self.index_head_dim
+        )
+        return indexer_query_states, raw_indexer_key_states.squeeze(2)
 
     def _compress_keys(
         self,
@@ -420,45 +412,67 @@ class Qwen4ExpQSAIndexer(nn.Module):
             unsqueeze_dim=1,
         ).squeeze(1)
 
-    def _score_blocks(self, q: torch.Tensor, compressed_keys: torch.Tensor) -> torch.Tensor:
-        scores = torch.einsum("...hd,nd->...nh", q.float(), compressed_keys.float())
-        return torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+    def _score_blocks(self, indexer_query_states: torch.Tensor, block_key_states: torch.Tensor) -> torch.Tensor:
+        index_scores = torch.einsum("...hd,nd->...nh", indexer_query_states.float(), block_key_states.float())
+        return torch.relu(index_scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
 
     def _select_visible_row(
         self,
-        q: torch.Tensor,
-        raw_keys: torch.Tensor,
+        indexer_query_states: torch.Tensor,
+        raw_indexer_key_states: torch.Tensor,
         key_cos: torch.Tensor,
         key_sin: torch.Tensor,
-        visible_indices: torch.Tensor,
+        visible_token_indices: torch.Tensor,
     ) -> torch.Tensor:
-        output = torch.full(
-            (self.token_topk + self.compress_ratio - 1,),
+        selected_token_indices = torch.full(
+            (self.token_budget + self.block_size - 1,),
             -1,
-            device=q.device,
+            device=indexer_query_states.device,
             dtype=torch.int32,
         )
-        num_blocks = visible_indices.numel() // self.compress_ratio
-        selected_tokens = visible_indices.new_empty((0,))
-        if num_blocks:
-            block_token_indices = visible_indices[: num_blocks * self.compress_ratio].view(
-                num_blocks,
-                self.compress_ratio,
+        num_complete_blocks = visible_token_indices.numel() // self.block_size
+        selected_tokens = visible_token_indices.new_empty((0,))
+        if num_complete_blocks:
+            block_token_indices = visible_token_indices[: num_complete_blocks * self.block_size].view(
+                num_complete_blocks,
+                self.block_size,
             )
-            compressed_keys = self._compress_keys(
-                raw_keys,
+            block_key_states = self._compress_keys(
+                raw_indexer_key_states,
                 key_cos,
                 key_sin,
                 block_token_indices,
             )
-            scores = self._score_blocks(q, compressed_keys)
-            selected_blocks = scores.topk(min(self.block_topk, num_blocks), dim=0).indices
-            selected_tokens = block_token_indices.index_select(0, selected_blocks).flatten()
-            selected_tokens = selected_tokens[: self.token_topk]
-        tail = visible_indices[num_blocks * self.compress_ratio :]
-        selected_tokens = torch.cat([selected_tokens, tail])
-        output[: selected_tokens.numel()] = selected_tokens.to(torch.int32)
-        return output
+            index_scores = self._score_blocks(indexer_query_states, block_key_states)
+            selected_block_indices = index_scores.topk(
+                min(self.num_selected_blocks, num_complete_blocks), dim=0
+            ).indices
+            selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
+            selected_tokens = selected_tokens[: self.token_budget]
+        trailing_token_indices = visible_token_indices[num_complete_blocks * self.block_size :]
+        selected_tokens = torch.cat([selected_tokens, trailing_token_indices])
+        selected_token_indices[: selected_tokens.numel()] = selected_tokens.to(torch.int32)
+        return selected_token_indices
+
+    @staticmethod
+    def build_sparse_attention_mask(
+        selected_token_indices: torch.Tensor,
+        target_length: int,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        additive_attention_mask = torch.full(
+            (*selected_token_indices.shape[:-1], target_length + 1),
+            torch.finfo(dtype).min,
+            device=selected_token_indices.device,
+            dtype=dtype,
+        )
+        scatter_indices = torch.where(
+            selected_token_indices >= 0,
+            selected_token_indices.long(),
+            target_length,
+        )
+        additive_attention_mask.scatter_(-1, scatter_indices, 0)
+        return additive_attention_mask[..., :target_length].unsqueeze(1)
 
     def _visible_indices(
         self,
@@ -492,57 +506,58 @@ class Qwen4ExpQSAIndexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
+        key_length: int,
     ) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
         cos, sin = position_embeddings
 
-        q, token_k = self.project_qk(hidden_states, cos, sin)
+        indexer_query_states, raw_indexer_key_states = self.project_qk(hidden_states, cos, sin)
 
         rotary_dim = cos.shape[-1]
         indexer_states = torch.cat(
-            [token_k, cos.to(token_k.dtype), sin.to(token_k.dtype)],
+            [
+                raw_indexer_key_states,
+                cos.to(raw_indexer_key_states.dtype),
+                sin.to(raw_indexer_key_states.dtype),
+            ],
             dim=-1,
         )
         if past_key_values is not None:
             indexer_states = past_key_values.update_indexer(indexer_states, self.layer_idx)
-            cache_length = past_key_values.get_seq_length(self.layer_idx)
-            actual_key_length = int(cache_length.item()) if isinstance(cache_length, torch.Tensor) else cache_length
-        else:
-            actual_key_length = sequence_length
-        indexer_states = indexer_states[:, :actual_key_length]
+        indexer_states = indexer_states[:, :key_length]
 
-        raw_keys, key_cos, key_sin = torch.split(
+        raw_indexer_key_states, key_cos, key_sin = torch.split(
             indexer_states,
             [self.index_head_dim, rotary_dim, rotary_dim],
             dim=-1,
         )
 
-        output = torch.full(
-            (batch_size, sequence_length, self.token_topk + self.compress_ratio - 1),
+        selected_token_indices = torch.full(
+            (batch_size, sequence_length, self.token_budget + self.block_size - 1),
             -1,
             dtype=torch.int32,
             device=hidden_states.device,
         )
-        query_start = actual_key_length - sequence_length
+        query_start_position = key_length - sequence_length
         for batch_idx in range(batch_size):
             for query_idx in range(sequence_length):
-                query_position = query_start + query_idx
-                visible_indices = self._visible_indices(
+                query_position = query_start_position + query_idx
+                visible_token_indices = self._visible_indices(
                     attention_mask,
                     batch_idx,
                     query_idx,
                     query_position,
-                    actual_key_length,
+                    key_length,
                     hidden_states.device,
                 )
-                output[batch_idx, query_idx] = self._select_visible_row(
-                    q[batch_idx, query_idx],
-                    raw_keys[batch_idx],
+                selected_token_indices[batch_idx, query_idx] = self._select_visible_row(
+                    indexer_query_states[batch_idx, query_idx],
+                    raw_indexer_key_states[batch_idx],
                     key_cos[batch_idx],
                     key_sin[batch_idx],
-                    visible_indices,
+                    visible_token_indices,
                 )
-        return output
+        return selected_token_indices
 
 
 class Qwen4ExpAttention(Qwen3_5Attention):
@@ -556,75 +571,35 @@ class Qwen4ExpAttention(Qwen3_5Attention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        query_states, gate = torch.chunk(
-            self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2),
-            2,
-            dim=-1,
-        )
-        gate = gate.reshape(*input_shape, -1)
-        query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
         if self.indexer is not None:
-            topk_indices = self.indexer(
+            query_length = hidden_states.shape[1]
+            past_length = 0
+            target_length = query_length
+            if past_key_values is not None:
+                past_length = past_key_values.get_seq_length(self.layer_idx)
+                past_length = int(past_length.item()) if isinstance(past_length, torch.Tensor) else past_length
+                target_length, _ = past_key_values.get_mask_sizes(query_length, self.layer_idx)
+            selected_token_indices = self.indexer(
                 hidden_states,
                 position_embeddings,
                 attention_mask,
                 past_key_values,
+                key_length=past_length + query_length,
             )
-            selected = torch.zeros(
-                (*topk_indices.shape[:-1], key_states.shape[-2]),
-                device=topk_indices.device,
-                dtype=torch.int32,
+            attention_mask = self.indexer.build_sparse_attention_mask(
+                selected_token_indices,
+                target_length=target_length,
+                dtype=hidden_states.dtype,
             )
-            selected.scatter_add_(
-                -1,
-                topk_indices.clamp_min(0).long(),
-                (topk_indices >= 0).to(selected.dtype),
-            )
-            attention_mask = torch.zeros_like(selected, dtype=query_states.dtype)
-            attention_mask = attention_mask.masked_fill(
-                selected == 0,
-                torch.finfo(query_states.dtype).min,
-            ).unsqueeze(1)
-
-        attention_implementation = self.config._attn_implementation
-        if self.indexer is not None and attention_implementation not in ("eager", "sdpa"):
-            logger.warning_once(
-                "Qwen4-Exp QSA currently uses the eager attention reference path when %s is requested.",
-                attention_implementation,
-            )
-            attention_interface = eager_attention_forward
-        else:
-            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                attention_implementation,
-                eager_attention_forward,
-            )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
+        return super().forward(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = attn_output * torch.sigmoid(gate)
-        return self.o_proj(attn_output), attn_weights
 
 
 class Qwen4ExpExperts(Qwen3NextExperts):
@@ -639,68 +614,69 @@ class Qwen4ExpSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
-class Qwen4ExpPLEGroupedNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6, group_size: int | None = None):
-        super().__init__()
-        if group_size is not None and hidden_size % group_size != 0:
+class Qwen4ExpGroupedRMSNorm(Qwen4ExpRMSNorm):
+    def __init__(self, hidden_size: int, group_size: int, eps: float = 1e-6):
+        super().__init__(hidden_size, eps=eps)
+        if hidden_size % group_size != 0:
             raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
-        self.variance_epsilon = eps
         self.group_size = group_size
-        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        if self.group_size is None:
-            variance = hidden_states.pow(2).mean(dim=-1, keepdim=True)
-            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        else:
-            grouped_shape = (*hidden_states.shape[:-1], -1, self.group_size)
-            hidden_states = hidden_states.reshape(grouped_shape)
-            variance = hidden_states.pow(2).mean(dim=-1, keepdim=True)
-            hidden_states = (hidden_states * torch.rsqrt(variance + self.variance_epsilon)).flatten(-2)
-        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
+    def _norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        grouped_shape = (*hidden_states.shape[:-1], -1, self.group_size)
+        return super()._norm(hidden_states.reshape(grouped_shape)).flatten(-2)
 
 
-class Qwen4ExpGatedResidualSimple(nn.Module):
-    def __init__(self, config: Qwen4ExpTextConfig, use_combine: bool = True):
+class Qwen4ExpGatedResidualHead(nn.Module):
+    def __init__(self, config: Qwen4ExpTextConfig):
         super().__init__()
         self.hc_count = config.hc_count
         self.hidden_size = config.hidden_size
         hc_hidden_size = self.hc_count * self.hidden_size
-        self.hc_norm = Qwen4ExpPLEGroupedNorm(
+        self.hc_norm = Qwen4ExpGroupedRMSNorm(
             hc_hidden_size,
             eps=config.rms_norm_eps,
             group_size=self.hidden_size,
         )
         self.input_mix_weight_down = nn.Linear(hc_hidden_size, config.hc_lowrank, bias=False)
         self.input_mix_weight_up = nn.Linear(config.hc_lowrank, hc_hidden_size, bias=False)
-        if use_combine:
-            self.block_inject_weight = nn.Linear(hc_hidden_size, self.hc_count, bias=False)
 
-    def mix(self, hyper_input: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        if hyper_input.shape[-1] != self.hc_count * self.hidden_size:
+    def _collapse(self, flat_hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if flat_hidden_streams.shape[-1] != self.hc_count * self.hidden_size:
             raise ValueError(
-                f"Expected {self.hc_count * self.hidden_size} hyper-connection features, got {hyper_input.shape[-1]}."
+                f"Expected {self.hc_count * self.hidden_size} hyper-connection features, got {flat_hidden_streams.shape[-1]}."
             )
-        hyper_input_normed = self.hc_norm(hyper_input)
-        input_mix_weight = F.silu(self.input_mix_weight_down(hyper_input_normed) / self.hc_count)
-        input_mix_weight = torch.sigmoid(self.input_mix_weight_up(input_mix_weight))
-        input_mix_weight = input_mix_weight.unflatten(-1, (self.hc_count, self.hidden_size))
-        mixed_input = (input_mix_weight * hyper_input_normed.unflatten(-1, (self.hc_count, self.hidden_size))).mean(
-            dim=-2
-        )
-        return mixed_input, (hyper_input, hyper_input_normed)
+        normalized_flat_streams = self.hc_norm(flat_hidden_streams)
+        collapse_weights = F.silu(self.input_mix_weight_down(normalized_flat_streams) / self.hc_count)
+        collapse_weights = torch.sigmoid(self.input_mix_weight_up(collapse_weights))
+        collapse_weights = collapse_weights.unflatten(-1, (self.hc_count, self.hidden_size))
+        collapsed_states = (
+            collapse_weights * normalized_flat_streams.unflatten(-1, (self.hc_count, self.hidden_size))
+        ).mean(dim=-2)
+        return collapsed_states, normalized_flat_streams
 
+    def forward(self, flat_hidden_streams: torch.Tensor) -> torch.Tensor:
+        collapsed_states, _ = self._collapse(flat_hidden_streams)
+        return collapsed_states
+
+
+class Qwen4ExpGatedResidualSimple(Qwen4ExpGatedResidualHead):
+    def __init__(self, config: Qwen4ExpTextConfig):
+        super().__init__(config)
+        self.block_inject_weight = nn.Linear(self.hc_count * self.hidden_size, self.hc_count, bias=False)
+
+    def forward(self, flat_hidden_streams: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        collapsed_states, normalized_flat_streams = self._collapse(flat_hidden_streams)
+        injection_weights = 2 * torch.sigmoid(self.block_inject_weight(normalized_flat_streams) / self.hc_count)
+        return collapsed_states, (flat_hidden_streams, injection_weights)
+
+    @staticmethod
     def combine(
-        self,
-        block_output: torch.Tensor,
-        residuals: tuple[torch.Tensor, torch.Tensor],
+        branch_output: torch.Tensor,
+        residual_context: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
-        hyper_input, hyper_input_normed = residuals
-        block_inject_weight = 2 * torch.sigmoid(self.block_inject_weight(hyper_input_normed) / self.hc_count)
-        injection = block_output.unsqueeze(-2) * block_inject_weight.unsqueeze(-1)
-        return (hyper_input.unflatten(-1, (self.hc_count, self.hidden_size)) + injection).flatten(-2)
+        flat_hidden_streams, injection_weights = residual_context
+        injection = branch_output.unsqueeze(-2) * injection_weights.unsqueeze(-1)
+        return flat_hidden_streams + injection.flatten(-2)
 
 
 class Qwen4ExpNGramEmbedding(nn.Module):
@@ -709,31 +685,29 @@ class Qwen4ExpNGramEmbedding(nn.Module):
     _SPLITMIX_M1 = 0xBF58476D1CE4E5B9
     _SPLITMIX_M2 = 0x94D049BB133111EB
     _PRIME_1 = 10007
-    _CONTEXT_STATE_IDX = 2
+    _PLE_TOKEN_CONTEXT_STATE_IDX = 2
 
-    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_layer_index: int = 0):
+    def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, ple_ordinal: int = 0):
         super().__init__()
-        self.ngram_embed_dim = embedding_dim
         self.ngram_size = config.ngram_size
         self.heads_per_ngram = config.heads_per_ngram
         self.ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
-        self.split_ngram_parts = config.split_ngram_parts
-        self.ple_layer_index = ple_layer_index
+        self.ple_ordinal = ple_ordinal
         self.unigram_vocab_size = config.vocab_size
         self.ngram_vocab_size_base = config.ngram_vocab_size_base
-        self.make_ngram_vocab_size_divisible_by = config.make_ngram_vocab_size_divisible_by
-        self.head_dim_per_ngram = self.ngram_embed_dim // self.ngram_heads
-        eos_token_id = config.eos_token_id[0] if isinstance(config.eos_token_id, list) else config.eos_token_id
-        if eos_token_id is None:
-            raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
-        self.eos_token_id = eos_token_id
+        head_dim_per_ngram = embedding_dim // self.ngram_heads
+        eos_token_ids = config.eos_token_id if isinstance(config.eos_token_id, list) else [config.eos_token_id]
+        self.eos_token_ids = tuple(eos_token_ids)
+        self.eos_token_id = eos_token_ids[0]
 
+        head_vocab_sizes, head_offsets, total_vocab_size = self._build_head_vocab_and_offsets()
+        ngram_vocab_divisor = config.make_ngram_vocab_size_divisible_by
+        padded_vocab_size = math.ceil(total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.register_buffer(
             "layer_multipliers",
             self._build_layer_multipliers(config.seed),
             persistent=True,
         )
-        head_vocab_sizes, head_offsets, total_vocab_size = self._build_head_vocab_and_offsets()
         self.register_buffer(
             "ngram_heads_vocab_sizes",
             torch.tensor(head_vocab_sizes, dtype=torch.long),
@@ -744,9 +718,19 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             torch.tensor(head_offsets, dtype=torch.long),
             persistent=True,
         )
-        padded_vocab_size = math.ceil(total_vocab_size / self.make_ngram_vocab_size_divisible_by)
-        padded_vocab_size *= self.make_ngram_vocab_size_divisible_by
-        self.ngram_embedding = nn.Embedding(padded_vocab_size, self.head_dim_per_ngram)
+        self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
+
+    def _reset_derived_buffers(self, seed: int) -> None:
+        head_vocab_sizes, head_offsets, _ = self._build_head_vocab_and_offsets()
+        init.copy_(self.layer_multipliers, self._build_layer_multipliers(seed).to(self.layer_multipliers.device))
+        init.copy_(
+            self.ngram_heads_vocab_sizes,
+            torch.tensor(head_vocab_sizes, dtype=torch.long, device=self.ngram_heads_vocab_sizes.device),
+        )
+        init.copy_(
+            self.ngram_heads_offsets,
+            torch.tensor(head_offsets, dtype=torch.long, device=self.ngram_heads_offsets.device),
+        )
 
     @classmethod
     def _splitmix64(cls, value: int) -> int:
@@ -759,7 +743,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         max_long = (1 << 63) - 1
         multiplier_max = max_long // max(self.unigram_vocab_size, 1)
         half_bound = max(1, multiplier_max // 2)
-        base_seed = seed + self._PRIME_1 * self.ple_layer_index
+        base_seed = seed + self._PRIME_1 * self.ple_ordinal
         multipliers = []
         for index in range(self.ngram_size):
             value = (base_seed + self._SPLITMIX_GAMMA * (index + 1)) & self._MASK64
@@ -790,12 +774,15 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         sizes = []
         offsets = []
         total = 0
-        for head_idx in range(self.ngram_heads):
-            global_head_idx = self.ple_layer_index * self.ngram_heads + head_idx
-            size = self._find_nth_prime_after(self.ngram_vocab_size_base - 1, global_head_idx + 1)
-            sizes.append(size)
+        prime = self._find_nth_prime_after(
+            self.ngram_vocab_size_base - 1,
+            self.ple_ordinal * self.ngram_heads,
+        )
+        for _ in range(self.ngram_heads):
+            prime = self._find_nth_prime_after(prime, 1)
+            sizes.append(prime)
             offsets.append(total)
-            total += size
+            total += prime
         return sizes, offsets, total
 
     def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int) -> torch.Tensor:
@@ -803,7 +790,10 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             return token_ids
         batch_size, seq_len = token_ids.shape
         positions = torch.arange(seq_len, device=token_ids.device, dtype=torch.long)
-        eos_positions = torch.where(token_ids == self.eos_token_id, positions, -1)
+        is_eos = token_ids == self.eos_token_ids[0]
+        for eos_token_id in self.eos_token_ids[1:]:
+            is_eos |= token_ids == eos_token_id
+        eos_positions = torch.where(is_eos, positions, -1)
         previous_eos_inclusive = torch.cummax(eos_positions, dim=1).values
         previous_eos = torch.cat([eos_positions.new_full((batch_size, 1), -1), previous_eos_inclusive[:, :-1]], dim=1)
         segment_start = previous_eos + 1
@@ -811,7 +801,7 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         source_positions = positions - shift
         gather_positions = source_positions.clamp_min(0).unsqueeze(0).expand(batch_size, -1)
         shifted = token_ids.gather(dim=1, index=gather_positions)
-        valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
+        valid = position_in_segment >= shift
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
     def _get_previous_context(
@@ -825,22 +815,20 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         if past_key_values is None:
             return previous_context
 
-        layer_cache = past_key_values.layers[layer_idx]
-        if layer_cache.is_conv_states_initialized[self._CONTEXT_STATE_IDX]:
-            cached_context = layer_cache.conv_states[self._CONTEXT_STATE_IDX]
-            previous_context = cached_context[..., -context_len:].to(input_ids).clone()
+        if past_key_values.has_previous_state(layer_idx, state_idx=self._PLE_TOKEN_CONTEXT_STATE_IDX):
             context_update = input_ids
         else:
             # LinearAttentionLayer pads newly initialized states with zeros, while Qwen4-Exp n-grams must be padded
             # with EOS. Seed the state explicitly on its first update to preserve prefill/decode parity.
             context_update = torch.cat([previous_context, input_ids], dim=-1)
-        past_key_values.update_conv_state(
+        context_states = past_key_values.update_conv_state(
             context_update,
             layer_idx,
-            state_idx=self._CONTEXT_STATE_IDX,
+            state_idx=self._PLE_TOKEN_CONTEXT_STATE_IDX,
             conv_kernel_size=context_len,
         )
-        return previous_context
+        context_end = context_states.shape[-1] - input_ids.shape[-1]
+        return context_states[..., context_end - context_len : context_end].to(input_ids)
 
     def forward(
         self,
@@ -851,7 +839,10 @@ class Qwen4ExpNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         previous_context = self._get_previous_context(input_ids, past_key_values, layer_idx)
         token_history = torch.cat([previous_context, input_ids], dim=-1)
-        shifted_tokens = [self._shift_right_ignore_eos(token_history, shift) for shift in range(self.ngram_size)]
+        shifted_tokens = []
+        for shift in range(self.ngram_size):
+            shifted = self._shift_right_ignore_eos(token_history, shift)[:, -input_ids.shape[1] :]
+            shifted_tokens.append(shifted)
 
         blocks = []
         for ngram in range(2, self.ngram_size + 1):
@@ -868,114 +859,104 @@ class Qwen4ExpNGramEmbedding(nn.Module):
             ngram_ids = torch.remainder(mixed_ids.unsqueeze(-1), head_vocab_sizes.view(1, 1, -1))
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
-        ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
+        ngram_ids = torch.cat(blocks, dim=-1)
         return self.ngram_embedding(ngram_ids).flatten(-2)
 
 
 class Qwen4ExpPLELayer(nn.Module):
-    _CONV_STATE_IDX = 1
+    """Inject hashed n-gram features into every hyper-connection stream.
 
-    def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int, ple_layer_index: int):
+    PLE projects each token's concatenated n-gram embedding to a shared value and one key per residual stream. The
+    normalized stream activations gate those values, then a dilated depthwise convolution adds local lexical context.
+    The returned tensor has shape `(batch_size, sequence_length, hc_count * hidden_size)`.
+    """
+
+    _PLE_CONV_STATE_IDX = 1
+
+    def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int, ple_ordinal: int):
         super().__init__()
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
-        self.ple_embed_dim = config.ple_embed_dim
-        self.conv_kernel_size = config.ple_conv_kernel_size
         self.hc_count = config.hc_count
-        self.hc_hidden_size = self.hidden_size * self.hc_count
-        self.ple_embedding = Qwen4ExpNGramEmbedding(config, self.ple_embed_dim, ple_layer_index)
-        self.short_conv_dilation = config.ngram_size
-        self.short_conv_state_len = (self.conv_kernel_size - 1) * self.short_conv_dilation
-        self.key_proj = nn.Linear(self.ple_embed_dim, self.hc_hidden_size, bias=False)
-        self.value_proj = nn.Linear(self.ple_embed_dim, self.hidden_size, bias=False)
-        self.norm_key = Qwen4ExpPLEGroupedNorm(
-            self.hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
-        self.norm_query = Qwen4ExpPLEGroupedNorm(
-            self.hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
-        self.norm_conv = Qwen4ExpPLEGroupedNorm(
-            self.hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size
-        )
+        ple_embed_dim = config.ple_embed_dim
+        hc_hidden_size = self.hidden_size * self.hc_count
+        self.ple_embedding = Qwen4ExpNGramEmbedding(config, ple_embed_dim, ple_ordinal)
+        conv_kernel_size = config.ple_conv_kernel_size
+        conv_dilation = config.ngram_size
+        self.ple_conv_state_len = (conv_kernel_size - 1) * conv_dilation
+        self.key_proj = nn.Linear(ple_embed_dim, hc_hidden_size, bias=False)
+        self.value_proj = nn.Linear(ple_embed_dim, self.hidden_size, bias=False)
+        self.norm_key = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
+        self.norm_query = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
+        self.norm_conv = Qwen4ExpGroupedRMSNorm(hc_hidden_size, eps=config.rms_norm_eps, group_size=self.hidden_size)
         self.conv1d = nn.Conv1d(
-            self.hc_hidden_size,
-            self.hc_hidden_size,
-            kernel_size=self.conv_kernel_size,
-            groups=self.hc_hidden_size,
-            padding=self.short_conv_state_len,
-            dilation=self.short_conv_dilation,
+            hc_hidden_size,
+            hc_hidden_size,
+            kernel_size=conv_kernel_size,
+            groups=hc_hidden_size,
+            dilation=conv_dilation,
             bias=False,
         )
 
-    def _apply_norm(self, norm: nn.Module, hidden_states: torch.Tensor) -> torch.Tensor:
-        return norm(hidden_states.flatten(-2)).unflatten(-1, (self.hc_count, self.hidden_size))
-
-    def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
+    def _apply_ple_conv(
+        self,
+        hidden_states: torch.Tensor,
+        past_key_values: Cache | None,
+    ) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
-        if self.short_conv_state_len == 0:
-            conv_input = hidden_states
-        else:
-            previous_state = hidden_states.new_zeros(
-                hidden_states.shape[0], hidden_states.shape[1], self.short_conv_state_len
-            )
+        sequence_length = hidden_states.shape[-1]
+        conv_input = hidden_states
+        if self.ple_conv_state_len:
             if past_key_values is not None:
-                layer_cache = past_key_values.layers[self.layer_idx]
-                if layer_cache.is_conv_states_initialized[self._CONV_STATE_IDX]:
-                    previous_state = (
-                        layer_cache.conv_states[self._CONV_STATE_IDX][..., -self.short_conv_state_len :]
-                        .to(hidden_states)
-                        .clone()
-                    )
-                past_key_values.update_conv_state(
+                conv_input = past_key_values.update_conv_state(
                     hidden_states,
                     self.layer_idx,
-                    state_idx=self._CONV_STATE_IDX,
-                    conv_kernel_size=self.short_conv_state_len,
+                    state_idx=self._PLE_CONV_STATE_IDX,
+                    conv_kernel_size=self.ple_conv_state_len,
                 )
-            conv_input = torch.cat([previous_state, hidden_states], dim=-1)
-        conv_output = F.conv1d(
-            conv_input,
-            self.conv1d.weight.to(hidden_states.dtype),
-            dilation=self.short_conv_dilation,
-            groups=self.hc_hidden_size,
-        )
-        return F.silu(conv_output).transpose(1, 2)
+            conv_input = F.pad(conv_input, (self.ple_conv_state_len, 0))
+            conv_input = conv_input[..., -(self.ple_conv_state_len + sequence_length) :]
+        return F.silu(self.conv1d(conv_input)).transpose(1, 2)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         input_ids: torch.Tensor,
         past_key_values: Cache | None,
+        ple_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
-        key = self.key_proj(embeddings).unflatten(-1, (self.hc_count, self.hidden_size))
-        value = self.value_proj(embeddings)
-        query = hidden_states.unflatten(-1, (self.hc_count, self.hidden_size))
-        key_normed = self._apply_norm(self.norm_key, key)
-        query_normed = self._apply_norm(self.norm_query, query)
-        gate = (key_normed * query_normed).sum(dim=-1, keepdim=True) / math.sqrt(self.hidden_size)
-        gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
-        gated_value = torch.sigmoid(gate) * value.unsqueeze(-2)
-        gated_value_normed = self._apply_norm(self.norm_conv, gated_value).flatten(-2)
-        gated_value = gated_value.flatten(-2)
-        return gated_value + self._short_conv(gated_value_normed, past_key_values)
+        ngram_embeddings = self.ple_embedding(input_ids, past_key_values, self.layer_idx)
+        ple_key_states = self.norm_key(self.key_proj(ngram_embeddings)).unflatten(
+            -1, (self.hc_count, self.hidden_size)
+        )
+        ple_value_states = self.value_proj(ngram_embeddings)
+        hc_query_states = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
+        ple_gate_logits = (ple_key_states * hc_query_states).sum(dim=-1, keepdim=True) / math.sqrt(self.hidden_size)
+        ple_gate_logits = ple_gate_logits.abs().clamp_min(1e-6).sqrt() * ple_gate_logits.sign()
+        ple_update = torch.sigmoid(ple_gate_logits) * ple_value_states.unsqueeze(-2)
+        normalized_ple_update = self.norm_conv(ple_update.flatten(-2))
+        ple_update = ple_update.flatten(-2)
+        if ple_padding_mask is not None:
+            current_ple_padding_mask = ple_padding_mask[:, -input_ids.shape[1] :].unsqueeze(-1).to(ple_update.dtype)
+            ple_update = ple_update * current_ple_padding_mask
+            normalized_ple_update = normalized_ple_update * current_ple_padding_mask
+        output = ple_update + self._apply_ple_conv(normalized_ple_update, past_key_values)
+        return output if ple_padding_mask is None else output * current_ple_padding_mask
 
 
 class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.hc_count = config.hc_count
         self.block_type = config.layers_block_type[layer_idx]
         if self.block_type == "linear_attention":
             self.linear_attn = Qwen4ExpGatedDeltaNet(config, layer_idx)
-        elif self.block_type == "full_attention":
+        else:
             self.self_attn = Qwen4ExpAttention(config, layer_idx)
         self.mlp = Qwen4ExpSparseMoeBlock(config)
         self.ple = None
         if layer_idx + 1 in config.ple_layer_ids:
-            ple_layer_index = config.ple_layer_ids.index(layer_idx + 1)
-            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_layer_index)
+            ple_ordinal = config.ple_layer_ids.index(layer_idx + 1)
+            self.ple = Qwen4ExpPLELayer(config, layer_idx, ple_ordinal)
         self.attn_hyper_connection = Qwen4ExpGatedResidualSimple(config)
         self.mlp_hyper_connection = Qwen4ExpGatedResidualSimple(config)
 
@@ -984,20 +965,22 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
+        ple_padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
-        if hidden_states.shape[-1] == self.hidden_size:
-            hidden_states = hidden_states.repeat(1, 1, self.hc_count)
-
         if self.ple is not None:
             if ple_input_ids is None:
                 raise ValueError("input_ids are required when Qwen4-Exp PLE layers are enabled.")
-            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, past_key_values)
+            hidden_states = hidden_states + self.ple(
+                hidden_states,
+                ple_input_ids,
+                past_key_values,
+                ple_padding_mask=ple_padding_mask,
+            )
 
-        hidden_states, residual = self.attn_hyper_connection.mix(hidden_states)
+        hidden_states, residual_context = self.attn_hyper_connection(hidden_states)
         if self.block_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
@@ -1005,20 +988,19 @@ class Qwen4ExpDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.block_type == "full_attention":
+        else:
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 position_embeddings=position_embeddings,
-                position_ids=position_ids,
                 **kwargs,
             )
-        hidden_states = self.attn_hyper_connection.combine(hidden_states, residual)
+        hidden_states = self.attn_hyper_connection.combine(hidden_states, residual_context)
 
-        hidden_states, residual = self.mlp_hyper_connection.mix(hidden_states)
+        hidden_states, residual_context = self.mlp_hyper_connection(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        return self.mlp_hyper_connection.combine(hidden_states, residual)
+        return self.mlp_hyper_connection.combine(hidden_states, residual_context)
 
 
 class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
@@ -1029,13 +1011,49 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
         "attentions": Qwen4ExpAttention,
     }
 
+    def _check_and_adjust_attn_implementation(
+        self,
+        attn_implementation: str | None,
+        is_init_check: bool = False,
+        allow_all_kernels: bool = False,
+    ) -> str:
+        if getattr(self.config.get_text_config(), "indexer_n_heads", None) is not None and attn_implementation not in (
+            None,
+            "eager",
+            "sdpa",
+        ):
+            logger.warning_once(
+                "Qwen4-Exp QSA only supports eager and SDPA attention; falling back to eager from %s.",
+                attn_implementation,
+            )
+            attn_implementation = "eager"
+            self.config._attn_implementation = attn_implementation
+        return PreTrainedModel._check_and_adjust_attn_implementation(
+            self,
+            attn_implementation,
+            is_init_check=is_init_check,
+            allow_all_kernels=allow_all_kernels,
+        )
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Qwen4ExpPLEGroupedNorm):
+        if isinstance(module, Qwen4ExpNGramEmbedding):
+            module._reset_derived_buffers(self.config.get_text_config().seed)
+        elif isinstance(module, Qwen4ExpGroupedRMSNorm):
             init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpPLELayer):
             init.zeros_(module.conv1d.weight)
+
+    def _valid_auto_compile_criteria(self, model_kwargs, generation_config):
+        if self.config.get_text_config().indexer_n_heads is not None:
+            if generation_config.compile_config is not None:
+                logger.warning_once(
+                    "Qwen4-Exp QSA uses data-dependent token selection, so automatic generation compilation "
+                    "is disabled."
+                )
+            return False
+        return GenerationMixin._valid_auto_compile_criteria(self, model_kwargs, generation_config)
 
 
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
@@ -1056,7 +1074,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             [Qwen4ExpDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = Qwen4ExpTextRotaryEmbedding(config=config)
-        self.hyper_connection_mixer = Qwen4ExpGatedResidualSimple(config, use_combine=False)
+        self.hyper_connection_mixer = Qwen4ExpGatedResidualHead(config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -1100,6 +1118,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
+        if (
+            past_key_values is not None
+            and getattr(past_key_values, "offloading", False)
+            and (self.config.ple_layer_ids or self.config.indexer_n_heads is not None)
+        ):
+            raise ValueError("Qwen4-Exp does not support offloaded caches when PLE or QSA is enabled.")
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1114,18 +1138,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         else:
             text_position_ids = None
 
-        raw_attention_mask = attention_mask
-        if (
-            self.config.ple_layer_ids
-            and ple_input_ids is not None
-            and isinstance(raw_attention_mask, torch.Tensor)
-            and raw_attention_mask.ndim == 2
-        ):
-            current_attention_mask = raw_attention_mask[:, -ple_input_ids.shape[1] :]
-            eos_token_id = self.config.eos_token_id
-            eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
-            ple_input_ids = torch.where(current_attention_mask.bool(), ple_input_ids, eos_token_id)
-
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -1139,28 +1151,41 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
+        ple_padding_mask = causal_mask_mapping.get("linear_attention")
+        if self.config.ple_layer_ids and ple_input_ids is not None and ple_padding_mask is not None:
+            eos_token_id = self.config.eos_token_id
+            eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
+            ple_input_ids = torch.where(ple_padding_mask.bool(), ple_input_ids, eos_token_id)
+
         output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
         hidden_states = inputs_embeds
         all_hidden_states = (hidden_states,) if output_hidden_states else None
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[layer_idx]
             block_type = self.config.layers_block_type[layer_idx]
+            mask_key = layer_type if layer_type in causal_mask_mapping else block_type
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[block_type],
-                position_ids=text_position_ids,
+                attention_mask=causal_mask_mapping[mask_key],
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
+                ple_padding_mask=ple_padding_mask,
                 use_cache=use_cache,
                 **kwargs,
             )
             if output_hidden_states:
-                layer_hidden_states, _ = self.hyper_connection_mixer.mix(hidden_states)
+                layer_hidden_states = self.hyper_connection_mixer(hidden_states)
                 all_hidden_states += (layer_hidden_states,)
 
-        hidden_states, _ = self.hyper_connection_mixer.mix(hidden_states)
+        hidden_states = (
+            all_hidden_states[-1]
+            if output_hidden_states and len(all_hidden_states) > 1
+            else self.hyper_connection_mixer(hidden_states)
+        )
         return Qwen4ExpModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
@@ -1169,8 +1194,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
-    _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1193,10 +1216,6 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         """
         if input_ids is not None:
             ple_input_ids = input_ids
-        elif self.config.text_config.ple_layer_ids and ple_input_ids is None:
-            raise ValueError(
-                "ple_input_ids must be provided when Qwen4-Exp PLE layers are enabled and inputs_embeds are used."
-            )
         kwargs["ple_input_ids"] = ple_input_ids
         return super().forward(
             input_ids=input_ids,
@@ -1215,7 +1234,6 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     config: Qwen4ExpTextConfig
-    _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
     def forward(
         self,
@@ -1230,54 +1248,24 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ):
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
             instead of input_ids.
         """
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-        outputs: MoeModelOutputWithPast = self.model(
+        kwargs["ple_input_ids"] = ple_input_ids
+        return super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            ple_input_ids=ple_input_ids,
+            labels=labels,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
+            logits_to_keep=logits_to_keep,
             **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
         )
 
 
@@ -1308,7 +1296,8 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
             Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
             instead of input_ids.
         """
-        super().forward(
+        kwargs["ple_input_ids"] = ple_input_ids
+        return super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1321,21 +1310,6 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
             video_grid_thw=video_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
             logits_to_keep=logits_to_keep,
-            ple_input_ids=ple_input_ids,
-            **kwargs,
-        )
-        outputs = self.model(  # noqa: F841
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            ple_input_ids=ple_input_ids,
             **kwargs,
         )
 
@@ -1346,35 +1320,7 @@ class Qwen4ExpTextForSequenceClassification(GenericForSequenceClassification, Qw
 
 
 class Qwen4ExpForSequenceClassification(GenericForSequenceClassification, Qwen4ExpPreTrainedModel):
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        ple_input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast:
-        return super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            ple_input_ids=ple_input_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            **kwargs,
-        )
+    pass
 
 
 __all__ = [

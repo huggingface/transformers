@@ -688,16 +688,6 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
-    def offload(self):
-        super().offload()
-        if self.is_indexer_initialized:
-            self.indexer_keys = self.indexer_keys.to("cpu", non_blocking=True)
-
-    def prefetch(self):
-        super().prefetch()
-        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
-            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
-
     def reset(self) -> None:
         super().reset()
         if self.is_indexer_initialized:

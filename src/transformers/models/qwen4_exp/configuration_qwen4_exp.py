@@ -60,14 +60,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         Divisor used to pad the combined n-gram embedding vocabulary.
     seed (`int`, *optional*, defaults to 1234):
         Seed used to deterministically derive the per-layer n-gram hash multipliers.
-    moe_intermediate_size (`int`, *optional*, defaults to 512):
-        Intermediate size of each routed expert.
-    shared_expert_intermediate_size (`int`, *optional*, defaults to 512):
-        Intermediate size of the shared expert.
-    num_experts_per_tok (`int`, *optional*, defaults to 10):
-        Number of routed experts selected for every token.
-    num_experts (`int`, *optional*, defaults to 512):
-        Number of routed experts.
     indexer_n_heads (`int`, *optional*):
         Number of query heads used by the QSA token indexer. Setting this enables QSA on full-attention layers.
     indexer_kv_heads (`int`, *optional*):
@@ -79,15 +71,36 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     indexer_compress_ratio (`int`, *optional*):
         Number of consecutive token keys averaged into one QSA index block.
     split_ngram_parts (`int`, *optional*, defaults to 512):
-        Number of checkpoint shards used for each PLE n-gram embedding table. The shards are concatenated into a
-        single embedding weight when loading.
-    norm_topk_prob (`bool`, *optional*, defaults to `True`):
-        Whether to normalize the selected experts' routing probabilities.
+        Number of checkpoint shards used for each PLE n-gram embedding table. Loading concatenates the shards into a
+        single runtime embedding, while `save_pretrained` restores the configured sharded layout.
     """
 
     model_type = "qwen4_exp_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = None
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
+        "layers.*.self_attn.indexer.index_qk_proj": "colwise_gather_output",
+        "layers.*.attn_hyper_connection.input_mix_weight_down": "rowwise_split_input",
+        "layers.*.mlp_hyper_connection.input_mix_weight_down": "rowwise_split_input",
+        "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_rowwise",
+    }
     base_model_pp_plan = None
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
@@ -128,6 +141,11 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    base_model_fsdp_plan = {
+        "embed_tokens": "free_full_weight",
+        "layers.*": "free_full_weight",
+        "hyper_connection_mixer": "keep_full_weight",
+    }
 
     hc_count: int = 4
     hc_lowrank: int = 320
@@ -149,20 +167,54 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     output_gate_type: str | None = None
 
     def __post_init__(self, **kwargs):
+        self.ple_layer_ids = [] if self.ple_layer_ids is None else sorted(set(self.ple_layer_ids))
+        self.ple_embed_dim = self.hidden_size if self.ple_embed_dim is None else self.ple_embed_dim
+
+        # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
+        # Without PLE, only the GatedDeltaNet state is needed.
+        self.number_of_conv_states = 3 if self.ple_layer_ids else 1
+        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
+        if self.layer_types is None:
+            interval_pattern = kwargs.pop("full_attention_interval", 4)
+            self.layer_types = [
+                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        else:
+            self.layer_types = remap_legacy_layer_types(self.layer_types)
+
+        super().__post_init__(**kwargs)
+
+        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
+        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
+        block_types = self.layers_block_type
+        self.layer_types = [
+            (
+                "hybrid_indexed"
+                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
+                else "deepseek_sparse_attention"
+                if self.indexer_n_heads is not None
+                else "hybrid"
+                if layer_idx + 1 in self.ple_layer_ids
+                else "full_attention"
+            )
+            if block_type == "full_attention"
+            else block_type
+            for layer_idx, block_type in enumerate(block_types)
+        ]
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
+        unsupported_layer_types = sorted(set(self.layers_block_type) - {"full_attention", "linear_attention"})
+        if unsupported_layer_types:
+            raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
+        output_gate_type = self.output_gate_type or self.hidden_act
+        if output_gate_type not in {"sigmoid", "silu"}:
+            raise ValueError(f"Unsupported Qwen4-Exp output gate activation: {output_gate_type}.")
         if self.hc_count <= 1:
             raise ValueError(f"Qwen4-Exp requires hc_count > 1, got {self.hc_count}.")
-        if self.ngram_size < 2:
-            raise ValueError(f"ngram_size must be >= 2, got {self.ngram_size}.")
-        if self.heads_per_ngram <= 0:
-            raise ValueError(f"heads_per_ngram must be > 0, got {self.heads_per_ngram}.")
-        if self.ple_conv_kernel_size <= 0:
-            raise ValueError(f"ple_conv_kernel_size must be > 0, got {self.ple_conv_kernel_size}.")
-        if self.ngram_vocab_size_base <= 0:
-            raise ValueError("ngram_vocab_size_base must be > 0.")
-        if self.make_ngram_vocab_size_divisible_by <= 0:
-            raise ValueError("make_ngram_vocab_size_divisible_by must be > 0.")
-        if self.split_ngram_parts <= 0:
-            raise ValueError("split_ngram_parts must be > 0.")
+        if self.hc_lowrank <= 0:
+            raise ValueError(f"hc_lowrank must be > 0, got {self.hc_lowrank}.")
         if self.num_experts <= 0:
             raise ValueError(f"num_experts must be > 0, got {self.num_experts}.")
         if not 0 < self.num_experts_per_tok <= self.num_experts:
@@ -191,37 +243,24 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
             if self.indexer_budget % self.indexer_compress_ratio != 0:
                 raise ValueError("indexer_budget must be divisible by indexer_compress_ratio.")
 
-        self.ple_layer_ids = [] if self.ple_layer_ids is None else sorted(set(self.ple_layer_ids))
-        self.ple_embed_dim = self.hidden_size if self.ple_embed_dim is None else self.ple_embed_dim
-        ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
-        if self.ple_embed_dim % ngram_heads != 0:
-            raise ValueError(
-                "ple_embed_dim must be divisible by the total number of n-gram heads: "
-                f"{self.ple_embed_dim} % {ngram_heads} != 0."
-            )
-        invalid_ple_layers = [
-            layer_id for layer_id in self.ple_layer_ids if layer_id < 1 or layer_id > self.num_hidden_layers
-        ]
-        if invalid_ple_layers:
-            raise ValueError(
-                f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
-                f"got {invalid_ple_layers}."
-            )
-
-        # Qwen4-Exp keeps the GatedDeltaNet convolution, PLE convolution and n-gram context in separate cache states.
-        # Without PLE, only the GatedDeltaNet state is needed.
-        self.number_of_conv_states = 3 if self.ple_layer_ids else 1
-        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
-        if self.layer_types is None:
-            interval_pattern = kwargs.pop("full_attention_interval", 4)
-            self.layer_types = [
-                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
-                for i in range(self.num_hidden_layers)
+        if self.ple_layer_ids:
+            ngram_heads = (self.ngram_size - 1) * self.heads_per_ngram
+            if ngram_heads <= 0 or self.ple_embed_dim <= 0 or self.ple_embed_dim % ngram_heads != 0:
+                raise ValueError(
+                    "ple_embed_dim and the total number of n-gram heads must be positive, and ple_embed_dim must be "
+                    f"divisible by the number of heads: {self.ple_embed_dim} % {ngram_heads} != 0."
+                )
+            invalid_ple_layers = [
+                layer_id for layer_id in self.ple_layer_ids if layer_id < 1 or layer_id > self.num_hidden_layers
             ]
-        else:
-            self.layer_types = remap_legacy_layer_types(self.layer_types)
+            if invalid_ple_layers:
+                raise ValueError(
+                    f"ple_layer_ids must contain one-indexed ids in [1, {self.num_hidden_layers}], "
+                    f"got {invalid_ple_layers}."
+                )
+            if self.eos_token_id is None or isinstance(self.eos_token_id, (list, tuple)) and not self.eos_token_id:
+                raise ValueError("eos_token_id must be set when Qwen4-Exp PLE layers are enabled.")
 
-        super().__post_init__(**kwargs)
         if self.indexer_n_heads is not None:
             partial_rotary_factor = (self.rope_parameters or {}).get("partial_rotary_factor", 1.0)
             rotary_dim = int(self.head_dim * partial_rotary_factor)
@@ -231,24 +270,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
                     f"rotary_dim={rotary_dim}, indexer_head_dim={self.indexer_head_dim}."
                 )
 
-        # Full-attention layers use an indexed cache when QSA is enabled. If PLE is also attached to that layer,
-        # the hybrid indexed cache additionally carries its convolution and n-gram context states.
-        block_types = self.layers_block_type
-        self.layer_types = [
-            (
-                "hybrid_indexed"
-                if self.indexer_n_heads is not None and layer_idx + 1 in self.ple_layer_ids
-                else "deepseek_sparse_attention"
-                if self.indexer_n_heads is not None
-                else "hybrid"
-                if layer_idx + 1 in self.ple_layer_ids
-                else "full_attention"
-            )
-            if block_type == "full_attention"
-            else block_type
-            for layer_idx, block_type in enumerate(block_types)
-        ]
-
     @property
     def layers_block_type(self) -> list[str]:
         full_attention_cache_types = {"deepseek_sparse_attention", "full_attention", "hybrid", "hybrid_indexed"}
@@ -256,21 +277,6 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
             "full_attention" if layer_type in full_attention_cache_types else layer_type
             for layer_type in self.layer_types
         ]
-
-    @property
-    def short_conv_layer_ids(self) -> list[int]:
-        return [layer_id - 1 for layer_id in self.ple_layer_ids]
-
-    @property
-    def short_conv_state_shape(self) -> tuple[int, int] | None:
-        if not self.ple_layer_ids:
-            return None
-        state_len = (self.ple_conv_kernel_size - 1) * self.ngram_size
-        return self.hidden_size * self.hc_count, state_len
-
-    @property
-    def ngram_context_len(self) -> int:
-        return self.ngram_size - 1 if self.ple_layer_ids else 0
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
@@ -298,6 +304,7 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    base_model_fsdp_plan = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")
@@ -327,6 +334,7 @@ class Qwen4ExpConfig(PreTrainedConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
+    base_model_fsdp_plan = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
