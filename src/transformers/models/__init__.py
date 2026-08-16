@@ -79,6 +79,7 @@ if TYPE_CHECKING:
     from .cohere2_moe import *
     from .cohere2_vision import *
     from .cohere_asr import *
+    from .cohere_compass import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *

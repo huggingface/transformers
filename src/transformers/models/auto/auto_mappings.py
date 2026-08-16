@@ -100,6 +100,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("cohere2_moe", "Cohere2MoeConfig"),
         ("cohere2_vision", "Cohere2VisionConfig"),
         ("cohere_asr", "CohereAsrConfig"),
+        ("cohere_compass", "CohereCompassConfig"),
+        ("cohere_compass_text", "CohereCompassTextConfig"),
+        ("cohere_compass_vision", "CohereCompassVisionConfig"),
         ("colmodernvbert", "ColModernVBertConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
@@ -751,6 +754,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("clipseg_vision_model", "clipseg"),
         ("clvp_decoder", "clvp"),
         ("clvp_encoder", "clvp"),
+        ("cohere_compass_text", "cohere_compass"),
+        ("cohere_compass_vision", "cohere_compass"),
         ("cosmos3_edge_text", "cosmos3_edge"),
         ("cosmos3_edge_vision", "cosmos3_edge"),
         ("csm_depth_decoder_model", "csm"),
@@ -963,6 +968,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
 
 VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("cohere_compass", "CohereCompassVideoProcessor"),
         ("cosmos3_edge", "Cosmos3EdgeVideoProcessor"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
         ("gemma4", "Gemma4VideoProcessor"),
@@ -1046,6 +1052,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("clvp", "ClvpProcessor"),
         ("cohere2_vision", "Cohere2VisionProcessor"),
         ("cohere_asr", "CohereAsrProcessor"),
+        ("cohere_compass", "CohereCompassProcessor"),
         ("colmodernvbert", "ColModernVBertProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
@@ -1180,6 +1187,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("chmv2", {"torchvision": "CHMv2ImageProcessor"}),
         ("clip", {"pil": "CLIPImageProcessorPil", "torchvision": "CLIPImageProcessor"}),
         ("cohere2_vision", {"torchvision": "Cohere2VisionImageProcessor"}),
+        ("cohere_compass", {"pil": "CohereCompassImageProcessorPil", "torchvision": "CohereCompassImageProcessor"}),
         (
             "conditional_detr",
             {"pil": "ConditionalDetrImageProcessorPil", "torchvision": "ConditionalDetrImageProcessor"},
