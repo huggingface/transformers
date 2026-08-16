@@ -1192,12 +1192,11 @@ class Sam3TrackerVideoPositionalEmbedding(nn.Module):
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
+        coordinates = input_coords.clone().float()
 
         if input_shape is not None:
             coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
             coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-        coordinates.to(torch.float32)
 
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
@@ -2696,6 +2695,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         # apply scale and bias terms to the sigmoid probabilities
         mask_for_mem = mask_for_mem * self.config.sigmoid_scale_for_mem_enc
         mask_for_mem = mask_for_mem + self.config.sigmoid_bias_for_mem_enc
+
+        mem_dtype = next(self.memory_encoder.parameters()).dtype
+        pix_feat = pix_feat.to(dtype=mem_dtype)
+        mask_for_mem = mask_for_mem.to(dtype=mem_dtype)
 
         maskmem_features, maskmem_pos_enc = self.memory_encoder(
             pix_feat,
