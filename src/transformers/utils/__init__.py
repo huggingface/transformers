@@ -276,6 +276,10 @@ from .peft_utils import (
 )
 
 
+# This fork retains Flax Whisper; is_flax_available was dropped upstream in 5.0.0.
+from .flax_compat import is_flax_available
+
+
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 SAFE_WEIGHTS_NAME = "model.safetensors"

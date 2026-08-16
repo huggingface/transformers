@@ -15,6 +15,7 @@
 from typing import TYPE_CHECKING
 
 from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_rich_available, is_torch_available
+from ..utils.flax_compat import is_flax_available
 
 
 _import_structure = {
@@ -115,6 +116,37 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["streamers"] += ["TextDiffusionStreamer"]
+
+
+# This fork retains Flax Whisper, which transformers 5.0.0 removed. See utils/flax_compat.py.
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flax_logits_process"] = [
+        "FlaxForcedBOSTokenLogitsProcessor",
+        "FlaxForcedEOSTokenLogitsProcessor",
+        "FlaxForceTokensLogitsProcessor",
+        "FlaxLogitsProcessor",
+        "FlaxLogitsProcessorList",
+        "FlaxLogitsWarper",
+        "FlaxMinLengthLogitsProcessor",
+        "FlaxSuppressTokensAtBeginLogitsProcessor",
+        "FlaxSuppressTokensLogitsProcessor",
+        "FlaxTemperatureLogitsWarper",
+        "FlaxTopKLogitsWarper",
+        "FlaxTopPLogitsWarper",
+        "FlaxWhisperTimeStampLogitsProcessor",
+        "FlaxNoRepeatNGramLogitsProcessor",
+    ]
+    _import_structure["flax_utils"] = [
+        "FlaxGenerationMixin",
+        "FlaxGreedySearchOutput",
+        "FlaxSampleOutput",
+        "FlaxBeamSearchOutput",
+    ]
 
 
 if TYPE_CHECKING:
