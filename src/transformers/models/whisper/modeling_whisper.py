@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Whisper model."""
 
+import copy
 import math
 from collections.abc import Callable
 
@@ -309,6 +310,7 @@ class WhisperAttention(nn.Module):
         query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
@@ -737,10 +739,40 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
+            # Build a config that DynamicCache can use to pre-allocate the right number of layers.
+            # DynamicCache(config=...) reads config.num_hidden_layers via get_text_config(decoder=True),
+            # but WhisperConfig maps num_hidden_layers → encoder_layers (e.g. 32 for distil-whisper-large-v2
+            # even though the decoder only has 2 layers). Pre-allocating 32 cache slots for a 2-layer
+            # decoder wastes memory and, with crop(-n), causes crop() to iterate uninitialized layers
+            # and crash. We deepcopy the config and override num_hidden_layers with decoder_layers so
+            # DynamicCache allocates exactly the right number of slots.
+            decoder_cache_config = copy.deepcopy(self.config)
+            decoder_cache_config.num_hidden_layers = self.config.decoder_layers
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                EncoderDecoderCache(
+                    DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config)
+                )
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
+                else DynamicCache(config=decoder_cache_config)
+            )
+        elif (
+            use_cache
+            and encoder_hidden_states is not None
+            and isinstance(past_key_values, DynamicCache)
+            and not isinstance(past_key_values, EncoderDecoderCache)
+            and past_key_values.get_seq_length() == 0
+        ):
+            # generate() (since PR #43679) pre-initializes the cache with DynamicCache based on
+            # config.is_encoder_decoder. WhisperForCausalLM sets is_encoder_decoder=False, so
+            # generate() creates a plain DynamicCache. But when encoder_hidden_states are present,
+            # both self-attention and cross-attention write to the same layer_idx in DynamicCache,
+            # overwriting each other. Convert the empty DynamicCache to EncoderDecoderCache here.
+            # Use the same decoder_cache_config approach: override num_hidden_layers with decoder_layers
+            # so only the actual decoder layers are pre-allocated.
+            decoder_cache_config = copy.deepcopy(self.config)
+            decoder_cache_config.num_hidden_layers = self.config.decoder_layers
+            past_key_values = EncoderDecoderCache(
+                DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config)
             )
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0

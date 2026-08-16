@@ -278,6 +278,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 best_threshold = thresholds[optimal_threshold_index]
 
                 self.assistant_generation_config.assistant_confidence_threshold = best_threshold
+                # Sync to generation_config so ConfidenceCriteria picks up the updated threshold on the next round
+                self.generation_config.assistant_confidence_threshold = best_threshold
 
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
@@ -292,8 +294,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            tokens_to_remove = remove_from_pkv + num_added_tokens
-            self.assistant_kwargs["past_key_values"].crop(-tokens_to_remove)
+            # Crop the cache to align with the next round's input_ids. The target size is
+            # input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens (= num_added_tokens worth
+            # of tokens are the "bonus" token added by the main model and processed next round).
+            # We compute how many tokens to remove rather than cropping to an absolute index to
+            # comply with the current Cache.crop() API (negative = remove from end).
+            target_size = input_ids.shape[-1] - 1 - remove_from_pkv - num_added_tokens
+            current_size = self.assistant_kwargs["past_key_values"].get_seq_length()
+            if current_size > target_size:
+                self.assistant_kwargs["past_key_values"].crop(target_size - current_size)
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
