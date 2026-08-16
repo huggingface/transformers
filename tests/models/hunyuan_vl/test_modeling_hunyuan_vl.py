@@ -425,7 +425,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                ("cuda", None): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a different",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
@@ -458,7 +458,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
+                ("cuda", None): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
