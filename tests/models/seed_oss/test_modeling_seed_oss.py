@@ -74,7 +74,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_eager(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+            "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -97,7 +97,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_sdpa(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+            "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
         ]
 
         # default attention is `sdpa` (and this model repo. doesn't specify explicitly) --> we get `sdpa` here
@@ -119,7 +119,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
     def test_model_36b_flash_attn(self):
         EXPECTED_TEXTS = [
             "How to make pasta?\nHow to make pasta?\nPasta is a popular dish that is enjoyed by people all over",
-            "Hi ByteDance-Seed team,\nI am trying to run the code on the <beginning of the code>seed",
+            "Hi ByteDance-Seed team,\nI am trying to use the ByteDance-Seed dataset for my research. I have",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
