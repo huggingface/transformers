@@ -107,6 +107,7 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     intermediate_size: int = 1280
     num_hidden_layers: int = 6
     num_attention_heads: int = 8
+    num_key_value_heads: int | None = None
     hidden_act: str = "silu"
     max_position_embeddings: int = 4096
     use_cache: bool = True
@@ -135,6 +136,8 @@ class MoonshineStreamingConfig(PreTrainedConfig):
                 "rope_theta": 10000.0,
                 "partial_rotary_factor": 0.8,
             }
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
 
