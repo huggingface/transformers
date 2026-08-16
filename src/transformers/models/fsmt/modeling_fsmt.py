@@ -177,17 +177,6 @@ def invert_mask(attention_mask):
     return attention_mask.eq(0)
 
 
-def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
-
-
 def _prepare_fsmt_decoder_inputs(
     config,
     input_ids,
@@ -208,8 +197,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
-        device=decoder_input_ids.device
+    causal_mask = torch.triu(
+        fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype, device=decoder_input_ids.device)),
+        diagonal=1,
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 

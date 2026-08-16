@@ -148,7 +148,10 @@ class FunnelAttentionStructure(nn.Module):
             cos_embed = self.cos_dropout(torch.cos(sinusoid))
             pos_embed = torch.cat([sin_embed, cos_embed], dim=-1)
 
-            pos = torch.arange(0, seq_len, dtype=torch.int64, device=device).to(dtype)
+            # Positions are integer indices fully determined by `seq_len`; keeping them as Python
+            # ints (instead of tensors) makes the relative-position `arange` sizes static, which is
+            # required for tracing / export.
+            pos = list(range(seq_len))
             pooled_pos = pos
             position_embeds_list = []
             for block_index in range(0, self.config.num_blocks):
@@ -165,7 +168,7 @@ class FunnelAttentionStructure(nn.Module):
 
                     # construct rel_pos_id
                     stride = 2 ** (block_index - 1)
-                    rel_pos = self.relative_pos(pos, stride, pooled_pos, shift=2)
+                    rel_pos = self.relative_pos(pos, stride, pooled_pos, shift=2, device=device)
                     rel_pos = rel_pos[:, None] + zero_offset
                     rel_pos = rel_pos.expand(rel_pos.size(0), d_model)
                     position_embeds_pooling = torch.gather(pos_embed, 0, rel_pos)
@@ -173,7 +176,7 @@ class FunnelAttentionStructure(nn.Module):
                 # Second type
                 pos = pooled_pos
                 stride = 2**block_index
-                rel_pos = self.relative_pos(pos, stride)
+                rel_pos = self.relative_pos(pos, stride, device=device)
 
                 rel_pos = rel_pos[:, None] + zero_offset
                 rel_pos = rel_pos.expand(rel_pos.size(0), d_model)
@@ -182,7 +185,7 @@ class FunnelAttentionStructure(nn.Module):
                 position_embeds_list.append([position_embeds_no_pooling, position_embeds_pooling])
             return position_embeds_list
 
-    def stride_pool_pos(self, pos_id: torch.Tensor, block_index: int):
+    def stride_pool_pos(self, pos_id: list[int], block_index: int) -> list[int]:
         """
         Pool `pos_id` while keeping the cls token separate (if `config.separate_cls=True`).
         """
@@ -191,25 +194,30 @@ class FunnelAttentionStructure(nn.Module):
             # the previous block of the 1st real block. Since the 1st real
             # block always has position 1, the position of the previous block
             # will be at `1 - 2 ** block_index`.
-            cls_pos = pos_id.new_tensor([-(2**block_index) + 1])
+            cls_pos = [-(2**block_index) + 1]
             pooled_pos_id = pos_id[1:-1] if self.config.truncate_seq else pos_id[1:]
-            return torch.cat([cls_pos, pooled_pos_id[::2]], 0)
+            return cls_pos + pooled_pos_id[::2]
         else:
             return pos_id[::2]
 
-    def relative_pos(self, pos: torch.Tensor, stride: int, pooled_pos=None, shift: int = 1) -> torch.Tensor:
+    def relative_pos(
+        self, pos: list[int], stride: int, pooled_pos: list[int] | None = None, shift: int = 1, device=None
+    ) -> torch.Tensor:
         """
         Build the relative positional vector between `pos` and `pooled_pos`.
+
+        `pos` and `pooled_pos` are lists of Python ints so the bounds (and hence the output size) are
+        statically known, which keeps the produced `arange` export-friendly.
         """
         if pooled_pos is None:
             pooled_pos = pos
 
         ref_point = pooled_pos[0] - pos[0]
-        num_remove = shift * pooled_pos.shape[0]
+        num_remove = shift * len(pooled_pos)
         max_dist = ref_point + num_remove * stride
         min_dist = pooled_pos[0] - pos[-1]
 
-        return torch.arange(max_dist, min_dist - 1, -stride, dtype=torch.long, device=pos.device)
+        return torch.arange(max_dist, min_dist - 1, -stride, dtype=torch.long, device=device)
 
     def stride_pool(
         self,

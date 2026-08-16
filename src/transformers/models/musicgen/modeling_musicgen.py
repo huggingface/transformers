@@ -140,7 +140,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
         bsz, codebooks, seq_len = input_ids.size()
         # Create the position ids from the input token ids.
-        position_ids = (torch.arange(seq_len) + past_key_values_length).to(input_ids.device)
+        position_ids = torch.arange(seq_len, device=input_ids.device) + past_key_values_length
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
             self.make_weights(seq_len, self.embedding_dim)

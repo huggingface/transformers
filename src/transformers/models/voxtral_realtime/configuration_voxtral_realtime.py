@@ -113,6 +113,7 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int = 750
     head_dim: int = 64
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
@@ -170,6 +171,7 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
     default_num_delay_tokens: int = 6
     downsample_factor: int = 4
     tie_word_embeddings: bool = True
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):

@@ -2497,8 +2497,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @staticmethod
     def prepare_question_mask(q_lengths: torch.Tensor, maxlen: int):
         # q_lengths -> (bz, 1)
-        mask = torch.arange(0, maxlen).to(q_lengths.device)
-        mask.unsqueeze_(0)  # -> (1, maxlen)
+        mask = torch.arange(0, maxlen, device=q_lengths.device).unsqueeze(0)  # -> (1, maxlen)
         mask = torch.where(mask < q_lengths, 1, 0)
         return mask
 
