@@ -749,7 +749,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
             decoder_cache_config = copy.deepcopy(self.config)
             decoder_cache_config.num_hidden_layers = self.config.decoder_layers
             past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config))
+                EncoderDecoderCache(
+                    DynamicCache(config=decoder_cache_config), DynamicCache(config=decoder_cache_config)
+                )
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=decoder_cache_config)
             )
