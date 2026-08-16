@@ -359,7 +359,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         # the data-dependent control flow in _longrope_frequency_update. Alternatively, we can rewrite
         # that function to avoid the data-dependent control flow.
         if hasattr(config, "rope_parameters") and config.rope_parameters is not None:
-            config.rope_parameters["type"] = "default"
+            config.rope_parameters["rope_type"] = "default"
 
         # Load model
         device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
