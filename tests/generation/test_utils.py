@@ -4068,59 +4068,59 @@ class GenerationIntegrationTests(unittest.TestCase):
     @require_torch_multi_accelerator
     def test_dflash_candidate_generator_keeps_ids_on_input_device(self):
         """Regression test for DFlash candidate logits being moved back to the input IDs device."""
+        from transformers.models.muse_glimmer.modeling_muse_glimmer import MuseGlimmerForConditionalGeneration
+        from transformers.models.muse_glimmer_assistant.modeling_muse_glimmer_assistant import (
+            MuseGlimmerAssistantModel,
+        )
+
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
-        hidden_size = 4
-        vocab_size = 8
-        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
+
+        model = MuseGlimmerForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-muse-glimmer").eval()
+        assistant = MuseGlimmerAssistantModel.from_pretrained("hf-internal-testing/tiny-muse-glimmer-assistant").eval()
+        assistant.config.target_layer_ids = list(range(model.config.text_config.num_hidden_layers))
+        model.model.to(input_device)
+        model.lm_head.to(assistant_device)
+        assistant.to(input_device)
+
+        class AssistantOutputOnDevice(torch.nn.Module):
+            def __init__(self, assistant, device):
+                super().__init__()
+                self.assistant = assistant
+                self.config = assistant.config
+                self.device = device
+
+            def forward(self, **kwargs):
+                outputs = self.assistant(**kwargs)
+                outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
+                return outputs
+
+        input_ids = torch.tensor([[2, 3, 4]], device=input_device)
+        main_model_input_ids = input_ids
         model_kwargs = {
-            "attention_mask": torch.ones_like(input_ids),
-            "position_ids": torch.arange(input_ids.shape[1], device=input_device).unsqueeze(0),
+            "attention_mask": torch.ones_like(main_model_input_ids),
+            "position_ids": torch.arange(main_model_input_ids.shape[1], device=input_device).unsqueeze(0),
         }
 
-        class FakeDFlashAssistant(torch.nn.Module):
-            def forward(self, **kwargs):
-                batch_size = kwargs["noise_embeds"].shape[0]
-                return SimpleNamespace(
-                    last_hidden_state=torch.zeros(batch_size, 3, hidden_size, device=assistant_device)
-                )
-
-        class FakeDFlashCache:
-            def set_previous_accepted_tokens(self, *args, **kwargs):
-                pass
-
-            def crop(self, *args, **kwargs):
-                pass
-
-        dflash_generator = DFlashTokenCandidateGenerator.__new__(DFlashTokenCandidateGenerator)
-        dflash_generator.assistant_model = FakeDFlashAssistant()
-        dflash_generator.main_model_max_length = 8
-        dflash_generator.main_model_input_embeddings = torch.nn.Embedding(vocab_size, hidden_size, device=input_device)
-        dflash_generator.main_model_output_embeddings = torch.nn.Linear(
-            hidden_size, vocab_size, device=assistant_device
+        dflash_generator = DFlashTokenCandidateGenerator(
+            assistant_model=AssistantOutputOnDevice(assistant, assistant_device),
+            main_model_input_embeddings=model.get_input_embeddings(),
+            main_model_output_embeddings=model.get_output_embeddings(),
+            generation_config=GenerationConfig(max_length=8, do_sample=False),
         )
-        dflash_generator.target_layer_ids = [0]
-        dflash_generator.block_size = 3
-        dflash_generator.mask_token_id = 0
-        dflash_generator.noise_ids_mask = torch.tensor([[0, 0]])
-        dflash_generator.cache = FakeDFlashCache()
-        dflash_generator.do_sample = False
-        dflash_generator.logits_processor = None
-        dflash_generator.is_main_model_prefill = True
-
-        dflash_outputs = SimpleNamespace(
-            hidden_states=(
-                torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),
-                torch.zeros(1, input_ids.shape[1], hidden_size, device=input_device),
+        with torch.no_grad():
+            dflash_outputs = model.model(
+                input_ids=main_model_input_ids,
+                attention_mask=model_kwargs["attention_mask"],
+                output_hidden_states=True,
             )
-        )
-        dflash_candidate_ids, dflash_candidate_logits = dflash_generator.get_candidates(
-            input_ids=input_ids,
-            model_kwargs=model_kwargs,
-            model_outputs=dflash_outputs,
-            is_first_iteration=False,
-            n_last_matches=0,
-        )
+            dflash_candidate_ids, dflash_candidate_logits = dflash_generator.get_candidates(
+                input_ids=input_ids,
+                model_kwargs=model_kwargs,
+                model_outputs=dflash_outputs,
+                is_first_iteration=False,
+                n_last_matches=0,
+            )
         self.assertEqual(dflash_candidate_ids.device, input_device)
         self.assertEqual(dflash_candidate_logits.device, input_device)
 
