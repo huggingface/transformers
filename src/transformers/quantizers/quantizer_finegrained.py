@@ -164,8 +164,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
         _disable_deepgemm_on_multi_device(model)
 
-        from ..integrations.finegrained import swizzle_scales_after_loading
+        from ..integrations.finegrained import (
+            interleave_gate_up_after_loading,
+            swizzle_scales_after_loading,
+        )
 
+        # order matters: the swizzle below packs whatever row order gate_up ends up in
+        interleave_gate_up_after_loading(model, already_interleaved=self._quant_method() == "mxfp4")
         swizzle_scales_after_loading(model)
         return model
 
@@ -231,13 +236,12 @@ class FineGrainedHfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter
         from ..integrations.finegrained import (
             FineGrainedDequantize,
-            FineGrainedGateUpBiasDeinterleave,
             FineGrainedMxfp4Deserialize,
         )
 
-        # GPT-OSS-style MXFP4 checkpoints ship {proj}_blocks + {proj}_scales (interleaved
-        # gate|up rows); deserialize them into the packed weight + e8m0 scale pair the
-        # finegrained kernels read, de-interleaving gate_up rows (and the bias to match).
+        # GPT-OSS-style MXFP4 checkpoints ship {proj}_blocks + {proj}_scales; deserialize them
+        # into the packed weight + e8m0 scale pair the finegrained kernels read. The gate_up bias
+        # needs no converter — it already follows the interleaved row order.
         if self.pre_quantized and self._quant_method() == "mxfp4" and not self.quantization_config.dequantize:
             return [
                 WeightConverter(
@@ -249,11 +253,6 @@ class FineGrainedHfQuantizer(HfQuantizer):
                     source_patterns=["down_proj_blocks", "down_proj_scales"],
                     target_patterns=r"down_proj$",
                     operations=[FineGrainedMxfp4Deserialize(self)],
-                ),
-                WeightConverter(
-                    source_patterns=[r"gate_up_proj_bias$"],
-                    target_patterns=r"gate_up_proj_bias$",
-                    operations=[FineGrainedGateUpBiasDeinterleave(self)],
                 ),
             ]
 

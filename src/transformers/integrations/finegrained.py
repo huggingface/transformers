@@ -907,7 +907,9 @@ class FineGrainedExperts(nn.Module):
             self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
+        # the GEMM's output columns alternate gate/up; mirrors the fused epilogue's
+        # `split_gate_up`, which the fused/unfused parity tests compare against
+        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         if self.swiglu_alpha is not None:
             # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
             gate = gate.clamp(max=self.swiglu_limit)
@@ -995,14 +997,44 @@ class FineGrainedExpertsInterface(ExpertsInterface):
 ALL_FINEGRAINED_EXPERTS_FUNCTIONS = FineGrainedExpertsInterface()
 
 
+def interleave_gate_up_after_loading(model: nn.Module, *, already_interleaved: bool = False) -> None:
+    """Put gate_up into the ``[g0, u0, g1, u1, ...]`` row order the kernels read.
+
+    Checkpoints that ship the two projections separately arrive stacked ``[gate; up]`` (the shared
+    ``MergeModulelist`` + ``Concatenate`` chain in ``conversion_mapping``, which serves unquantized
+    MoE models too and so cannot carry a finegrained-specific reorder). GPT-OSS-style MXFP4 already
+    ships interleaved — ``already_interleaved`` skips those.
+
+    Weight, block-scale grid and bias all key off the same output-row axis, so all three move
+    together. Runs BEFORE ``swizzle_scales_after_loading``, which then swizzles the final order.
+    """
+    if already_interleaved:
+        return
+    for module in model.modules():
+        if not isinstance(module, FineGrainedExperts) or not module.has_gate:
+            continue
+        for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_bias"):
+            t = getattr(module, name, None)
+            if t is None or t.device.type == "meta":
+                continue
+            local = to_local(t)
+            axis = -1 if local.ndim == 1 or name.endswith("bias") else -2
+            n = local.shape[axis] // 2
+            if axis == -1:
+                rows = torch.stack([local[..., :n], local[..., n:]], dim=-1)
+            else:
+                rows = torch.stack([local[..., :n, :], local[..., n:, :]], dim=-2)
+            local.data.copy_(rows.reshape(local.shape))
+
+
 def swizzle_scales_after_loading(model: nn.Module) -> None:
     """Pre-swizzle MX/NVFP4 weight block scales into the ``SWIZZLE_32_4_4`` layout the Blackwell
     tcgen05 scaled-MMA reads directly (one triton launch per matrix, values unchanged) — the
     kernels accept both layouts, but plain row-major forces a per-tile gather that caps the
     scaled dot below the fp8/fp4 peak. Runs once post-load; the swizzled artifact is cached as
     a BUFFER next to the affine scale Parameter (which stays the state_dict source of truth, so
-    save/dequantize round-trip untouched; scale tensors are small). gate_up scales take the
-    gate-interleaved artifact the fused GATE arm reads natively.
+    save/dequantize round-trip untouched; scale tensors are small). A gate_up grid swizzles as one
+    matrix over its 2N rows.
 
     SM100 only. The layout exists for the Blackwell tcgen05 scaled-MMA; elsewhere it buys
     nothing, costs the swizzled arm's tile constraints (``swizzled_scales_bm_pruner`` pins
@@ -1035,14 +1067,13 @@ def swizzle_scales_after_loading(model: nn.Module) -> None:
             scale = getattr(module, f"{proj}_scale_inv", None)
             if scale is None or scale.device.type == "meta":
                 continue
-            gate = proj == "gate_up_proj"
             n_rows = to_local(scale).shape[-2]
-            # the swizzled layout needs whole 128-row blocks per projection (under gate the
-            # split sits at N, mid-block unless N % 128 == 0, e.g. GPT-OSS N=2880); the
-            # kernels read the affine layout directly, so just skip the pre-swizzle
-            if (n_rows // 2 if gate else n_rows) % 128:
+            # the swizzled layout needs whole 128-row blocks; for gate_up that is the 2N extent,
+            # i.e. N % 64 (GPT-OSS N=2880 qualifies). The kernels read the affine layout directly,
+            # so a non-conforming projection just skips the pre-swizzle.
+            if n_rows % 128:
                 continue
-            swizzled = kernel.swizzle_mx_scales(to_local(scale).data, gate=gate)
+            swizzled = kernel.swizzle_mx_scales(to_local(scale).data)
             module.register_buffer(f"{proj}_scale_inv_swizzled", swizzled, persistent=False)
 
 
@@ -1179,20 +1210,13 @@ def replace_with_finegrained_layer(
     return model
 
 
-def _deinterleave_gate_up_rows(t: torch.Tensor) -> torch.Tensor:
-    """GPT-OSS fuses gate|up INTERLEAVED along the output dim ([g0, u0, g1, u1, ...]); the
-    finegrained kernels (and `FineGrainedExperts._apply_gate`'s ``chunk``) read the STACKED
-    form ([gate; up]). One permutation at load, values untouched."""
-    return torch.cat([t[:, 0::2], t[:, 1::2]], dim=1)
-
-
 class FineGrainedMxfp4Deserialize(ConversionOps):
     """Convert GPT-OSS MXFP4 checkpoint tensors to the finegrained layout: ``{proj}_blocks``
     ``(E, N, K/32, 16)`` uint8 (two low-nibble-first E2M1 values per byte) reshapes to the
     packed ``(E, N, K/2)`` int8 the kernels read directly — same nibble order — and
     ``{proj}_scales`` (biased-127 exponent bytes) bitcast to ``float8_e8m0fnu``. No swizzle
-    (the kernels take affine scales; the post-load hook builds the swizzled cache). gate_up
-    rows de-interleave from GPT-OSS's [g0, u0, ...] to the stacked [gate; up] form."""
+    (the kernels take affine scales; the post-load hook builds the swizzled cache). GPT-OSS ships
+    gate_up in the interleaved [g0, u0, ...] row order the kernels read, so rows pass through."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -1213,29 +1237,9 @@ class FineGrainedMxfp4Deserialize(ConversionOps):
 
         num_experts, rows = blocks.shape[0], blocks.shape[1]
         weight = blocks.reshape(num_experts, rows, -1).view(torch.int8)
-        # deinterleave BEFORE the e8m0 bitcast: cat/index ops aren't implemented for
-        # float8_e8m0fnu on CUDA, and the reorder is byte-identical either way
-        if proj == "gate_up_proj":
-            weight = _deinterleave_gate_up_rows(weight)
-            scales = _deinterleave_gate_up_rows(scales)
         scale_inv = scales.contiguous().view(_get_ue8m0_dtype())
         prefix = full_layer_name.rsplit(".", 1)[0]
         return {f"{prefix}.{proj}": weight.contiguous(), f"{prefix}.{proj}_scale_inv": scale_inv}
-
-
-class FineGrainedGateUpBiasDeinterleave(ConversionOps):
-    """GPT-OSS ``gate_up_proj_bias`` follows the interleaved output layout; de-interleave to
-    match the stacked weight rows produced by `FineGrainedMxfp4Deserialize`."""
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        # single-source converter: input_dict is keyed by the SOURCE PATTERN string (with
-        # any regex anchors), so don't look up by a hardcoded name
-        bias = next(iter(input_dict.values()))
-        bias = bias[0] if isinstance(bias, list) else bias
-        return {full_layer_name: _deinterleave_gate_up_rows(bias)}
 
 
 class FineGrainedViewPackedInt8(ConversionOps):
