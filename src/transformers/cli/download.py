@@ -17,19 +17,15 @@ import typer
 
 
 def download(
-    model_id: Annotated[str, typer.Argument(help="The model ID to download")],
-    cache_dir: Annotated[str | None, typer.Option(help="Directory where to save files.")] = None,
-    force_download: Annotated[
-        bool, typer.Option(help="If set, the files will be downloaded even if they are already cached locally.")
-    ] = False,
+    model_id: Annotated[str, typer.Argument(help="Model ID to download")],
+    cache_dir: Annotated[str | None, typer.Option(help="Directory to store files")] = None,
+    force_download: Annotated[bool, typer.Option(help="Download files even if they're already cached")] = False,
     trust_remote_code: Annotated[
         bool,
-        typer.Option(
-            help="Whether or not to allow for custom models defined on the Hub in their own modeling files. Use only if you've reviewed the code as it will execute on your local machine"
-        ),
+        typer.Option(help="Allow custom model code from the Hub to run locally after you've reviewed it"),
     ] = False,
 ):
-    """Download a model and its tokenizer from the Hub."""
+    """Download a model and tokenizer from the Hugging Face Hub"""
     from ..models.auto import AutoModel, AutoTokenizer
 
     AutoModel.from_pretrained(
