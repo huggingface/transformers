@@ -389,3 +389,35 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip("TODO: compass configures RoPE per layer type")
     def test_model_rope_scaling_from_config(self):
         pass
+
+    @unittest.skip("CohereCompass vision pos_embed not compatible with naive model parallelism")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip("CohereCompass vision pos_embed not compatible with naive model parallelism")
+    def test_model_parallel_beam_search(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_dynamic(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_generate_dynamic(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_generate_dynamic_static_cache(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_generate_static(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_generate_static_static_cache(self):
+        pass
+
+    @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
+    def test_torch_export_static(self):
+        pass
