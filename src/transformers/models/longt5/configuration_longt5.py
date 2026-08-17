@@ -84,10 +84,8 @@ class LongT5Config(PreTrainedConfig):
         if self.feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        # Same quirk as T5, since LongT5 is derived from it: the original T5 always scaled the decoder outputs,
-        # but the 1.1v does not. The model code was relying on saved configs where `tie_word_embeddings` is set
-        # to `False` in 1.1v and using it as indicator of whether to scale or not. But in fact we tie weights
-        # always, as the checkpoints only store `shared.weight`, so we force it to be `True`.
+        # Same quirk as T5: `tie_word_embeddings=False` indicates the 1.1v (no decoder output scaling), but the
+        # checkpoints only store `shared.weight` so weights are always tied.
         self.scale_decoder_outputs = self.tie_word_embeddings
         self.tie_word_embeddings = True
 

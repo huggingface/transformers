@@ -428,10 +428,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.config_tester.run_common_tests()
 
     def test_tie_word_embeddings(self):
-        # Same quirk as T5: `sweetcocoa/pop2piano` sets `tie_word_embeddings=False` to indicate that the decoder
-        # outputs must not be scaled, but it only stores `shared.weight`. So the flag must be forced to `True`
-        # (otherwise the embeddings are randomly initialized when loading from safetensors), and the scaling has
-        # to be driven by its own `scale_decoder_outputs` flag.
+        # Forced to True, see https://github.com/huggingface/transformers/pull/47620
         config = Pop2PianoConfig(vocab_size=99, d_model=16, d_ff=32, d_kv=8, num_layers=2, num_heads=2)
         self.assertTrue(config.tie_word_embeddings)
         self.assertTrue(config.scale_decoder_outputs)

@@ -65,9 +65,8 @@ class Pop2PianoConfig(PreTrainedConfig):
         self.num_decoder_layers = self.num_decoder_layers if self.num_decoder_layers is not None else self.num_layers
         self.is_gated_act = self.feed_forward_proj.split("-")[0] == "gated"
 
-        # Same quirk as T5, since Pop2Piano is derived from it: `tie_word_embeddings` was used as an indicator of
-        # whether to scale the decoder outputs, and `sweetcocoa/pop2piano` sets it to `False`. But the embeddings
-        # must be tied regardless, so we force it to be `True` and scale based on `scale_decoder_outputs`.
+        # Same quirk as T5: `tie_word_embeddings=False` indicates no decoder output scaling, but the checkpoint
+        # only stores `shared.weight` so weights are always tied.
         self.scale_decoder_outputs = self.tie_word_embeddings
         self.tie_word_embeddings = True
 

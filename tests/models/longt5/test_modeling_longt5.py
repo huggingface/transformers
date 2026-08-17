@@ -437,10 +437,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         self.config_tester.run_common_tests()
 
     def test_tie_word_embeddings(self):
-        # Same quirk as T5: the official LongT5 checkpoints set `tie_word_embeddings=False` to indicate that the
-        # decoder outputs must not be scaled, but they only store `shared.weight`. So the flag must be forced to
-        # `True` (otherwise the embeddings and the LM head stay randomly initialized), and the scaling has to be
-        # driven by its own `scale_decoder_outputs` flag.
+        # Forced to True, see https://github.com/huggingface/transformers/pull/47620
         config = self.model_tester.get_config()
         self.assertTrue(config.tie_word_embeddings)
         self.assertTrue(config.scale_decoder_outputs)
