@@ -220,7 +220,7 @@ class ColwiseParallel(TensorParallelLayer):
         if is_local_input:
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (Replicate(),):
-            x = x.redistribute(placements=[Replicate()], async_op=True)
+            x = x.redistribute(placements=[Replicate()])
         if self.should_use_local_tensors(module):
             x = x.to_local(grad_placements=[Partial()])
         return (x,) + args[1:], kwargs
@@ -237,7 +237,7 @@ class ColwiseParallel(TensorParallelLayer):
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
         if output.placements != (self.output_layouts,):
-            output = output.redistribute(placements=[self.output_layouts], async_op=True)
+            output = output.redistribute(placements=[self.output_layouts])
         return output.to_local() if self.use_local_output else output
 
 
@@ -285,7 +285,7 @@ class RowwiseParallel(TensorParallelLayer):
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
         if x.placements != (desired,):
-            x = x.redistribute(placements=[desired], async_op=True)
+            x = x.redistribute(placements=[desired])
         if self.should_use_local_tensors(module):
             x = x.to_local()
         return (x,) + args[1:], kwargs
@@ -325,7 +325,7 @@ class RowwiseParallel(TensorParallelLayer):
             if not isinstance(output, DTensor):
                 output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
             if output.placements != (self.output_layouts,):
-                output = output.redistribute(placements=[self.output_layouts], async_op=True)
+                output = output.redistribute(placements=[self.output_layouts])
             if self.should_use_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
                 output = output + bias
             if self.use_local_output:
@@ -398,7 +398,7 @@ class SequenceParallel(TensorParallelLayer):
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [seq], run_check=False)
         elif x.placements != (seq,):
-            x = x.redistribute(placements=[seq], async_op=True)
+            x = x.redistribute(placements=[seq])
         return (x,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
