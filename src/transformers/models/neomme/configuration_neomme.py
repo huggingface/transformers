@@ -47,8 +47,6 @@ class NeoMMEConfig(PreTrainedConfig):
         alternate between full-attention layers.
     use_value_embeds (`bool`, *optional*, defaults to `True`):
         Whether to add learned token value embeddings in the first and last full-attention layers.
-    patch_size (`int`, *optional*, defaults to 32):
-        Side length of an image patch in pixels.
     embedding_dim (`int`, *optional*, defaults to 128):
         Width of the token-level embeddings returned by [`NeoMMEForRetrieval`]. This setting is unrelated to
         `embedding_rank`.
