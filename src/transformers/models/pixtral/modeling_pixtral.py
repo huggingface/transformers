@@ -108,7 +108,7 @@ class PixtralRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = position_ids_expanded @ inv_freq_expanded
-            cos = freqs.cos() * self.attention_scaling  # (722, 2, 32)
+            cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_to_2d(cos)

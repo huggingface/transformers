@@ -306,7 +306,7 @@ class Qwen3VLVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-# Was same as ernie but this has block-split rope as llama!
+# conceptually same as ernie but this has block-split rope as llama!
 class Qwen3VLTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config, device=None):

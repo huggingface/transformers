@@ -51,13 +51,14 @@ class Sam3ViTConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
-    rope_theta: float = 10000.0
     window_size: int = 24
     global_attn_indexes: list[int] | None = None
     layer_scale_init_value: float | None = None
     pretrain_image_size: int | list[int] | tuple[int, int] = 336
     hidden_dropout: float | int = 0.0
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)

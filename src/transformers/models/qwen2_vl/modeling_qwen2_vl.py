@@ -128,10 +128,11 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-        self.mrope_section = self.config.rope_parameters["mrope_section"]
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        # Ignore copy
+        self.mrope_section = self.config.rope_parameters["mrope_section"]
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -170,10 +171,6 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         sin = self.recomposition_to_3d(sin)
         cos = self.recomposition_to_3d(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-    def recomposition_to_3d(self, freq):
-        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
-        return torch.cat((freq, freq), dim=-1)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
