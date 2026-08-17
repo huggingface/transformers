@@ -52,8 +52,6 @@ class NeoMMEConfig(PreTrainedConfig):
         `embedding_rank`.
     document_token_id (`int`, *optional*, defaults to 5):
         Token ID for the `<doc>` marker.
-    image_token_id (`int`, *optional*, defaults to 6):
-        Token ID for the `<img>` marker and image-patch placeholders.
 
     ```python
     >>> from transformers import NeoMMEModel, NeoMMEConfig
