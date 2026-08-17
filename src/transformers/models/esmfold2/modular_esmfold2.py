@@ -398,9 +398,8 @@ class EsmFold2AtomEncoder(nn.Module):
 
     def __init__(self, config: EsmFold2Config, structure_prediction: bool = True) -> None:
         super().__init__()
-        atom_config = (
-            config.structure_head.diffusion_module.atom_encoder if structure_prediction else config.atom_encoder
-        )
+        diffusion_config = config.structure_head.diffusion_module
+        atom_config = diffusion_config.atom_encoder if structure_prediction else config.atom_encoder
         self.structure_prediction = structure_prediction
 
         # The atom-name-char slice of `config.atom_feature_dim`.
@@ -670,8 +669,9 @@ class EsmFold2DiffusionTransformer(nn.Module):
 
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__()
+        diffusion_config = config.structure_head.diffusion_module
         self.layers = nn.ModuleList(
-            [EsmFold2DiffusionLayer(config) for _ in range(config.structure_head.diffusion_module.num_hidden_layers)]
+            [EsmFold2DiffusionLayer(config) for _ in range(diffusion_config.num_hidden_layers)]
         )
 
     def compute_pair_biases(self, pair_states: Tensor, attention_mask: Tensor | None = None) -> list[Tensor]:
