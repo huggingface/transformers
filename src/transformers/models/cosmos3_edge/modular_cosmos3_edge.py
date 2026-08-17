@@ -82,7 +82,7 @@ from ..siglip2.modeling_siglip2 import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeTextConfig(LlamaConfig):
     model_type = "cosmos3_edge_text"
@@ -141,7 +141,7 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     r"""
@@ -158,7 +158,7 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""

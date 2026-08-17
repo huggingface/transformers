@@ -61,7 +61,7 @@ from ..slanext.modeling_slanext import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
     r"""
@@ -89,7 +89,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
     decoder_hidden_size: int = 512
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(MBartConfig):
     base_config_key = "text_config"
@@ -108,7 +108,7 @@ class PPFormulaNetTextConfig(MBartConfig):
     is_decoder = AttributeError()
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
