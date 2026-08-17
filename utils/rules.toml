@@ -962,24 +962,8 @@ diff = '''
 '''
 
 [rules.TRF054]
-description = "Processor media token ids are properties, never instance attributes set in __init__."
-default_enabled = true
-allowlist_models = ["hunyuan_vl", "inkling", "qwen3_asr"]
-cutoff_date = "2026-06-20"
-
-[rules.TRF054.explanation]
-what_it_does = "Checks processor __init__ methods in processing_*.py for assignments to self.image_token_id, self.video_token_id, or self.audio_token_id. Models contributed before the cutoff date are exempt."
-why_bad = "Instance attributes on a processor serialize into processor_config.json, which v5 forbids for token ids; the saved value also goes stale when the tokenizer changes. Expose the id as a property reading the tokenizer."
-diff = '''
- class AcmeProcessor(ProcessorMixin):
-     def __init__(self, image_processor, tokenizer):
-         super().__init__(image_processor, tokenizer)
--        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-+
-+    @property
-+    def image_token_id(self):
-+        return self.tokenizer.convert_tokens_to_ids(self.image_token)
-'''
+deprecated = true
+description = "Removed in 0.1.4: flagged self.<media>_token_id assignments in processor __init__, too noisy on legitimate processor code."
 
 [rules.TRF055]
 description = "`config` on a PreTrainedModel subclass must be an annotation (`config: SomeConfig`), not an assignment (`config = SomeConfig`)."

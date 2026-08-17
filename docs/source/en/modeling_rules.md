@@ -761,21 +761,6 @@ if labels is not None:
 +    loss = self.loss_function(logits=logits, labels=labels, shift_labels=labels, vocab_size=self.config.vocab_size)
 ```
 
-### TRF054
-
-Checks processor __init__ methods in processing_*.py for assignments to self.image_token_id, self.video_token_id, or self.audio_token_id. Models contributed before the cutoff date are exempt. Instance attributes on a processor serialize into processor_config.json, which v5 forbids for token ids; the saved value also goes stale when the tokenizer changes. Expose the id as a property reading the tokenizer.
-
-```diff
-class AcmeProcessor(ProcessorMixin):
-     def __init__(self, image_processor, tokenizer):
-         super().__init__(image_processor, tokenizer)
--        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-+
-+    @property
-+    def image_token_id(self):
-+        return self.tokenizer.convert_tokens_to_ids(self.image_token)
-```
-
 ### TRF055
 
 Checks that PreTrainedModel subclasses in modeling_*.py and modular_*.py do not assign `config = SomeConfig` as a class attribute. `PreTrainedModel.__init_subclass__` derives `config_class` by looking for a `config` **annotation** via `inspect.get_annotations(cls)`. An assignment (`config = SomeConfig`) is invisible to this mechanism: it creates a stray class attribute but `inspect.get_annotations` returns `None` for it, so the subclass falls back to inheriting the parent's `config_class` instead of picking up the intended config. A pure annotation (`config: SomeConfig`) has no runtime value and does not create an attribute, so it is correctly detected by `inspect.get_annotations` and sets `config_class` to the right class.

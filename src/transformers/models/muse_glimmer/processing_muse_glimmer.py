@@ -35,6 +35,10 @@ class MuseGlimmerProcessor(ProcessorMixin):
         self.video_sep_token = "<|vid_frame_separator|>"
         self.video_start_token = "<|vid_start|>"
         self.video_end_token = "<|vid_end|>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
         super().__init__(
             image_processor=image_processor,
@@ -43,22 +47,6 @@ class MuseGlimmerProcessor(ProcessorMixin):
             chat_template=chat_template,
             **kwargs,
         )
-
-    @property
-    def image_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.image_token)
-
-    @property
-    def image_start_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.image_start_token)
-
-    @property
-    def image_end_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.image_end_token)
-
-    @property
-    def video_token_id(self):
-        return self.tokenizer.convert_tokens_to_ids(self.video_token)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
