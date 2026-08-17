@@ -462,7 +462,6 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_to_2d(self, freq):
-        # in contrast to pixtral, interleave grids as H-H-W-W
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
         return freq_hw.repeat_interleave(2, dim=-1)

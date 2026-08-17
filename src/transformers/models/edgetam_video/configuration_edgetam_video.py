@@ -131,8 +131,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_k_sizes (`List[int]`, *optional*, defaults to `[16, 16]`):
@@ -250,10 +248,12 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_mlp_hidden_size: int = 2048
     memory_attention_mlp_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: float | int = 10000
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
+    max_position_embeddings: int | None = None
+    # ig should be `memory_rope_parameters` though not sure if the utilities will catch up
+    rope_parameters: dict | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256
