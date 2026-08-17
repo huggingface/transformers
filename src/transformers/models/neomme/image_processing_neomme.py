@@ -101,14 +101,12 @@ class NeoMMEImageProcessor(TorchvisionBackend):
 
     valid_kwargs = NeoMMEImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
-    # `pixel / 127.5 - 1`: `image_mean` is a shift and `image_std` a no-op (as in chameleon), not dataset
-    # statistics. The usual `1/255` + `0.5` form is the same map to ~1e-7; this one is bit-exact.
-    image_mean = [1.0, 1.0, 1.0]
-    image_std = [1.0, 1.0, 1.0]
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
     do_convert_rgb = True
     do_resize = True
     do_rescale = True
-    rescale_factor = 1 / 127.5
+    rescale_factor = 1 / 255
     do_normalize = True
     patch_size = 32
     max_side = None
