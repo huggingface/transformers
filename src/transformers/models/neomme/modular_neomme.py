@@ -748,12 +748,6 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
         self.model = NeoMMEModel(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.model.embeddings.word_embeddings = value
-
     def get_output_embeddings(self):
         """The decode is tied through the factorized embedding; there is no separate output layer."""
         return None
@@ -836,12 +830,6 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
         self.model = NeoMMEModel(config)
         self.embedding_proj_layer = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.model.embeddings.word_embeddings = value
 
     @can_return_tuple
     @auto_docstring
