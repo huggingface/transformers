@@ -538,7 +538,7 @@ class MtpModel(PreTrainedModel):
             if logits_processor is not None and full_input_ids is not None:
                 next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
             # Append the drafted logits AFTER logits processors if any
-            drafted_logits.append(next_token_logits)
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
                 probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
