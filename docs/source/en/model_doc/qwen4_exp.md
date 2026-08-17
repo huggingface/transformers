@@ -17,14 +17,11 @@ rendered properly in your Markdown viewer.
 
 # Qwen4-Exp
 
-Qwen4-Exp extends the Qwen3.5 hybrid text and multimodal architecture with learned hyper-connections and positional
-lexical embeddings (PLE). Each decoder block mixes several residual streams before attention and the sparse MoE
-block, then learns how strongly to inject each block output back into those streams. Selected layers also add PLE
-features built from hashed token n-grams and a dilated depthwise convolution.
+Qwen4-Exp builds on Qwen3.5's hybrid text and multimodal architecture with three key innovations: GatedResidual (GR), Per-Layer Embedding (PLE), and Qwen Sparse Attention (QSA).
 
-The text backbone retains Qwen3.5's mixture of Gated DeltaNet linear-attention layers and gated full-attention layers.
-Every decoder layer uses routed experts together with a shared expert; Qwen4-Exp does not provide dense decoder blocks or
-a dense fallback. The multimodal model reuses the Qwen3.5 vision encoder and multimodal rotary position encoding.
+GR is a Qwen-developed residual architecture that combines Hyper-Connection with GatedNorm. It mixes multiple residual streams with fine-grained elementwise gating before each attention and Mixture-of-Experts (MoE) block, then controls how much of the block output is injected back into each stream. PLE augments selected decoder layers with layer-specific lexical features derived from hashed token n-grams and a dilated depthwise convolution.
+
+QSA uses multi-head query representations to score compressed key blocks, selects relevant contiguous token blocks, and keeps the incomplete trailing block uncompressed. This block-level design reduces selection overhead and improves memory locality over long sequences. Together, Gated DeltaNet and QSA make Qwen4-Exp the first hybrid architecture to combine linear attention with sparse attention, substantially improving inference efficiency for long-context workloads.
 
 ## Usage tips
 
