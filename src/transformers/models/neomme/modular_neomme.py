@@ -305,14 +305,13 @@ class NeoMMEPatchEmbeddings(nn.Module):
     def __init__(self, config: NeoMMEConfig):
         super().__init__()
         self.norm = nn.LayerNorm(config.patch_dim)
-        self.projection = nn.Sequential(
-            nn.Linear(config.patch_dim, config.hidden_size * 2, bias=False),
-            nn.GELU(),
-            nn.Linear(config.hidden_size * 2, config.hidden_size, bias=True),
-        )
+        self.up_proj = nn.Linear(config.patch_dim, config.hidden_size * 2, bias=False)
+        self.act_fn = nn.GELU()
+        self.down_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=True)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        return self.projection(self.norm(pixel_values))
+        hidden_states = self.up_proj(self.norm(pixel_values))
+        return self.down_proj(self.act_fn(hidden_states))
 
 
 class NeoMMERotaryEmbedding(nn.Module):
@@ -564,11 +563,9 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         elif isinstance(module, NeoMMEValueEmbeddings):
             init.zeros_(module.weight)
         elif isinstance(module, NeoMMEPatchEmbeddings):
-            for submodule in module.projection.modules():
-                if isinstance(submodule, nn.Linear):
-                    init.normal_(submodule.weight, mean=0.0, std=std)
-                    if submodule.bias is not None:
-                        init.zeros_(submodule.bias)
+            init.normal_(module.up_proj.weight, mean=0.0, std=std)
+            init.normal_(module.down_proj.weight, mean=0.0, std=std)
+            init.zeros_(module.down_proj.bias)
         elif isinstance(module, NeoMMEAttention):
             init.normal_(module.q_proj.weight, mean=0.0, std=std)
             init.normal_(module.kv_proj.weight, mean=0.0, std=std)
