@@ -1684,19 +1684,22 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
-            candidate_ids = input_ids
+            candidate_ids = input_ids.to(device=candidate_logits.device)
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(
-                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
-                )
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
                 if self.do_sample:
-                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
                 else:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                # Append it to the full sequence
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+            # Put back to `input_ids.device` as we performed all computations on `candidate_logits.device`
+            candidate_ids = candidate_ids.to(input_ids.device)
         # Here we can vectorize as we don't have any processors
         else:
             if self.do_sample:
