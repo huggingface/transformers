@@ -105,12 +105,6 @@ class NeoMMEPatchEmbeddings(nn.Module):
         return self.down_proj(self.act_fn(hidden_states))
 
 
-def get_rotary_dim(config: NeoMMEConfig, layer_type: str) -> int:
-    """Number of head dimensions that carry position for `layer_type`."""
-    partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
-    return int(config.head_dim * partial_rotary_factor)
-
-
 class NeoMMERotaryEmbedding(nn.Module):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
@@ -143,7 +137,8 @@ class NeoMMERotaryEmbedding(nn.Module):
         layer_type: str | None = None,
     ) -> tuple[torch.Tensor, float]:
         """Default inverse frequencies for a layer type."""
-        rotary_dim = get_rotary_dim(config, layer_type)
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0)
+        rotary_dim = int(config.head_dim * partial_rotary_factor)
         theta = config.rope_parameters[layer_type]["rope_theta"]
         inv_freq = theta ** -(torch.arange(0, rotary_dim, 2, dtype=torch.float, device=device) / rotary_dim)
         return inv_freq, 1.0
@@ -261,7 +256,8 @@ class NeoMMEAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.rotary_dim = get_rotary_dim(config, self.attention_type)
+        partial_rotary_factor = config.rope_parameters[self.attention_type].get("partial_rotary_factor", 1.0)
+        self.rotary_dim = int(config.head_dim * partial_rotary_factor)
         self.is_causal = False
         self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
         self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
