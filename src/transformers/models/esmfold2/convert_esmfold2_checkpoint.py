@@ -54,7 +54,6 @@ _LEGACY_RENAMES = {
     "pairwise_hidden_size": "d_pair",
     "single_inputs_size": "inputs.d_inputs",
     "sliding_window": "inputs.atom_encoder.swa_window_size",
-    "msa_encoder.overwrite": "msa_encoder_overwrite",
     "folding_trunk_num_hidden_layers": "folding_trunk.n_layers",
     "parcae_num_coda_layers": "parcae.coda_n_layers",
     "num_relative_residx_bins": "n_relative_residx_bins",
@@ -119,6 +118,7 @@ _LEGACY_DROP_PATHS = {
     "structure_head.diffusion_module.relpos_r_max",
     "structure_head.diffusion_module.relpos_s_max",
     "msa_encoder.enabled",  # always built now (every release enables it)
+    "msa_encoder_overwrite",  # value-checked in ``build_legacy_config``; the additive path was removed
     "lm_encoder.enabled",  # always built now (every release enables it)
     "confidence_head.enabled",
     "confidence_head.folding_trunk.n_heads",
@@ -294,6 +294,10 @@ def build_legacy_config(old: dict) -> dict:
     if "dtype" in old:
         config["dtype"] = old["dtype"]
     _derive_widths(old, config)
+    # Every release overwrites the injected pair with the MSA-conditioned one, so the port dropped
+    # the additive path; refuse a variant that needs it rather than converting it incorrectly.
+    if not old.get("msa_encoder_overwrite", True):
+        raise ValueError("msa_encoder_overwrite=false is not supported: the port removed the additive MSA path")
     mapped = {_LEGACY_RENAMES.get(port_path, port_path) for port_path in _LEGACY_PORT_PATHS}
     unexpected = _leaf_paths(old) - (mapped | _LEGACY_DROP_PATHS | _LEGACY_WIDTH_INPUTS | {"dtype"})
     if unexpected:

@@ -101,6 +101,8 @@ def build_esmc_config_dict(esmc_dir: str) -> dict:
     config = {field: old[field] for field in _LEGACY_FIELDS if field in old}
     for port_field, legacy_field in _LEGACY_RENAMES.items():
         config[port_field] = old[legacy_field]
+    # The research config carries no FFN width; its code derives it from ``d_model``.
+    config["intermediate_size"] = int((8 / 3 * config["hidden_size"] + 255) // 256 * 256)
     if "dtype" in old:
         config["dtype"] = old["dtype"]
     mapped = {*_LEGACY_FIELDS, *_LEGACY_RENAMES.values(), "dtype"}

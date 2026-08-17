@@ -45,6 +45,7 @@ class EsmcModelTester:
         use_labels=True,
         vocab_size=33,
         hidden_size=32,
+        intermediate_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         initializer_range=0.02,
@@ -59,6 +60,7 @@ class EsmcModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.initializer_range = initializer_range
@@ -85,6 +87,7 @@ class EsmcModelTester:
         return EsmcConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             pad_token_id=1,

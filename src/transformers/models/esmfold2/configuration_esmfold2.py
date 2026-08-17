@@ -248,9 +248,6 @@ class EsmFold2ConfidenceHeadConfig(PreTrainedConfig):
 @strict
 class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     r"""
-    overwrite (`bool`, *optional*, defaults to `True`):
-        Whether the MSA-conditioned pair representation replaces the injected pair each trunk loop
-        rather than being added to it.
     divide_outer_before_proj (`bool`, *optional*, defaults to `False`):
         Order of the outer-product-mean normalization: `False` computes `Wout(outer) / n_valid` (the
         projection bias is scaled too), `True` computes `Wout(outer / n_valid)`. Different released
@@ -273,7 +270,6 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
     """
 
-    overwrite: bool | None = True
     divide_outer_before_proj: bool | None = False
     hidden_size: int | None = 128
     outer_hidden_size: int | None = 32

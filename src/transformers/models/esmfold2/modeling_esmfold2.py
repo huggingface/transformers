@@ -340,7 +340,7 @@ class EsmFold2AtomAttention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class EsmFold2AtomLayer(nn.Module):
+class EsmFold2AtomLayer(GradientCheckpointingLayer):
     """adaLN-Zero + SWA attention + SwiGLU FFN, modulated by ``adaln_linear(silu(atom_conditioning))``."""
 
     def __init__(self, config: EsmFold2Config, atom_config: EsmFold2AtomEncoderConfig) -> None:
@@ -694,7 +694,7 @@ class EsmFold2ConditionedTransition(nn.Module):
         return torch.sigmoid(self.output_gate(single_states)) * hidden_states
 
 
-class EsmFold2DiffusionLayer(nn.Module):
+class EsmFold2DiffusionLayer(GradientCheckpointingLayer):
     """Pair-bias attention and transition, each adaLN-conditioned and gated on the single stream.
 
     The adaLN pre-norm and the output gate live here rather than inside the attention, so that
@@ -1267,45 +1267,47 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
         return self.o_proj(attn_output.reshape(batch_size, seq_len, msa_depth, -1))
 
 
-@dataclass
-class EsmFold2Output(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output of [`EsmFold2Model`]. All confidence scores are on a 0-1 scale; per-sample tensors
     have a leading `num_diffusion_samples` axis.
-
-    Args:
-        distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
-            Predicted distance-distribution logits over residue pairs (RNG-independent; no diffusion sampling).
-        sample_atom_coords (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
-            Predicted all-atom Cartesian coordinates for each diffusion sample.
-        plddt_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
-            Per-atom pLDDT bin logits.
-        plddt (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
-            Per-residue predicted lDDT confidence.
-        plddt_per_atom (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms)`):
-            Per-atom predicted lDDT confidence.
-        plddt_ca (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
-            Predicted lDDT at the representative (Cα) atom of each token.
-        complex_plddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
-            Mean pLDDT over all atoms of the complex.
-        complex_iplddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
-            Interface-weighted complex pLDDT.
-        pae_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
-            Predicted-aligned-error bin logits.
-        pae (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
-            Expected predicted aligned error (Å) for each residue pair.
-        pde_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
-            Predicted-distance-error bin logits.
-        pde (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
-            Expected predicted distance error (Å) for each residue pair.
-        resolved_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
-            Per-atom resolved/unresolved logits.
-        ptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
-            Predicted TM-score for each sample.
-        iptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
-            Predicted interface TM-score for each sample.
-        pair_chains_iptm (`torch.FloatTensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
-            Predicted interface TM-score for each ordered chain pair.
+    """
+)
+@dataclass
+class EsmFold2Output(ModelOutput):
+    r"""
+    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+        Predicted distance-distribution logits over residue pairs (RNG-independent; no diffusion sampling).
+    sample_atom_coords (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
+        Predicted all-atom Cartesian coordinates for each diffusion sample.
+    plddt_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
+        Per-atom pLDDT bin logits.
+    plddt (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+        Per-residue predicted lDDT confidence.
+    plddt_per_atom (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms)`):
+        Per-atom predicted lDDT confidence.
+    plddt_ca (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+        Predicted lDDT at the representative (Cα) atom of each token.
+    complex_plddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+        Mean pLDDT over all atoms of the complex.
+    complex_iplddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+        Interface-weighted complex pLDDT.
+    pae_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
+        Predicted-aligned-error bin logits.
+    pae (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+        Expected predicted aligned error (Å) for each residue pair.
+    pde_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
+        Predicted-distance-error bin logits.
+    pde (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+        Expected predicted distance error (Å) for each residue pair.
+    resolved_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
+        Per-atom resolved/unresolved logits.
+    ptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+        Predicted TM-score for each sample.
+    iptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+        Predicted interface TM-score for each sample.
+    pair_chains_iptm (`torch.FloatTensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
+        Predicted interface TM-score for each ordered chain pair.
     """
 
     distogram_logits: Tensor | None = None
@@ -1326,26 +1328,28 @@ class EsmFold2Output(ModelOutput):
     pair_chains_iptm: Tensor | None = None
 
 
-@dataclass
-class EsmFold2TrunkOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output of [`EsmFold2Model.forward`]: the folding trunk's pair representation, the distogram read
     off it, and the conditioning tensors that the structure and confidence heads consume. Everything
     here is deterministic given the inputs apart from the trunk's random initial pair state.
-
-    Args:
-        distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
-            Predicted distance-distribution logits over residue pairs.
-        pair_states (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
-            The trunk's final pair representation, in fp32.
-        single_inputs (`torch.FloatTensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
-            Concatenated single-input features built by the inputs embedder.
-        relative_position_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
-            Relative-position pair encoding.
-        token_bonds_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
-            Embedded inter-token covalent-bond feature.
-        atom_inputs ([`EsmFold2AtomInputs`]):
-            The featurized reference-conformer atom inputs, reused by the diffusion atom stack.
+    """
+)
+@dataclass
+class EsmFold2TrunkOutput(ModelOutput):
+    r"""
+    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+        Predicted distance-distribution logits over residue pairs.
+    pair_states (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+        The trunk's final pair representation, in fp32.
+    single_inputs (`torch.FloatTensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
+        Concatenated single-input features built by the inputs embedder.
+    relative_position_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+        Relative-position pair encoding.
+    token_bonds_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+        Embedded inter-token covalent-bond feature.
+    atom_inputs ([`EsmFold2AtomInputs`]):
+        The featurized reference-conformer atom inputs, reused by the diffusion atom stack.
     """
 
     distogram_logits: Tensor | None = None
@@ -1822,7 +1826,6 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [
-        "EsmcLayer",
         "EsmFold2PairUpdateLayer",
         "EsmFold2AtomEncoder",
         "EsmFold2AtomDecoder",
@@ -2146,10 +2149,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
 
             injected_pair_states = initial_pair_states
             if msa_kwargs is not None:
-                msa_pair = self.msa_encoder(pair_states=injected_pair_states, **msa_kwargs)
-                injected_pair_states = (
-                    msa_pair if self.config.msa_encoder.overwrite else (injected_pair_states + msa_pair)
-                )
+                injected_pair_states = self.msa_encoder(pair_states=injected_pair_states, **msa_kwargs)
 
             if refined_lm_pair_states is not None:
                 injected_pair_states = injected_pair_states + refined_lm_pair_states

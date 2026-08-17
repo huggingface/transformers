@@ -60,13 +60,6 @@ class EsmcConfig(LlamaConfig):
         Index of the mask token in the vocabulary (``"<mask>"``), used for masked language modelling.
     classifier_dropout (`float`, *optional*, defaults to 0.1):
         Dropout ratio for the classification head.
-    expansion_ratio (`float`, *optional*, defaults to `8/3`):
-        Hidden-dim expansion ratio for the SwiGLU feed-forward network. When
-        `intermediate_size` is not given it is derived from this as
-        `expansion_ratio * hidden_size` rounded up to a multiple of 256.
-    scale_residue (`bool`, *optional*, defaults to `True`):
-        Whether to apply ESM3 residual scaling (`1 / sqrt(num_hidden_layers / 36)`
-        per block) to stabilise deep networks.
 
     Examples:
 
@@ -89,7 +82,7 @@ class EsmcConfig(LlamaConfig):
     # Llama fields re-declared only where ESMC's default differs from the parent's.
     vocab_size: int = 64
     hidden_size: int = 2560
-    intermediate_size: int | None = None
+    intermediate_size: int = 6912
     num_hidden_layers: int = 80
     num_attention_heads: int = 40
     pad_token_id: int | None = 1
@@ -99,8 +92,6 @@ class EsmcConfig(LlamaConfig):
     # ESMC-specific fields.
     mask_token_id: int | None = 32
     classifier_dropout: float | None = 0.1
-    expansion_ratio: float | None = 8 / 3
-    scale_residue: bool | None = True
 
     # Llama fields that do not apply to ESMC
     rms_norm_eps = AttributeError()
@@ -109,8 +100,6 @@ class EsmcConfig(LlamaConfig):
     keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
-        if self.intermediate_size is None:
-            self.intermediate_size = int(((self.expansion_ratio * self.hidden_size) + 255) // 256 * 256)
         # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles
         # as BOS, `<eos>`=2); configs saved before these fields existed carry explicit nulls.
         if self.bos_token_id is None:
@@ -206,8 +195,8 @@ class EsmcLayer(LlamaDecoderLayer):
         # LayerNorm instead of Llama's RMSNorm, dtype-restoring (see EsmcLayerNorm).
         self.input_layernorm = EsmcLayerNorm(config.hidden_size)
         self.post_attention_layernorm = EsmcLayerNorm(config.hidden_size)
-        # ESM3 residual scaling to stabilise deep networks.
-        self.scaling_factor = math.sqrt(config.num_hidden_layers / 36) if config.scale_residue else 1.0
+        # ESM3 residual scaling to stabilise deep networks; every released checkpoint uses it.
+        self.scaling_factor = math.sqrt(config.num_hidden_layers / 36)
 
     def forward(
         self,

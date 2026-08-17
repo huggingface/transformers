@@ -269,8 +269,8 @@ class EsmcLayer(GradientCheckpointingLayer):
         # LayerNorm instead of Llama's RMSNorm, dtype-restoring (see EsmcLayerNorm).
         self.input_layernorm = EsmcLayerNorm(config.hidden_size)
         self.post_attention_layernorm = EsmcLayerNorm(config.hidden_size)
-        # ESM3 residual scaling to stabilise deep networks.
-        self.scaling_factor = math.sqrt(config.num_hidden_layers / 36) if config.scale_residue else 1.0
+        # ESM3 residual scaling to stabilise deep networks; every released checkpoint uses it.
+        self.scaling_factor = math.sqrt(config.num_hidden_layers / 36)
 
     def forward(
         self,
