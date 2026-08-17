@@ -260,8 +260,9 @@ class GenerationConfigTest(unittest.TestCase):
 
     def test_validate_pad_token_id_in_eos_token_id(self):
         """
-        `validate` should warn when `pad_token_id` is also in `eos_token_id`, as this can cause `generate` to stop
-        immediately. See https://github.com/huggingface/transformers/issues/48016
+        `validate` should warn when `pad_token_id` is in a multi-token `eos_token_id` list, as this can cause
+        `generate` to stop immediately. The single-eos case (pad == eos as int) is the common default for many
+        models and is not flagged. See https://github.com/huggingface/transformers/issues/48016
         """
         logger = transformers_logging.get_logger("transformers.generation.configuration_utils")
 
@@ -274,13 +275,13 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertIn("pad_token_id", captured_logs.out)
         self.assertIn("eos_token_id", captured_logs.out)
 
-        # pad_token_id equals a single int eos_token_id -> warning
+        # pad_token_id equals a single int eos_token_id -> no warning (common default)
         logger.warning_once.cache_clear()
         logger.info_once.cache_clear()
         with LoggingLevel(logging.INFO):
             with CaptureLogger(logger) as captured_logs:
                 GenerationConfig(pad_token_id=2, eos_token_id=2)
-        self.assertIn("pad_token_id", captured_logs.out)
+        self.assertEqual(len(captured_logs.out), 0)
 
         # pad_token_id NOT in eos_token_id -> no warning
         logger.warning_once.cache_clear()

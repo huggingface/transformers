@@ -827,17 +827,21 @@ class GenerationConfig(PushToHubMixin):
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
                     )
 
-        # 2.7. detect `pad_token_id` overlapping with `eos_token_id`. When the pad token is also an EOS token,
-        # `generate` may stop immediately (every padded position is treated as a finished sequence), producing
-        # empty or degenerate outputs. See https://github.com/huggingface/transformers/issues/48016
-        if self.pad_token_id is not None and self.eos_token_id is not None:
-            eos_ids = self.eos_token_id if isinstance(self.eos_token_id, list) else [self.eos_token_id]
-            if self.pad_token_id in eos_ids:
-                minor_issues["pad_token_id"] = (
-                    f"`pad_token_id` ({self.pad_token_id}) is in `eos_token_id` ({eos_ids}). This may cause "
-                    "`generate` to stop immediately, as every padded position is treated as a finished sequence. "
-                    "Consider setting `pad_token_id` to a token that is not in `eos_token_id`."
-                )
+        # 2.7. detect `pad_token_id` overlapping with `eos_token_id` when there are multiple EOS tokens.
+        # When `eos_token_id` is a list and `pad_token_id` is one of those tokens, `generate` may stop
+        # immediately (every padded position is treated as a finished sequence), producing empty outputs.
+        # The single-eos case (pad == eos as a single int) is the common default for many models and is not
+        # flagged here. See https://github.com/huggingface/transformers/issues/48016
+        if (
+            self.pad_token_id is not None
+            and isinstance(self.eos_token_id, list)
+            and self.pad_token_id in self.eos_token_id
+        ):
+            minor_issues["pad_token_id"] = (
+                f"`pad_token_id` ({self.pad_token_id}) is in `eos_token_id` ({self.eos_token_id}). This may cause "
+                "`generate` to stop immediately, as every padded position is treated as a finished sequence. "
+                "Consider setting `pad_token_id` to a token that is not in `eos_token_id`."
+            )
 
         # 3. Check common issue: passing `generate` arguments inside the generation config
         generate_arguments = (
