@@ -1039,6 +1039,11 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
 
+    # TEMPORARY - DO NOT MERGE: force the examples_torch job to run so we can verify the
+    # pytest unpin in examples/pytorch/_tests_requirements.txt. The fetcher only selects
+    # examples tests on the full-CI path, so a requirements-only diff never exercises them.
+    test_files_to_run.extend(glob.glob("examples/pytorch/*test_*.py"))
+
     if should_run_repo_utils_tests(modified_files):
         test_files_to_run.extend(get_repo_utils_tests())
 
