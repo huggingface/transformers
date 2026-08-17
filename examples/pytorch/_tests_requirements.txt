@@ -15,6 +15,7 @@ nltk
 pandas
 datasets >= 1.13.3
 fire
+pytest
 conllu
 sentencepiece != 0.1.92
 protobuf
