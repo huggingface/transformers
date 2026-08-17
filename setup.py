@@ -150,7 +150,6 @@ _deps = [
     "torch>=2.5",
     "torchaudio",
     "torchvision",
-    "trimesh",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.60",
     "typer",
@@ -233,7 +232,6 @@ extras["testing"] = (
         "tensorboard",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
-        "trimesh",  # builds the WeatherNext 2 mesh/grid connectivity
     )
     + extras["docs"]
     + extras["quality"]
