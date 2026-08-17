@@ -925,7 +925,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         # Strip padding patches before scattering into text sequence.
         # Padding patches have position_ids == -1 on both axes.
         # We only scatter non-padding patches into the placeholder token positions.
-        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)  # (batch, num_patches)
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
@@ -1170,15 +1170,16 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
 
         # Strip padding patches before scattering into text sequence.
-        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.device)
+        non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        vision_outputs = vision_outputs[non_pad_mask.flatten(0, 1)]  # (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[
+            non_pad_mask.flatten(0, 1)
+        ]  # (total_valid_patches, text_hidden_size)
 
         split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
-        return Gemma4UnifiedVisionModelOutput(
-            pooler_output=torch.split(vision_outputs, split_sizes),
-        )
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        return vision_outputs
 
 
 def create_masks_for_vision_model(
