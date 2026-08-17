@@ -1053,7 +1053,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations({
-            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some of the key elements:\n\n* **A'],
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nWhat do you see here?\nmodel\nThe first image shows a brown and white cow standing on a sandy beach next to a clear blue ocean and sky. The cow is looking directly at the'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
         }).get_expectation()  # fmt: skip
