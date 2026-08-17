@@ -357,6 +357,8 @@ class GenerationConfig(PushToHubMixin):
             `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
             to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
             is not compatible with prompt lookup decoding.
+        speculation_type (`str`, *optional*):
+            The requested speculation type. Accepted values are [`dflash`].
 
         > Parameters related to performances and compilation
 
@@ -463,6 +465,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
         self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
+        self.speculation_type = kwargs.pop("speculation_type", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
@@ -576,7 +579,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 logger.warning(
-                    "You've set `assistant_model`or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
+                    "You've set `assistant_model` or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
