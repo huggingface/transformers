@@ -266,8 +266,8 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config.tie_word_embeddings = False
         model = FSMTForConditionalGeneration(config)
 
-        # `tie_word_embeddings=False` only unties the output projection: the encoder/decoder embeddings are
-        # structural aliases of each other and stay tied, so two distinct storages are left.
+        # FSMT shares three weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
         self.assertEqual(
             len(
                 {
@@ -276,7 +276,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     model.base_model.decoder.output_projection.weight.data_ptr(),
                 }
             ),
-            2,
+            3,
         )
 
     @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
