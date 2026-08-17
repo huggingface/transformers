@@ -685,10 +685,8 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    # `lm_head.weight` is a vocab-sized slice of `input_embedding.weight`, whose trailing
-    # `prompt_types * prompt_length` rows are soft-prompt embeddings and never decoding
-    # targets. A whole-tensor tie would be shape-mismatched, so the checkpoint ships the
-    # head explicitly and nothing is tied here.
+    # The head is a vocab-sized slice of `input_embedding.weight`, so a whole-tensor tie
+    # would be shape-mismatched; the checkpoint ships `lm_head.weight` explicitly.
     _tied_weights_keys = {}
 
     def __init__(self, config: CpmAntConfig):
