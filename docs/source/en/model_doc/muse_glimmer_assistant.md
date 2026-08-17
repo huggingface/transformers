@@ -74,6 +74,7 @@ print(response)
 ## Notes
 
 - The drafter needs the main model's hidden states, so `generate` forces `output_hidden_states=True` for the target model when `speculation_type="dflash"`.
+- See the [Meta is back with Muse Glimmer: local, agentic, multimodal, and open source!](https://huggingface.co/blog/muse-glimmer) blog post for more details and example usage.
 
 ## MuseGlimmerAssistantConfig
 

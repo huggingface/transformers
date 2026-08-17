@@ -114,6 +114,7 @@ print(response)
 - Videos are processed as frames, and [`MuseGlimmerProcessor`] writes a `Time: <seconds>s` marker before each temporal group so the model can reason about ordering. The timestamps come from the video metadata, so pass `video_metadata` when the frame rate can't be inferred. Otherwise the processor warns and falls back to 24 fps, which shifts every timestamp in the prompt.
 - Images and videos are expanded into token spans by the processor. An image becomes `<|image_start|>` followed by one `<|patch|>` per merged patch and `<|image_end|>`. Only include `{"type": "image"}` in the chat messages.
 - [`MuseGlimmerTextConfig`] derives `layer_types` and `layer_rope_theta` from `num_hidden_layers` in its `__post_init__`, counting the NoPE layers backward from the last layer. Set both explicitly if you change the layer count and want a different pattern.
+- See the [Meta is back with Muse Glimmer: local, agentic, multimodal, and open source!](https://huggingface.co/blog/muse-glimmer) blog post for more details and example usage.
 
 ## MuseGlimmerConfig
 
