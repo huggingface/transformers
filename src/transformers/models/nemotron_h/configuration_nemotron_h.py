@@ -13,8 +13,6 @@
 # limitations under the License.
 """NemotronH model configuration"""
 
-from typing import Optional
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
@@ -230,7 +228,7 @@ class NemotronHConfig(PreTrainedConfig):
                 )
 
     @property
-    def num_hidden_layers(self) -> Optional[int]:
+    def num_hidden_layers(self) -> int | None:
         """Returns the number of layers from ``layers_block_type`` for backward compatibility.
 
         NemotronH uses ``layers_block_type`` (a list) to determine the number of layers,
