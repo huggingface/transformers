@@ -362,8 +362,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         self.lambdas = nn.Parameter(torch.tensor([1.0, 0.0]))
         self.input_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
         self.post_attention_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
-        # muP depth transfer, a forward-time constant that is never folded into the weights.
-        self.residual_scale = (2 * config.num_hidden_layers) ** -0.5
+        self.residual_scale = config.residual_scale
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(

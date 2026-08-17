@@ -43,6 +43,8 @@ class NeoMMEConfig(PreTrainedConfig):
         alternate between full-attention layers.
     use_value_embeds (`bool`, *optional*, defaults to `True`):
         Whether to add learned token value embeddings in the first and last full-attention layers.
+    residual_scale (`float`, *optional*):
+        Scale applied to attention and MLP residual branches. Defaults to `1 / sqrt(2 * num_hidden_layers)`.
     embedding_dim (`int`, *optional*, defaults to 128):
         Width of the token-level embeddings returned by [`NeoMMEForRetrieval`]. This setting is unrelated to
         `embedding_rank`.
@@ -82,6 +84,7 @@ class NeoMMEConfig(PreTrainedConfig):
     sliding_window_long: int = 1024
 
     use_value_embeds: bool = True
+    residual_scale: float | None = None
 
     patch_size: int = 32
     embedding_dim: int = 128
@@ -97,6 +100,8 @@ class NeoMMEConfig(PreTrainedConfig):
                 "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
                 for i in range(self.num_hidden_layers)
             ]
+        if self.residual_scale is None:
+            self.residual_scale = (2 * self.num_hidden_layers) ** -0.5
         self.validate_layer_types()
 
         super().__post_init__(**kwargs)
@@ -111,6 +116,8 @@ class NeoMMEConfig(PreTrainedConfig):
                 f"and {self.sliding_window_long}. Pass two equal widths for a single band; the research "
                 "encoding of `sliding_window_long = 0` for 'uniform' is resolved by the conversion script."
             )
+        if self.residual_scale <= 0:
+            raise ValueError("residual_scale must be positive")
         self._validate_rotary_dims()
 
     def convert_rope_params_to_dict(self, **kwargs):
