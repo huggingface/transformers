@@ -407,11 +407,6 @@ class SequenceParallel(TensorParallelLayer):
         return output
 
 
-# =============================================================================
-# MoE / packed-linear (grouped_mm needs plain tensors)
-# =============================================================================
-
-
 class PackedColwiseParallel(TensorParallelLayer):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
