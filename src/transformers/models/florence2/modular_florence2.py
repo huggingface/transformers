@@ -1462,7 +1462,7 @@ class Florence2Model(LlavaModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if encoder_outputs is None and pixel_values is not None else None,
         )
 
 
@@ -1587,7 +1587,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -1596,21 +1596,18 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
         inputs_embeds = model_kwargs.pop("inputs_embeds", None)
-        pixel_values = model_kwargs.pop("pixel_values", None)
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        if (image_outputs := model_kwargs.pop("encoder_outputs", {}).get("images")) is not None:
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
+        model_kwargs = super()._maybe_prepare_encoder_kwargs_for_generation(
             None, model_kwargs, model_input_name, generation_config
         )
         model_kwargs.pop("inputs_embeds", None)
