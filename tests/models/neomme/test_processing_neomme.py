@@ -18,6 +18,7 @@ import unittest
 from unittest import mock
 
 import numpy as np
+from jinja2.exceptions import TemplateError
 from parameterized import parameterized
 
 from transformers.testing_utils import require_tokenizers, require_torch, require_vision, torch_device
@@ -99,7 +100,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def _set_retrieval_chat_template(self, processor):
         processor.chat_template = (
-            "{% if task == 'query' %}<query>{% else %}<doc>{% endif %}"
+            "{% if task not in ['query', 'document'] %}{{ raise_exception(\"task must be 'query' or 'document'\") }}"
+            "{% elif task == 'query' %}<query>{% else %}<doc>{% endif %}"
             "{% for message in messages %}{% for item in message['content'] %}"
             "{% if item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
             "{% endfor %}{% endfor %}"
@@ -157,6 +159,14 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "must use the `task` variable"):
             processor.apply_chat_template(messages, task="document", tokenize=True)
+
+    def test_apply_chat_template_rejects_invalid_task(self):
+        processor = self.get_processor()
+        self._set_retrieval_chat_template(processor)
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
+
+        with self.assertRaisesRegex(TemplateError, "task must be 'query' or 'document'"):
+            processor.apply_chat_template(messages, task="invalid", tokenize=True)
 
     def test_apply_chat_template_rejects_unsupported_inputs(self):
         processor = self.get_processor()
