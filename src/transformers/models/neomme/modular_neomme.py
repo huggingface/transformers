@@ -519,6 +519,7 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
 class NeoMMEPreTrainedModel(PreTrainedModel):
     config: NeoMMEConfig
     base_model_prefix = "model"
+    _input_embed_layer = "word_embeddings"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["NeoMMEEncoderLayer"]
@@ -618,12 +619,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         )
         self.gradient_checkpointing = False
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
 
     @merge_with_config_defaults
     @capture_outputs
