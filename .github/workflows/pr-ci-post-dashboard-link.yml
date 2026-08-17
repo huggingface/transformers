@@ -49,6 +49,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mlinter-findings
+          path: ${{ runner.temp }}/mlinter-findings
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 

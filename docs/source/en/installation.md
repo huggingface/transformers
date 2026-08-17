@@ -61,6 +61,24 @@ uv pip install "transformers[torch]"
 ```
 
 </hfoption>
+<hfoption id="NVIDIA Spark (ARM64)">
+
+To install Transformers with PyTorch on NVIDIA Spark devices (such as an RTX Spark laptop) running ARM64, install PyTorch from the NVIDIA PyPI index. These devices require NVIDIA's ARM64 builds of PyTorch, which are not available on the default PyPI index or the standard PyTorch wheel index.
+
+Run the command below to check if your system detects an NVIDIA GPU.
+
+```bash
+nvidia-smi
+```
+
+Install PyTorch from the NVIDIA PyPI index, then install Transformers.
+
+```bash
+uv pip install torch --index-url https://pypi.nvidia.com
+uv pip install transformers
+```
+
+</hfoption>
 <hfoption id="CPU">
 
 To install a CPU-only version of Transformers, run the following command.
