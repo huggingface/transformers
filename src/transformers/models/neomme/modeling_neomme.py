@@ -90,10 +90,6 @@ class NeoMMEEmbeddings(nn.Module):
         return projected @ self.word_embeddings.weight.t()  # (batch_size, sequence_length, vocab_size)
 
 
-class NeoMMEValueEmbeddings(nn.Embedding):
-    """Per-token value embeddings added to the first and last global attention layers."""
-
-
 class NeoMMEPatchEmbeddings(nn.Module):
     """Patch stem that maps flattened image patches to hidden size."""
 
@@ -431,8 +427,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             # logits stay O(1) at init (otherwise the initial cross-entropy is ~250 instead of ln V).
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.embedding_rank**-0.5)
             init.normal_(module.embedding_projection.weight, mean=0.0, std=std)
-        elif isinstance(module, NeoMMEValueEmbeddings):
-            init.zeros_(module.weight)
         elif isinstance(module, NeoMMEPatchEmbeddings):
             init.normal_(module.up_proj.weight, mean=0.0, std=std)
             init.normal_(module.down_proj.weight, mean=0.0, std=std)
@@ -448,6 +442,8 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
             init.zeros_(module.down_proj.weight)
         elif isinstance(module, NeoMMEEncoderLayer):
             init.copy_(module.lambdas, torch.tensor([1.0, 0.0]))
+        elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
+            init.zeros_(module.value_embeddings.weight)
         elif isinstance(module, NeoMMEForRetrieval):
             init.normal_(module.embedding_proj_layer.weight, mean=0.0, std=std)
         elif isinstance(module, NeoMMERotaryEmbedding):
@@ -472,9 +468,7 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         resized = self._get_resized_embeddings(
             backbone.value_embeddings, word_embeddings.weight.shape[0], mean_resizing=mean_resizing
         )
-        # `_get_resized_embeddings` returns a plain `nn.Embedding`; the marker subclass is what the init
-        # dispatch and the conversion script match on, so keep it.
-        backbone.value_embeddings = NeoMMEValueEmbeddings(resized.num_embeddings, resized.embedding_dim)
+        backbone.value_embeddings = nn.Embedding(resized.num_embeddings, resized.embedding_dim)
         backbone.value_embeddings.weight = resized.weight
         return word_embeddings
 
@@ -498,7 +492,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         )
         global_layers = [i for i, layer_type in enumerate(config.layer_types) if layer_type == "full_attention"]
         self.value_embeddings = (
-            NeoMMEValueEmbeddings(config.vocab_size, config.num_key_value_heads * config.head_dim)
+            nn.Embedding(config.vocab_size, config.num_key_value_heads * config.head_dim)
             if config.use_value_embeds and global_layers
             else None
         )

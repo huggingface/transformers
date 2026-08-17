@@ -44,7 +44,6 @@ if is_torch_available():
         NeoMMEEncoderLayer,
         NeoMMEMLP,
         NeoMMEPreTrainedModel,
-        NeoMMEValueEmbeddings,
         apply_interleaved_rotary_pos_emb,
     )
 
@@ -68,11 +67,11 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
                 init.normal_(module.alpha, mean=0.0, std=1.0)
         elif isinstance(module, NeoMMEMLP):
             init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, NeoMMEValueEmbeddings):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, NeoMMEEncoderLayer):
             # `lambdas` is born `[1.0, 0.0]`; only partly zero, so an all-zero refill would miss it.
             init.copy_(module.lambdas, torch.tensor([1.0, 0.5]))
+        elif isinstance(module, NeoMMEModel) and module.value_embeddings is not None:
+            init.normal_(module.value_embeddings.weight, mean=0.0, std=self.config.initializer_range)
 
     patcher = patch.object(NeoMMEPreTrainedModel, "_init_weights", initialize_with_live_residual_branches)
     patcher.start()
