@@ -1668,14 +1668,16 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
-        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:].to(input_ids.device)
+        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                next_token_logits = self.logits_processor(
+                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
+                )
                 if self.do_sample:
                     probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
@@ -1691,7 +1693,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
 
         return candidate_ids, candidate_logits
 

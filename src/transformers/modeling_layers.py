@@ -534,17 +534,16 @@ class MtpModel(PreTrainedModel):
                 )
 
             # Append the drafted logits
-            logits = logits.to(input_ids.device)
             drafted_logits.append(logits)
             # Decode one token
-            next_token_logits = logits[:, -1, :]
+            next_token_logits = logits[:, -1, :].to(device=input_ids.device, dtype=torch.float32)
             if logits_processor is not None and full_input_ids is not None:
-                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+                next_token_logits = logits_processor(full_input_ids, next_token_logits)
             if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+                next_mtp_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
