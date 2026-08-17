@@ -1577,6 +1577,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get the assistant model and the embeddings of the main model
         self.assistant_model = assistant_model
+        self.device = self.assistant_model.device
         self.main_model_max_length = generation_config.max_length
         self.main_model_input_embeddings = main_model_input_embeddings
         self.main_model_output_embeddings = main_model_output_embeddings
@@ -1626,7 +1627,11 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # The hidden states hold all tokens from the last main model's forward on all the candidates. We need the
         # hidden states of only accepted tokens thus crop out the rest
         context_hidden_states: torch.Tensor = torch.cat(
-            [model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens] for i in self.target_layer_ids], dim=-1
+            [
+                model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens].to(self.device)
+                for i in self.target_layer_ids
+            ],
+            dim=-1,
         )
 
         # We need to tell the cache how many new states to expect into its k/v states, additional to the "noise" or "diffusion window"
@@ -1658,24 +1663,28 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get assistant model outputs
         outputs = self.assistant_model(
-            noise_embeds=noise_embeds,
+            noise_embeds=noise_embeds.to(self.device),
             context_hidden_states=context_hidden_states,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
+            position_ids=position_ids.to(self.device),
+            attention_mask=attention_mask.to(self.device),
             past_key_values=self.cache,
         )
 
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
-        candidate_logits = self.main_model_output_embeddings(outputs.last_hidden_state)[:, 1:]
+        candidate_logits = self.main_model_output_embeddings(
+            outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
+        )
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(candidate_ids, candidate_logits[:, i, :].float())
+                next_token_logits = self.logits_processor(
+                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
+                )
                 if self.do_sample:
                     probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
@@ -1691,7 +1700,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
 
         return candidate_ids, candidate_logits
 
