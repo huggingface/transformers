@@ -26,8 +26,6 @@ ordering that the attention mask is built from.
 
 from __future__ import annotations
 
-import hashlib
-import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -384,104 +382,4 @@ def build_geometry(
         mesh_to_grid_senders=m2g_senders,
         mesh_to_grid_receivers=m2g_receivers,
         mesh_to_grid_edge_features=m2g_edge_features.astype(np.float32),
-    )
-
-
-def build_geometry_cached(
-    mesh_splits: int,
-    grid_lat: np.ndarray,
-    grid_lon: np.ndarray,
-    attention_k_hop: int,
-    ball_query_radius_fraction: float,
-    grid_major_axis: str = "lat",
-    cache_dir: str | None = None,
-) -> WeatherNext2Geometry:
-    """Same as [`build_geometry`], memoised on disk.
-
-    At 0.25 degrees the ball query and the nearest-face search take tens of seconds and produce a
-    few hundred MB of indices, so a cache keeps model instantiation cheap after the first time.
-    """
-    key = "|".join(
-        [
-            # Bump when the construction changes, so stale caches are not reused.
-            "v2",
-            str(mesh_splits),
-            str(attention_k_hop),
-            f"{ball_query_radius_fraction:.6f}",
-            grid_major_axis,
-            hashlib.sha256(np.ascontiguousarray(grid_lat, dtype=np.float64)).hexdigest()[:16],
-            hashlib.sha256(np.ascontiguousarray(grid_lon, dtype=np.float64)).hexdigest()[:16],
-        ]
-    )
-    digest = hashlib.sha256(key.encode()).hexdigest()[:24]
-
-    if cache_dir is None:
-        cache_dir = os.path.join(os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "weathernext2")
-    path = os.path.join(cache_dir, f"geometry-{digest}.npz")
-
-    if os.path.exists(path):
-        try:
-            return _load_geometry(path)
-        except Exception as error:  # noqa: BLE001 - a corrupt cache must never be fatal
-            logger.warning(f"Ignoring unreadable WeatherNext2 geometry cache at {path}: {error}")
-
-    geometry = build_geometry(
-        mesh_splits=mesh_splits,
-        grid_lat=grid_lat,
-        grid_lon=grid_lon,
-        attention_k_hop=attention_k_hop,
-        ball_query_radius_fraction=ball_query_radius_fraction,
-        grid_major_axis=grid_major_axis,
-    )
-    try:
-        os.makedirs(cache_dir, exist_ok=True)
-        _save_geometry(geometry, path)
-    except OSError as error:
-        logger.warning(f"Could not cache WeatherNext2 geometry to {path}: {error}")
-    return geometry
-
-
-def _save_geometry(geometry: WeatherNext2Geometry, path: str) -> None:
-    mask = geometry.attention_mask.tocsr()
-    np.savez(
-        path,
-        mesh_lat=geometry.mesh_lat,
-        mesh_lon=geometry.mesh_lon,
-        mesh_faces=geometry.mesh_faces,
-        mesh_spatial_features=geometry.mesh_spatial_features,
-        grid_spatial_features=geometry.grid_spatial_features,
-        attention_bandwidth=np.array(geometry.attention_bandwidth),
-        mask_indptr=mask.indptr,
-        mask_indices=mask.indices,
-        mask_shape=np.array(mask.shape),
-        grid_to_mesh_senders=geometry.grid_to_mesh_senders,
-        grid_to_mesh_receivers=geometry.grid_to_mesh_receivers,
-        grid_to_mesh_edge_features=geometry.grid_to_mesh_edge_features,
-        mesh_to_grid_senders=geometry.mesh_to_grid_senders,
-        mesh_to_grid_receivers=geometry.mesh_to_grid_receivers,
-        mesh_to_grid_edge_features=geometry.mesh_to_grid_edge_features,
-    )
-
-
-def _load_geometry(path: str) -> WeatherNext2Geometry:
-    data = np.load(path)
-    shape = tuple(data["mask_shape"])
-    mask = sp.csr_matrix(
-        (np.ones(len(data["mask_indices"]), dtype=bool), data["mask_indices"], data["mask_indptr"]),
-        shape=shape,
-    )
-    return WeatherNext2Geometry(
-        mesh_lat=data["mesh_lat"],
-        mesh_lon=data["mesh_lon"],
-        mesh_faces=data["mesh_faces"],
-        mesh_spatial_features=data["mesh_spatial_features"],
-        grid_spatial_features=data["grid_spatial_features"],
-        attention_bandwidth=int(data["attention_bandwidth"]),
-        attention_mask=mask,
-        grid_to_mesh_senders=data["grid_to_mesh_senders"],
-        grid_to_mesh_receivers=data["grid_to_mesh_receivers"],
-        grid_to_mesh_edge_features=data["grid_to_mesh_edge_features"],
-        mesh_to_grid_senders=data["mesh_to_grid_senders"],
-        mesh_to_grid_receivers=data["mesh_to_grid_receivers"],
-        mesh_to_grid_edge_features=data["mesh_to_grid_edge_features"],
     )
