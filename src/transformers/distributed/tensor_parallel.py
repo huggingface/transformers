@@ -545,7 +545,7 @@ if is_torch_distributed_available():
             return grad, None
 
 
-class MoEExpertsParallel(TensorParallelLayer):
+class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return True
 
@@ -652,12 +652,12 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
-class MoeTensorParalellMegaMoeExperts(MoEExpertsParallel):
+class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
     """TP layer for DeepGEMM Mega MoE experts.
 
     Mega MoE is inference-only (the kernel has no backward) and handles EP dispatch +
     combine + per-rank token sharding internally — so we skip the gradient-sync hooks
-    that ``MoEExpertsParallel`` would apply, and we forward the EP ``process_group``
+    that ``MoeExpertsParallel`` would apply, and we forward the EP ``process_group``
     into the module so the symm-buffer rendezvous can run on first forward.
     """
 
@@ -690,7 +690,7 @@ class ParallelInterface(GeneralInterface):
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
-            "moe_tp_experts": MoEExpertsParallel(),
+            "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
