@@ -12,22 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_bidirectional_mask, sliding_window_bidirectional_overlay
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
+    TensorType,
     TransformersKwargs,
     auto_docstring,
     is_torchdynamo_compiling,
@@ -37,10 +43,224 @@ from ...utils import (
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
+from ..siglip2.image_processing_siglip2 import convert_image_to_patches
 from .configuration_neomme import NeoMMEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def get_resize_scale(
+    height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
+) -> float:
+    """Compute the resize scale before patchifying an image.
+
+    Args:
+        height (`int`):
+            Image height in pixels.
+        width (`int`):
+            Image width in pixels.
+        max_side (`int`, *optional*):
+            Maximum longest side. Downscale only.
+        max_pixels (`int`, *optional*):
+            Maximum pixel area. Downscale only.
+        min_pixels (`int`, *optional*):
+            Minimum pixel area. May upscale the image. Caps take precedence when both bounds apply.
+
+    Returns:
+        `float`: Scale factor to apply to the image.
+    """
+    scale = 1.0
+    if min_pixels is not None and height * width < min_pixels:
+        scale = (min_pixels / (height * width)) ** 0.5
+    # `min` does double duty: it keeps a cap from ever upscaling, and it lets a cap override the floor.
+    if max_side is not None:
+        scale = min(scale, max_side / max(height, width))
+    if max_pixels is not None:
+        scale = min(scale, (max_pixels / (height * width)) ** 0.5)
+    return scale
+
+
+def get_resize_output_size(
+    height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
+) -> tuple[int, int]:
+    """Compute integer height and width that follow the configured image size limits."""
+    scale = get_resize_scale(height, width, max_side, max_pixels, min_pixels)
+    if scale == 1.0:
+        return height, width
+
+    needs_minimum = min_pixels is not None and height * width < min_pixels
+    if needs_minimum:
+        resized_height = max(1, math.ceil(height * scale))
+        resized_width = max(1, math.ceil(width * scale))
+        exceeds_cap = (max_side is not None and max(resized_height, resized_width) > max_side) or (
+            max_pixels is not None and resized_height * resized_width > max_pixels
+        )
+        if not exceeds_cap:
+            return resized_height, resized_width
+
+    # Caps take precedence over the floor. Rounding down keeps both hard upper bounds intact.
+    return max(1, math.floor(height * scale)), max(1, math.floor(width * scale))
+
+
+class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to `self.patch_size`):
+        Side, in pixels, of one patch token. The image is padded to a whole multiple of it.
+    max_side (`int`, *optional*):
+        Longest-side cap in pixels. Unset means no longest-side resize.
+    max_pixels (`int`, *optional*):
+        Pixel-area cap. Unset means no area cap.
+    min_pixels (`int`, *optional*):
+        Pixel-area floor; may upscale the image. Caps take precedence when both bounds apply.
+    """
+
+    patch_size: int
+    max_side: int | None
+    max_pixels: int | None
+    min_pixels: int | None
+
+
+@auto_docstring
+class NeoMMEImageProcessor(TorchvisionBackend):
+    r"""
+    Constructs an image processor for NeoMME.
+
+    The processor converts each image to RGB and splits it into row-major patches. It preserves the original size by
+    default, but it can resize images when `max_side`, `max_pixels`, or `min_pixels` is set. It pads the bottom and
+    right edges to complete the final patch. A batch returns one concatenated patch tensor and one grid height and
+    width pair per image.
+    """
+
+    valid_kwargs = NeoMMEImageProcessorKwargs
+    resample = PILImageResampling.BILINEAR
+    # `pixel / 127.5 - 1`: `image_mean` is a shift and `image_std` a no-op (as in chameleon), not dataset
+    # statistics. The usual `1/255` + `0.5` form is the same map to ~1e-7; this one is bit-exact.
+    image_mean = [1.0, 1.0, 1.0]
+    image_std = [1.0, 1.0, 1.0]
+    do_convert_rgb = True
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 127.5
+    do_normalize = True
+    patch_size = 32
+    max_side = None
+    max_pixels = None
+    min_pixels = None
+    model_input_names = ["pixel_values", "image_grid_hw"]
+
+    def __init__(self, **kwargs: Unpack[NeoMMEImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[NeoMMEImageProcessorKwargs]) -> BatchFeature:
+        r"""
+        Returns:
+            [`BatchFeature`] with `pixel_values` of shape `(total_patches, 3 * patch_size ** 2)` and
+            `image_grid_hw` of shape `(batch_size, 2)`. `pixel_values` concatenates patches from every image in the
+            batch.
+        """
+        return super().preprocess(images, **kwargs)
+
+    def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
+        # `size` is computed per image from the resolution budget, so the generic `do_resize` check
+        # (which insists on a `size`) does not apply.
+        kwargs.pop("do_resize", None)
+        return super()._validate_preprocess_kwargs(**kwargs)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        patch_size: int,
+        max_side: int | None,
+        max_pixels: int | None,
+        min_pixels: int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        unsupported = sorted(
+            name
+            for name in ("size", "crop_size", "do_center_crop", "do_pad", "pad_size", "image_seq_length")
+            if kwargs.get(name) not in (None, False)
+        )
+        if unsupported:
+            raise ValueError(f"NeoMMEImageProcessor does not implement these image kwargs: {unsupported}")
+
+        pixel_values: list[torch.Tensor] = []
+        image_grid_hw: list[tuple[int, int]] = []
+
+        # Per image, because each one gets its own patch grid: the usual group-by-shape batching would
+        # have to regroup after every step, and a page's grid is what decides its token count.
+        for image in images:
+            if do_resize:
+                image = self._resize_to_budget(image, max_side, max_pixels, min_pixels, resample)
+            # Pad to a whole patch grid on the RAW image, so padded pixels rescale to -1 exactly like the
+            # black canvas the reference implementation pastes onto.
+            image, grid_height, grid_width = self._pad_to_patch_grid(image, patch_size)
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            pixel_values.append(convert_image_to_patches(image, patch_size))  # (num_patches_i, 3 * patch_size ** 2)
+            image_grid_hw.append((grid_height, grid_width))
+
+        return BatchFeature(
+            data={
+                "pixel_values": torch.cat(pixel_values, dim=0),  # (num_patches, 3 * patch_size ** 2)
+                "image_grid_hw": torch.tensor(image_grid_hw, dtype=torch.int64),  # (batch_size, 2)
+            },
+            tensor_type=return_tensors,
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """
+        Return the number of image patches for one image, excluding row markers.
+
+        The method applies the effective resize settings, then rounds each image dimension up to a whole patch.
+        Values in `images_kwargs` override the processor settings.
+        """
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size") or self.patch_size
+        if images_kwargs.get("do_resize", self.do_resize):
+            height, width = get_resize_output_size(
+                height,
+                width,
+                images_kwargs.get("max_side", self.max_side),
+                images_kwargs.get("max_pixels", self.max_pixels),
+                images_kwargs.get("min_pixels", self.min_pixels),
+            )
+        return -(-height // patch_size) * (-(-width // patch_size))
+
+    def _resize_to_budget(
+        self,
+        image: "torch.Tensor",
+        max_side: int | None,
+        max_pixels: int | None,
+        min_pixels: int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+    ) -> "torch.Tensor":
+        height, width = image.shape[-2], image.shape[-1]
+        resized_height, resized_width = get_resize_output_size(height, width, max_side, max_pixels, min_pixels)
+        if (resized_height, resized_width) == (height, width):
+            return image
+        size = SizeDict(height=resized_height, width=resized_width)
+        # `antialias=True` is the default, passed explicitly because it is what holds this backend to the
+        # PIL one: without it a downscaled page differs by up to 166 of 255 levels, not one.
+        return self.resize(image=image, size=size, resample=resample, antialias=True)
+
+    def _pad_to_patch_grid(self, image: "torch.Tensor", patch_size: int) -> tuple["torch.Tensor", int, int]:
+        height, width = image.shape[-2], image.shape[-1]
+        grid_height, grid_width = -(-height // patch_size), -(-width // patch_size)
+        pad_height = grid_height * patch_size - height
+        pad_width = grid_width * patch_size - width
+        if pad_height or pad_width:
+            image = tvF.pad(image, [0, 0, pad_width, pad_height], fill=0)
+        # image: (num_channels, grid_height * patch_size, grid_width * patch_size)
+        return image, grid_height, grid_width
 
 
 def parameter_free_rms_norm(hidden_states: torch.Tensor, eps: float) -> torch.Tensor:
@@ -813,6 +1033,7 @@ class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
 __all__ = [
     "NeoMMEForMaskedLM",
     "NeoMMEForRetrieval",
+    "NeoMMEImageProcessor",
     "NeoMMEModel",
     "NeoMMEPreTrainedModel",
 ]
