@@ -31,9 +31,11 @@ from transformers.audio_utils import (
     chroma_filter_bank,
     get_audio_filetype,
     hertz_to_mel,
+    is_valid_audio,
     load_audio,
     load_audio_librosa,
     load_audio_torchcodec,
+    make_list_of_audio,
     mel_filter_bank,
     mel_to_hertz,
     power_to_db,
@@ -1990,3 +1992,25 @@ class LoadAudioTester(unittest.TestCase):
     def test_unknown_backend_raises(self):
         with self.assertRaises(ValueError):
             load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")
+
+
+class AudioInputValidationTest(unittest.TestCase):
+    def test_is_valid_audio_empty_sequence(self):
+        # An empty list/tuple used to raise IndexError from audio[0] instead of
+        # being reported as not valid audio.
+        self.assertFalse(is_valid_audio([]))
+        self.assertFalse(is_valid_audio(()))
+
+    def test_is_valid_audio_accepts_valid_inputs(self):
+        self.assertTrue(is_valid_audio([1.0, 2.0]))
+        self.assertTrue(is_valid_audio((1.0,)))
+        self.assertTrue(is_valid_audio(np.zeros(3)))
+
+    def test_is_valid_audio_rejects_non_audio(self):
+        self.assertFalse(is_valid_audio([1, 2]))
+        self.assertFalse(is_valid_audio("not audio"))
+
+    def test_make_list_of_audio_empty_sequence_raises_value_error(self):
+        for empty in ([], ()):
+            with self.assertRaises(ValueError):
+                make_list_of_audio(empty)
