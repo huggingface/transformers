@@ -407,11 +407,16 @@ class TestDFlashTokenCandidateGenerator(unittest.TestCase):
         vocab_size = self.vocab_size
 
         class _PinnedOutputEmbeddings(nn.Module):
+            def __init__(self):
+                super().__init__()
+                # `get_candidates` reads `.weight.device` to place hidden states (#47877)
+                self.weight = nn.Parameter(torch.zeros(1, device=torch_device))
+
             def forward(self, hidden_states):
                 logits = torch.zeros(*hidden_states.shape[:2], vocab_size, device=hidden_states.device)
                 for position, token in enumerate(draft):
-                    # `get_candidates` drops the first position, which belongs to the anchor token
-                    logits[:, position + 1, token] = 1.0
+                    # The anchor position is dropped before the head since #48007, so rows map 1:1 to the draft
+                    logits[:, position, token] = 1.0
                 return logits
 
         generation_config = GenerationConfig(do_sample=False, max_length=1024)
