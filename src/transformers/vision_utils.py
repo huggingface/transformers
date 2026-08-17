@@ -189,12 +189,14 @@ def get_vision_window_index(
 
 
 def _interpolation_axis_taps_weights(
-    index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool
+    index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool, padding: str = "border"
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-axis interpolation taps into a `side`-length source table and their weights, for `index`
     target positions on an axis of length `size`. `mode` selects the kernel width — 2 taps
     (`"bilinear"`) or 4 taps (`"bicubic"`, Keys convolution kernel with `a=-0.75`). `size` may be a
-    scalar or a per-element tensor (ragged batches)."""
+    scalar or a per-element tensor (ragged batches). `padding` controls out-of-range taps: `"border"`
+    clamps to the edge value (like `F.interpolate`), `"zeros"` gives them zero weight (like
+    `F.grid_sample(padding_mode="zeros")`)."""
     index = index.to(torch.float32)
     if align_corners:
         # Closed form of `torch.linspace(0, side-1, size)[index]` — endpoints map to 0 and side-1.
@@ -209,7 +211,8 @@ def _interpolation_axis_taps_weights(
         offsets = torch.arange(-1, 3, device=index.device)  # floor-1 .. floor+2
     else:
         raise ValueError(f"Unsupported interpolation mode {mode!r} (expected 'bilinear' or 'bicubic').")
-    taps = (floor.long()[:, None] + offsets).clamp(0, side - 1)
+    raw_taps = floor.long()[:, None] + offsets
+    taps = raw_taps.clamp(0, side - 1)
     distance = (src[:, None] - floor[:, None] - offsets).abs()
     if mode == "bilinear":
         weights = (1 - distance).clamp(min=0)  # linear hat kernel
@@ -218,6 +221,10 @@ def _interpolation_axis_taps_weights(
         near = ((a + 2) * distance - (a + 3)) * distance * distance + 1
         far = ((a * distance - 5 * a) * distance + 8 * a) * distance - 4 * a
         weights = torch.where(distance <= 1, near, far)
+    if padding == "zeros":
+        # Out-of-range taps were clamped to the border above; zero their weight so they contribute
+        # nothing (the clamped index is then irrelevant) — `F.grid_sample(padding_mode="zeros")`.
+        weights = weights * ((raw_taps >= 0) & (raw_taps <= side - 1))
     return taps, weights
 
 
@@ -227,6 +234,7 @@ def get_vision_interpolation_indices_and_weights(
     mode: str = "bilinear",
     align_corners: bool = False,
     spatial_merge_size: int = 1,
+    padding: str = "border",
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-patch gather indices/weights that resample a square learned `(num_grid_per_side,
@@ -280,8 +288,8 @@ def get_vision_interpolation_indices_and_weights(
     row = block_row * merge + in_row
     col = block_col * merge + in_col
 
-    h_taps, h_weights = _interpolation_axis_taps_weights(row, heights, side, mode, align_corners)
-    w_taps, w_weights = _interpolation_axis_taps_weights(col, widths, side, mode, align_corners)
+    h_taps, h_weights = _interpolation_axis_taps_weights(row, heights, side, mode, align_corners, padding)
+    w_taps, w_weights = _interpolation_axis_taps_weights(col, widths, side, mode, align_corners, padding)
     n = h_taps.shape[1]  # taps per axis
     # 2D separable: outer product of the per-axis taps/weights → n*n taps per patch.
     indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, n * n)
