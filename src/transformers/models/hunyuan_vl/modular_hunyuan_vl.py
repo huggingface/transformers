@@ -1220,12 +1220,6 @@ class HunYuanVLModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor`):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         return self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
@@ -1270,12 +1264,6 @@ class HunYuanVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> HunYuanVLModelOutputWithPast:
-        r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1362,11 +1350,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
-            Flat per-patch pixel features produced by the image processor.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-
         Example:
 
         ```python

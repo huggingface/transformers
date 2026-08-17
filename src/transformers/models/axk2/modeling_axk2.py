@@ -204,7 +204,7 @@ class AXK2Indexer(nn.Module):
     `past_key_values.update_indexer()`.
     """
 
-    def __init__(self, config: AXK2Config, layer_idx: int):
+    def __init__(self, config: "AXK2Config", layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -218,7 +218,7 @@ class AXK2Indexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-5)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
@@ -628,7 +628,7 @@ class AXK2Attention(nn.Module):
         indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states,
-            q_compressed,
+            q_resid,
             position_embeddings,
             indexer_mask,
             position_ids,
