@@ -94,9 +94,10 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     hc_lowrank (`int`, *optional*, defaults to 320):
         Rank of the learned hyper-connection input mixer.
     ple_layer_ids (`list[int]`, *optional*):
-        One-indexed decoder layer ids that use the positional lexical embedding (PLE) module.
+        One-indexed decoder layer ids that use Per-Layer Embedding (PLE).
     ple_embed_dim (`int`, *optional*):
-        Size of the concatenated n-gram embeddings. Defaults to `hidden_size`.
+        Total dimension of the embeddings concatenated from all n-gram heads in each PLE module. Defaults to
+        `hidden_size`.
     ple_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the dilated depthwise convolution in each PLE module.
     ngram_size (`int`, *optional*, defaults to 3):
@@ -104,7 +105,7 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
     heads_per_ngram (`int`, *optional*, defaults to 8):
         Number of independently hashed embedding heads for every n-gram order.
     ngram_vocab_size_base (`int`, *optional*, defaults to 20000000):
-        Base prime vocabulary size used by the hashed n-gram heads.
+        Lower bound used to derive a distinct prime vocabulary size for each hashed n-gram head.
     make_ngram_vocab_size_divisible_by (`int`, *optional*, defaults to 128):
         Divisor used to pad the combined n-gram embedding vocabulary.
     seed (`int`, *optional*, defaults to 1234):
@@ -1048,8 +1049,8 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     ) -> BaseModelOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings. This is only needed when PLE is
-            enabled and `inputs_embeds` are passed instead of `input_ids`.
+            Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
+            `inputs_embeds` are passed instead of `input_ids`.
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify input_ids or inputs_embeds.")
@@ -1161,8 +1162,8 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
     ) -> tuple | Qwen4ExpModelOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids. When input_ids are provided, they are always used for PLE.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
+            When input_ids are provided, they are always used for PLE.
         """
         if input_ids is not None:
             ple_input_ids = input_ids
@@ -1201,8 +1202,7 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     ):
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
         """
         kwargs["ple_input_ids"] = ple_input_ids
         return super().forward(
@@ -1243,8 +1243,7 @@ class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
     ):
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
         """
         kwargs["ple_input_ids"] = ple_input_ids
         return super().forward(

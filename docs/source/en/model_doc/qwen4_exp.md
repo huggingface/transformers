@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -17,34 +17,24 @@ rendered properly in your Markdown viewer.
 
 # Qwen4-Exp
 
-Qwen4-Exp builds on Qwen3.5's hybrid text and multimodal architecture with three key innovations: GatedResidual (GR), Per-Layer Embedding (PLE), and Qwen Sparse Attention (QSA).
+Qwen4-Exp builds on Qwen3.5's hybrid text and multimodal architecture with three key components: GatedResidual (GR), Qwen Sparse Attention (QSA), and Per-Layer Embedding (PLE).
 
-GR is a Qwen-developed residual architecture that combines Hyper-Connection with GatedNorm. It mixes multiple residual streams with fine-grained elementwise gating before each attention and Mixture-of-Experts (MoE) block, then controls how much of the block output is injected back into each stream. PLE augments selected decoder layers with layer-specific lexical features derived from hashed token n-grams and a dilated depthwise convolution.
+GR is a Qwen-developed residual architecture that combines Hyper-Connection with GatedNorm. It mixes multiple residual streams with fine-grained elementwise gating before each attention and Mixture-of-Experts (MoE) block, then controls how much of the block output is injected back into each stream.
 
-QSA uses multi-head query representations to score compressed key blocks, selects relevant contiguous token blocks, and keeps the incomplete trailing block uncompressed. This block-level design reduces selection overhead and improves memory locality over long sequences. Together, Gated DeltaNet and QSA make Qwen4-Exp the first hybrid architecture to combine linear attention with sparse attention, substantially improving inference efficiency for long-context workloads.
+QSA uses multiple query heads to score compressed key blocks, selects the most relevant contiguous token blocks, and keeps the incomplete trailing block uncompressed. This block-level selection reduces indexing overhead and improves memory locality for long sequences. Combined with Gated DeltaNet, QSA makes Qwen4-Exp the first hybrid architecture to integrate linear and sparse attention, substantially improving inference efficiency for long-context workloads.
+
+PLE enriches selected decoder layers with layer-specific lexical features derived from hashed token n-grams and a dilated depthwise convolution.
 
 ## Usage tips
 
-- `ple_layer_ids` contains one-indexed decoder layer numbers. PLE needs the original token ids even when the language
-  model receives `inputs_embeds`; pass them as `ple_input_ids` in that case.
-- PLE maintains both n-gram context and dilated-convolution state during cached generation. [`DynamicCache`] is the
-  recommended default. [`StaticCache`] is also supported. Offloaded caches are not supported when PLE or QSA is
-  enabled.
-- `split_ngram_parts` controls the sharded checkpoint layout of each large PLE embedding table. Transformers
-  concatenates those shards along the vocabulary dimension into one runtime embedding weight, while `save_pretrained`
-  restores the configured sharded layout.
-- `hc_count` is the number of residual streams and `hc_lowrank` controls the rank of the learned input mixer.
-- Setting the QSA indexer fields enables sparse token selection on full-attention layers. SDPA and eager attention are
-  supported, other requested attention backends fall back to eager, and automatic generation compilation is disabled
-  because selection is data-dependent.
-- `tp_plan="auto"` supports the inherited attention, MoE, and GatedDeltaNet rules together with QSA, hyper-connections,
-  and vocabulary-row sharding of PLE tables. Custom configurations must keep the sharded attention heads, QSA and
-  GatedDeltaNet projection dimensions, hyper-connection stream width, expert dimensions, and padded PLE vocabulary
-  divisible by the TP size. The replicated hyper-connection low-rank output does not add a divisibility constraint.
-- FSDP2 shards token embeddings and decoder layers while keeping the final hyper-connection mixer gathered. TP and FSDP
-  cannot currently be combined, and a pipeline-parallel plan is not provided.
-- Use [`Qwen4ExpForCausalLM`] with [`Qwen4ExpTextConfig`] for text-only generation. Use
-  [`Qwen4ExpForConditionalGeneration`] with [`Qwen4ExpConfig`] for multimodal inputs.
+- `ple_layer_ids` uses one-based decoder layer indices. When PLE is enabled and the model receives `inputs_embeds`, pass the original token ids through `ple_input_ids`. If `input_ids` are provided, the model uses them for PLE automatically.
+- During cached generation, PLE maintains both n-gram context and dilated-convolution state. [`DynamicCache`] is the recommended default, and [`StaticCache`] is also supported. Offloaded caches are not supported when PLE or QSA is enabled.
+- `split_ngram_parts` controls the logical checkpoint shards for each large PLE n-gram embedding table. Transformers concatenates these shards along the vocabulary dimension into one runtime weight. The default `save_pretrained(save_original_format=True)` writes the configured original sharded layout.
+- `hc_count` sets the number of residual streams, and `hc_lowrank` sets the rank of the learned GR input mixer.
+- Providing the complete set of QSA indexer fields enables sparse token selection on full-attention layers. Eager and SDPA attention are supported; other requested backends fall back to eager. Automatic generation compilation is disabled because token selection is data-dependent.
+- `tp_plan="auto"` supports attention, MoE, GatedDeltaNet, QSA, GR, and vocabulary-row sharding of PLE tables. Custom configurations must keep sharded attention heads, QSA and GatedDeltaNet projection dimensions, GR stream width, expert dimensions, and the padded PLE vocabulary divisible by the TP size. The replicated low-rank GR output adds no divisibility constraint.
+- FSDP2 shards token embeddings and decoder layers while keeping the final GR mixer gathered. TP and FSDP cannot currently be combined, and no pipeline-parallel plan is provided.
+- Use [`Qwen4ExpForCausalLM`] with [`Qwen4ExpTextConfig`] for text-only generation. Use [`Qwen4ExpForConditionalGeneration`] with [`Qwen4ExpConfig`] for multimodal inputs.
 
 ## Qwen4ExpConfig
 

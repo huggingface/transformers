@@ -1834,8 +1834,8 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
     ) -> BaseModelOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings. This is only needed when PLE is
-            enabled and `inputs_embeds` are passed instead of `input_ids`.
+            Original token ids used by Per-Layer Embedding (PLE). This is only needed when PLE is enabled and
+            `inputs_embeds` are passed instead of `input_ids`.
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify input_ids or inputs_embeds.")
@@ -2231,8 +2231,8 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     ) -> tuple | Qwen4ExpModelOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids. When input_ids are provided, they are always used for PLE.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
+            When input_ids are provided, they are always used for PLE.
         """
         if input_ids is not None:
             ple_input_ids = input_ids
@@ -2412,8 +2412,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
     ) -> MoeCausalLMOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
         """
         kwargs["ple_input_ids"] = ple_input_ids
 
@@ -2544,8 +2543,7 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     ) -> tuple | Qwen4ExpCausalLMOutputWithPast:
         r"""
         ple_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Original token ids used to construct positional lexical embeddings when inputs_embeds are passed
-            instead of input_ids.
+            Original token ids used by Per-Layer Embedding (PLE) when inputs_embeds are passed instead of input_ids.
         """
         kwargs["ple_input_ids"] = ple_input_ids
 

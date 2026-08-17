@@ -45,9 +45,10 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     hc_lowrank (`int`, *optional*, defaults to 320):
         Rank of the learned hyper-connection input mixer.
     ple_layer_ids (`list[int]`, *optional*):
-        One-indexed decoder layer ids that use the positional lexical embedding (PLE) module.
+        One-indexed decoder layer ids that use Per-Layer Embedding (PLE).
     ple_embed_dim (`int`, *optional*):
-        Size of the concatenated n-gram embeddings. Defaults to `hidden_size`.
+        Total dimension of the embeddings concatenated from all n-gram heads in each PLE module. Defaults to
+        `hidden_size`.
     ple_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the dilated depthwise convolution in each PLE module.
     ngram_size (`int`, *optional*, defaults to 3):
@@ -55,7 +56,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     heads_per_ngram (`int`, *optional*, defaults to 8):
         Number of independently hashed embedding heads for every n-gram order.
     ngram_vocab_size_base (`int`, *optional*, defaults to 20000000):
-        Base prime vocabulary size used by the hashed n-gram heads.
+        Lower bound used to derive a distinct prime vocabulary size for each hashed n-gram head.
     make_ngram_vocab_size_divisible_by (`int`, *optional*, defaults to 128):
         Divisor used to pad the combined n-gram embedding vocabulary.
     seed (`int`, *optional*, defaults to 1234):
