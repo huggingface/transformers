@@ -61,14 +61,14 @@ def _patch_residual_init(test_case: unittest.TestCase) -> None:
     def initialize_with_live_residual_branches(self: NeoMMEPreTrainedModel, module: torch.nn.Module) -> None:
         initialize(self, module)
         if isinstance(module, NeoMMEAttention):
-            init.normal_(module.o_proj.weight, mean=0.0, std=module.o_proj.weight.shape[-1] ** -0.5)
+            init.normal_(module.o_proj.weight, mean=0.0, std=self.config.initializer_range)
             if module.alpha is not None:
                 # XSA scales by `tanh(alpha)`, so a small std would leave it a no-op just like zero does.
                 init.normal_(module.alpha, mean=0.0, std=1.0)
         elif isinstance(module, NeoMMEMLP):
-            init.normal_(module.down_proj.weight, mean=0.0, std=module.down_proj.weight.shape[-1] ** -0.5)
+            init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, NeoMMEValueEmbeddings):
-            init.normal_(module.weight, mean=0.0, std=module.weight.shape[-1] ** -0.5)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, NeoMMEEncoderLayer):
             # `lambdas` is born `[1.0, 0.0]`; only partly zero, so an all-zero refill would miss it.
             init.copy_(module.lambdas, torch.tensor([1.0, 0.5]))
