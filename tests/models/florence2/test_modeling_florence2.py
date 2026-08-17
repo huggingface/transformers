@@ -448,9 +448,9 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_large_model_inference_eager(self):
         model_name = "florence-community/Florence-2-large"
         processor = AutoProcessor.from_pretrained(model_name)
-        model = Florence2ForConditionalGeneration.from_pretrained(model_name, attn_implementation="eager").to(
-            torch_device
-        )
+        model = Florence2ForConditionalGeneration.from_pretrained(
+            model_name, attn_implementation="eager", torch_dtype=torch.float32
+        ).to(torch_device)
 
         prompt = "<DETAILED_CAPTION>"
         inputs = processor(images=self.image1, text=prompt, return_tensors="pt")
