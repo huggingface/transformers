@@ -117,10 +117,10 @@ def sdpa_attention_forward(
     #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
     # - It is important to check first for the shape, otherwise compile will fail with
     #   `argument 'is_causal' must be bool, not SymBool`.
-    # TODO: dynamic export can still hit `argument 'is_causal' must be bool, not SymBool` here
-    #   (e.g. the seamless_m4t / seamless_m4t_v2 speech encoders) as the symbolic `q_length > 1` is evaluated first.
-    #   This should be fixed on the exporter side rather than by reordering the conditions.
-    #   See https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141
+    # TODO: under `torch.export` with dynamic shapes, `q_length > 1` is a `SymBool` and `and` returns the first falsy
+    #   operand, so `is_causal` can end up being that `SymBool` (e.g. the seamless_m4t / seamless_m4t_v2 speech
+    #   encoders). Reordering the conditions fixes it but breaks the compile requirement above, so it should rather be
+    #   handled on the exporter side. See https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141
     is_causal = q_length > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
