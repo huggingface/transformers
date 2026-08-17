@@ -999,7 +999,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         factor = self.merge_size
         dim = hidden_states.shape[-1]
         shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
-        hidden_states = hidden_states[shuffle_index]
+        hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults

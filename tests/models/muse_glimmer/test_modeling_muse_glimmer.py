@@ -88,6 +88,10 @@ class MuseGlimmerVision2TextModelTester(VLMModelTester):
 class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MuseGlimmerVision2TextModelTester
 
+    @unittest.skip("MuseGlimmer uses sliding attention layers, which `QuantizedCache` does not support.")
+    def test_generate_with_quant_cache(self):
+        pass
+
     def test_reverse_loading_mapping(self):
         # The vendor checkpoint layout is defined relative to the `model.` prefix, which the base
         # MuseGlimmerModel serializes without.
