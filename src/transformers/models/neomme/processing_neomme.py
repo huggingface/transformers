@@ -102,36 +102,19 @@ class NeoMMEProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        query_token: str = "<query>",
-        document_token: str = "<doc>",
-        image_token: str = "<img>",
-        row_token: str = "<row>",
         query_expand: int = 10,
         **kwargs,
     ):
         r"""
-        query_token (`str`, *optional*, defaults to `"<query>"`):
-            Marker token prefixed to every query.
-        document_token (`str`, *optional*, defaults to `"<doc>"`):
-            Marker token prefixed to every document, text or image.
-        image_token (`str`, *optional*, defaults to `"<img>"`):
-            Placeholder token the patch embeddings are scattered into.
-        row_token (`str`, *optional*, defaults to `"<row>"`):
-            Token that closes every row of the image patch grid.
         query_expand (`int`, *optional*, defaults to 10):
             Number of `<mask>` buffer tokens appended to every query.
         """
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
-        self.query_token = query_token
-        self.document_token = document_token
-        self.image_token = image_token
-        self.row_token = row_token
         self.query_expand = query_expand
 
     @property
-    def query_augmentation_token(self) -> str:
-        """The `<mask>` token appended to every retrieval query."""
-        return self.tokenizer.mask_token
+    def image_token(self) -> str | None:
+        return getattr(self.tokenizer, "image_token", None)
 
     @property
     def model_input_names(self) -> list[str]:
@@ -424,10 +407,10 @@ class NeoMMEProcessor(ProcessorMixin):
     def _marker_ids(self) -> dict[str, int]:
         """Resolve marker token ids and validate that the tokenizer defines them."""
         ids = {
-            "query": self.tokenizer.convert_tokens_to_ids(self.query_token),
-            "document": self.tokenizer.convert_tokens_to_ids(self.document_token),
-            "image": self.tokenizer.convert_tokens_to_ids(self.image_token),
-            "row": self.tokenizer.convert_tokens_to_ids(self.row_token),
+            "query": getattr(self.tokenizer, "query_token_id", None),
+            "document": getattr(self.tokenizer, "document_token_id", None),
+            "image": getattr(self.tokenizer, "image_token_id", None),
+            "row": getattr(self.tokenizer, "row_token_id", None),
             "mask": self.tokenizer.mask_token_id,
         }
         unknown_id = self.tokenizer.unk_token_id

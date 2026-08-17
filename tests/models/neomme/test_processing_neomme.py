@@ -70,7 +70,16 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 unk_token="<unk>",
                 mask_token="<mask>",
                 # Only the markers this vocabulary really has: naming one here would add it back.
-                additional_special_tokens=[t for t in ("<doc>", "<img>", "<query>", "<row>") if t in vocabulary],
+                extra_special_tokens={
+                    name: token
+                    for name, token in {
+                        "document_token": "<doc>",
+                        "image_token": "<img>",
+                        "query_token": "<query>",
+                        "row_token": "<row>",
+                    }.items()
+                    if token in vocabulary
+                },
             )
 
     @classmethod
