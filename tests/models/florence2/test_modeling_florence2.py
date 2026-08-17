@@ -455,6 +455,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "<DETAILED_CAPTION>"
         inputs = processor(images=self.image1, text=prompt, return_tensors="pt")
         inputs.to(device=torch_device)
+        inputs["pixel_values"] = inputs["pixel_values"].to(dtype=model.dtype)
 
         EXPECTED_INPUT_IDS = [[processor.image_token_id] * processor.num_image_tokens + [0, 47066, 21700, 11, 4617, 99, 16, 2343, 11, 5, 2274, 4, 2]]  # fmt: skip
         self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
@@ -463,7 +464,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_PREDICTION_IDS = Expectations(
             {
-                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]],
+                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 2014, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 4, 2]],
                 ("xpu", 5): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 19, 766, 6904, 4, 2]],
             }
         ).get_expectation()  # fmt: skip
@@ -473,7 +474,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATED_TEXT = Expectations(
             {
-                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
+                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the street, and in the background, there are trees, people walking on the footpath, and an arch.",
                 ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
             }
         ).get_expectation()  # fmt: skip
