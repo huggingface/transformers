@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask, sliding_window_bidirectional_overlay
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
@@ -334,15 +335,17 @@ class NeoMMEAttention(nn.Module):
 
 
 class NeoMMEMLP(nn.Module):
-    """Squared ReLU feed-forward block."""
-
-    def __init__(self, config: NeoMMEConfig):
+    def __init__(self, config):
         super().__init__()
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(F.relu(self.up_proj(hidden_states)).square())
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 class NeoMMEEncoderLayer(GradientCheckpointingLayer):

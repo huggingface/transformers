@@ -69,6 +69,8 @@ class NeoMMEConfig(PreTrainedConfig):
     embedding_rank: int = 256
     hidden_size: int = 1024
     intermediate_size: int = 3584
+    hidden_act: Literal["relu2"] = "relu2"
+    mlp_bias: bool = False
     num_hidden_layers: int = 17
     num_attention_heads: int = 16
     num_key_value_heads: int = 4

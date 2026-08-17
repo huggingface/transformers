@@ -42,6 +42,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
+from ..nemotron.modeling_nemotron import NemotronMLP
 from ..siglip2.image_processing_siglip2 import convert_image_to_patches
 from .configuration_neomme import NeoMMEConfig
 
@@ -457,16 +458,8 @@ class NeoMMEAttention(nn.Module):
         return attn_output - (scale * projection) * value_unit
 
 
-class NeoMMEMLP(nn.Module):
-    """Squared ReLU feed-forward block."""
-
-    def __init__(self, config: NeoMMEConfig):
-        super().__init__()
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(F.relu(self.up_proj(hidden_states)).square())
+class NeoMMEMLP(NemotronMLP):
+    pass
 
 
 class NeoMMEEncoderLayer(GradientCheckpointingLayer):
