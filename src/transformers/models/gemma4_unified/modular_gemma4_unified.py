@@ -841,7 +841,8 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         return_dict: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
-        image_position_ids: (batch, num_patches, 2) — integer XY positions (-1 for padding).
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
         # Step 1: Patch embedding (LN → Dense → LN)
         if (target_dtype := self.patch_dense.weight.dtype).is_floating_point:
