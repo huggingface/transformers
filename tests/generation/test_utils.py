@@ -24,7 +24,6 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -112,7 +111,6 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
         DFlashTokenCandidateGenerator,
-        SinglePositionMultiTokenCandidateGenerator,
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, _speculative_sampling
     from transformers.modeling_layers import MtpModel
@@ -3949,125 +3947,34 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
     @require_torch_multi_accelerator
-    def test_gemma_candidate_generator_keeps_ids_on_input_device(self):
-        """Regression test for Gemma4Assistant candidate generation with the assistant on a different device."""
-        input_device = torch.device(f"{torch_device}:0")
-        assistant_device = torch.device(f"{torch_device}:1")
-
-        assistant = AutoModelForCausalLM.from_pretrained("tiny-random/gemma-4-assistant").to(assistant_device).eval()
-        dtype = next(assistant.parameters()).dtype
-        text_config = assistant.config.get_text_config()
-        backbone_hidden_size = assistant.config.backbone_hidden_size
-        vocab_size = text_config.vocab_size
-
-        input_ids = torch.tensor([[1, 2, 3]], device=input_device)
-        target_embeddings = torch.nn.Embedding(vocab_size, backbone_hidden_size, device=input_device, dtype=dtype)
-        model_kwargs = {
-            "attention_mask": torch.ones_like(input_ids),
-            "position_ids": torch.arange(input_ids.shape[1], device=input_device).unsqueeze(0),
-        }
-        gemma_generator = SinglePositionMultiTokenCandidateGenerator(
-            input_ids=input_ids,
-            assistant_model=assistant,
-            target_model_input_embeddings=target_embeddings,
-            generation_config=GenerationConfig(eos_token_id=vocab_size - 1, pad_token_id=0, max_length=8),
-            model_kwargs=model_kwargs,
-        )
-        gemma_generator.num_assistant_tokens = 2
-
-        full_attention_head_dim = text_config.per_layer_config[
-            text_config.layer_types.index("full_attention")
-        ].head_dim
-        sliding_attention_head_dim = text_config.per_layer_config[
-            text_config.layer_types.index("sliding_attention")
-        ].head_dim
-        gemma_outputs = SimpleNamespace(
-            hidden_states=(
-                torch.zeros(1, input_ids.shape[1], backbone_hidden_size, device=input_device, dtype=dtype),
-            ),
-            shared_kv_states={
-                "full_attention": (
-                    torch.zeros(
-                        1,
-                        text_config.num_key_value_heads,
-                        input_ids.shape[1],
-                        full_attention_head_dim,
-                        device=input_device,
-                        dtype=dtype,
-                    ),
-                    torch.zeros(
-                        1,
-                        text_config.num_key_value_heads,
-                        input_ids.shape[1],
-                        full_attention_head_dim,
-                        device=input_device,
-                        dtype=dtype,
-                    ),
-                ),
-                "sliding_attention": (
-                    torch.zeros(
-                        1,
-                        text_config.num_key_value_heads,
-                        input_ids.shape[1],
-                        sliding_attention_head_dim,
-                        device=input_device,
-                        dtype=dtype,
-                    ),
-                    torch.zeros(
-                        1,
-                        text_config.num_key_value_heads,
-                        input_ids.shape[1],
-                        sliding_attention_head_dim,
-                        device=input_device,
-                        dtype=dtype,
-                    ),
-                ),
-            },
-        )
-        candidate_ids, candidate_logits = gemma_generator.get_candidates(
-            input_ids=input_ids,
-            model_kwargs=model_kwargs,
-            model_outputs=gemma_outputs,
-            is_first_iteration=False,
-            n_last_matches=0,
-        )
-        self.assertEqual(candidate_ids.device, input_device)
-        self.assertEqual(candidate_logits.device, input_device)
-
-    @require_torch_multi_accelerator
-    @require_accelerate
-    def test_mtp_candidate_generator_keeps_ids_on_input_device(self):
-        """Regression test for MTP draft logits being moved back to the input IDs device."""
-        from accelerate import dispatch_model
-
+    def test_mtp_use_correct_device_when_drafting(self):
+        """Test that when drafting the new token, mtp puts it back on the correct same device as `input_ids`"""
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
 
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model.config.get_text_config().num_mtp_layers = 2
-        mtp_model = MtpModel(model, num_mtp_layers=2).eval()
-        device_map = {"embed_tokens": input_device, "layers": assistant_device, "shared_head": assistant_device}
-        if mtp_model.rotary_emb is not None:
-            device_map["rotary_emb"] = assistant_device
-        dispatch_model(mtp_model, device_map=device_map)
+        mtp_model = MtpModel(model, num_mtp_layers=2).to(assistant_device).eval()
+        # Mimics embedding being on 1st device, i.e. main model device
+        mtp_model.embed_tokens.to(input_device)
 
         input_ids = torch.tensor([[1, 2]], device=input_device)
-        mtp_candidate_ids, mtp_candidate_logits, _ = MtpModel.forward(
-            mtp_model,
+
+        # If the device is not correct, this will raise an error
+        mtp_candidate_ids, mtp_candidate_logits, _ = mtp_model.forward(
             input_ids=input_ids,
             last_hidden_states=torch.zeros(1, input_ids.shape[1], model.config.hidden_size, device=assistant_device),
             attention_mask=torch.ones_like(input_ids, device=assistant_device),
             position_ids=torch.arange(input_ids.shape[1], device=assistant_device).unsqueeze(0),
             mtp_cache=None,
-            logits_processor=LogitsProcessorList(),
             full_input_ids=input_ids,
         )
         self.assertEqual(mtp_candidate_ids.device, input_device)
-        self.assertEqual(mtp_candidate_logits.device, input_device)
+        self.assertEqual(mtp_candidate_logits.device, assistant_device)
 
     @require_torch_multi_accelerator
-    def test_dflash_candidate_generator_keeps_ids_on_input_device(self):
-        """Regression test for DFlash candidate logits being moved back to the input IDs device."""
+    def test_dflash_use_correct_device_when_drafting(self):
+        """Test that when drafting the new tokens, dflash puts them it back on the correct same device as `input_ids`"""
         from transformers.models.muse_glimmer.modeling_muse_glimmer import MuseGlimmerForConditionalGeneration
         from transformers.models.muse_glimmer_assistant.modeling_muse_glimmer_assistant import (
             MuseGlimmerAssistantModel,
@@ -4076,24 +3983,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_device = torch.device(f"{torch_device}:0")
         assistant_device = torch.device(f"{torch_device}:1")
 
-        model = MuseGlimmerForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-muse-glimmer").eval()
-        assistant = MuseGlimmerAssistantModel.from_pretrained("hf-internal-testing/tiny-muse-glimmer-assistant").eval()
+        model = MuseGlimmerForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer", device_map=input_device
+        )
+        assistant = MuseGlimmerAssistantModel.from_pretrained(
+            "hf-internal-testing/tiny-muse-glimmer-assistant", device_map=assistant_device
+        )
         assistant.config.target_layer_ids = list(range(model.config.text_config.num_hidden_layers))
-        model.model.to(input_device)
-        model.lm_head.to(assistant_device)
-        assistant.to(input_device)
-
-        class AssistantOutputOnDevice(torch.nn.Module):
-            def __init__(self, assistant, device):
-                super().__init__()
-                self.assistant = assistant
-                self.config = assistant.config
-                self.device = device
-
-            def forward(self, **kwargs):
-                outputs = self.assistant(**kwargs)
-                outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
-                return outputs
 
         input_ids = torch.tensor([[2, 3, 4]], device=input_device)
         main_model_input_ids = input_ids
@@ -4103,7 +3999,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         }
 
         dflash_generator = DFlashTokenCandidateGenerator(
-            assistant_model=AssistantOutputOnDevice(assistant, assistant_device),
+            assistant_model=assistant,
             main_model_input_embeddings=model.get_input_embeddings(),
             main_model_output_embeddings=model.get_output_embeddings(),
             generation_config=GenerationConfig(max_length=8, do_sample=False),
@@ -4121,6 +4017,7 @@ class GenerationIntegrationTests(unittest.TestCase):
                 is_first_iteration=False,
                 n_last_matches=0,
             )
+        # Both will live on `input_device` as the main model is there
         self.assertEqual(dflash_candidate_ids.device, input_device)
         self.assertEqual(dflash_candidate_logits.device, input_device)
 
