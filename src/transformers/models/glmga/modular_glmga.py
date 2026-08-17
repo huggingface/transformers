@@ -216,6 +216,21 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
 
 
 class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    max_frames (`int`, *optional*, defaults to 640):
+        The maximum number of frames that can be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 55790`):
+        The maximum pixels a video can be resized to.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The factor that will be multiplied to `patch_size` when resizing videos.
+    """
+
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
