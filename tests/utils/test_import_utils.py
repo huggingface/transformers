@@ -181,6 +181,19 @@ def test_flash_attn_2_fallback_rescues_non_cuda_platform():
         assert is_flash_attn_2_available(kernels_fallback_ok=True)
 
 
+@parameterized.expand([(2,), (3,)])
+def test_flash_attn_cuda_kernels_fallback_pre_ampere_gpu(fa_version: int):
+    # Pre-Ampere CUDA GPUs (e.g. Turing/T4 with capability 7.5 or Volta/V100 with 7.0)
+    # cannot run Hub FlashAttention kernels, so the fallback should return False
+    with mock_flash_attn_env(cuda_available=True, kernels_available=True) as get_kernel:
+        with patch("torch.cuda.get_device_capability", return_value=(7, 5)):
+            if fa_version == 2:
+                assert not is_flash_attn_2_available(kernels_fallback_ok=True)
+            elif fa_version == 3:
+                assert not is_flash_attn_3_available(kernels_fallback_ok=True)
+            get_kernel.assert_not_called()
+
+
 def test_require_flash_attn_decorators_accept_kernels_fallback():
     # Smoke test: these decorators call is_flash_attn_2_available(kernels_fallback_ok=True) and must not raise
     from transformers.testing_utils import require_all_flash_attn, require_flash_attn
