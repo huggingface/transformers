@@ -595,7 +595,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
 class NeoMMEModel(NeoMMEPreTrainedModel):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
-        self.config = config
         self.embeddings = NeoMMEEmbeddings(config)
         self.patch_embeddings = NeoMMEPatchEmbeddings(config)
         self.rotary_emb = NeoMMERotaryEmbedding(config)
@@ -738,7 +737,6 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
-        self.config = config
         self.model = NeoMMEModel(config)
         self.post_init()
 
@@ -820,7 +818,6 @@ class NeoMMEForRetrievalOutput(ModelOutput):
 class NeoMMEForRetrieval(NeoMMEPreTrainedModel):
     def __init__(self, config: NeoMMEConfig):
         super().__init__(config)
-        self.config = config
         self.model = NeoMMEModel(config)
         self.embedding_proj_layer = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
         self.post_init()
