@@ -62,7 +62,6 @@ class NeoMMEConfig(PreTrainedConfig):
     # at long range and leave the rest of each head unrotated for content matching.
     default_theta = {"full_attention": 1_000_000.0, "sliding_attention": 10_000.0}
     default_partial_rotary_factor = {"full_attention": 0.25, "sliding_attention": 1.0}
-    ignore_keys_at_rope_validation = {"partial_rotary_factor"}
 
     vocab_size: int = 131072
     embedding_rank: int = 256
@@ -93,6 +92,17 @@ class NeoMMEConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        self.validate_layer_types()
+
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_key_value_heads <= 0 or self.num_attention_heads % self.num_key_value_heads:
             raise ValueError("num_key_value_heads must divide num_attention_heads")
         if not 0 < self.sliding_window_short <= self.sliding_window_long:
@@ -101,14 +111,7 @@ class NeoMMEConfig(PreTrainedConfig):
                 f"and {self.sliding_window_long}. Pass two equal widths for a single band; the research "
                 "encoding of `sliding_window_long = 0` for 'uniform' is resolved by the conversion script."
             )
-        if self.layer_types is None:
-            self.layer_types = [
-                "full_attention" if (i + 1) % 6 == 0 or i == self.num_hidden_layers - 1 else "sliding_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        self._validate_layer_types()
-
-        super().__post_init__(**kwargs)
+        self._validate_rotary_dims()
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -129,10 +132,9 @@ class NeoMMEConfig(PreTrainedConfig):
             layer_params.setdefault("partial_rotary_factor", self.default_partial_rotary_factor[layer_type])
 
         self.standardize_rope_params()
-        self._validate_rotary_dims()
         return kwargs
 
-    def _validate_layer_types(self) -> None:
+    def validate_layer_types(self) -> None:
         """Validate `layer_types`."""
         if len(self.layer_types) != self.num_hidden_layers:
             raise ValueError(

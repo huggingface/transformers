@@ -18,6 +18,7 @@ from typing import ClassVar
 from unittest.mock import patch
 
 from datasets import load_dataset
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import NeoMMEConfig, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
@@ -263,7 +264,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_grouped_query_heads_validated(self):
         for num_key_value_heads in (0, 3):
-            with self.assertRaisesRegex(ValueError, "must divide"):
+            with self.assertRaisesRegex(StrictDataclassClassValidationError, "must divide"):
                 NeoMMEConfig(num_attention_heads=4, num_key_value_heads=num_key_value_heads)
 
     def test_layer_types_validated(self):
@@ -283,7 +284,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         uniform = NeoMMEConfig(**base, sliding_window_short=256, sliding_window_long=256)
         self.assertEqual([w for w in uniform.layer_window_sizes if w is not None], [256, 256])
         for short, long in ((256, 0), (256, 128), (0, 256)):
-            with self.subTest(short=short, long=long), self.assertRaises(ValueError):
+            with self.subTest(short=short, long=long), self.assertRaises(StrictDataclassClassValidationError):
                 NeoMMEConfig(**base, sliding_window_short=short, sliding_window_long=long)
 
     def test_rope_parameters_follow_layer_types(self):
@@ -314,11 +315,11 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_partial_rotary_factor_multiple_of_four(self):
         """Rotating dims must be a multiple of 4 (two M-RoPE axes × pairs); used to silently round down."""
-        with self.assertRaisesRegex(ValueError, "needs at least 4"):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
             NeoMMEConfig(head_dim=8)
-        with self.assertRaisesRegex(ValueError, "not a multiple of 4"):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "not a multiple of 4"):
             NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.3}})
-        with self.assertRaisesRegex(ValueError, "needs at least 4"):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "needs at least 4"):
             NeoMMEConfig(head_dim=2, layer_types=["full_attention"] * 17)
         # A factor that lands on a multiple of 4 is fine, on either layer type.
         config = NeoMMEConfig(head_dim=64, rope_parameters={"full_attention": {"partial_rotary_factor": 0.75}})
@@ -327,7 +328,7 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_partial_rotary_factor_unit_interval(self):
         """`partial_rotary_factor` must lie in (0, 1]."""
         for factor in (2.0, 0.0, -0.25):
-            with self.assertRaisesRegex(ValueError, r"outside \(0.0, 1.0\]"):
+            with self.assertRaisesRegex(StrictDataclassClassValidationError, r"outside \(0.0, 1.0\]"):
                 NeoMMEConfig(rope_parameters={"sliding_attention": {"partial_rotary_factor": factor}})
 
     def test_config_dict_roundtrip(self):
