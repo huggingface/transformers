@@ -304,10 +304,11 @@ class GenerationConfigTest(unittest.TestCase):
             GenerationConfig(pad_token_id=12)
         self.assertEqual(len(captured_logs.out), 0)
 
-        # strict=True escalates to ValueError
+        # strict=True does NOT raise — this is a warning-only check so that
+        # save_pretrained (which calls validate(strict=True)) works for models
+        # that ship with pad_token_id in eos_token_id.
         generation_config = GenerationConfig(pad_token_id=12, eos_token_id=[2, 11, 12])
-        with self.assertRaises(ValueError):
-            generation_config.validate(strict=True)
+        generation_config.validate(strict=True)  # should not raise
 
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""

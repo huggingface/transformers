@@ -831,13 +831,15 @@ class GenerationConfig(PushToHubMixin):
         # When `eos_token_id` is a list and `pad_token_id` is one of those tokens, `generate` may stop
         # immediately (every padded position is treated as a finished sequence), producing empty outputs.
         # The single-eos case (pad == eos as a single int) is the common default for many models and is not
-        # flagged here. See https://github.com/huggingface/transformers/issues/48016
+        # flagged here. This is a warning-only check — it is NOT added to `minor_issues` because many valid
+        # pretrained models ship with this config and `save_pretrained` calls `validate(strict=True)`, which
+        # would raise. See https://github.com/huggingface/transformers/issues/48016
         if (
             self.pad_token_id is not None
             and isinstance(self.eos_token_id, list)
             and self.pad_token_id in self.eos_token_id
         ):
-            minor_issues["pad_token_id"] = (
+            logger.warning_once(
                 f"`pad_token_id` ({self.pad_token_id}) is in `eos_token_id` ({self.eos_token_id}). This may cause "
                 "`generate` to stop immediately, as every padded position is treated as a finished sequence. "
                 "Consider setting `pad_token_id` to a token that is not in `eos_token_id`."
