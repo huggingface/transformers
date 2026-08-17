@@ -44,6 +44,7 @@ from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import (
     get_vision_cu_seqlens,
+    get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -878,94 +879,22 @@ class MuseGlimmerVisionEncoderLayer(Kimi_K25VisionEncoderLayer):
     pass
 
 
-# override the fn from `vision_utils.py` since muse_glimmer uses `F.grid_sample` in ref
-# and `grid_sample` applies padding unlike `f.interpolate`. Custom interpolation
-# export-friendly code used in muse_glimmer, thus kept in model file
-def get_vision_bilinear_indices_and_weights(
-    grid_thw: torch.Tensor,
-    num_grid_per_side: int,
-    spatial_merge_size: int,
-    kwargs: dict | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """The fn is equivalent with F.grid_sample(inputs, align_coreners=False, padding="zeros")"""
-    if kwargs is not None:
-        bilinear_indices = kwargs.pop("bilinear_indices", None)
-        bilinear_weights = kwargs.pop("bilinear_weights", None)
-        if bilinear_indices is not None and bilinear_weights is not None:
-            return bilinear_indices, bilinear_weights
-    side = num_grid_per_side
-    merge_size = spatial_merge_size
-    device = grid_thw.device
-
-    idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-    weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-
-    for t, h, w in grid_thw.tolist():
-        t, h, w = int(t), int(h), int(w)
-
-        h_grid = (torch.arange(h, device=device).float() + 0.5) * (side / h) - 0.5
-        w_grid = (torch.arange(w, device=device).float() + 0.5) * (side / w) - 0.5
-
-        # NOTE: use `floor()`, not `int()` to avoid truncation when align corner is False
-        h_floor = torch.floor(h_grid).long()
-        w_floor = torch.floor(w_grid).long()
-        h_ceil = h_floor + 1
-        w_ceil = w_floor + 1
-        h_frac = h_grid - h_floor.float()
-        w_frac = w_grid - w_floor.float()
-
-        h_floor_valid = (h_floor >= 0) & (h_floor <= side - 1)
-        h_ceil_valid = (h_ceil >= 0) & (h_ceil <= side - 1)
-        w_floor_valid = (w_floor >= 0) & (w_floor <= side - 1)
-        w_ceil_valid = (w_ceil >= 0) & (w_ceil <= side - 1)
-        h_floor = h_floor.clamp(0, side - 1)
-        h_ceil = h_ceil.clamp(0, side - 1)
-        w_floor = w_floor.clamp(0, side - 1)
-        w_ceil = w_ceil.clamp(0, side - 1)
-
-        h_floor_offset = h_floor * side
-        h_ceil_offset = h_ceil * side
-
-        corner_indices = [
-            (h_floor_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_floor_offset[:, None] + w_ceil[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_floor[None, :]).flatten(),
-            (h_ceil_offset[:, None] + w_ceil[None, :]).flatten(),
-        ]
-        corner_weights = [
-            (
-                (1 - h_frac)[:, None] * (1 - w_frac)[None, :] * (h_floor_valid[:, None] & w_floor_valid[None, :])
-            ).flatten(),
-            ((1 - h_frac)[:, None] * w_frac[None, :] * (h_floor_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-            (h_frac[:, None] * (1 - w_frac)[None, :] * (h_ceil_valid[:, None] & w_floor_valid[None, :])).flatten(),
-            (h_frac[:, None] * w_frac[None, :] * (h_ceil_valid[:, None] & w_ceil_valid[None, :])).flatten(),
-        ]
-
-        h_idx = torch.arange(h, device=device).view(h // merge_size, merge_size)
-        w_idx = torch.arange(w, device=device).view(w // merge_size, merge_size)
-        reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).transpose(1, 2).flatten().repeat(t)
-
-        for i in range(4):
-            idx_parts[i].append(corner_indices[i][reorder])
-            weight_parts[i].append(corner_weights[i][reorder])
-
-    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
-    bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
-    return bilinear_indices, bilinear_weights
-
-
 class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
     def __init__(self, config: MuseGlimmerVisionConfig):
         nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
-        self.patch_size = config.patch_temporal * 3 * config.patch_size**2
-
-        self.patch_embedding = nn.Linear(self.patch_size, self.hidden_size, bias=False)
+        self.patch_embedding = nn.Linear(
+            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
+        )
         self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
         # FIXME: only if square images - vision utils don't yet support non-square
         # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
         self.num_grid_per_side = config.pos_emb_height
+        # muse_glimmer resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
+        self.interpolation_mode = "bilinear"
+        self.interpolation_align_corners = False
+        self.interpolation_padding = "zeros"
 
     def forward(
         self,
@@ -980,21 +909,20 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        batch_sequence_len = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_sequence_len, -1)
+        embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
             spatial_merge_size=1,
+            padding=self.interpolation_padding,
             kwargs=kwargs,
         )
-        # this doesn;t match ref since we compute manually in fp32. `F.grid_sample` has some numerical
-        # error accumulated and for whatever reason, that might be important (see comment in ref code)
-        pos_embeds = (self.position_embedding_table(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
 
         return embeddings
@@ -1003,21 +931,44 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
 class MuseGlimmerVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
     def forward(self, x, position_ids):
         # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in MuseGlimmer
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
-        )
-        w_ids = position_ids[:, :, 0][:, None, :].float()
-        h_ids = position_ids[:, :, 1][:, None, :].float()
+        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
+        w_ids = position_ids[:, 0].float()  # position_ids: (seq, 2), unbatched
+        h_ids = position_ids[:, 1].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freq_h = (inv_freq_expanded @ h_ids).transpose(1, 2)
-            freq_w = (inv_freq_expanded @ w_ids).transpose(1, 2)
+            freq_w = w_ids[:, None] * inv_freq[None, :]
+            freq_h = h_ids[:, None] * inv_freq[None, :]
             freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
             cos = freq.cos() * self.attention_scaling
             sin = freq.sin() * self.attention_scaling
 
         return cos.to(x.dtype), sin.to(x.dtype)
+
+
+def get_vision_pixel_shuffle_index(
+    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
+    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
+    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
+    """
+    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
+        return index
+    indices = []
+    offset = 0
+    for frames, height, width in grid_thw.tolist():
+        frames, height, width = int(frames), int(height), int(width)
+        permutation = torch.arange(height * width, device=grid_thw.device)
+        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
+        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
+        if frames > 1:
+            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
+            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
+            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
+        indices.append(permutation + offset)
+        offset += frames * height * width
+    return torch.cat(indices, dim=0)
 
 
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
@@ -1036,45 +987,20 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         self.ln_pre = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MuseGlimmerVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # read by both the forward and the export precompute. `spatial_merge_size` is intentionally 1 (not `config.merge_size`):
+        # window/position/interpolation run un-merged, the merge is deferred to `pixel_shuffle`.
+        self.spatial_merge_size = 1
+        self.patch_size = config.patch_size
+        self.window_size = config.pos_emb_height * config.patch_size
+        self.merge_size = config.merge_size
         self.post_init()
 
-    def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
-        factor = self.config.merge_size
+    def pixel_shuffle(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        factor = self.merge_size
         dim = hidden_states.shape[-1]
-
-        output = []
-        offset = 0
-
-        for t, h, w in grid_thw:
-            t, h, w = int(t), int(h), int(w)
-            n_tokens = t * h * w
-
-            hidden_states_chunk = hidden_states[offset : offset + n_tokens]
-
-            # per-frame downsample (t frames share the same h,w perm)
-            n_out_per_frame = (h // factor) * (w // factor)
-            ds_perm = torch.arange(h * w, device=hidden_states.device)
-            ds_perm = ds_perm.view(h // factor, factor, w // factor, factor).permute(0, 2, 1, 3).reshape(-1)
-
-            if t > 1:
-                # offset the perm per frame so it indexes correctly into the flattened (t*h*w) sequence
-                frame_offsets = (torch.arange(t, device=hidden_states.device) * h * w).view(t, 1)
-                ds_perm_all = (ds_perm.unsqueeze(0) + frame_offsets).reshape(-1)
-            else:
-                ds_perm_all = ds_perm
-
-            hidden_states_downsampled = hidden_states_chunk[ds_perm_all]
-            hidden_states_downsampled = hidden_states_downsampled.view(t * n_out_per_frame, factor * factor, dim)
-            hidden_states_downsampled = (
-                hidden_states_downsampled.permute(0, 2, 1)
-                .contiguous()
-                .view(t * n_out_per_frame, dim * factor * factor)
-            )
-
-            output.append(hidden_states_downsampled)
-            offset += n_tokens
-
-        return torch.cat(output, dim=0)
+        shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
+        hidden_states = hidden_states[shuffle_index]
+        return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1085,23 +1011,23 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
-            spatial_merge_size=1,
-            # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
-            window_size=self.config.pos_emb_height * self.config.patch_size,
-            patch_size=self.config.patch_size,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
             kwargs=kwargs,
         )
 
-        inputs_embeds = self.patch_embedder(pixel_values, grid_thw)
+        inputs_embeds = self.patch_embedder(pixel_values, grid_thw, **kwargs)
         hidden_states = self.ln_pre(inputs_embeds)
         hidden_states = hidden_states[window_index, :]
 
         # Add `1` because ref implementation's position offset is `1`!
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
         position_ids = position_ids.flip(-1) + 1
-        position_ids = position_ids[None, window_index, :]  # unsqueeze single batch size
+        position_ids = position_ids[window_index, :]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens_mapping = {
@@ -1119,7 +1045,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self.pixel_shuffle(hidden_states, grid_thw)
+        hidden_states = self.pixel_shuffle(hidden_states, grid_thw, **kwargs)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
