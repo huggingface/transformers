@@ -1099,7 +1099,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = Expectations({
-            ("cuda", None): [" and the people are so friendly. I'm so glad I came here. I'm so", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("cuda", None): [" and I find it very relaxing. I also like the food, which is very delicious. I also", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
