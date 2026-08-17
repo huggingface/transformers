@@ -99,7 +99,9 @@ class BackboneConfigMixin:
                 raise ValueError(f"out_indices must be a list, got {type(self._out_indices)}")
             # Convert negative indices to their positive equivalent: [-1,] -> [len(stage_names) - 1,]
             positive_indices = tuple(idx % len(self.stage_names) if idx < 0 else idx for idx in self._out_indices)
-            if any(idx for idx in positive_indices if idx not in range(len(self.stage_names))):
+            # `any(idx for ...)` tested the truthiness of each out-of-range index, so an
+            # out-of-range 0 was falsy and slipped through; test the condition instead.
+            if any(idx not in range(len(self.stage_names)) for idx in positive_indices):
                 raise ValueError(
                     f"out_indices must be valid indices for stage_names {self.stage_names}, got {self._out_indices}"
                 )

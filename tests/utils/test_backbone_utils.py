@@ -132,6 +132,18 @@ class BackboneUtilsTester(unittest.TestCase):
         AnyBackboneConfig(stage_names=["a", "b", "c", "d"], out_features=["a", "b", "d"], out_indices=[0, 1, -1])
 
     @require_torch
+    def test_config_verify_out_indices_rejects_out_of_range_zero(self):
+        # `any(idx for ...)` tested the truthiness of each out-of-range index, so an
+        # out-of-range 0 was falsy and passed validation while 1 was rejected.
+        with pytest.raises(ValueError, match="out_indices must be valid indices for stage_names"):
+            AnyBackboneConfig(stage_names=[], out_features=None, out_indices=[0])
+
+        with pytest.raises(ValueError, match="out_indices must be valid indices for stage_names"):
+            AnyBackboneConfig(stage_names=[], out_features=None, out_indices=[1])
+
+        # a valid 0 for non-empty stage_names is still accepted
+        AnyBackboneConfig(stage_names=["a", "b"], out_features=None, out_indices=[0])
+
     def test_backbone_mixin(self):
         config = AnyBackboneConfig(stage_names=["a", "b", "c"], out_features=["a", "c"], out_indices=[0, 2])
         backbone = AnyBackbone(config)
