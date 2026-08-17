@@ -1675,22 +1675,23 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         candidate_logits = self.main_model_output_embeddings(
             outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
-        )
+        ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(
-                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
-                )
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
                 if self.do_sample:
-                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
                 else:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                # Append it to the full sequence
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
         # Here we can vectorize as we don't have any processors
         else:
@@ -1700,7 +1701,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
 
         return candidate_ids, candidate_logits
 
