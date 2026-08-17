@@ -759,9 +759,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
-        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        # Each layer outputs its key, value, and cumulative length, plus the model logits.
+        self.assertEqual(3 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        # The cache adds one cumulative-length input per layer to input IDs, attention mask, and use_cache.
         self.assertEqual(
-            3,
+            model.config.num_hidden_layers + 3,
             len(
                 [
                     x
@@ -807,9 +809,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
-        self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        # Each layer outputs its key, value, and cumulative length, plus the model logits.
+        self.assertEqual(3 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
+        # The cache adds one cumulative-length input per layer to the input ids, attention mask, and use_cache.
         self.assertEqual(
-            3,
+            model.config.num_hidden_layers + 3,
             len(
                 [
                     x
