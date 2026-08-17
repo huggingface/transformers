@@ -16,12 +16,6 @@ import json
 import os
 from dataclasses import asdict, dataclass
 
-from ..utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
-
 
 @dataclass
 class DistributedConfig:
@@ -63,12 +57,12 @@ class DistributedConfig:
         if self.fsdp_size is None:
             self.fsdp_size = 1
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            world_size = torch.distributed.get_world_size()
-            if self.tp_size * self.fsdp_size != world_size:
-                raise RuntimeError(
-                    f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) is not equal to world_size ({world_size})"
-                )
+        if self.tp_size > 1 and self.fsdp_size > 1:
+            raise ValueError(
+                "FSDP+TP is not supported yet. "
+                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N), not both. "
+                "2D support will come soon."
+            )
 
     @classmethod
     def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":

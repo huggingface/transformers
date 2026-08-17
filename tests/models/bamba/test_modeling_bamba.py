@@ -548,7 +548,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=torch_device)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
@@ -568,12 +568,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.model.to(torch_device)
-
-        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
-            "input_ids"
-        ].to(torch_device)
-        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        inputs = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt").to(torch_device)
+        out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
@@ -581,7 +577,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
+                logits = self.model(**inputs, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [
@@ -620,8 +616,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-
-        self.model.to(torch_device)
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "I am late! I need to"],

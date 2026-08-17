@@ -2202,7 +2202,7 @@ class WordpieceTokenizer:
 
 # Below: utilities for TAPAS tokenizer
 # This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
-# to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
+# to create the column_ranks, inv_column_ranks, numeric_values, numeric_values_scale and numeric_relations in
 # prepare_for_model of TapasTokenizer.
 # These are meant to be used in an academic setup, for production use cases Gold mine or Aqua should be used.
 

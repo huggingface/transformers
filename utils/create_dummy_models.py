@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -53,9 +54,11 @@ from transformers import (
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor
+from transformers.image_utils import SizeDict
 from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
 from transformers.processing_utils import ProcessorMixin, transformers_module
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.video_processing_utils import BaseVideoProcessor
 
 
 # make sure tokenizer plays nice with multiprocessing
@@ -133,9 +136,6 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
 
 
 config_class_to_model_tester_map = {
-    "Qwen3OmniMoeConfig": None,  # Only has `Qwen3OmniMoeThinkerForConditionalGenerationTester` which returns `Qwen3OmniMoeThinkerConfig`
-    "Qwen2_5OmniConfig": None,  # Only has `Qwen2_5OmniThinkerForConditionalGenerationTester` which returns `Qwen2_5OmniThinkerConfig`
-    "PeAudioVideoConfig": None,  # Only has `PeAudioVideoEncoderTester` which returns `PeAudioVideoEncoderConfig`
     "Qwen3_5Config": "Qwen3_5VisionText2TextModelTester",
     "Qwen3_5MoeConfig": "Qwen3_5MoeVisionText2TextModelTester",
     "InstructBlipConfig": "InstructBlipForConditionalGenerationDecoderOnlyModelTester",
@@ -144,6 +144,7 @@ config_class_to_model_tester_map = {
     "Gemma3nConfig": "Gemma3nVision2TextModelTester",
     "Gemma3Config": "Gemma3Vision2TextModelTester",
     "VideoLlama3Config": "VideoLlama3VisionText2TextModelTester",
+    "Cosmos3EdgeConfig": "Cosmos3EdgeVisionText2TextModelTester",
     "JanusConfig": "JanusVisionText2TextModelTester",
     "Emu3Config": "Emu3Vision2TextModelTester",
     # Need `torchcodec` and `ffmpeg` --> fixed now
@@ -154,11 +155,32 @@ config_class_to_model_tester_map = {
     "FastSpeech2ConformerWithHifiGanConfig": "FastSpeech2ConformerWithHifiGanTester",
     "Gemma3nAudioConfig": "Gemma3nAudioModelTester",
     # "Blip2QFormerConfig": "Blip2QFormerModelTester",
+    "Gemma4Config": "Gemma4Vision2TextModelTester",
+    "Gemma4UnifiedConfig": "Gemma4UnifiedVision2TextModelTester",
+    "GraniteSpeechPlusConfig": "GraniteSpeechPlusForConditionalGenerationModelTester",
+    "NemotronAsrStreamingConfig": "NemotronAsrStreamingForRNNTModelTester",
+    "NemotronAsrStreamingEncoderConfig": "NemotronAsrStreamingEncoderModelTester",
+    "ParakeetRNNTConfig": "ParakeetForRNNTModelTester",
+    "ParakeetTDTConfig": "ParakeetForTDTModelTester",
+    "UVDocConfig": "UVDocModelTester",
+    "Cosmos3EdgeVisionConfig": "Cosmos3EdgeVisionText2TextModelTester",
+    "Gemma4AudioConfig": "Gemma4Audio2TextModelTester",
+    "Gemma4VisionConfig": "Gemma4Vision2TextModelTester",
+    "Qwen3_5VisionConfig": "Qwen3_5VisionText2TextModelTester",
+    "Qwen3_5MoeVisionConfig": "Qwen3_5MoeVisionText2TextModelTester",
 }
 
 
+# TODO: create a separate map `no_proper_tester` for configs where only a sub-config tester exists
+# (e.g. only ThinkerTester exists but not a full OmniTester). Currently placed in no_model_tester_at_all.
 no_model_tester_at_all = {
     "EdgeTamVideoConfig",
+    "PeAudioVideoConfig",  # only PeAudioVideoEncoderTester exists, returns PeAudioVideoEncoderConfig not PeAudioVideoConfig
+    "Qwen2_5OmniConfig",  # only Qwen2_5OmniThinkerForConditionalGenerationTester exists, returns Qwen2_5OmniThinkerConfig
+    "Qwen3OmniMoeConfig",  # only Qwen3OmniMoeThinkerForConditionalGenerationTester exists, returns Qwen3OmniMoeThinkerConfig
+    "Gemma4AssistantConfig",
+    "Gemma4UnifiedAssistantConfig",
+    "GlmgaConfig",  # processor-only variant of glm46v; no modeling_glmga.py exists, model classes are from glm46v
     "Llama4Config",
     "Llama4TextConfig",
     "Sam2VideoConfig",
@@ -207,9 +229,12 @@ CHECKPOINT_REVISIONS = {
     "Ernie4_5_VL_MoeConfig": "refs/pr/10",
     "Ernie4_5_VLMoeConfig": "refs/pr/10",
     "Phi4MultimodalConfig": "refs/pr/70",
+    "VideoPrismConfig": "refs/pr/2",  # google/videoprism-lvt-base-f16r288
+    "VideoPrismVisionConfig": "refs/pr/4",  # google/videoprism-base-f16r288
 }
 
 CHECKPOINT_SUBFOLDERS = {
+    "GlmImageConfig": "processor",
     "GlmImageTextConfig": "processor",
     "GlmImageVisionConfig": "processor",
     "GlmImageVQVAEConfig": "processor",
@@ -378,8 +403,15 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     try:
         revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
         sub_folder = CHECKPOINT_SUBFOLDERS.get(config_class.__name__, "")
+        _t0 = time.time()
+        print(f"[build_processor] trying {processor_class.__name__}.from_pretrained({checkpoint!r})", flush=True)
         processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
+        print(f"[build_processor] OK  {processor_class.__name__} in {time.time() - _t0:.1f}s", flush=True)
     except Exception as e:
+        print(
+            f"[build_processor] FAIL {processor_class.__name__} in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}",
+            flush=True,
+        )
         logger.error(f"{e.__class__.__name__}: {e}")
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
@@ -395,8 +427,15 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     ):
         try:
             revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
+            _t0 = time.time()
+            print(f"[build_processor] trying AutoConfig.from_pretrained({checkpoint!r})", flush=True)
             config = AutoConfig.from_pretrained(checkpoint, revision=revision)
+            print(f"[build_processor] OK  AutoConfig in {time.time() - _t0:.1f}s", flush=True)
         except Exception as e:
+            print(
+                f"[build_processor] FAIL AutoConfig in {time.time() - _t0:.1f}s — {e.__class__.__name__}: {e}",
+                flush=True,
+            )
             logger.error(f"{e.__class__.__name__}: {e}")
             config = None
         if config is not None:
@@ -536,6 +575,10 @@ def _get_exact_config(_config, config_class):
     for key in keys:
         sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
         if sub_config is not None:
+            # Skip primitives (bool, int, str, …) that happen to have a name ending in `_config`
+            # (e.g. `serialize_explicit_per_layer_config` on PreTrainedConfig is a bool).
+            if not (isinstance(sub_config, dict) or hasattr(sub_config, "to_dict")):
+                continue
             # TODO: `VibeVoiceAcousticTokenizerEncoder/DecoderConfig` needs some protection!!!
             if sub_config.__class__ == _config.__class__:
                 continue
@@ -628,6 +671,10 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
             # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
             # TODO: More fine grained control of the desired tester class.
+            # TODO: Instead of picking a single tester by shortest name, try all testers in order and use the first
+            # one whose config output is an instance of `config_class`. This would eliminate the need for manual
+            # entries in `config_class_to_model_tester_map` for multimodal models where a sub-tester (e.g.
+            # `Cosmos3EdgeTextModelTester`) appears before the full-model tester in the test file.
             model_tester_class = min(tester_classes, key=lambda x: (len(x.__name__), x.__name__))
 
             # TODO: SpeechT5ForSpeechToText needs a particular tester to get the working config
@@ -672,6 +719,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             model_tester, config = _build_model_tester_and_get_config(
                 new_model_tester_class, model_tester_kwargs, model_type
             )
+            config = _get_exact_config(config, config_class)
 
         # TODO: Disabled as this causes issues due to much larger models
         # # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
@@ -732,17 +780,34 @@ def convert_feature_extractor(feature_extractor, tiny_config):
     to_convert = False
     kwargs = {}
     if hasattr(tiny_config, "image_size"):
-        kwargs["size"] = tiny_config.image_size
-        kwargs["crop_size"] = tiny_config.image_size
+        image_size = tiny_config.image_size
         to_convert = True
     elif (
         hasattr(tiny_config, "vision_config")
         and tiny_config.vision_config is not None
         and hasattr(tiny_config.vision_config, "image_size")
     ):
-        kwargs["size"] = tiny_config.vision_config.image_size
-        kwargs["crop_size"] = tiny_config.vision_config.image_size
+        image_size = tiny_config.vision_config.image_size
         to_convert = True
+    else:
+        image_size = None
+
+    if to_convert:
+        # Some processors expect `size` as a dict (e.g. {"shortest_edge": N, "longest_edge": N})
+        # rather than a plain int. If the existing processor already has a dict `size`, preserve
+        # the dict structure when converting.
+        existing_size = getattr(feature_extractor, "size", None)
+        if isinstance(existing_size, (dict, SizeDict)):
+            if "shortest_edge" in existing_size or "longest_edge" in existing_size:
+                size = {"shortest_edge": image_size, "longest_edge": image_size}
+            elif "height" in existing_size or "width" in existing_size:
+                size = {"height": image_size, "width": image_size}
+            else:
+                size = image_size
+        else:
+            size = image_size
+        kwargs["size"] = size
+        kwargs["crop_size"] = size
 
     # Speech2TextModel specific.
     if hasattr(tiny_config, "input_feat_per_channel"):
@@ -1331,6 +1396,54 @@ def get_config_overrides(config_class, processors):
     return config_overrides
 
 
+def _read_mem_used_gb() -> float | None:
+    """Return current memory used (GB) from /proc/meminfo, or None if unavailable."""
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
+        return (meminfo["MemTotal"] - meminfo["MemAvailable"]) / 1024**2
+    except Exception:
+        return None
+
+
+def _get_folder_size_mb(path: str) -> float | None:
+    """Return total size of all files under `path` in MB, or None if unavailable."""
+    try:
+        total = sum(f.stat().st_size for f in Path(path).rglob("*") if f.is_file())
+        return round(total / 1024**2, 2)
+    except Exception:
+        return None
+
+
+def _log_disk_usage(label: str) -> None:
+    """Print disk and memory usage for GitHub Actions log visibility."""
+    try:
+        import shutil
+
+        total, used, free = shutil.disk_usage("/")
+        gb = 1024**3
+        print(
+            f"[disk] {label}: total={total / gb:.1f}G  used={used / gb:.1f}G  free={free / gb:.1f}G",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[disk] {label}: could not read disk usage: {e}", flush=True)
+
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
+        total = meminfo["MemTotal"] / 1024**2
+        free = meminfo["MemFree"] / 1024**2
+        available = meminfo["MemAvailable"] / 1024**2
+        used = total - available
+        print(
+            f"[mem]  {label}: total={total:.1f}G  used={used:.1f}G  available={available:.1f}G",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[mem]  {label}: could not read memory usage: {e}", flush=True)
+
+
 def build(config_class, models_to_create, output_dir, keep_model=False):
     """Create all models for a certain model type.
 
@@ -1344,6 +1457,41 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
             it.
     """
+    import time as _time
+
+    _start = _time.monotonic()
+    _mem_start = _read_mem_used_gb()
+    print(f"[time] START {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
+    _log_disk_usage(f"START {config_class.__name__}")
+
+    # When not keeping models, redirect all output (processors + per-arch copies) to a
+    # temporary directory so nothing accumulates on disk across model types.
+    # try/finally ensures cleanup even on early returns inside build().
+    _tmpdir = tempfile.TemporaryDirectory() if not keep_model else None
+    if _tmpdir is not None:
+        output_dir = _tmpdir.name
+
+    result = None
+    try:
+        result = _build_inner(config_class, models_to_create, output_dir, keep_model)
+        return result
+    finally:
+        _elapsed = _time.monotonic() - _start
+        _mem_end = _read_mem_used_gb()
+        _mem_delta = round(_mem_end - _mem_start, 2) if (_mem_start is not None and _mem_end is not None) else None
+        _folder_size_mb = _get_folder_size_mb(output_dir)
+        if isinstance(result, dict):
+            result["duration_s"] = round(_elapsed, 1)
+            result["mem_delta_gb"] = _mem_delta
+            result["folder_size_mb"] = _folder_size_mb
+        print(f"[time] END   {config_class.__name__}: {_time.strftime('%H:%M:%S')}", flush=True)
+        print(f"[time] Duration {config_class.__name__}: {_elapsed:.1f}s", flush=True)
+        _log_disk_usage(f"END   {config_class.__name__}")
+        if _tmpdir is not None:
+            _tmpdir.cleanup()
+
+
+def _build_inner(config_class, models_to_create, output_dir, keep_model=False):
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
         data["training_ds"] = ds["train"]
@@ -1381,15 +1529,44 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     traces = []
     errors = []
+    print(
+        f"[processor_loop] {config_class.__name__}: will try {len(processor_classes)} processor class(es): {[pc.__name__ for pc in processor_classes]}",
+        flush=True,
+    )
     for processor_class in processor_classes:
+        _loop_t0 = time.time()
+        # Skip Auto classes if we already have a loaded processor of the same category.
+        # Auto classes are fallbacks; if an explicit class already succeeded there is no need to
+        # load again (e.g. TokenizersBackend + AutoTokenizer both convert from tokenizer.model).
+        already_loaded = list(result["processor"].keys())
+        if processor_class is AutoTokenizer and any(issubclass(t, PreTrainedTokenizerBase) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (tokenizer already loaded)", flush=True)
+            continue
+        if processor_class is AutoImageProcessor and any(issubclass(t, BaseImageProcessor) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (image processor already loaded)", flush=True)
+            continue
+        if processor_class is AutoFeatureExtractor and any(
+            issubclass(t, FeatureExtractionMixin) for t in already_loaded
+        ):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (feature extractor already loaded)", flush=True)
+            continue
+        if processor_class is AutoVideoProcessor and any(issubclass(t, BaseVideoProcessor) for t in already_loaded):
+            print(f"[processor_loop] SKIP  {processor_class.__name__} (video processor already loaded)", flush=True)
+            continue
+        print(f"[processor_loop] START {processor_class.__name__}", flush=True)
         try:
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 if type(processor) not in result["processor"]:
                     result["processor"][type(processor)] = processor
+            print(
+                f"[processor_loop] END   {processor_class.__name__} in {time.time() - _loop_t0:.1f}s → {type(processor).__name__ if processor is not None else 'None'}",
+                flush=True,
+            )
         except Exception:
             error = f"Failed to build processor for {processor_class.__name__}."
             trace = traceback.format_exc()
+            print(f"[processor_loop] FAIL  {processor_class.__name__} in {time.time() - _loop_t0:.1f}s", flush=True)
             errors.append(error)
             traces.append(trace)
             # fill_result_with_error(result, error, trace, models_to_create)

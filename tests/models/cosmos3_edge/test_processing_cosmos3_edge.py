@@ -20,6 +20,7 @@ import numpy as np
 
 from transformers import (
     Cosmos3EdgeImageProcessor,
+    Cosmos3EdgeImageProcessorPil,
     Cosmos3EdgeProcessor,
     Cosmos3EdgeVideoProcessor,
 )
@@ -284,25 +285,25 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 torch.testing.assert_close(video_processor_output[key], processor_output[key])
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
-        """Protect the 2x2 block-major patch order expected by the Edge projector."""
-        processor = Cosmos3EdgeImageProcessor(
-            do_resize=False,
-            do_rescale=False,
-            do_normalize=False,
-            patch_size=2,
-            merge_size=2,
-        )
-        image = np.zeros((4, 8, 3), dtype=np.uint8)
-        for height_index in range(2):
-            for width_index in range(4):
-                patch_index = height_index * 4 + width_index
-                image[height_index * 2 : (height_index + 1) * 2, width_index * 2 : (width_index + 1) * 2] = patch_index
+        """Protect the checkpoint's block-major patches and HWC values within each patch."""
+        image = np.arange(4 * 4 * 3, dtype=np.uint8).reshape(4, 4, 3)
+        expected_patches = [
+            [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+            [6, 7, 8, 9, 10, 11, 18, 19, 20, 21, 22, 23],
+            [24, 25, 26, 27, 28, 29, 36, 37, 38, 39, 40, 41],
+            [30, 31, 32, 33, 34, 35, 42, 43, 44, 45, 46, 47],
+        ]
 
-        processed = processor(image, return_tensors="pt")
-
-        # The 2×2 groups must be contiguous for the checkpoint projector: the
-        # first group is (0, 0), (0, 1), (1, 0), (1, 1), followed by the next group.
-        self.assertEqual(processed["pixel_values"][:, 0].tolist(), [0, 1, 4, 5, 2, 3, 6, 7])
+        for image_processor_class in (Cosmos3EdgeImageProcessor, Cosmos3EdgeImageProcessorPil):
+            processor = image_processor_class(
+                do_resize=False,
+                do_rescale=False,
+                do_normalize=False,
+                patch_size=2,
+                merge_size=2,
+            )
+            processed = processor(image, return_tensors="pt")
+            self.assertEqual(processed["pixel_values"].tolist(), expected_patches)
 
     def test_video_processor_uses_projector_block_major_patch_order_per_frame(self):
         """Protect projector block-major ordering independently within every frame."""
@@ -314,16 +315,14 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             merge_size=2,
             temporal_patch_size=1,
         )
-        video = np.zeros((2, 4, 8, 3), dtype=np.uint8)
-        for frame_index in range(2):
-            for height_index in range(2):
-                for width_index in range(4):
-                    patch_index = frame_index * 10 + height_index * 4 + width_index
-                    video[
-                        frame_index,
-                        height_index * 2 : (height_index + 1) * 2,
-                        width_index * 2 : (width_index + 1) * 2,
-                    ] = patch_index
+        video = np.arange(2 * 4 * 4 * 3, dtype=np.uint8).reshape(2, 4, 4, 3)
+        first_frame_patches = [
+            [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17],
+            [6, 7, 8, 9, 10, 11, 18, 19, 20, 21, 22, 23],
+            [24, 25, 26, 27, 28, 29, 36, 37, 38, 39, 40, 41],
+            [30, 31, 32, 33, 34, 35, 42, 43, 44, 45, 46, 47],
+        ]
+        expected_patches = first_frame_patches + [[value + 48 for value in patch] for patch in first_frame_patches]
 
         processed = processor(
             video,
@@ -331,10 +330,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
         )
 
-        self.assertEqual(
-            processed["pixel_values_videos"][:, 0].tolist(),
-            [0, 1, 4, 5, 2, 3, 6, 7, 10, 11, 14, 15, 12, 13, 16, 17],
-        )
+        self.assertEqual(processed["pixel_values_videos"].tolist(), expected_patches)
 
     def test_processor_returns_multimodal_token_types_by_default(self):
         """Check the Edge default while allowing an explicit tokenizer override."""

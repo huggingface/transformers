@@ -168,12 +168,13 @@ class GPTSw3Tokenizer(SentencePieceBackend):
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "

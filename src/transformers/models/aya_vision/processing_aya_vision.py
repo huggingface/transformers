@@ -99,7 +99,7 @@ class AyaVisionProcessor(ProcessorMixin):
             ]
         )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_patches = image_inputs["num_patches"][image_idx]
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"

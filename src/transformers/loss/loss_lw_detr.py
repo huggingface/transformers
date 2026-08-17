@@ -16,6 +16,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
+from ..distributed.utils import _is_torch_distributed_initialized
 from ..utils import is_scipy_available, is_vision_available
 from .loss_for_object_detection import (
     HungarianMatcher,
@@ -265,7 +266,7 @@ class LwDetrImageLoss(nn.Module):
         num_boxes = num_boxes * group_detr
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if dist.is_available() and dist.is_initialized():
+        if _is_torch_distributed_initialized():
             dist.all_reduce(num_boxes, op=dist.ReduceOp.SUM)
             world_size = dist.get_world_size()
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()

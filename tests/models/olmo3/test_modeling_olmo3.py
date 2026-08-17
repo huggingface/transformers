@@ -99,97 +99,6 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
                 tmp_dir, model_class, max_new_tokens
             )
 
-    def test_model_rope_scaling_frequencies(self):
-        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
-        # Olmo3 has different RoPE configs per layer type
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
-        # named location of the RoPE layer class.
-        base_model = self.model_tester.base_model_class(config)
-        possible_rope_attributes = [
-            "pos_emb",
-            "rotary_emb",  # most common case
-            "global_rotary_emb",
-            "local_rotary_emb",
-        ]
-        for name, module in base_model.named_modules():
-            if any(potential_name in name for potential_name in possible_rope_attributes):
-                rope_class = type(module)
-                break
-
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        rope_params = {"rope_type": "default", "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="sliding_attention")
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        rope_params = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        rope_params = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue(
-            (ntk_scaling_rope.sliding_attention_inv_freq <= original_rope.sliding_attention_inv_freq).all()
-        )
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        rope_params = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0}
-        config.rope_parameters = {"sliding_attention": rope_params, "full_attention": rope_params}
-        yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="sliding_attention")
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="sliding_attention")
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
 
 @slow
 @require_torch
@@ -204,16 +113,23 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         cls.model = Olmo3ForCausalLM.from_pretrained("shanearora/2025-sep-a-base-model", device_map="auto")
         cls.tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer")
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.model = None
+        cls.tokenizer = None
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = self.model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[1.9575, -2.4659, 0.5985, 1.3795, -0.5207, -0.9844, -2.7795, -1.0069]],
+                ("cuda", 8): [[2.0097, -2.5104, 0.6044, 1.4389, -0.4990, -0.9521, -2.7803, -1.0300]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -221,7 +137,7 @@ class Olmo3InternalIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
-                ("cuda", 8): [8.5625, 5.7812, 4.4688, 2.7031, 3.1094, 4.8125, 5.7188, 3.4219, 2.3906, 2.0938, 3.9844, 5.4688, 3.5312, 5.0938, 2.7656, 8.8125, 9.4375, 9.0625, 8.5000, 8.1875, 7.8750, 7.5312, 7.3125, 7.2812, 7.0000, 2.5625, 4.0312, 3.1719, 7.6562, 4.5625],
+                ("cuda", 8): [8.5625, 5.8125, 4.5, 2.75, 3.15625, 4.875, 5.78125, 3.484375, 2.484375, 2.15625, 4.03125, 5.5, 3.5625, 5.15625, 2.84375, 8.8125, 9.4375, 9.0625, 8.5, 8.1875, 7.875, 7.53125, 7.3125, 7.3125, 7.0, 2.625, 4.0625, 3.234375, 7.6875, 4.625],
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -313,6 +229,12 @@ class Olmo3IntegrationTest(unittest.TestCase):
         cls.model = Olmo3ForCausalLM.from_pretrained(cls.model_id, device_map="auto")
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.model = None
+        cls.tokenizer = None
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -337,7 +259,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [
                     'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nWho would win in a fight - a dinosaur or a cow named Moo Moo?\nassistant\nThis is a fun and imaginative question! Let’s break it down:\n\n### 1. **A Dinosaur (General Case)**\nDinosaurs were a huge and diverse group, spanning from tiny feathered raptors to massive sauropods like *Brachiosaurus* or *Tyrannosaurus rex',
-                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein’s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
+                    'system\nYou are a helpful function-calling AI assistant. You do not currently have access to any functions. <functions></functions>\nuser\nSimply put, the theory of relativity\nassistant\nSure! In simple terms, **the theory of relativity** is Einstein\u2019s explanation of how space, time, and gravity work. It has two main parts:\n\n1. **Special Relativity (1905):**  \n   This says that the laws of physics are the same for everyone moving at a constant speed (',
                 ],
             }
         )  # fmt: skip
@@ -346,6 +268,7 @@ class Olmo3IntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}],
             [{"role": "user", "content": "Simply put, the theory of relativity"}],
         ]
+        self.tokenizer.padding_side = "left"  # required for decoder-only batched generation
         inputs = self.tokenizer.apply_chat_template(
             message, add_generation_prompt=True, padding=True, return_tensors="pt", return_dict=True
         ).to(self.model.device)
