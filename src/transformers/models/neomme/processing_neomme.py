@@ -95,6 +95,7 @@ class NeoMMEProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = NeoMMEProcessorKwargs
+    unused_input_names = ["image_grid_hw"]
 
     def __init__(
         self,
@@ -134,7 +135,7 @@ class NeoMMEProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self) -> list[str]:
-        return ["input_ids", "attention_mask", "position_ids", "pixel_values", "image_grid_hw"]
+        return super().model_input_names + ["position_ids"]
 
     def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
         """Validate that each call contains exactly one NeoMME input modality."""
@@ -191,7 +192,7 @@ class NeoMMEProcessor(ProcessorMixin):
 
         Returns:
             A [`BatchFeature`] with `input_ids` and `attention_mask`. Image inputs also return `position_ids`,
-            `pixel_values`, and `image_grid_hw`.
+            and `pixel_values`.
         """
         if _chat_template_applied and images is not None:
             text = None
@@ -335,24 +336,24 @@ class NeoMMEProcessor(ProcessorMixin):
 
         Each image starts with `<doc> <img>`, followed by row-major patch placeholders and one `<row>` marker per
         patch row. Image arguments such as `max_side` are forwarded to the image processor. The returned
-        [`BatchFeature`] contains `input_ids`, `attention_mask`, `position_ids`, `pixel_values`, and `image_grid_hw`.
+        [`BatchFeature`] contains `input_ids`, `attention_mask`, `position_ids`, and `pixel_values`.
         """
         if is_valid_image(images):
             images = [images]
         return_tensors = kwargs.setdefault("return_tensors", "pt")
         image_inputs = self.image_processor(images=images, **kwargs)
+        image_grid_hw = image_inputs.pop("image_grid_hw")
         marker_ids = self._marker_ids()
 
         sequences: list[list[int]] = []
         positions: list[np.ndarray] = []
-        for grid_height, grid_width in image_inputs["image_grid_hw"].tolist():
+        for grid_height, grid_width in image_grid_hw.tolist():
             ids, position_ids = self._encode_image_grid(grid_height, grid_width, marker_ids)
             sequences.append(ids)
             positions.append(position_ids)
 
         batch = self._pad_sequences(sequences, positions, return_tensors=return_tensors)
         batch["pixel_values"] = image_inputs["pixel_values"]  # (num_patches, 3 * patch_size ** 2)
-        batch["image_grid_hw"] = image_inputs["image_grid_hw"]  # (batch_size, 2)
         return batch
 
     def score_retrieval(

@@ -149,7 +149,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(inputs["input_ids"].shape[0], batch_size)
         self.assertTrue(torch.all(inputs["input_ids"][:, 0] == self.marker_ids["<doc>"]))
-        self.assertEqual(inputs["image_grid_hw"].shape[0], batch_size)
+        self.assertEqual(inputs["position_ids"].shape[1], batch_size)
+        self.assertNotIn("image_grid_hw", inputs)
         self.assertIn("pixel_values", inputs)
 
     def test_apply_chat_template_requires_task_variable(self):
@@ -477,7 +478,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected += [self.marker_ids["<img>"]] * grid_width + [self.marker_ids["<row>"]]
         self.assertEqual(ids, expected)
         self.assertEqual(batch["pixel_values"].shape, (grid_height * grid_width, 3 * patch_size**2))
-        self.assertEqual(batch["image_grid_hw"].tolist(), [[grid_height, grid_width]])
+        self.assertNotIn("image_grid_hw", batch)
 
         # The two markers take diagonal positions, then the grid starts at (2, 2).
         self.assertEqual(positions[:, 0].tolist(), [0, 0])
