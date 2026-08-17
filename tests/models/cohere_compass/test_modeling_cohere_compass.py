@@ -184,6 +184,7 @@ class CohereCompassModelTester(VLMModelTester):
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("deepstack_visual_indexes", [0])
+        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
         kwargs.setdefault(
             "rope_parameters",
             {
