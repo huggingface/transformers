@@ -227,11 +227,11 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 capped_size = strict_processor(images=[self.make_image(16, 20)], max_pixels=106, return_tensors="np")[
                     "image_grid_hw"
                 ][0]
-                self.assertLessEqual(int(np.prod(capped_size)), 106)
+                self.assertEqual(capped_size.tolist(), [9, 12])
                 floored_size = strict_processor(images=[self.make_image(16, 16)], min_pixels=341, return_tensors="np")[
                     "image_grid_hw"
                 ][0]
-                self.assertGreaterEqual(int(np.prod(floored_size)), 341)
+                self.assertEqual(floored_size.tolist(), [18, 18])
 
     def test_caps_clamp_min_pixels(self):
         """A cap takes precedence over the minimum pixel floor."""

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -61,19 +60,7 @@ def get_resize_output_size(
         scale = min(scale, (max_pixels / (height * width)) ** 0.5)
     if scale == 1.0:
         return height, width
-
-    needs_minimum = min_pixels is not None and height * width < min_pixels
-    if needs_minimum:
-        resized_height = max(1, math.ceil(height * scale))
-        resized_width = max(1, math.ceil(width * scale))
-        exceeds_cap = (max_side is not None and max(resized_height, resized_width) > max_side) or (
-            max_pixels is not None and resized_height * resized_width > max_pixels
-        )
-        if not exceeds_cap:
-            return resized_height, resized_width
-
-    # Caps take precedence over the floor. Rounding down keeps both hard upper bounds intact.
-    return max(1, math.floor(height * scale)), max(1, math.floor(width * scale))
+    return max(1, round(height * scale)), max(1, round(width * scale))
 
 
 class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
