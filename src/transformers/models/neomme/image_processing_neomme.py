@@ -62,42 +62,15 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
     return patched_image
 
 
-def get_resize_scale(
-    height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
-) -> float:
-    """Compute the resize scale before patchifying an image.
-
-    Args:
-        height (`int`):
-            Image height in pixels.
-        width (`int`):
-            Image width in pixels.
-        max_side (`int`, *optional*):
-            Maximum longest side. Downscale only.
-        max_pixels (`int`, *optional*):
-            Maximum pixel area. Downscale only.
-        min_pixels (`int`, *optional*):
-            Minimum pixel area. May upscale the image. Caps take precedence when both bounds apply.
-
-    Returns:
-        `float`: Scale factor to apply to the image.
-    """
-    scale = 1.0
-    if min_pixels is not None and height * width < min_pixels:
-        scale = (min_pixels / (height * width)) ** 0.5
-    # `min` does double duty: it keeps a cap from ever upscaling, and it lets a cap override the floor.
-    if max_side is not None:
-        scale = min(scale, max_side / max(height, width))
-    if max_pixels is not None:
-        scale = min(scale, (max_pixels / (height * width)) ** 0.5)
-    return scale
-
-
 def get_resize_output_size(
     height: int, width: int, max_side: int | None, max_pixels: int | None, min_pixels: int | None
 ) -> tuple[int, int]:
     """Compute integer height and width that follow the configured image size limits."""
-    scale = get_resize_scale(height, width, max_side, max_pixels, min_pixels)
+    scale = (min_pixels / (height * width)) ** 0.5 if min_pixels is not None and height * width < min_pixels else 1.0
+    if max_side is not None:
+        scale = min(scale, max_side / max(height, width))
+    if max_pixels is not None:
+        scale = min(scale, (max_pixels / (height * width)) ** 0.5)
     if scale == 1.0:
         return height, width
 
