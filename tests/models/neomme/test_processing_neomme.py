@@ -110,11 +110,11 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _set_retrieval_chat_template(self, processor):
         processor.chat_template = (
             "{% if task not in ['query', 'document'] %}{{ raise_exception(\"task must be 'query' or 'document'\") }}"
-            "{% elif task == 'query' %}<query>{% else %}<doc>{% endif %}"
+            "{% elif task == 'query' %}{{ query_token }}{% else %}{{ document_token }}{% endif %}"
             "{% for message in messages %}{% for item in message['content'] %}"
             "{% if item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
             "{% endfor %}{% endfor %}"
-            "{% if task == 'query' %}{% for _ in range(10) %}<mask>{% endfor %}{% endif %}"
+            "{% if task == 'query' %}{% for _ in range(10) %}{{ mask_token }}{% endfor %}{% endif %}"
         )
 
     def test_apply_chat_template_query(self):
