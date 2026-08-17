@@ -264,6 +264,7 @@ class CohereCompassDecoderLayer(Cohere2DecoderLayer):
 class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
     _no_split_modules = [
         "CohereCompassDecoderLayer",
+        "CohereCompassVisionBlock",
     ]
     _can_record_outputs = {
         "hidden_states": CohereCompassDecoderLayer,

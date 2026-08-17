@@ -390,14 +390,6 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_from_config(self):
         pass
 
-    @unittest.skip("CohereCompass vision pos_embed not compatible with naive model parallelism")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip("CohereCompass vision pos_embed not compatible with naive model parallelism")
-    def test_model_parallel_beam_search(self):
-        pass
-
     @unittest.skip("CohereCompass uses data-dependent control flow incompatible with torch.export")
     def test_torch_export_dynamic(self):
         pass
