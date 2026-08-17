@@ -34,7 +34,7 @@ from transformers import AutoModelForMaskedLM, AutoProcessor
 
 checkpoint = "Hcompany/NeoMME-260M"
 processor = AutoProcessor.from_pretrained(checkpoint)
-model = AutoModelForMaskedLM.from_pretrained(checkpoint).eval()
+model = AutoModelForMaskedLM.from_pretrained(checkpoint, device_map="auto")
 
 text = f"The capital of {processor.tokenizer.mask_token} is London."
 inputs = processor(text=[text], task="document").to(model.device)
