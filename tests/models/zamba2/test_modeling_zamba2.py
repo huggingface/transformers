@@ -552,6 +552,20 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
+    def test_multiple_mem_blocks_construction(self):
+        """Test that Zamba2 with num_mem_blocks > 1 (e.g. Zamba2-2.7B) constructs and ties weights correctly."""
+        config = Zamba2Config(
+            num_hidden_layers=9,
+            layers_block_type=["mamba", "hybrid", "mamba", "hybrid", "mamba", "hybrid", "mamba", "hybrid", "hybrid"],
+            num_mem_blocks=2,
+            hidden_size=64,
+            intermediate_size=64,
+            num_attention_heads=4,
+        )
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsNotNone(model)
+
 
 @require_torch
 class Zamba2ModelIntegrationTest(unittest.TestCase):
