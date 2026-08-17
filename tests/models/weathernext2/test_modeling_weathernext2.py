@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pathlib
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
@@ -159,8 +161,32 @@ class WeatherNext2ModelTester:
         }
 
 
+GEOMETRY_FIXTURE = pathlib.Path(__file__).parents[2] / "fixtures" / "weathernext2_geometry.safetensors"
+
+
+def install_fixture_geometry(self, device=None):
+    """Stands in for `register_geometry_buffers` while the model tests run.
+
+    Building the geometry needs trimesh, which is not a Transformers dependency: released checkpoints
+    carry their geometry, so only building one from scratch needs it. The tests do build from scratch,
+    so they read the tiny mesh from a fixture instead and stay runnable anywhere.
+    """
+    from safetensors.torch import load_file
+
+    geometry = load_file(GEOMETRY_FIXTURE)
+    expected = (self.config.mesh_splits, self.config.grid_latitudes, self.config.grid_longitudes)
+    if expected != (2, 19, 36):
+        raise ValueError(
+            f"The geometry fixture was built for mesh_splits=2 on a 19x36 grid, but the config asks for {expected}. "
+            "Regenerate it, or decorate the test with `@require_trimesh` and build the geometry."
+        )
+    for name, value in geometry.items():
+        self.register_buffer(name, value.clone().to(device) if device is not None else value.clone(), persistent=True)
+    self.config.num_grid_to_mesh_edges = int(geometry["grid_to_mesh_senders"].shape[0])
+    self.config.attention_bandwidth = int(geometry["attention_mask"].shape[2])
+
+
 @require_torch
-@require_trimesh
 class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
     # There is no `weather-forecasting` pipeline yet; the inputs are global gridded states rather than
@@ -174,6 +200,17 @@ class WeatherNext2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_inputs_embeds = False
     test_torchscript = False
     is_encoder_decoder = False
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._geometry_patch = patch.object(WeatherNext2Model, "register_geometry_buffers", install_fixture_geometry)
+        cls._geometry_patch.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._geometry_patch.stop()
+        super().tearDownClass()
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
@@ -425,7 +462,6 @@ class WeatherNext2GeometryTest(unittest.TestCase):
 
 @require_torch
 @slow
-@require_trimesh
 class WeatherNext2ModelIntegrationTest(unittest.TestCase):
     """End-to-end check against the released 1 degree Mini checkpoint.
 
