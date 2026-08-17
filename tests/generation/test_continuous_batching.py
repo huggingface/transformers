@@ -540,7 +540,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Read indices: the (at most) `sliding_window - 1` most recent cached tokens, in chronological order,
         # followed by one sentinel per query token. The most recent cached token is the one at logical position
-        # `past_length - 1`, and it must be part of the read.
+        # `past_length - 1`, and will be read as long as sliding_window > 1 (should always be the case)
         read_cache_length = min(past_length, sliding_window - 1)
         expected_read = [to_physical(i) for i in range(past_length - read_cache_length, past_length)]
         expected_read += [sentinel_index] * query_length

@@ -526,7 +526,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
-        # Apply sliding window: only the last `sliding_window` query tokens are kept, the earlier ones go to the trash
+        # Apply sliding window: only the last `sliding_window` query tokens are written, the earlier ones go to the trash
         # slot. The first kept token is at logical position `past_length + padding_length`, hence the start index
         cache_length = min(query_length, self.sliding_window)
         padding_length = query_length - cache_length
