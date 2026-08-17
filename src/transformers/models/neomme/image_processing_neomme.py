@@ -96,6 +96,8 @@ class NeoMMEImageProcessor(TorchvisionBackend):
     rescale_factor = 1 / 255
     do_normalize = True
     patch_size = 32
+    # Native resolution by default. When all limits are None, the computed scale is 1.0 and resize() is skipped.
+    # Converted checkpoints override these values from preprocessor_config.json when they define a resize budget.
     max_side = None
     max_pixels = None
     min_pixels = None
