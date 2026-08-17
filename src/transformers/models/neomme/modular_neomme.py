@@ -41,6 +41,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..llama.modeling_llama import eager_attention_forward, repeat_kv
 from ..siglip2.image_processing_siglip2 import convert_image_to_patches
 from .configuration_neomme import NeoMMEConfig
@@ -223,9 +224,8 @@ class NeoMMEImageProcessor(TorchvisionBackend):
         return image, grid_height, grid_width
 
 
-def parameter_free_rms_norm(hidden_states: torch.Tensor, eps: float) -> torch.Tensor:
-    """RMS normalization without a learnable weight."""
-    return F.rms_norm(hidden_states, (hidden_states.shape[-1],), eps=eps)
+class NeoMMERMSNorm(Gemma4RMSNorm):
+    pass
 
 
 def get_rotary_dim(config: NeoMMEConfig, layer_type: str) -> int:
@@ -398,9 +398,10 @@ class NeoMMEAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.norm_eps = config.norm_eps
         self.rotary_dim = get_rotary_dim(config, self.attention_type)
         self.is_causal = False
+        self.q_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
+        self.k_norm = NeoMMERMSNorm(config.head_dim, config.norm_eps, with_scale=False)
 
         # `config.layer_window_sizes` is a HALF-width (`abs(i - j) <= window`). The flash-attention path
         # builds an inclusive symmetric band of `sliding_window - 1` per side, hence the `+ 1`.
@@ -428,11 +429,11 @@ class NeoMMEAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(
             *input_shape, self.num_attention_heads, self.head_dim
         )  # (batch_size, sequence_length, num_attention_heads, head_dim)
-        query_states = parameter_free_rms_norm(query_states, self.norm_eps)
+        query_states = self.q_norm(query_states)
         key_states, value_states = (
             self.kv_proj(hidden_states).view(*input_shape, 2, self.num_key_value_heads, self.head_dim).unbind(-3)
         )  # K is index 0, V is index 1: (batch_size, sequence_length, 2, num_key_value_heads, head_dim)
-        key_states = parameter_free_rms_norm(key_states, self.norm_eps)
+        key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
         query_states = apply_interleaved_rotary_pos_emb(query_states, cos, sin, self.rotary_dim)
@@ -500,7 +501,8 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         self.self_attn = NeoMMEAttention(config, layer_idx)
         self.mlp = NeoMMEMLP(config)
         self.lambdas = nn.Parameter(torch.tensor([1.0, 0.0]))
-        self.norm_eps = config.norm_eps
+        self.input_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
+        self.post_attention_layernorm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
         # muP depth transfer, a forward-time constant that is never folded into the weights.
         self.residual_scale = (2 * config.num_hidden_layers) ** -0.5
         self.attention_type = config.layer_types[layer_idx]
@@ -519,15 +521,17 @@ class NeoMMEEncoderLayer(GradientCheckpointingLayer):
         # graph for positional inputs, and a shared grad-carrying keyword argument would be backwarded
         # through twice (the value-embedding table feeds two layers).
         mixed_states = self.lambdas[0] * hidden_states + self.lambdas[1] * initial_hidden_states
+        normed_states = self.input_layernorm(mixed_states)
         attn_output, _ = self.self_attn(
-            parameter_free_rms_norm(mixed_states, self.norm_eps),
+            normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             value_embeds=value_embeds,
             **kwargs,
         )
         hidden_states = hidden_states + self.residual_scale * attn_output
-        mlp_output = self.mlp(parameter_free_rms_norm(hidden_states, self.norm_eps))
+        normed_states = self.post_attention_layernorm(hidden_states)
+        mlp_output = self.mlp(normed_states)
         return hidden_states + self.residual_scale * mlp_output
 
 
@@ -620,6 +624,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
         self.embeddings = NeoMMEEmbeddings(config)
         self.patch_embeddings = NeoMMEPatchEmbeddings(config)
         self.rotary_emb = NeoMMERotaryEmbedding(config)
+        self.embedding_norm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
+        self.final_norm = NeoMMERMSNorm(config.hidden_size, config.norm_eps, with_scale=False)
         self.layers = nn.ModuleList(
             [NeoMMEEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -684,7 +690,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
 
         # `initial_hidden_states` is captured HERE — after the patch scatter and the first norm — and every
         # layer mixes it back in through its `lambdas`.
-        hidden_states = initial_hidden_states = parameter_free_rms_norm(hidden_states, self.config.norm_eps)
+        hidden_states = initial_hidden_states = self.embedding_norm(hidden_states)
 
         attention_masks = self._build_attention_masks(hidden_states, attention_mask)
         position_embeddings = {
@@ -710,7 +716,7 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             )
 
         # The final norm is part of the backbone; heads must NOT re-norm.
-        hidden_states = parameter_free_rms_norm(hidden_states, self.config.norm_eps)
+        hidden_states = self.final_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
     def _scatter_patch_embeddings(
