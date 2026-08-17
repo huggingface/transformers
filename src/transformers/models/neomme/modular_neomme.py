@@ -263,17 +263,6 @@ def apply_interleaved_rotary_pos_emb(
     return torch.cat([rotated, pass_through], dim=-1).to(hidden_states.dtype)
 
 
-def unmask_empty_rows(attention_mask: torch.Tensor | None) -> torch.Tensor | None:
-    """Unmask fully masked query rows to avoid NaNs in attention."""
-    if not torch.is_tensor(attention_mask):
-        return attention_mask
-    if attention_mask.dtype == torch.bool:
-        return attention_mask | (~attention_mask).all(-1, keepdim=True)
-    return attention_mask.masked_fill(
-        (attention_mask <= torch.finfo(attention_mask.dtype).min).all(-1, keepdim=True), 0.0
-    )
-
-
 class NeoMMEEmbeddings(nn.Module):
     """Factorized (ALBERT-style) token embeddings: `vocab_size -> embedding_rank -> hidden_size`."""
 
@@ -757,10 +746,8 @@ class NeoMMEModel(NeoMMEPreTrainedModel):
             if window is None:
                 masks[window] = create_bidirectional_mask(**mask_kwargs)
             else:
-                masks[window] = unmask_empty_rows(
-                    create_bidirectional_mask(
-                        **mask_kwargs, and_mask_function=sliding_window_bidirectional_overlay(window)
-                    )
+                masks[window] = create_bidirectional_mask(
+                    **mask_kwargs, and_mask_function=sliding_window_bidirectional_overlay(window)
                 )
         return [masks[window] for window in self.config.layer_window_sizes]
 
