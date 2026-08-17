@@ -1672,6 +1672,10 @@ class ContinuousBatchingConfig:
         max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
+        enable_sliding_window_decode (`bool`, *optional*, defaults to `False`):
+            When `False` (default), models with sliding window attention have the fast decode path disabled
+            automatically. Set to `True` to allow the fast decode path for sliding window models whose
+            cache implementation supports it.
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1748,6 +1752,10 @@ class ContinuousBatchingConfig:
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
     max_blocks_per_request: int | None = None
+
+    # When False (default), models with sliding window attention have the fast decode path disabled automatically.
+    # Set to True for models whose sliding window cache implementation supports the fast decode path.
+    enable_sliding_window_decode: bool = False
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.

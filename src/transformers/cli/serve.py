@@ -95,6 +95,9 @@ class Serve:
         cb_use_cuda_graph: Annotated[
             bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
         ] = None,
+        cb_enable_sliding_window_decode: Annotated[
+            bool | None, typer.Option(help="Allow the fast decode path for models with sliding window attention.")
+        ] = None,
         # Server options
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
@@ -145,6 +148,7 @@ class Serve:
                 "max_batch_tokens": cb_max_batch_tokens,
                 "max_memory_percent": cb_max_memory_percent,
                 "use_cuda_graph": cb_use_cuda_graph,
+                "enable_sliding_window_decode": cb_enable_sliding_window_decode,
             }.items()
             if v is not None
         }

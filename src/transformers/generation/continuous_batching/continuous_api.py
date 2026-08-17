@@ -1016,8 +1016,11 @@ class ContinuousBatchingManager:
             use_prefix_sharing=self._use_prefix_sharing,
         )
 
-        # Disable the decode path if the model has sliding window attention (TODO)
-        if paged_attention_cache.num_sliding_attention_groups > 0:
+        # Disable the decode path if the model has sliding window attention, unless explicitly enabled
+        if (
+            paged_attention_cache.num_sliding_attention_groups > 0
+            and not self.continuous_batching_config.enable_sliding_window_decode
+        ):
             self.continuous_batching_config.max_blocks_per_request = 0
 
         # Retrieve the scheduler class

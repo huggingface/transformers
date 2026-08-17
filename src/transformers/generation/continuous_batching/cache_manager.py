@@ -505,8 +505,8 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
         # Apply sliding window
-        start_index = 0 if past_length < self.sliding_window else past_length % self.sliding_window
         cache_length = min(past_length, self.sliding_window - 1)
+        start_index = (past_length - cache_length) % self.sliding_window
         # Compute the physical indices
         physical_indices = []
         for i in range(start_index, start_index + cache_length):
