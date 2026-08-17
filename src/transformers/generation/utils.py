@@ -577,6 +577,22 @@ class GenerationMixin(ContinuousMixin):
         attention_mask = (
             kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
         )
+        # When processing encoder-decoder models with condition_on_prev_tokens=True (e.g. Whisper
+        # longform), shorter sequences in a batch are left-padded. Without explicit position_ids,
+        # WhisperDecoder falls back to `past_kv.get_seq_length()` which counts padding positions,
+        # giving wrong embeddings for padded items. Compute per-item position_ids from the
+        # decoder_attention_mask via cumsum so each item gets correct positions regardless of padding.
+        if (
+            self.config.is_encoder_decoder
+            and attention_mask is not None
+            and model_inputs.get(position_ids_key) is None
+            and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
+        ):
+            decoder_position_ids = attention_mask.long().cumsum(-1) - 1
+            decoder_position_ids = decoder_position_ids.masked_fill(attention_mask == 0, 0)
+            model_inputs[position_ids_key] = decoder_position_ids[..., -sequence_length:].clone(
+                memory_format=torch.contiguous_format
+            )
         if (
             isinstance(past_key_values, Cache)
             and past_key_values.is_compileable
