@@ -1138,6 +1138,9 @@ def _get_cache_dict(cache: DynamicCache):
     return {
         "key_cache": [layer.keys for layer in cache.layers if layer.keys is not None],
         "value_cache": [layer.values for layer in cache.layers if layer.values is not None],
+        "cumulative_lengths": [
+            layer.cumulative_length for layer in cache.layers if type(layer) is DynamicSlidingWindowLayer
+        ],
     }
 
 
@@ -1164,11 +1167,14 @@ def _unflatten_dynamic_cache(values, context: torch.utils._pytree.Context):
     dictionary = torch.utils._pytree._dict_unflatten(values, dictionary_keys)
     key_states = iter(dictionary.get("key_cache", []))
     value_states = iter(dictionary.get("value_cache", []))
+    cumulative_lengths = iter(dictionary.get("cumulative_lengths", []))
     layers = []
     for sliding_window, is_populated in layout:
         layer = DynamicLayer() if sliding_window is None else DynamicSlidingWindowLayer(sliding_window)
         if is_populated:
             layer.update(next(key_states), next(value_states))
+        if sliding_window is not None:
+            layer.cumulative_length = next(cumulative_lengths)
         layers.append(layer)
 
     return DynamicCache(layers=layers) if layers else DynamicCache()

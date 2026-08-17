@@ -699,34 +699,40 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
                 return past_key_values
 
         # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
-        new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        past_states = torch.arange(10.0).reshape(1, 1, 5, 2)
+        new_states = torch.arange(10.0, 14.0).reshape(1, 1, 2, 2)
         cache_config = LlamaConfig(
             num_hidden_layers=2,
             sliding_window=4,
             layer_types=["sliding_attention", "full_attention"],
         )
 
+        def create_cache():
+            cache = DynamicCache(config=cache_config)
+            cache.update(past_states, past_states, layer_idx=0)
+            cache.update(past_states, past_states, layer_idx=1)
+            return cache
+
         register_dynamic_cache_export_support()
 
         exported_program = torch.export.export(
             CacheUpdateModule(),
             (),
-            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            {"new_states": new_states, "past_key_values": create_cache()},
             strict=False,
         )
-        exported_cache = exported_program.module()(
-            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
-        )
-        eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
+        exported_cache = exported_program.module()(new_states=new_states, past_key_values=create_cache())
+        eager_cache = CacheUpdateModule()(new_states, create_cache())
 
         self.assertEqual(len(exported_cache.layers), 2)
         self.assertIs(type(exported_cache.layers[0]), DynamicSlidingWindowLayer)
         self.assertEqual(exported_cache.layers[0].sliding_window, 4)
-        self.assertEqual(exported_cache.layers[0].get_seq_length(), cache_config.sliding_window - 1)
+        self.assertEqual(exported_cache.layers[0].keys.shape[-2], cache_config.sliding_window - 1)
+        self.assertEqual(exported_cache.layers[0].get_seq_length(), eager_cache.layers[0].get_seq_length())
         torch.testing.assert_close(exported_cache.layers[0].keys, eager_cache.layers[0].keys)
         torch.testing.assert_close(exported_cache.layers[0].values, eager_cache.layers[0].values)
         self.assertIs(type(exported_cache.layers[1]), DynamicLayer)
-        self.assertEqual(exported_cache.layers[1].get_seq_length(), new_states.shape[-2])
+        self.assertEqual(exported_cache.layers[1].get_seq_length(), eager_cache.layers[1].get_seq_length())
         torch.testing.assert_close(exported_cache.layers[1].keys, eager_cache.layers[1].keys)
         torch.testing.assert_close(exported_cache.layers[1].values, eager_cache.layers[1].values)
 
