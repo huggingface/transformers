@@ -582,6 +582,16 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
 }
 
+# Flash attention version -> major version of its hub kernel repo. Flash attention flavors that are not
+# listed here, and all other attention kernels, use `_DEFAULT_ATTN_KERNEL_VERSION`.
+_FLASH_ATTN_KERNEL_VERSION_MAPPING: dict[int, int] = {
+    # v3 is the first version shipping the Torch stable ABI (CUDA/ROCm) and Torch 2.13 builds (incl. XPU)
+    2: 3,
+    # FA4 is still in beta -> only v0 has been released
+    4: 0,
+}
+_DEFAULT_ATTN_KERNEL_VERSION = 1
+
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 
@@ -591,6 +601,14 @@ def is_kernel(attn_implementation: str | None) -> bool:
         attn_implementation is not None
         and re.search(r"^[^/:]+/[^/:]+(?:@[^/:]+)?(?::[^/:]+)?$", attn_implementation) is not None
     )
+
+
+def get_attn_kernel_version(repo_id: str) -> int:
+    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    for flash_attn_version, kernel_version in _FLASH_ATTN_KERNEL_VERSION_MAPPING.items():
+        if is_flash_attention_requested(requested_attention_implementation=repo_id, version=flash_attn_version):
+            return kernel_version
+    return _DEFAULT_ATTN_KERNEL_VERSION
 
 
 def load_and_register_attn_kernel(
@@ -634,9 +652,7 @@ def load_and_register_attn_kernel(
     rev = rev.strip() if rev else None
     version = None
     if rev is None:
-        # FA4 is still in beta -> redirect to v0 else default to v1
-        is_fa4 = is_flash_attention_requested(requested_attention_implementation=repo_id, version=4)
-        version = 0 if is_fa4 else 1
+        version = get_attn_kernel_version(repo_id)
 
     # Load the kernel from hub
     try:
