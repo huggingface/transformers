@@ -136,6 +136,15 @@ class NeoMMEProcessor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         return ["input_ids", "attention_mask", "position_ids", "pixel_values", "image_grid_hw"]
 
+    def validate_inputs(self, images: ImageInput | None = None, text: TextInput | None = None, **kwargs):
+        """Validate that each call contains exactly one NeoMME input modality."""
+        super().validate_inputs(images=images, text=text, **kwargs)
+        if text is not None and images is not None:
+            raise ValueError(
+                "Pass exactly one of `text` or `images`: they are opposite retrieval sides, encoded in "
+                "separate forward passes."
+            )
+
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
@@ -186,11 +195,8 @@ class NeoMMEProcessor(ProcessorMixin):
         """
         if _chat_template_applied and images is not None:
             text = None
-        if (text is None) == (images is None):
-            raise ValueError(
-                "Pass exactly one of `text` or `images`: they are opposite retrieval sides, encoded in "
-                "separate forward passes."
-            )
+        images, text, _, _ = self.prepare_inputs_layout(images=images, text=text, **kwargs)
+        self.validate_inputs(images=images, text=text, **kwargs)
         if "task" in kwargs.get("text_kwargs", {}):
             raise ValueError("Pass `task` as a top-level processor argument, not inside `text_kwargs`.")
 
