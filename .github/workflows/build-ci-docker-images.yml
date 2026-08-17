@@ -23,28 +23,22 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ fromJSON(matrix.arch.runner) }}
 
     if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
 
     strategy:
+      fail-fast: false
       matrix:
         file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch"]
+        arch:
+          - name: amd64
+            runner: '"ubuntu-22.04"'
+          - name: arm64
+            runner: '{"group": "aws-m8g-l-cache"}'
     continue-on-error: true
 
     steps:
-      -
-        name: Set tag
-        env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-              if echo "$COMMIT_MESSAGE" | grep -q '\[build-ci-image\]'; then
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
-                  echo "setting it to DEV!"
-              else
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
-
-              fi
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
@@ -60,17 +54,92 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
-        name: Build ${{ matrix.file }}.dockerfile
+        name: Build ${{ matrix.file }}.dockerfile (${{ matrix.arch.name }})
+        id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: ./docker
           build-args: |
             REF=${{ github.sha }}
           file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
-          tags: ${{ env.TAG }}
+          platforms: linux/${{ matrix.arch.name }}
+          provenance: false
+          # When pushing: push by digest so the merge job can create a multi-arch manifest.
+          # When not pushing: outputs is empty and push: false takes effect (build-only validation).
+          outputs: ${{ (contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule') && format('type=image,name=huggingface/transformers-{0},push-by-digest=true,name-canonical=true,push=true', matrix.file) || '' }}
+          push: false
+      -
+        name: Export digest
+        if: ${{ contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule' }}
+        run: |
+          mkdir -p /tmp/digests/${{ matrix.file }}
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${{ matrix.file }}/${digest#sha256:}"
+      -
+        name: Upload digest
+        if: ${{ contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.file }}-${{ matrix.arch.name }}
+          path: /tmp/digests/${{ matrix.file }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    if: ${{ contains(github.event.head_commit.message, 'ci-image]') || github.event_name == 'schedule' }}
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch"]
+    continue-on-error: true
+
+    steps:
+      -
+        name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests/${{ matrix.file }}
+          pattern: digest-${{ matrix.file }}-*
+          merge-multiple: true
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Set tag
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if echo "$COMMIT_MESSAGE" | grep -q '\[build-ci-image\]'; then
+            echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
+          else
+            echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
+          fi
+      -
+        name: Create multi-arch manifest and push
+        working-directory: /tmp/digests/${{ matrix.file }}
+        run: |
+          set -euo pipefail
+          sources=()
+          for f in *; do
+            sources+=("huggingface/transformers-${{ matrix.file }}@sha256:${f}")
+          done
+          echo "Merging ${#sources[@]} digest(s) into $TAG"
+          docker buildx imagetools create -t "$TAG" "${sources[@]}"
+      -
+        name: Inspect manifest
+        run: docker buildx imagetools inspect ${{ env.TAG }}
 
   notify:
+    needs: merge
     runs-on: ubuntu-22.04
     if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
     steps:
