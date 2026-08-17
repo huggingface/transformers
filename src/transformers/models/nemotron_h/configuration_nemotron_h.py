@@ -13,6 +13,8 @@
 # limitations under the License.
 """NemotronH model configuration"""
 
+from typing import Optional
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
@@ -167,15 +169,15 @@ class NemotronHConfig(PreTrainedConfig):
             # Migrate legacy names from configs stored on the Hub.
             self.layer_types = remap_legacy_layer_types(self.layer_types)
 
-        # Note: num_hidden_layers is deprecated and ignored if layers_block_type is explicitly provided
-        # It's only kept for backward compatibility when loading old configs
-        if self.num_hidden_layers is not None:
-            # Warn if num_hidden_layers is provided but doesn't match layers_block_type
-            if len(self.layer_types) != self.num_hidden_layers:
-                logger.warning(
-                    f"num_hidden_layers ({self.num_hidden_layers}) is deprecated and doesn't match "
-                    f"layer_types length ({len(self.layer_types)}). Using layers_block_type length."
-                )
+        # Note: num_hidden_layers is deprecated; the actual layer count is derived from
+        # layers_block_type. The original value passed via config.json (if any) is stored in
+        # _num_hidden_layers by the property setter so we can warn on mismatches.
+        _num_hidden_layers = getattr(self, "_num_hidden_layers", None)
+        if _num_hidden_layers is not None and len(self.layer_types) != _num_hidden_layers:
+            logger.warning(
+                f"num_hidden_layers ({_num_hidden_layers}) is deprecated and doesn't match "
+                f"layer_types length ({len(self.layer_types)}). Using layers_block_type length."
+            )
 
         # Backward compatibility: convert mtp_hybrid_override_pattern to mtp_layers_block_type
         # Always pop mtp_hybrid_override_pattern from kwargs to prevent it from being set as an attribute
@@ -228,21 +230,33 @@ class NemotronHConfig(PreTrainedConfig):
                 )
 
     @property
-    def num_hidden_layers(self) -> int:
+    def num_hidden_layers(self) -> Optional[int]:
+        """Returns the number of layers from ``layers_block_type`` for backward compatibility.
+
+        NemotronH uses ``layers_block_type`` (a list) to determine the number of layers,
+        but downstream tools (GGUF conversion via ``transformers/integrations/ggml.py``,
+        llama.cpp ``convert_hf_to_gguf.py``, PEFT, etc.) expect ``num_hidden_layers``.
+        This property ensures those tools always see the correct layer count without
+        relying on a potentially stale deprecated value stored in config.json.
+
+        When ``layers_block_type`` is not yet initialised (e.g. before ``__post_init__``
+        runs), the property falls back to the raw value stored by the setter so that
+        the attribute is never ``None`` unexpectedly.
         """
-        Number of hidden layers derived from the length of layers_block_type.
-        This property replaces the deprecated num_hidden_layers parameter.
-        """
-        return len(self.layers_block_type)
+        if self.layers_block_type is not None:
+            return len(self.layers_block_type)
+        return getattr(self, "_num_hidden_layers", None)
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
+        """Store the deprecated ``num_hidden_layers`` value for backward compatibility.
+
+        The actual layer count is always derived from ``layers_block_type`` (see the
+        property getter), but the original value from config.json is stored in
+        ``_num_hidden_layers`` so that ``__post_init__`` can emit a warning when it
+        does not match ``len(layers_block_type)``.
         """
-        Setter for backward compatibility when loading configs.
-        The value is ignored since num_hidden_layers is computed from layers_block_type.
-        """
-        # Ignore the value - num_hidden_layers is always derived from layers_block_type
-        pass
+        self._num_hidden_layers = value
 
     @property
     def hybrid_override_pattern(self) -> str:
