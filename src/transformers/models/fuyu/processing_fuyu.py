@@ -616,7 +616,7 @@ class FuyuProcessor(ProcessorMixin):
         ]
         max_len = max(len(seq) for seq in unpadded_output_sequences)
         # convert to torch and pad sequences
-        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
+        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.tokenizer.pad_token_id)
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
 
