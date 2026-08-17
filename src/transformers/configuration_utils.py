@@ -1413,6 +1413,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # This is needed to be correct in several places, e.g. when creating the cache
         text_config.num_hidden_layers = num_mtp_layers
 
+        # If this exist, the MTP layers always use a MoE, so we artificially set to 0
+        if hasattr(text_config, "first_k_dense_replace"):
+            text_config.first_k_dense_replace = 0
+
         return text_config
 
 
