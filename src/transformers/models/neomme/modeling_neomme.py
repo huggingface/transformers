@@ -33,7 +33,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     is_torchdynamo_compiling,
@@ -665,7 +664,7 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
     """
 )
 @dataclass
-class NeoMMEForRetrievalOutput(ModelOutput):
+class NeoMMEForRetrievalOutput(BaseModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
@@ -680,9 +679,6 @@ class NeoMMEForRetrievalOutput(ModelOutput):
     loss: torch.FloatTensor | None = None
     embeddings: torch.FloatTensor | None = None
     dense_embeddings: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(

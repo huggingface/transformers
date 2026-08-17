@@ -21,6 +21,7 @@ from datasets import load_dataset
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import NeoMMEConfig, is_torch_available
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -549,7 +550,9 @@ class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
         model = NeoMMEForRetrieval(config).to(torch_device).eval()
 
-        self.assertIsNone(model(input_ids=input_ids, output_dense=False).dense_embeddings)
+        output = model(input_ids=input_ids, output_dense=False)
+        self.assertIsInstance(output, BaseModelOutput)
+        self.assertIsNone(output.dense_embeddings)
         self.assertIsNone(model(input_ids=input_ids, output_multivector=False).embeddings)
         with self.assertRaises(ValueError):
             model(input_ids=input_ids, output_dense=False, output_multivector=False)
