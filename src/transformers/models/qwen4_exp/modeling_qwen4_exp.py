@@ -1381,7 +1381,7 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {
@@ -1390,6 +1390,7 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
     _can_compile_fullgraph = True
+    _supports_flex_attn = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1418,29 +1419,6 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, Qwen4ExpPLELayer):
             init.zeros_(module.conv1d.weight)
-
-    def _check_and_adjust_attn_implementation(
-        self,
-        attn_implementation: str | None,
-        is_init_check: bool = False,
-        allow_all_kernels: bool = False,
-    ) -> str:
-        if getattr(self.config.get_text_config(), "indexer_n_heads", None) is not None and attn_implementation not in (
-            None,
-            "eager",
-            "sdpa",
-        ):
-            logger.warning_once(
-                "Qwen4-Exp QSA only supports eager and SDPA attention; falling back to eager from %s.",
-                attn_implementation,
-            )
-            attn_implementation = "eager"
-            self.config._attn_implementation = attn_implementation
-        return super()._check_and_adjust_attn_implementation(
-            attn_implementation,
-            is_init_check=is_init_check,
-            allow_all_kernels=allow_all_kernels,
-        )
 
     def _valid_auto_compile_criteria(self, model_kwargs, generation_config):
         if self.config.get_text_config().indexer_n_heads is not None:

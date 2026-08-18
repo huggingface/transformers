@@ -29,7 +29,6 @@ from ...modeling_layers import (
     GradientCheckpointingLayer,
 )
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
@@ -960,30 +959,9 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
         "router_logits": OutputRecorder(Qwen4ExpTopKRouter, index=0),
         "attentions": Qwen4ExpAttention,
     }
-
-    def _check_and_adjust_attn_implementation(
-        self,
-        attn_implementation: str | None,
-        is_init_check: bool = False,
-        allow_all_kernels: bool = False,
-    ) -> str:
-        if getattr(self.config.get_text_config(), "indexer_n_heads", None) is not None and attn_implementation not in (
-            None,
-            "eager",
-            "sdpa",
-        ):
-            logger.warning_once(
-                "Qwen4-Exp QSA only supports eager and SDPA attention; falling back to eager from %s.",
-                attn_implementation,
-            )
-            attn_implementation = "eager"
-            self.config._attn_implementation = attn_implementation
-        return PreTrainedModel._check_and_adjust_attn_implementation(
-            self,
-            attn_implementation,
-            is_init_check=is_init_check,
-            allow_all_kernels=allow_all_kernels,
-        )
+    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
+    _supports_flex_attn = False
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
