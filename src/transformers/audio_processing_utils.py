@@ -484,7 +484,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         For centered STFT returns `audio_lengths // hop_length` (plus 1 when
         `include_center_frame=True`); for non-centered STFT returns the exact frame count
-        `(audio_lengths - win_length) // hop_length + 1`.
+        `(audio_lengths - frame_size) // hop_length + 1`, where `frame_size` is
+        `win_length + frame_extension` — the width the framing actually unfolds at.
 
         Override this method in subclasses that use non-standard STFT framing (e.g.,
         unfold-based with extra samples, or model-specific frame counting).
@@ -492,14 +493,21 @@ class BaseAudioProcessor(AudioProcessingMixin):
         stft_cfg = spectrogram_config.stft_config
         win_length = stft_cfg.win_length or stft_cfg.n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
+        # `skip_last_frame` drops the trailing frame from the features, so the mask width
+        # (`include_center_frame=True`) has to shrink with it. Per-utterance validity is
+        # unaffected — those frames sit at the start of each row — and any overflow past the
+        # width is clipped when the mask is built.
+        trim = 1 if include_center_frame and spectrogram_config.skip_last_frame else 0
         if stft_cfg.center == "left":
-            lengths = (audio_lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+            lengths = (
+                audio_lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)
+            ) // hop_length + 1 - trim
             return max(0, lengths) if isinstance(lengths, int) else lengths.clip(min=0)
         if not stft_cfg.center:
-            return (audio_lengths - win_length) // hop_length + 1
+            return (audio_lengths - (win_length + stft_cfg.frame_extension)) // hop_length + 1 - trim
         lengths = audio_lengths // hop_length
         if include_center_frame:
-            lengths = lengths + 1
+            lengths = lengths + 1 - trim
         return lengths
 
     # ── Spectrogram backend ──────────────────────────────────────────────
