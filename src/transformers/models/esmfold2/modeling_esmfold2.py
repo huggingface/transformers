@@ -1674,23 +1674,21 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
 
     The pair half is exactly an `EsmFold2PairUpdateLayer`, so it is inherited rather than repeated.
 
-    The last layer updates only the pair stream, so its two MSA-stream submodules are `None`: the
-    released checkpoints carry no weights for them (the MSA representation they would produce is never
-    read), and `nn.Identity` is not a substitute -- these sit on residuals, so an identity would double
-    the stream rather than leave it alone.
+    The final layer updates only the pair stream, so it does not build the two MSA-stream submodules:
+    the released checkpoints carry no weights for them (the MSA representation it would produce is
+    never read), and `nn.Identity` is not a substitute -- these sit on residuals, so an identity would
+    double the stream rather than leave it alone.
     """
 
-    def __init__(self, config: EsmFold2Config, layer_idx: int) -> None:
+    def __init__(self, config: EsmFold2Config, updates_msa: bool = True) -> None:
         super().__init__(config)
+        self.updates_msa = updates_msa
         self.outer_product_mean = EsmFold2OuterProductMean(config)
-        if layer_idx != config.msa_encoder.num_hidden_layers - 1:
+        if updates_msa:
             self.msa_pair_weighted_averaging = EsmFold2MSAPairWeightedAveraging(config)
             self.msa_transition = EsmFold2Transition(
                 config.msa_encoder.hidden_size, config.msa_encoder.intermediate_size, config.chunk_size
             )
-        else:
-            # Final layer is simplified
-            self.msa_pair_weighted_averaging = self.msa_transition = None
 
     def forward(
         self,
@@ -1700,7 +1698,7 @@ class EsmFold2MSAEncoderLayer(EsmFold2PairUpdateLayer):
         pair_attention_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         pair_states = pair_states + self.outer_product_mean(msa_states, msa_attention_mask)
-        if self.msa_pair_weighted_averaging is not None:
+        if self.updates_msa:
             msa_states = msa_states + self.msa_pair_weighted_averaging(msa_states, pair_states, pair_attention_mask)
             msa_states = self.msa_transition(msa_states)
         return msa_states, super().forward(pair_states, pair_attention_mask)
@@ -1715,7 +1713,10 @@ class EsmFold2MSAEncoder(nn.Module):
         self.embed = nn.Linear(config.num_res_types + 2, config.msa_encoder.hidden_size, bias=False)
         self.project_inputs = nn.Linear(config.single_inputs_size, config.msa_encoder.hidden_size, bias=False)
         self.layers = nn.ModuleList(
-            [EsmFold2MSAEncoderLayer(config, layer_idx) for layer_idx in range(config.msa_encoder.num_hidden_layers)]
+            [
+                EsmFold2MSAEncoderLayer(config, updates_msa=(i != config.msa_encoder.num_hidden_layers - 1))
+                for i in range(config.msa_encoder.num_hidden_layers)
+            ]
         )
 
     def forward(
@@ -1781,6 +1782,79 @@ class EsmFold2Parcae(nn.Module):
         return self.output_stack(self.out_proj(state), pair_attention_mask=pair_attention_mask)
 
 
+class EsmFold2InputEmbedder(nn.Module):
+    """Embeds the raw token and atom features into the trunk's single and pair representations.
+
+    Runs the atom encoder, concatenates its per-token output with the residue-type, profile and
+    deletion-mean features into ``single_inputs``, then initialises the pair representation from
+    ``single_inputs`` plus the relative-position and token-bond encodings.
+    """
+
+    def __init__(self, config: EsmFold2Config) -> None:
+        super().__init__()
+        self.atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=False)
+        self.pair_init_1 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.pair_init_2 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
+        self.rel_pos = EsmFold2RelativePositionEncoding(config)
+        self.token_bonds = nn.Linear(1, config.pairwise_hidden_size, bias=False)
+
+    def forward(
+        self,
+        atom_inputs: EsmFold2AtomInputs,
+        res_type_one_hot: Tensor,
+        profile: Tensor,
+        deletion_mean: Tensor,
+        token_index: Tensor,
+        residue_index: Tensor,
+        asym_id: Tensor,
+        sym_id: Tensor,
+        entity_id: Tensor,
+        token_bonds: Tensor,
+        num_tokens: int,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        """Returns ``(single_inputs, initial_pair_states, relative_position_encoding,
+        token_bonds_encoding)``. The last two are already folded into ``initial_pair_states`` and are
+        returned separately only because the confidence head reads them again.
+        """
+        # The atom stack runs once here, at the unexpanded batch size.
+        atom_embeds, position_embeddings = self.atom_encoder.embed_atoms(atom_inputs)
+        atom_encoding = self.atom_encoder(
+            atom_embeds=atom_embeds,
+            attention_mask=self.atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds),
+            position_embeddings=position_embeddings,
+            atom_mask=atom_inputs.atom_attention_mask,
+            atom_to_token=atom_inputs.atom_to_token,
+            num_tokens=num_tokens,
+        )[0]
+        # Fold the fp32 input features into the atom encoding's dtype, so single_inputs is one dtype.
+        dtype = atom_encoding.dtype
+        single_inputs = torch.cat(
+            [
+                atom_encoding,
+                res_type_one_hot.to(dtype),
+                profile.to(dtype),
+                deletion_mean.unsqueeze(-1).to(dtype),
+            ],
+            dim=-1,
+        )
+
+        initial_pair_states = self.pair_init_1(single_inputs).unsqueeze(2) + self.pair_init_2(single_inputs).unsqueeze(
+            1
+        )
+
+        relative_position_encoding = self.rel_pos(
+            residue_index=residue_index,
+            asym_id=asym_id,
+            sym_id=sym_id,
+            entity_id=entity_id,
+            token_index=token_index,
+        )
+        token_bonds_encoding = self.token_bonds(token_bonds.to(self.token_bonds.weight.dtype))
+        initial_pair_states = initial_pair_states + relative_position_encoding + token_bonds_encoding
+
+        return single_inputs, initial_pair_states, relative_position_encoding, token_bonds_encoding
+
+
 def _inverse_softplus(value: float) -> float:
     return value + math.log(-math.expm1(-value))
 
@@ -1836,11 +1910,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
     def __init__(self, config: EsmFold2Config) -> None:
         super().__init__(config)
 
-        self.inputs_atom_encoder = EsmFold2AtomEncoder(config, structure_prediction=False)
-        self.pair_init_1 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
-        self.pair_init_2 = nn.Linear(config.single_inputs_size, config.pairwise_hidden_size, bias=False)
-        self.rel_pos = EsmFold2RelativePositionEncoding(config)
-        self.token_bonds = nn.Linear(1, config.pairwise_hidden_size, bias=False)
+        self.input_embedder = EsmFold2InputEmbedder(config)
         self.language_model = EsmFold2LanguageModelEncoder(config)
         # Populated by from_pretrained from the checkpoint's ``esmc.*`` weights; run frozen (no_grad).
         self.esmc = AutoModel.from_config(config.esmc_config)
@@ -2217,41 +2287,19 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
             atom_to_token=atom_to_token,
         )
 
-        # The inputs embedder runs its atom stack once, at the unexpanded batch size.
-        atom_embeds, position_embeddings = self.inputs_atom_encoder.embed_atoms(atom_inputs)
-        atom_encoding = self.inputs_atom_encoder(
-            atom_embeds=atom_embeds,
-            attention_mask=self.inputs_atom_encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds),
-            position_embeddings=position_embeddings,
-            atom_mask=atom_inputs.atom_attention_mask,
-            atom_to_token=atom_inputs.atom_to_token,
-            num_tokens=attention_mask.shape[1],
-        )[0]
-        # Fold the fp32 input features into the atom encoding's dtype, so single_inputs is one dtype.
-        dtype = atom_encoding.dtype
-        single_inputs = torch.cat(
-            [
-                atom_encoding,
-                res_type_one_hot.to(dtype),
-                profile.to(dtype),
-                deletion_mean.unsqueeze(-1).to(dtype),
-            ],
-            dim=-1,
-        )
-
-        initial_pair_states = self.pair_init_1(single_inputs).unsqueeze(2) + self.pair_init_2(single_inputs).unsqueeze(
-            1
-        )
-
-        relative_position_encoding = self.rel_pos(
+        single_inputs, initial_pair_states, relative_position_encoding, token_bonds_encoding = self.input_embedder(
+            atom_inputs=atom_inputs,
+            res_type_one_hot=res_type_one_hot,
+            profile=profile,
+            deletion_mean=deletion_mean,
+            token_index=token_index,
             residue_index=residue_index,
             asym_id=asym_id,
             sym_id=sym_id,
             entity_id=entity_id,
-            token_index=token_index,
+            token_bonds=token_bonds,
+            num_tokens=attention_mask.shape[1],
         )
-        token_bonds_encoding = self.token_bonds(token_bonds.to(self.token_bonds.weight.dtype))
-        initial_pair_states = initial_pair_states + relative_position_encoding + token_bonds_encoding
 
         if lm_hidden_states is None and input_ids is not None:
             lm_hidden_states = self._compute_lm_hidden_states(

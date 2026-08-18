@@ -132,7 +132,7 @@ _LEGACY_DROP_PATHS = {
 # Literal substring rewrites from the research checkpoint's keys to the port's module names, so
 # from_pretrained needs no runtime conversion. Shapes and order are unchanged.
 _WEIGHT_KEY_RENAMES = (
-    ("inputs_embedder.atom_attention_encoder.", "inputs_atom_encoder."),
+    ("inputs_embedder.atom_attention_encoder.", "input_embedder.atom_encoder."),
     ("structure_head.diffusion_module.", "structure_head."),
     (".atom_transformer.", "."),
     ("._engine.", "."),
@@ -184,8 +184,13 @@ _WEIGHT_KEY_RENAMES = (
     (".s_to_token.", ".single_to_token."),
     (".s_step_norm.", ".single_step_norm."),
     (".g_proj.", ".gate_proj."),
-    ("z_init_1.", "pair_init_1."),
-    ("z_init_2.", "pair_init_2."),
+    # The pair initialisation, relative-position encoding and token-bond projection are loose
+    # attributes upstream; the port groups them with the atom encoder under an ``EsmFold2InputEmbedder``
+    # submodule (the atom encoder is prefixed by the ``inputs_embedder`` rule further up).
+    ("z_init_1.", "input_embedder.pair_init_1."),
+    ("z_init_2.", "input_embedder.pair_init_2."),
+    ("rel_pos.", "input_embedder.rel_pos."),
+    ("token_bonds.", "input_embedder.token_bonds."),
     # The two ``W``-prefixed stacks. Scoped by module, since ``Wout`` means a different projection in each.
     ("outer_product_mean.W.", "outer_product_mean.input_proj."),
     ("outer_product_mean.Wout.", "outer_product_mean.output_proj."),

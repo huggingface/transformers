@@ -256,7 +256,7 @@ class EsmFold2ModelTest(unittest.TestCase):
             atom_to_token=atom_to_token,
         )
         with torch.no_grad():
-            encoder = model.inputs_atom_encoder
+            encoder = model.input_embedder.atom_encoder
             atom_embeds, _position_embeddings = encoder.embed_atoms(atom_inputs)
             mask = encoder.build_attention_mask(atom_inputs.atom_attention_mask, atom_embeds)
 
