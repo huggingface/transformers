@@ -47,11 +47,8 @@ class NVFP4Kernel:
     swizzled_sf_shape: Callable
 
 
-_NVFP4_KERNEL: NVFP4Kernel | None = None
-
-
 @functools.cache
-def _load_nvfp4_kernel() -> NVFP4Kernel:
+def load_nvfp4_kernel() -> NVFP4Kernel:
     """Load and validate the NVFP4 Hub kernel once."""
 
     if not is_kernels_available():
@@ -81,13 +78,6 @@ def _load_nvfp4_kernel() -> NVFP4Kernel:
     return NVFP4Kernel(**entry_points)
 
 
-def load_nvfp4_kernel() -> NVFP4Kernel:
-    global _NVFP4_KERNEL
-    if _NVFP4_KERNEL is None:
-        _NVFP4_KERNEL = _load_nvfp4_kernel()
-    return _NVFP4_KERNEL
-
-
 def nvfp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -99,9 +89,7 @@ def nvfp4_linear(
 ) -> torch.Tensor:
     """Apply an NVFP4 linear operation using packed weights and dynamic activation quantization."""
 
-    kernel = _NVFP4_KERNEL
-    if kernel is None:
-        raise RuntimeError("The NVFP4 kernel must be loaded before running an NVFP4 linear layer.")
+    kernel = load_nvfp4_kernel()
     packed_weight = kernel.PackedWeight(
         qweight=weight,
         sf=weight_sf,

@@ -82,7 +82,6 @@ class NVFP4IntegrationTest(unittest.TestCase):
         self.assertEqual(model["convert"].weight_sf_rowmajor.dtype, torch.uint8)
         self.assertEqual(model["convert"].weight_global_scale.dtype, torch.float32)
 
-    @patch("transformers.integrations.nvfp4._NVFP4_KERNEL", new=_fake_kernel())
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_linear_forward_uses_normal_function_entry_point(self, _):
         layer = NVFP4Linear(64, 32)
@@ -166,7 +165,3 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
     def test_rejects_cpu_offload(self, _, __):
         with self.assertRaisesRegex(ValueError, "CPU or disk offload"):
             self.quantizer.validate_environment(device_map={"model": "cuda", "lm_head": "cpu"})
-
-
-if __name__ == "__main__":
-    unittest.main()
