@@ -2085,6 +2085,27 @@ class ModelTesterMixin(ExportTesterMixin):
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_loss_num_items_in_batch_scaling(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_with_labels = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            if "labels" not in inputs_with_labels and "start_positions" not in inputs_with_labels:
+                continue
+
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+            with torch.no_grad():
+                try:
+                    loss_n4 = model(**inputs_with_labels, num_items_in_batch=4).loss
+                    loss_n8 = model(**inputs_with_labels, num_items_in_batch=8).loss
+                except (TypeError, ValueError):
+                    continue
+
+            if loss_n4 is not None and loss_n8 is not None:
+                # If the model consumes num_items_in_batch, raw sum (loss * n) is invariant to n
+                if not torch.allclose(loss_n4, loss_n8):
+                    torch.testing.assert_close(loss_n4 * 4, loss_n8 * 8, rtol=1e-4, atol=1e-4)
+
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
         self._set_subconfig_attributes(config, "output_hidden_states", True)
@@ -2679,8 +2700,10 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
-                                "This probably means that it was not set with the correct value when tying.",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                    "This probably means that it was not set with the correct value when tying."
+                                ),
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
@@ -2726,7 +2749,9 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key"
+                                ),
                             )
 
                 # Checking there was no complain of missing weights
