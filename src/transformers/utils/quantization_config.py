@@ -60,6 +60,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    NVFP4 = "nvfp4"
     MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
@@ -2063,3 +2064,22 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self.quantize_embeddings = quantize_embeddings
         self.module_quant_configs = module_quant_configs
         self.modules_to_not_convert = modules_to_not_convert
+
+
+class NVFP4Config(QuantizationConfigMixin):
+    """Configuration for on-the-fly NVFP4 weight quantization.
+
+    Args:
+        modules_to_not_convert (`list[str]`, *optional*):
+            Module-name patterns that should remain in their original precision.
+        kwargs (`dict[str, Any]`, *optional*):
+            Additional values are ignored and reported through the Transformers logger.
+    """
+
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
+        self.quant_method = QuantizationMethod.NVFP4
+        self.modules_to_not_convert = modules_to_not_convert
+        if kwargs:
+            logger.info(
+                f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
+            )
