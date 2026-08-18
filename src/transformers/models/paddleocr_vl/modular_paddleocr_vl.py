@@ -69,7 +69,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
-    VisionRotaryEmbedding,
+    Qwen2VLVisionRotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -350,7 +350,7 @@ class PaddleOCRProjector(nn.Module):
         return torch.cat(processed_features, dim=0)
 
 
-class PaddleOCRVisionRotaryEmbedding(VisionRotaryEmbedding):
+class PaddleOCRQwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     pass
 
 
@@ -406,7 +406,7 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, PaddleOCRVisionRotaryEmbedding):
+        elif isinstance(module, PaddleOCRQwen2VLVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -559,7 +559,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
-        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = PaddleOCRQwen2VLVisionRotaryEmbedding(head_dim // 2)
 
     @can_return_tuple
     @auto_docstring

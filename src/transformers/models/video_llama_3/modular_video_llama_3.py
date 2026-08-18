@@ -57,8 +57,8 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
+    Qwen2VLVisionRotaryEmbedding,
     TransformersKwargs,
-    VisionRotaryEmbedding,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
@@ -124,7 +124,7 @@ class VideoLlama3Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class VideoLlama3VisionRotaryEmbedding(VisionRotaryEmbedding):
+class VideoLlama3Qwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     pass
 
 
@@ -320,7 +320,7 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+        if isinstance(module, VideoLlama3Qwen2VLVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -338,7 +338,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         super().__init__(config)
         head_dim = config.hidden_size // config.num_attention_heads
 
-        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = VideoLlama3Qwen2VLVisionRotaryEmbedding(head_dim // 2)
         self.embeddings = VideoLlama3VisionEmbeddings(config)
         self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

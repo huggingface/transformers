@@ -52,9 +52,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    Qwen2VLVisionRotaryEmbedding,
     TransformersKwargs,
     VisionAttention,
-    VisionRotaryEmbedding,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
@@ -125,7 +125,7 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
     pass
 
 
-class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
+class Qwen2_5_Qwen2VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     pass
 
 
@@ -174,7 +174,7 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
 class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+        if isinstance(module, Qwen2_5_Qwen2VLVisionRotaryEmbedding):
             inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
             init.copy_(module.inv_freq, inv_freq)
 
@@ -204,7 +204,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen2_5_Qwen2VLVisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList([Qwen2_5_VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5_VLPatchMerger(

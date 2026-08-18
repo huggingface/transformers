@@ -39,6 +39,8 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     initializer_range: float = 0.02
+    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
