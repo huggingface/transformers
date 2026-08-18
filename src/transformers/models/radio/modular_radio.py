@@ -40,22 +40,16 @@ logger = logging.get_logger(__name__)
 __all__ = ["RadioModel", "RadioPreTrainedModel"]
 
 
+@auto_docstring(custom_intro="Output of [`RadioModel`].")
 @dataclass
 class RadioModelOutput(ModelOutput):
-    """Output of [`RadioModel`].
-
-    Args:
-        summary (`torch.FloatTensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
-            Flattened summary embedding, gathered from the cls tokens selected by `config.summary_idxs`.
-        features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-            Dense spatial patch features.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Full token sequence (prefix tokens + patches) from the final encoder layer.
-        hidden_states (`tuple[torch.FloatTensor]`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of `(batch_size, sequence_length, hidden_size)` tensors, one for the embedding output plus one for
-            each encoder layer.
-        attentions (`tuple[torch.FloatTensor]`, *optional*, returned when `output_attentions=True`):
-            Tuple of `(batch_size, num_heads, sequence_length, sequence_length)` attention weights, one per layer.
+    r"""
+    summary (`torch.FloatTensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
+        Flattened summary embedding, gathered from the cls tokens selected by `config.summary_idxs`.
+    features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+        Dense spatial patch features.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Full token sequence (prefix tokens + patches) from the final encoder layer.
     """
 
     summary: torch.FloatTensor | None = None
@@ -70,8 +64,8 @@ class RadioInputConditioner(nn.Module):
 
     def __init__(self, config: RadioConfig):
         super().__init__()
-        self.register_buffer("norm_mean", torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=True)
-        self.register_buffer("norm_std", torch.tensor(config.norm_std).view(-1, 1, 1), persistent=True)
+        self.norm_mean = nn.Buffer(torch.tensor(config.norm_mean).view(-1, 1, 1), persistent=True)
+        self.norm_std = nn.Buffer(torch.tensor(config.norm_std).view(-1, 1, 1), persistent=True)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         normalized = (pixel_values.float() - self.norm_mean.float()) / self.norm_std.float()
@@ -197,6 +191,7 @@ class RadioEncoder(RadioPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for layer in self.layer:
             hidden_states = layer(hidden_states)
@@ -211,7 +206,7 @@ class RadioModel(RadioPreTrainedModel):
         self.input_conditioner = RadioInputConditioner(config)
         self.embeddings = RadioPatchEmbeddings(config)
         self.encoder = RadioEncoder(config)
-        self.register_buffer("summary_idxs", torch.tensor(config.summary_idxs, dtype=torch.long), persistent=True)
+        self.summary_idxs = nn.Buffer(torch.tensor(config.summary_idxs, dtype=torch.long), persistent=True)
         self.post_init()
 
     @property

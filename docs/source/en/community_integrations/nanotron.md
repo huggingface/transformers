@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -36,5 +36,5 @@ Nanotron also relies on [`AutoTokenizer`] for turning text into token ids during
 
 ## Resources
 
-- [Nanontron](https://github.com/huggingface/nanotron) repository
+- [Nanotron](https://github.com/huggingface/nanotron) repository
 - [Ultrascale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook) describes how to efficiently scale training with Nanotron

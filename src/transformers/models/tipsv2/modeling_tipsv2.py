@@ -443,7 +443,7 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Tipsv2VisionLayer"]
+    _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -652,7 +652,7 @@ class Tipsv2SinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -686,9 +686,7 @@ class Tipsv2TextEmbeddings(nn.Module):
         self.position_embedding = Tipsv2SinusoidalPositionalEmbedding(config)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_sqrt_depth else 1.0
 
     def forward(
@@ -978,6 +976,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.final_layer_norm(last_hidden_state)
         if pooling_mask is not None:
+            pooling_mask = pooling_mask.to(last_hidden_state.device)
             masked_hidden_state = last_hidden_state * pooling_mask[..., None]
             pooled_output = masked_hidden_state.sum(dim=1) / (
                 pooling_mask.sum(dim=1, keepdim=True) + self.config.pooling_epsilon
@@ -1171,7 +1170,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         loss = None
         if image_embeds is not None and text_embeds is not None:
             logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
-            logits_per_text = logits_per_text / self.temperature
+            logits_per_text = logits_per_text / self.temperature.to(logits_per_text.device)
             logits_per_image = logits_per_text.t()
             if return_loss:
                 loss = image_text_contrastive_loss(logits_per_text)

@@ -48,7 +48,7 @@ processor = AutoProcessor.from_pretrained("facebook/hf-seamless-m4t-medium")
 model = SeamlessM4TModel.from_pretrained("facebook/hf-seamless-m4t-medium", device_map="auto")
 ```
 
-You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
+You can seamlessly use this model on text or on audio, to generate either translated text or translated audio.
 
 Here is how to use the processor to process text and audio:
 

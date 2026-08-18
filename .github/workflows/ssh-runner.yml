@@ -4,14 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: 'Type of runner to test (a10)'
+        description: 'Type of runner to test (a10, cpu)'
         required: true
       docker_image:
         description: 'Name of the Docker image'
         required: true
       num_gpus:
-        description: 'Type of the number of gpus to use (`single` or `multi`)'
-        required: true
+        description: 'Number of GPUs to use (`single` or `multi`; not needed for cpu runner)'
+        required: false
+        default: 'none'
 
 env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
@@ -39,10 +40,18 @@ jobs:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
         run: |
-          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+          if [[ "$RUNNER_TYPE" == "a10" ]]; then
+            if [[ "$NUM_GPUS" != "single" && "$NUM_GPUS" != "multi" ]]; then
+              echo "WARNING: num_gpus not set or invalid for a10 runner, defaulting to 'single'"
+              NUM_GPUS="single"
+            fi
+            if [[ "$NUM_GPUS" == "single" ]]; then
+              echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
+            else
+              echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+            fi
+          elif [[ "$RUNNER_TYPE" == "cpu" ]]; then
+            echo "RUNNER=aws-m8i-l-cache" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -62,6 +71,7 @@ jobs:
       image: ${{ github.event.inputs.docker_image }}
     steps:
       - name: Update clone
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         env:
           commit_sha: ${{ github.sha }}
@@ -69,6 +79,7 @@ jobs:
           git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
@@ -76,10 +87,12 @@ jobs:
           rm -rf reports
 
       - name: Show installed libraries and their versions
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: pip freeze
 
       - name: NVIDIA-SMI
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         run: |
           nvidia-smi
 
@@ -94,12 +107,14 @@ jobs:
           pip install psutil --break-system-packages
 
       - name: Download memory monitor script
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         run: |
           apt-get update && apt-get install -y curl
           curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
 
       - name: Start memory monitor
+        if: ${{ github.event.inputs.runner_type != 'cpu' }}
         working-directory: /transformers
         continue-on-error: true  # Don't fail workflow if monitor has issues
         run: |

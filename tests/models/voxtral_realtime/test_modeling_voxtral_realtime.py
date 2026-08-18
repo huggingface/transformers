@@ -19,6 +19,7 @@ import unittest
 from threading import Thread
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -262,6 +263,11 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
         reason="VoxtralRealtime only supports static and offloaded_static cache implementations, not quantized cache"
     )
     def test_generate_with_quant_cache(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Model needs special input preparation!")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

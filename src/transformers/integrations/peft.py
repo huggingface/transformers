@@ -218,7 +218,8 @@ class PeftAdapterMixin:
 
         from peft.utils.transformers_weight_conversion import build_peft_weight_mapping
 
-        weight_conversions = get_model_conversion_mapping(self)
+        # Reuse `from_pretrained`'s `weight_mapping` as recomputing here would drop any user-supplied `key_mapping`.
+        weight_conversions = load_config.weight_mapping or get_model_conversion_mapping(self)
 
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
@@ -421,7 +422,7 @@ class PeftAdapterMixin:
         # Retrieve the name or path of the model, one could also use self.config._name_or_path
         # but to be consistent with what we do in PEFT: https://github.com/huggingface/peft/blob/6e783780ca9df3a623992cc4d1d665001232eae0/src/peft/mapping.py#L100
         adapter_config.base_model_name_or_path = self.__dict__.get("name_or_path", None)
-        # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
+        # TODO: WE NEED TO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
         self.set_adapter(adapter_name)

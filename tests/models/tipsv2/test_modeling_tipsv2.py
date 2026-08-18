@@ -140,6 +140,7 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     all_model_classes = (Tipsv2VisionModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": Tipsv2VisionModel} if is_torch_available() else {}
+    model_split_percents = [0.5, 0.9]
 
     test_resize_embeddings = False
     has_attentions = False
@@ -460,6 +461,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426],
                 ("cpu", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426],
+                ("xpu", None): [0.03267, 0.02216, 0.00546, 0.01890, -0.05426],
             }
         )
         expected_image_embeds = torch.tensor(EXPECTED_IMAGE_EMBEDS.get_expectation(), device=torch_device)
@@ -469,6 +471,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010],
                 ("cpu", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010],
+                ("xpu", None): [0.25287, -0.01092, -0.57542, 0.09660, -0.04010],
             }
         )
         expected_patch_tokens = torch.tensor(EXPECTED_PATCH_TOKENS.get_expectation(), device=torch_device)
@@ -478,6 +481,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281],
                 ("cpu", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281],
+                ("xpu", None): [0.69319, 0.03710, 0.01194, 0.02136, -0.04281],
             }
         )
         expected_text_embeds = torch.tensor(EXPECTED_TEXT_EMBEDS.get_expectation(), device=torch_device)
@@ -487,6 +491,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544],
                 ("cpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
+                ("xpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
             }
         )
         expected_logits_per_image = torch.tensor(EXPECTED_LOGITS_PER_IMAGE.get_expectation(), device=torch_device)
@@ -496,6 +501,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [31.12190, 26.99341, 20.26748, 17.55544],
                 ("cpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
+                ("xpu", None): [31.12190, 26.99341, 20.26748, 17.55544],
             }
         )
         expected_logits_per_text = torch.tensor(EXPECTED_LOGITS_PER_TEXT.get_expectation(), device=torch_device)
@@ -505,6 +511,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632],
                 ("cpu", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632],
+                ("xpu", None): [0.22055, 0.14960, 0.03689, 0.12756, -0.36632],
             }
         )
         expected_vision_pooler_output = torch.tensor(
@@ -518,6 +525,7 @@ class Tipsv2ModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551],
                 ("cpu", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551],
+                ("xpu", None): [12.07207, 0.64612, 0.20788, 0.37204, -0.74551],
             }
         )
         expected_text_pooler_output = torch.tensor(EXPECTED_TEXT_POOLER_OUTPUT.get_expectation(), device=torch_device)

@@ -65,6 +65,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     is_flash_attn_2_available,
+    is_flash_attn_3_available,
     is_torch_xpu_available,
 )
 from transformers.utils.generic import is_flash_attention_requested
@@ -537,10 +538,11 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         )
         allocator.block_table["req"] = block_table
 
-        # Read indices: cache positions followed by one sentinel per query token
-        read_start = 0 if past_length < sliding_window else past_length % sliding_window
+        # Read indices: the (at most) `sliding_window - 1` most recent cached tokens, in chronological order,
+        # followed by one sentinel per query token. The most recent cached token is the one at logical position
+        # `past_length - 1`, and will be read as long as sliding_window > 1 (should always be the case)
         read_cache_length = min(past_length, sliding_window - 1)
-        expected_read = [to_physical(i) for i in range(read_start, read_start + read_cache_length)]
+        expected_read = [to_physical(i) for i in range(past_length - read_cache_length, past_length)]
         expected_read += [sentinel_index] * query_length
         read = allocator.get_read_indices("req", past_length, query_length)
 
@@ -554,11 +556,10 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Write indices: one slot per query token, left-padded with the write trash index when the query overflows the
         # window
-        write_start = past_length % sliding_window
         write_cache_length = min(query_length, sliding_window)
         padding_length = query_length - write_cache_length
         expected_write = [write_trash_index] * padding_length
-        expected_write += [to_physical(i) for i in range(write_start, write_start + write_cache_length)]
+        expected_write += [to_physical(i) for i in range(past_length + padding_length, past_length + query_length)]
         write = allocator.get_write_indices("req", past_length, query_length)
 
         # Main check
@@ -568,6 +569,63 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
             self.assertIn(idx // block_size, block_table)
+
+    @parameterized.expand(
+        [
+            # (block_size, sliding_window, block_table, query_lengths)
+            # Prefill shorter than the window, then decode past the wrap-around
+            (4, 8, [0, 1], [3] + [1] * 16),
+            # Prefill exactly the size of the window, then decode
+            (4, 8, [0, 1], [8] + [1] * 16),
+            # Prefill longer than the window, then decode
+            (4, 8, [3, 5], [11] + [1] * 16),
+            # Chunked prefill, with chunks smaller and larger than the window
+            (4, 8, [0, 1], [3, 5, 4, 10, 2] + [1] * 8),
+            # Single-block window
+            (4, 4, [7], [1] * 12),
+            # Larger block size
+            (16, 32, [0, 1], [5] + [1] * 40),
+        ]
+    )
+    def test_sliding_attention_read_write_round_trip(
+        self,
+        block_size: int,
+        sliding_window: int,
+        block_table: list[int],
+        query_lengths: list[int],
+    ) -> None:
+        """Replays a sequence of prefill/decode steps through the rolling buffer, tracking which logical token each
+        physical slot holds, and checks that every read returns the `sliding_window - 1` most recent tokens in
+        chronological order. Reads and writes are only consistent with each other if both agree on where a given
+        logical position lives, so this catches off-by-one errors that the two index computations would otherwise hide
+        from each other."""
+        allocator = SlidingAttentionCacheAllocator(
+            index=0,
+            block_size=block_size,
+            sliding_window=sliding_window,
+            sentinel_index=-1,
+            write_trash_index=-2,
+        )
+        allocator.block_table["req"] = block_table
+
+        slot_to_token: dict[int, int] = {}  # physical slot -> logical position currently stored there
+        past_length = 0
+        for query_length in query_lengths:
+            # Reads happen before writes, and only when there is cache to read from
+            if past_length > 0:
+                read = allocator.get_read_indices("req", past_length, query_length)
+                self.assertEqual(read[-query_length:], [allocator.sentinel_index] * query_length)
+                cached_tokens = [slot_to_token[idx] for idx in read[:-query_length]]
+                expected_tokens = list(range(max(0, past_length - sliding_window + 1), past_length))
+                self.assertEqual(
+                    cached_tokens,
+                    expected_tokens,
+                    f"Wrong cache read at {past_length = } for {sliding_window = }, {block_size = }",
+                )
+            for offset, idx in enumerate(allocator.get_write_indices("req", past_length, query_length)):
+                if idx != allocator.write_trash_index:
+                    slot_to_token[idx] = past_length + offset
+            past_length += query_length
 
     @slow
     def test_continuous_batching_no_accelerators(self) -> None:
@@ -590,7 +648,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 self.assertFalse(is_torch_xpu_available())
                 self.assertFalse(torch.backends.mps.is_available())
 
-                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
+                tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", "cpu")
                 user_messages = _DEFAULT_USER_MESSAGES[:1]
                 input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -750,8 +808,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # continuous batching but not in generate
         dtype = "auto" if is_fa else torch.float32
 
-        # Prepare inputs
-        tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
+        # Prepare inputs (add paged| prefix so that eager or sdpa is not overridden by flash)
+        paged_attn_implem = ("paged|" if "paged|" not in attn_implementation else "") + attn_implementation
+        tokenizer, model = get_tokenizer_and_model(model_id, paged_attn_implem, torch_device, dtype)
         if (
             attn_implementation == "flash_attention_2"
             and torch_device == "cpu"
@@ -881,6 +940,46 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             compare_to_fp32_eager=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
         )
 
+    @parameterized.expand(
+        [
+            # (loaded_attn_implementation, supports_flash_attn, expect_flash_after_switch)
+            ("sdpa", True, True),  # flash-capable model on a non-flash impl -> auto-switched to a paged flash impl
+            ("paged|sdpa", True, False),  # an explicit paged request is respected: no flash upgrade
+            ("sdpa", False, False),  # _supports_flash_attn=False opts out: stays on paged|sdpa
+        ]
+    )
+    @slow
+    def test_switch_to_cb_friendly_attn(
+        self, attn_implementation: str, supports_flash_attn: bool, expect_flash_after_switch: bool
+    ) -> None:
+        """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
+        flash_available = is_flash_attn_2_available(kernels_fallback_ok=True)
+        flash_available |= is_flash_attn_3_available(kernels_fallback_ok=True)
+
+        if expect_flash_after_switch and not flash_available:
+            self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
+
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
+        model._supports_flash_attn = supports_flash_attn
+        original_attn_impl = model.config._attn_implementation
+
+        # Creating the manager switches the model to a CB-friendly attention implementation
+        manager = model.init_continuous_batching(
+            continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=32, use_cuda_graph=False)
+        )
+        switched_attn_impl = model.config._attn_implementation
+        self.assertTrue(switched_attn_impl.startswith("paged|"), f"Expected a paged impl, got {switched_attn_impl}")
+        is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
+        self.assertEqual(is_flash, expect_flash_after_switch)
+        if not expect_flash_after_switch:
+            self.assertEqual(switched_attn_impl, "paged|sdpa")
+
+        # Starting then stopping the manager restores the original attention implementation
+        manager.start()
+        manager.stop(block=True)
+        self.assertEqual(model.config._attn_implementation, original_attn_impl)
+
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
     @parameterized.expand(
@@ -946,7 +1045,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_memory_percent = 0.5
         tolerance = 0.05
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float16)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float16)
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
         model.generation_config.max_new_tokens = 20
         model.generation_config.do_sample = False
@@ -994,7 +1093,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
         # Retrieve tokenizer, model and eos_token_id (required otherwise logits will be misaligned)
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float32)
         eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
 
         # Run CB generation
@@ -1077,7 +1176,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
         manager = model.init_continuous_batching()
         manager.logit_processor.clear()
         manager.start()
@@ -1125,7 +1224,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
         manager = model.init_continuous_batching()
         manager.logit_processor.clear()
         manager.start()
@@ -1161,8 +1260,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
     def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
-        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test). Load plain
+        # sdpa (regular_generate runs on this model) and disable flash so the CB switch stays on paged|sdpa.
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+        model._supports_flash_attn = False
 
         # Configure generation for parity: disable processors not supported by CB (like repetition_penalty)
         model.generation_config.max_new_tokens = 32
@@ -1761,13 +1862,14 @@ def _tp_continuous_batching_worker(
     use_cuda_graph: bool,
     use_async_batching: bool,
 ) -> None:
-    """Loads `model_id` with `tp_plan="auto"`, checks three TP-specific paths in the same process: (a) direct
+    """Loads `model_id` with `DistributedConfig(tp_size=...)`, checks three TP-specific paths in the same process: (a) direct
     broadcasts via `DistributedHelper`, (b) per-rank parity of CB-generated tokens via `dist.all_gather_object`, and
     (c) reproducibility across two CB runs sharing the same seed. Rank 0 owns all the assertions; the other ranks
     only need to participate in the collectives."""
     import torch
     import torch.distributed as dist
 
+    from transformers.distributed import DistributedConfig
     from transformers.generation.continuous_batching.distributed import DistributedHelper
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -1775,7 +1877,10 @@ def _tp_continuous_batching_worker(
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
     ).eval()
 
     # Direct broadcast tests: only rank 0's value should propagate to every TP rank
@@ -1853,6 +1958,8 @@ def _tp_cancellation_worker(
 
     import torch
 
+    from transformers.distributed import DistributedConfig
+
     cb_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -1860,7 +1967,10 @@ def _tp_cancellation_worker(
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, attn_implementation=attn_implementation, tp_plan="auto", dtype=torch.float32
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
     ).eval()
 
     chat = [{"role": "user", "content": "Tell me a long story about a robot exploring the galaxy."}]
@@ -1912,7 +2022,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            "attn_implementation": "sdpa",
+            "attn_implementation": "paged|sdpa",
             "max_new_tokens": max_new_tokens,
             "do_sample": False,
             "seed": 42,
@@ -1958,7 +2068,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="sdpa",
+            attn_implementation="paged|sdpa",
         )
 
     @slow
@@ -1967,7 +2077,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
         _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-            attn_implementation="sdpa",
+            attn_implementation="paged|sdpa",
             use_async_batching=True,
             use_cuda_graph=True,
         )

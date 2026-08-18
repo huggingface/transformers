@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
 import unittest
 
-import httpx
 import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    load_coco_image,
+    prepare_image_inputs,
+    prepare_video_inputs,
+)
 
 
 if is_torch_available():
@@ -243,6 +246,21 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue((encoded_images_nested == encoded_images).all())
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
+    def test_non_square_grid_orientation(self):
+        # Regression test: `navit_resize` used to be called with transposed (height, width) arguments, distorting
+        # every non-square image. The grid must be [1, height // patch, width // patch] after padding.
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor_dict = {**self.image_processor_dict, "max_patches": 16384}
+            image_processing = image_processing_class(**image_processor_dict)
+            image = Image.fromarray(np.random.default_rng(0).integers(0, 256, (56, 112, 3), dtype=np.uint8))
+            process_out = image_processing(image, return_tensors="pt")
+            self.assertEqual(process_out.image_grid_thw.tolist(), [[1, 4, 8]])
+
+            # A landscape image and its portrait transpose must produce transposed grids
+            portrait = Image.fromarray(np.asarray(image).transpose(1, 0, 2))
+            process_out = image_processing(portrait, return_tensors="pt")
+            self.assertEqual(process_out.image_grid_thw.tolist(), [[1, 8, 4]])
+
     def test_custom_pixels(self):
         "Test different values for min and max pixels when resizing"
         pixel_choices = frozenset((100, 150, 200, 20000))
@@ -267,11 +285,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override to test additional outputs for equivalence such as `image_grid_thw`
     def test_backends_equivalence(self):
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

@@ -683,5 +683,17 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         # Register the new mapping (this will always take precedence in __getattr__ and __contains__ compared to base mapping)
         self._extra_content[key] = value
 
+    def __reduce__(self):
+        return (
+            self.__class__._from_pickle,
+            (self._config_mapping, self._model_mapping, dict(self._extra_content)),
+        )
+
+    @classmethod
+    def _from_pickle(cls, config_mapping, model_mapping, extra_content):
+        obj = cls(config_mapping, model_mapping)
+        obj._extra_content = extra_content
+        return obj
+
 
 __all__ = ["get_values"]
