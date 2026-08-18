@@ -587,7 +587,9 @@ class TorchAudioBackend(BaseAudioProcessor):
         return mel_filters.to(torch.get_default_dtype())
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.to(device=features.device)
+        # Match the filters to the feature dtype: unlike numpy, `torch.matmul` refuses mixed
+        # dtypes, so float64 filters against float32 features would raise instead of promoting.
+        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
         matmul_order = spectrogram_config.mel_scale_config.matmul_order
         if matmul_order == "features_first":
             mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)

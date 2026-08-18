@@ -12,33 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
-from .audio_processing_numpy_gemma4 import Gemma4AudioProcessorMixin
+from .audio_processing_numpy_gemma4 import Gemma4AudioProcessorNumpy
 
 
-class Gemma4AudioProcessor(Gemma4AudioProcessorMixin, TorchAudioBackend):
-    """Torch sibling of [`Gemma4AudioProcessorNumpy`]. See the mixin for the pipeline."""
+class Gemma4AudioProcessor(TorchAudioBackend):
+    sampling_rate = 16000
+    force_mono = True
+    padding = "longest"
+    padding_value = 0.0
+    max_length = 480_000
+    truncation = True
+    pad_to_multiple_of = 128
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # cast the float64 filters to the float32 features dtype (legacy torch behavior)
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
-        return torch.matmul(features.transpose(-2, -1), mel_filters)
+    spectrogram_config = Gemma4AudioProcessorNumpy.spectrogram_config
+    legacy_field_mapping = Gemma4AudioProcessorNumpy.legacy_field_mapping
 
     def _postprocess_output(self, output, audio_ranges=None, **kwargs):
-        if audio_ranges is None or "audio_features" not in output:
-            return output
-        features = output["audio_features"]
-        # same arithmetic as the numpy sibling; per-backend only for the device move
-        if self.per_bin_mean is not None:
-            features = features - self.per_bin_mean.to(device=features.device, dtype=features.dtype)
-        if self.per_bin_stddev is not None:
-            features = features / self.per_bin_stddev.to(device=features.device, dtype=features.dtype)
+        # Zero the padded frames, as the legacy extractor does.
         mask = output.get("audio_features_mask")
-        if mask is not None:
-            features = features * mask.to(features.dtype).unsqueeze(-1)
-        output["audio_features"] = features
+        if mask is not None and "audio_features" in output:
+            features = output["audio_features"]
+            output["audio_features"] = features * mask.to(features.dtype).unsqueeze(-1)
         return output
 
 
