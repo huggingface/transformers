@@ -946,6 +946,11 @@ def can_return_tuple(func):
 
 _KNOWN_MODALITIES = ("image", "video", "audio")
 
+# Flash-attention varlen kwargs the outer (text) forward broadcasts to every submodule. They belong to the
+# language model, not a modality encoder, and their names collide with the vision/audio encoders' own
+# `cu_seqlens`/`max_seqlen`, so `accepts_precomputed_kwargs` drops them when they arrive unprefixed.
+_FLASH_VARLEN_KWARGS = ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k")
+
 
 def accepts_precomputed_kwargs(modality: str):
     """
@@ -988,6 +993,10 @@ def accepts_precomputed_kwargs(modality: str):
                     continue
                 if k.startswith(prefix) and k not in existing_params:
                     translated[k.removeprefix(prefix)] = v
+                elif k in _FLASH_VARLEN_KWARGS and k not in existing_params:
+                    # Unprefixed text flash-attention varlen kwargs — don't let them leak into this
+                    # modality encoder, where they'd duplicate/clash with its own `cu_seqlens`.
+                    continue
                 else:
                     translated[k] = v
             return func(*args, **translated)
