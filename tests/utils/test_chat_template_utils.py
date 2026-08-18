@@ -15,6 +15,8 @@
 import unittest
 from typing import Literal
 
+from transformers import AutoTokenizer
+from transformers.testing_utils import require_jinja, require_tokenizers
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
 
@@ -646,3 +648,71 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+@require_jinja
+@require_tokenizers
+class ChatInputSanitizationTest(unittest.TestCase):
+    # This template emits exactly one control token of its own per message, so any *additional* one in the
+    # encoded output can only have come from the (user-supplied) message content
+    template = "{% for message in messages %}{{ bos_token }}{{ message['content'] }}{% endfor %}"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        cls.tokenizer.pad_token = cls.tokenizer.eos_token  # this tokenizer has no pad token of its own
+        cls.bos = cls.tokenizer.bos_token
+        cls.bos_id = cls.tokenizer.bos_token_id
+
+    def apply(self, chat, template=None, **kwargs):
+        return self.tokenizer.apply_chat_template(
+            chat, chat_template=template or self.template, return_dict=False, **kwargs
+        )
+
+    def test_injected_special_tokens_encode_as_ordinary_text(self):
+        chat = [{"role": "user", "content": f"hello {self.bos} world"}]
+        # Without sanitization the injected token is encoded as the control token itself
+        self.assertEqual(self.apply(chat).count(self.bos_id), 2)
+
+        sanitized = self.apply(chat, sanitize_special_tokens=True)
+        # Only the template's own control token remains special...
+        self.assertEqual(sanitized.count(self.bos_id), 1)
+        # ...and the user's text is preserved rather than stripped or escaped
+        self.assertIn(f"hello {self.bos} world", self.tokenizer.decode(sanitized))
+
+    def test_template_may_call_tokenize_securely(self):
+        chat = [{"role": "user", "content": f"hello {self.bos} world"}]
+        template = "{% for message in messages %}{{ message['content'].tokenize_securely() }}{% endfor %}"
+        sanitized = self.apply(chat, template=template, sanitize_special_tokens=True)
+        self.assertNotIn(self.bos_id, sanitized)
+        self.assertIn(f"hello {self.bos} world", self.tokenizer.decode(sanitized))
+
+    def test_chat_without_special_tokens_is_unaffected(self):
+        chat = [{"role": "user", "content": "hello world"}]
+        self.assertEqual(self.apply(chat, sanitize_special_tokens=True), self.apply(chat))
+
+    def test_batched_and_padded(self):
+        attack = [{"role": "user", "content": f"hello {self.bos} world"}]
+        clean = [{"role": "user", "content": "hello world"}]
+        batch = self.tokenizer.apply_chat_template(
+            [attack, clean], chat_template=self.template, sanitize_special_tokens=True, padding=True
+        )
+        self.assertEqual(len(batch["input_ids"][0]), len(batch["input_ids"][1]))
+        # The clean conversation still encodes exactly as it would on its own
+        self.assertEqual(sum(batch["attention_mask"][1]), len(self.apply(clean)))
+
+    def test_truncation(self):
+        chat = [{"role": "user", "content": f"hello {self.bos} world"}]
+        out = self.tokenizer.apply_chat_template(
+            chat, chat_template=self.template, sanitize_special_tokens=True, truncation=True, max_length=5
+        )
+        self.assertEqual(len(out["input_ids"]), 5)
+
+    def test_unsupported_arguments_raise(self):
+        chat = [{"role": "user", "content": "hello"}]
+        # The guarantee is a property of the encoding, so it cannot be expressed in string output
+        with self.assertRaises(ValueError):
+            self.apply(chat, tokenize=False, sanitize_special_tokens=True)
+        # Assistant masks need character offsets into the rendered chat
+        with self.assertRaises(ValueError):
+            self.apply(chat, sanitize_special_tokens=True, return_assistant_tokens_mask=True)
