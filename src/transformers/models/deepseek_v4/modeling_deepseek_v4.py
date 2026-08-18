@@ -88,8 +88,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekV4Config, device=None):
         super().__init__()
@@ -107,15 +105,15 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type, device=device)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: DeepseekV4Config, layer_type: str, device=None, **kwargs
+        config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -1032,7 +1030,7 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -1061,7 +1059,7 @@ class DeepseekV4HashRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
+        self.tid2eid = nn.Buffer(torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
 
     def forward(
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor

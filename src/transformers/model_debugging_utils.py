@@ -20,9 +20,9 @@ import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 
-from .distributed.utils import _get_torch_distributed_rank, _torch_distributed_available
+from .distributed.utils import _get_torch_distributed_rank
 from .utils import logging
-from .utils.import_utils import is_torch_available, requires
+from .utils.import_utils import is_torch_available, is_torch_distributed_available, requires
 
 
 if is_torch_available():
@@ -30,7 +30,7 @@ if is_torch_available():
     from safetensors.torch import save_file
 
     # Note to code inspectors: this toolbox is intended for people who add models to `transformers`.
-    if _torch_distributed_available:
+    if is_torch_distributed_available():
         import torch.distributed.tensor
 
 
@@ -70,7 +70,7 @@ def _serialize_tensor_like_io(
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensor as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store the full tensors in separate
+            `value` property in the associated FULL_TENSORS.json file, or to store the full tensors in separate
             SafeTensors file and store the relative path to that file in the `value` property in the dictionary.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.
@@ -121,7 +121,7 @@ def _serialize_io(value, debug_path: str | None = None, use_repr: bool = True, p
         value: Any Python object, often including torch Tensors, lists, dicts, etc.
         debug_path (`str`, *optional*, defaults to `None`): Directory to dump debug JSON and SafeTensors files.
         use_repr (bool, *optional*, defaults to `True`): Whether to save a `repr()`-ized version of the tensors as the
-            `value` property in the asscoiated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
+            `value` property in the associated FULL_TENSORS.json file, or to store full tensors in separate SafeTensors
             files and store the relative path to that file in the `value` property.
         path_to_value (`str`, *optional*, defaults to `None`): The file name for the SafeTensors file holding the full
             tensor value if `use_repr=False`.

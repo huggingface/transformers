@@ -96,7 +96,7 @@ class QianfanOCRProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         # remove video from signature as well because the modality isn't supported
-        # some tests pass all modalities from signature, and stuble upon `ValueError`
+        # some tests pass all modalities from signature, and stumble upon `ValueError`
         return super().__call__(images=images, text=text, **kwargs)
 
     def validate_inputs(

@@ -236,7 +236,7 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: ModernBertConfig, layer_type: str, device=None, **kwargs
+        config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, layer_type)
 

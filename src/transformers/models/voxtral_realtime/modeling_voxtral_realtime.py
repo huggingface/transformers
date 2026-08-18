@@ -151,8 +151,6 @@ class VoxtralRealtimeCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 class VoxtralRealtimeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: VoxtralRealtimeConfig, device=None):
         super().__init__()
@@ -165,10 +163,10 @@ class VoxtralRealtimeRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -845,7 +843,7 @@ class VoxtralRealtimeTimeEmbedding(nn.Module):
         self.dim = dim
         self.theta = theta
         inv_freq = torch.exp(-math.log(self.theta) * torch.arange(self.dim // 2).float() / (self.dim // 2))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, time_tensor: torch.Tensor) -> torch.Tensor:
         inv_freq = self.inv_freq.to(device=time_tensor.device, dtype=time_tensor.dtype)

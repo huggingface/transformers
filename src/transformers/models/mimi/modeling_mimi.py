@@ -247,9 +247,9 @@ class MimiConv1d(nn.Module):
         # Effective kernel size with dilations.
         kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
-        self.register_buffer("stride", stride, persistent=False)
-        self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
 
         # Asymmetric padding required for odd strides
         self.padding_right = self.padding_total // 2
@@ -509,8 +509,6 @@ class MimiLayerScale(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mimi
 class MimiRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: MimiConfig, device=None):
         super().__init__()
@@ -523,10 +521,10 @@ class MimiRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -972,9 +970,9 @@ class MimiEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("initialized", torch.tensor([True], dtype=torch.float32))
-        self.register_buffer("cluster_usage", torch.ones(config.codebook_size))
-        self.register_buffer("embed_sum", embed)
+        self.initialized = nn.Buffer(torch.tensor([True], dtype=torch.float32))
+        self.cluster_usage = nn.Buffer(torch.ones(config.codebook_size))
+        self.embed_sum = nn.Buffer(embed)
         self._embed = None
         self.epsilon = epsilon
 

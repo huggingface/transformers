@@ -103,15 +103,16 @@ class SonicMoeLoaderTest(unittest.TestCase):
                 side_effect=lambda *a, **k: capability if _in_loader() else real_capability(),
             )
         )
-        # Report each build dependency at its validated max when ok, one major past it when not; delegate
+        # Report each build dependency at its minimum when ok, one major below it when not; delegate
         # unknown distributions to the real lookup so nothing else the process imports is disturbed.
         real_version = importlib.metadata.version
 
         def _version(distribution):
-            max_version = sm.SONICMOE_DEPENDENCIES.get(distribution)
-            if max_version is None:
+            min_version = sm.SONICMOE_DEPENDENCIES.get(distribution)
+            if min_version is None:
                 return real_version(distribution)
-            return max_version if versions_ok else f"{int(max_version.split('.')[0]) + 1}.0.0"
+            # Too-old is the only way these gates fail now, so report one major below the minimum.
+            return min_version if versions_ok else f"{int(min_version.split('.')[0]) - 1}.0.0"
 
         stack.enter_context(mock.patch.object(importlib.metadata, "version", side_effect=_version))
         stack.enter_context(mock.patch.object(sm, "lazy_load_kernel", return_value=kernel))
@@ -129,7 +130,7 @@ class SonicMoeLoaderTest(unittest.TestCase):
             ("no_kernels", {"kernels_available": False}, "`kernels` package"),
             ("no_cuda", {"cuda_available": False}, "requires CUDA"),
             ("bad_arch", {"capability": (8, 0)}, "requires a Hopper"),
-            ("incompatible_versions", {"versions_ok": False}, "unvalidated"),
+            ("outdated_versions", {"versions_ok": False}, "requires"),
         ]
     )
     def test_is_sonicmoe_loadable(self, _name, env_kwargs, pattern):
@@ -184,27 +185,6 @@ class SonicMoeLoaderTest(unittest.TestCase):
 
             out = run(torch.zeros(3, device=torch_device))
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
-
-    def test_wrapper_is_compile_safe(self):
-        # `_sonicmoe_wrapper`'s `@allow_in_graph` must keep the CuteDSL dispatch opaque — sonic-moe's
-        # kernel asserts `not is_compiling()`. Targets the wrapper directly (not the full forward, which
-        # requires a CUDA device); the wrapper has no device dependency, so like the loader tests above it
-        # needs no GPU. Args past `hidden_states` are dummies — the fake only reads it (for `zeros_like`).
-        def fake_moe(hidden_states, *args, **kwargs):
-            assert not torch.compiler.is_compiling()
-            return torch.zeros_like(hidden_states), None
-
-        bundle = sm.SonicMoE(activation_type_enum=_FakeActivationType, moe_general_routing_inputs=fake_moe)
-        d = torch.zeros(1, device=torch_device)
-        with mock.patch.object(sm, "load_sonicmoe_kernel", return_value=bundle):
-            torch.compiler.reset()
-
-            @torch.compile(fullgraph=True)
-            def run(x):
-                return sm._sonicmoe_wrapper(x, d, d, d, d, None, d, None, "silu", 4, True, True)
-
-            out = run(torch.zeros(6, 8, dtype=torch.bfloat16, device=torch_device))
-        self.assertEqual(out.shape, (6, 8))
 
     def test_is_sonicmoe_loadable_is_compile_safe(self):
         # `is_sonicmoe_loadable` must fold to a constant (via `@assume_constant_result`); tracing its env

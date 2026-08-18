@@ -40,10 +40,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     Quantizer for the compressed_tensors package. Loads and restores models to
     quantized state with compressed_tensors.
 
-    FP8 checkpoints are kept in FP8 and matmuls run through row-wise FP8 kernels
-    (torch._scaled_mm) via `CompressedTensorsFP8Linear` when FP8 matmul hardware is
-    available (CUDA SM89+ or XPU). Otherwise the model is dequantized at load time
-    through the regular compressed-tensors route.
+    With `use_optimized_inference=True`, FP8 checkpoints are kept in FP8 and their matmuls run through
+    row-wise FP8 kernels (`torch.nn.functional.scaled_mm`) via `CompressedTensorsFP8Linear`, when FP8 matmul
+    hardware is available (CUDA SM89+ or XPU). This is opt-in and inference only.
+
+    Otherwise the model goes through the regular compressed-tensors route: `dequantize=True`
+    dequantizes the weights at load time, while `dequantize=False` leaves them compressed and lets
+    compressed-tensors decompress them on the first forward pass.
     """
 
     requires_calibration = True
@@ -52,8 +55,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-        # Call post_init here to ensure proper config setup when `run_compressed`
-        # is provided directly via CompressedTensorsConfig, and to avoid duplicate logging.
+        # Call post_init here to ensure proper config setup when `dequantize` /
+        # `use_optimized_inference` are provided directly via CompressedTensorsConfig, and to avoid
+        # duplicate logging.
 
         quantization_config.post_init()
         from compressed_tensors.compressors import ModelCompressor
@@ -68,27 +72,18 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 "`pip install compressed-tensors>=0.15.0`"
             )
 
-        # The FP8 kernel path needs FP8 matmul hardware (XPU, or CUDA SM89+). Without it, fall
-        # back to dequantizing at load time (regular compressed-tensors route).
-        if self.quantization_config.has_fp8_modules and not self.quantization_config.dequantize:
-            has_fp8_hardware = torch.xpu.is_available() or (
-                torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9)
+        # `use_optimized_inference` has been resolved against the checkpoint by
+        # `CompressedTensorsConfig.post_init`; what is left to check is whether the hardware can run
+        # the kernels. When it cannot, the model goes through the regular compressed-tensors route.
+        self.use_fp8_kernel = self.quantization_config.use_optimized_inference
+        if self.use_fp8_kernel and not (
+            torch.xpu.is_available() or (torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9))
+        ):
+            logger.warning_once(
+                "Ignoring `use_optimized_inference=True`: FP8 matmul kernels need a CUDA GPU with compute capability "
+                ">= 8.9 (e.g. 4090/H100) or an Intel XPU, and none was found."
             )
-            if not has_fp8_hardware:
-                logger.warning_once(
-                    "FP8 compressed-tensors models need a CUDA GPU with compute capability >= 8.9 (e.g. "
-                    "4090/H100) or an Intel XPU to run FP8 matmul kernels; none was found. Defaulting to "
-                    "dequantizing the model to the original dtype."
-                )
-                self.quantization_config.dequantize = True
-
-        if not self.quantization_config.has_fp8_modules and not self.quantization_config.dequantize:
-            logger.info(
-                "Dequantizing the model as there are no kernels for this scheme. We only support fp8 for now for compressed tensors. "
-            )
-            self.quantization_config.dequantize = True
-
-        self.use_fp8_kernel = self.quantization_config.has_fp8_modules and not self.quantization_config.dequantize
+            self.use_fp8_kernel = False
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         ct_config = self.compressor.quantization_config
@@ -111,14 +106,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 modules_to_not_convert=self.modules_to_not_convert,
             )
 
-        if not remaining_groups:
-            return
-
         from compressed_tensors.quantization import apply_quantization_config
 
-        # Layers quantized with the remaining (non-FP8) schemes go through the regular
-        # compressed-tensors wrappers and are dequantized after loading — there are no
-        # kernels for those schemes.
         remaining_config = deepcopy(ct_config)
         remaining_config.config_groups = remaining_groups
 
@@ -129,10 +118,13 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self.compressor.compress_model(model=model)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        """Decompress the layers loaded through the compressed-tensors wrappers. FP8-kernel
-        modules were never wrapped (their weights loaded directly in FP8), so decompression
-        does not touch them."""
-        if self.quantization_config.is_quantization_compressed:
+        """Dequantize the layers loaded through the compressed-tensors wrappers, but only when asked
+        for: with `dequantize=False` the weights are left compressed, and the hook `compress_model`
+        registered decompresses them on the first forward pass instead.
+
+        FP8-kernel modules were never wrapped (their weights loaded directly in FP8) and hold no
+        compressed-tensors scheme, so neither the call below nor that hook touches them."""
+        if self.quantization_config.dequantize and self.quantization_config.is_quantization_compressed:
             self.compressor.decompress_model(model=model)
 
     # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.

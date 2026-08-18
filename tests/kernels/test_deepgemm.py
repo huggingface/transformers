@@ -52,6 +52,7 @@ from transformers.integrations.deepgemm import (
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
+from transformers.integrations.tensor_parallel import to_local
 from transformers.testing_utils import (
     require_torch,
     require_torch_greater_or_equal,
@@ -228,6 +229,21 @@ class DeepGemmLoaderTest(unittest.TestCase):
             return x + 1 if dg.is_deepgemm_loadable() else x - 1
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+
+    def test_to_local_is_compile_safe(self):
+        # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
+        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
+        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
+        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
+        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
+        torch.compiler.reset()
+
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return to_local(x) + 1
+
+        out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────

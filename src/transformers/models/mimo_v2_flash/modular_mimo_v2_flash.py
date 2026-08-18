@@ -142,7 +142,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: MiMoV2FlashConfig, layer_type: str, device=None, **kwargs
+        config: MiMoV2FlashConfig, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

@@ -189,7 +189,7 @@ class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: Olmo3Config, layer_type: str, device=None, **kwargs
+        config: Olmo3Config, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, layer_type)
 

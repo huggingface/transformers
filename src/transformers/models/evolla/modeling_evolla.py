@@ -81,9 +81,6 @@ class EvollaSaProtEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
 
         self.padding_idx = config.pad_token_id
         if self.position_embedding_type == "absolute":
@@ -92,8 +89,6 @@ class EvollaSaProtEmbeddings(nn.Module):
             )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
-        # remove the position_ids in EsmEmbeddings
-        self.position_ids = None
 
     def forward(
         self,
@@ -168,8 +163,6 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: SaProtConfig, device=None):
         super().__init__()
@@ -178,7 +171,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         self.rope_type = {}
 
         curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config)
-        self.register_buffer("inv_freq", curr_inv_freq)
+        self.inv_freq = nn.Buffer(curr_inv_freq)
         setattr(self, "attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -1034,8 +1027,6 @@ class EvollaRMSNorm(nn.Module):
 
 
 class EvollaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
@@ -1048,10 +1039,10 @@ class EvollaRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device=device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -1350,9 +1341,9 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_feats (torch.FloatTensor):
             The input IDs for purely MSA-based features. Should be of shape `(batch_size, msa_seq_length, msa_feat_dim)` and type `torch.FloatTensor`. Dummy input for now.
         structure_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummy input for now.
         msa_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummy input for now.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

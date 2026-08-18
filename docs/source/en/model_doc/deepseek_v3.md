@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -28,7 +28,7 @@ We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 67
 
 We are super happy to make this code community-powered, and would love to see how you can best optimize the following:
 
-- current implementation uses the "naive" attention compution (so not really MLA)
+- current implementation uses the "naive" attention computation (so not really MLA)
 - current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`.
 - current implementation uses the eleuther formula for ROPE, using the original one would be more efficient! (should still follow our API)
 - static cache is not supported (this should be just a generation config issue / config shape issues)
