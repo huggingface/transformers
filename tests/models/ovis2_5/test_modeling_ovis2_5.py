@@ -14,10 +14,8 @@
 """Testing suite for the PyTorch Ovis2.5 model."""
 
 import copy
-import json
 import tempfile
 import unittest
-from pathlib import Path
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
@@ -574,9 +572,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         with self.assertRaises(StrictDataclassClassValidationError):
             Ovis2_5VisionConfig(num_hidden_layers=1, layer_types=["invalid"])
 
-    def test_converter_translates_original_subconfig_names(self):
-        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
-
+    def test_legacy_subconfig_names(self):
         text_config = self.model_tester.get_text_config().to_dict()
         text_config["hidden_size"] = 2048
         vision_config = self.model_tester.get_vision_config().to_dict()
@@ -586,16 +582,12 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         vision_config["num_patches"] = -1
         vision_config["preserve_original_pe"] = True
         vision_config["use_rope"] = True
-        original_config = {
-            "llm_config": text_config,
-            "vit_config": vision_config,
-            "visual_vocab_size": self.model_tester.visual_vocab_size,
-            "torch_dtype": "bfloat16",
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            source = Path(tmp_dir)
-            (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
-            config, max_pixels = convert_config(source)
+        config = Ovis2_5Config(
+            llm_config=text_config,
+            vit_config=vision_config,
+            visual_vocab_size=self.model_tester.visual_vocab_size,
+            torch_dtype="bfloat16",
+        )
 
         self.assertIsInstance(config.text_config, Qwen3Config)
         self.assertIsInstance(config.vision_config, Ovis2_5VisionConfig)
@@ -609,38 +601,29 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertFalse(hasattr(config.vision_config, "num_patches"))
         self.assertFalse(hasattr(config.vision_config, "preserve_original_pe"))
         self.assertFalse(hasattr(config.vision_config, "use_rope"))
-        self.assertEqual(config.architectures, ["Ovis2_5ForConditionalGeneration"])
-        self.assertEqual(max_pixels, 1344 * 1792)
+        serialized_config = config.to_dict()
+        self.assertNotIn("llm_config", serialized_config)
+        self.assertNotIn("vit_config", serialized_config)
+        self.assertNotIn("visual_vocab_size", serialized_config)
 
-    def test_converter_rejects_unreleased_patch_embedding(self):
-        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
+    def test_legacy_config_rejects_unreleased_patch_embedding(self):
+        with self.assertRaisesRegex(ValueError, "convolutional vision patch embedding"):
+            Ovis2_5Config(
+                llm_config=self.model_tester.get_text_config().to_dict(),
+                vit_config={**self.model_tester.get_vision_config().to_dict(), "num_patches": 16},
+            )
 
-        original_config = {
-            "llm_config": self.model_tester.get_text_config().to_dict(),
-            "vit_config": {**self.model_tester.get_vision_config().to_dict(), "num_patches": 16},
-        }
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            source = Path(tmp_dir)
-            (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "convolutional patch embedding"):
-                convert_config(source)
-
-    def test_converter_rejects_unreleased_vision_options(self):
-        from transformers.models.ovis2_5.convert_ovis2_5_weights_to_hf import convert_config
-
+    def test_legacy_config_rejects_unreleased_vision_options(self):
         for option, message in (
             ("preserve_original_pe", "learned vision position embeddings"),
             ("use_rope", "vision rotary position embeddings"),
         ):
-            original_config = {
-                "llm_config": self.model_tester.get_text_config().to_dict(),
-                "vit_config": {**self.model_tester.get_vision_config().to_dict(), option: False},
-            }
-            with self.subTest(option=option), tempfile.TemporaryDirectory() as tmp_dir:
-                source = Path(tmp_dir)
-                (source / "config.json").write_text(json.dumps(original_config), encoding="utf-8")
+            with self.subTest(option=option):
                 with self.assertRaisesRegex(ValueError, message):
-                    convert_config(source)
+                    Ovis2_5Config(
+                        llm_config=self.model_tester.get_text_config().to_dict(),
+                        vit_config={**self.model_tester.get_vision_config().to_dict(), option: False},
+                    )
 
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
