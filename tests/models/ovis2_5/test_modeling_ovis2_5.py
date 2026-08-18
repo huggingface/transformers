@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import (
@@ -563,9 +564,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
         )
 
-        with self.assertRaisesRegex(ValueError, "one vision attention type per layer"):
+        with self.assertRaises(StrictDataclassClassValidationError):
             Ovis2_5VisionConfig(num_hidden_layers=2, layer_types=["full_attention"])
-        with self.assertRaisesRegex(ValueError, "Unsupported Ovis2.5 vision attention types"):
+        with self.assertRaises(StrictDataclassClassValidationError):
             Ovis2_5VisionConfig(num_hidden_layers=1, layer_types=["invalid"])
 
     def test_converter_translates_original_subconfig_names(self):

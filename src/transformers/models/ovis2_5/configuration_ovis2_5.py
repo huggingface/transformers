@@ -77,14 +77,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
             self.layer_types = ["full_attention"] * self.num_hidden_layers
         else:
             self.layer_types = list(self.layer_types)
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"Expected one vision attention type per layer, but got {len(self.layer_types)} entries for "
-                f"{self.num_hidden_layers} layers."
-            )
-        if invalid_layer_types := set(self.layer_types) - {"full_attention", "sliding_attention"}:
-            raise ValueError(f"Unsupported Ovis2.5 vision attention types: {sorted(invalid_layer_types)}")
-
         super().__post_init__(**kwargs)
 
 
