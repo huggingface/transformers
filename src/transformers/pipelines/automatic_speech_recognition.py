@@ -304,8 +304,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
-        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
-            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+        # Only fall back when the caller did not pass an explicit value (including False).
+        if (
+            return_timestamps is None
+            and hasattr(self, "generation_config")
+            and hasattr(self.generation_config, "return_timestamps")
+        ):
+            return_timestamps = self.generation_config.return_timestamps
 
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
@@ -377,6 +382,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs = {"array": _array, "sampling_rate": _audio_samples.sample_rate}
 
         if isinstance(inputs, dict):
+            inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
             stride = inputs.pop("stride", None)
             # Accepting `"array"` which is the key defined in `datasets` for
             # better integration
@@ -503,7 +509,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
-            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
+            if return_timestamps is None:
+                return_timestamps = getattr(self.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":

@@ -32,10 +32,17 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
     try:
         with subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE) as ffmpeg_process:
             output_stream = ffmpeg_process.communicate(bpayload)
+            returncode = ffmpeg_process.returncode
     except FileNotFoundError as error:
         raise ValueError("ffmpeg was not found but is required to load audio files from filename") from error
     out_bytes = output_stream[0]
     audio = np.frombuffer(out_bytes, np.float32)
+    if returncode:
+        raise ValueError(
+            f"ffmpeg returned non-zero exit status {returncode}. Ensure that the soundfile has a valid audio file "
+            "extension (e.g. wav, flac or mp3) and is not corrupted. If reading from a remote URL, ensure that the "
+            "URL is the full address to **download** the audio file."
+        )
     if audio.shape[0] == 0:
         raise ValueError(
             "Soundfile is either not in the correct format or is malformed. Ensure that the soundfile has "
@@ -99,6 +106,11 @@ def ffmpeg_microphone(
     elif system == "Windows":
         format_ = "dshow"
         input_ = ffmpeg_input_device or _get_microphone_name()
+    else:
+        raise ValueError(
+            f"Unsupported operating system for microphone input via ffmpeg: {system}. "
+            "Supported platforms are Linux, Darwin (macOS), and Windows."
+        )
 
     ffmpeg_additional_args = [] if ffmpeg_additional_args is None else ffmpeg_additional_args
 

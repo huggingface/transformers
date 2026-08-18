@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import subprocess
 from typing import Any
 
 import httpx
 import numpy as np
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
+from .audio_utils import ffmpeg_read
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -25,42 +25,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
-
-
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
-    """
-    Helper function to read an audio file through ffmpeg.
-    """
-    ar = f"{sampling_rate}"
-    ac = "1"
-    format_for_conversion = "f32le"
-    ffmpeg_command = [
-        "ffmpeg",
-        "-i",
-        "pipe:0",
-        "-ac",
-        ac,
-        "-ar",
-        ar,
-        "-f",
-        format_for_conversion,
-        "-hide_banner",
-        "-loglevel",
-        "quiet",
-        "pipe:1",
-    ]
-
-    try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
-    output_stream = ffmpeg_process.communicate(bpayload)
-    out_bytes = output_stream[0]
-
-    audio = np.frombuffer(out_bytes, np.float32)
-    if audio.shape[0] == 0:
-        raise ValueError("Malformed soundfile")
-    return audio
 
 
 @add_end_docstrings(build_pipeline_init_args(has_feature_extractor=True))

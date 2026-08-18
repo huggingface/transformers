@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -32,7 +33,7 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
+from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone, ffmpeg_microphone_live, ffmpeg_read
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
     Expectations,
@@ -1733,6 +1734,38 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer({"raw": waveform, "stride": (1000, 8000), "sampling_rate": 16_000})
         self.assertEqual(output, {"text": "XB"})
 
+    @require_torch
+    def test_preprocess_does_not_mutate_input_dict(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+        waveform = np.zeros(1000, dtype=np.float32)
+        inputs = {"raw": waveform, "stride": (0, 0), "sampling_rate": 16_000}
+        _ = list(speech_recognizer.preprocess(inputs))
+        self.assertIn("raw", inputs)
+        self.assertIn("stride", inputs)
+        self.assertIn("sampling_rate", inputs)
+        self.assertIs(inputs["raw"], waveform)
+
+    @require_torch
+    def test_return_timestamps_false_overrides_generation_config(self):
+        from transformers import GenerationConfig
+        from transformers.pipelines.automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
+
+        # Avoid downloading a Whisper checkpoint just to exercise sanitize logic.
+        speech_recognizer = AutomaticSpeechRecognitionPipeline.__new__(AutomaticSpeechRecognitionPipeline)
+        speech_recognizer.type = "seq2seq_whisper"
+        speech_recognizer.generation_config = GenerationConfig(return_timestamps=True)
+
+        _, forward_params, postprocess_params = speech_recognizer._sanitize_parameters(return_timestamps=False)
+        self.assertFalse(forward_params.get("return_timestamps", False))
+        self.assertFalse(postprocess_params.get("return_timestamps", False))
+
+        _, forward_params, postprocess_params = speech_recognizer._sanitize_parameters(return_timestamps=None)
+        self.assertTrue(forward_params.get("return_timestamps"))
+        self.assertTrue(postprocess_params.get("return_timestamps"))
+
     @slow
     @require_torch_accelerator
     def test_slow_unfinished_sequence(self):
@@ -1884,3 +1917,27 @@ class AudioUtilsTest(unittest.TestCase):
     def test_ffmpeg_additional_args(self):
         mic = ffmpeg_microphone_live(16000, 2.0, ffmpeg_additional_args=["-nostdin"])
         mic.close()
+
+
+class FfmpegAudioUtilsUnitTest(unittest.TestCase):
+    def test_ffmpeg_microphone_rejects_unsupported_os(self):
+        with patch("transformers.pipelines.audio_utils.platform.system", return_value="FreeBSD"):
+            with self.assertRaisesRegex(ValueError, "Unsupported operating system"):
+                next(ffmpeg_microphone(16000, 1.0))
+
+    def test_ffmpeg_read_raises_on_nonzero_exit(self):
+        class FakeProcess:
+            returncode = 1
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def communicate(self, _payload):
+                return (np.array([0.0, 0.5], dtype=np.float32).tobytes(), b"")
+
+        with patch("transformers.pipelines.audio_utils.subprocess.Popen", return_value=FakeProcess()):
+            with self.assertRaisesRegex(ValueError, "non-zero exit status"):
+                ffmpeg_read(b"not-a-real-audio-file", 16000)
